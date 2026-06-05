@@ -739,15 +739,21 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
     for(let i=0;i<pdfs.length;i++){
       const pdf = pdfs[i]
       try {
-        // Descargar PDF como texto via exportLinks (Drive extrae texto)
-        const textRes = await fetch(`https://www.googleapis.com/drive/v3/files/${pdf.id}/export?mimeType=text/plain`, { headers:{Authorization:`Bearer ${t}`} })
-        const text = textRes.ok ? await textRes.text() : ''
-
-        // Si no hay texto exportable, intentar con el contenido directamente
-        let raw = text
-        if(!raw || raw.length < 50) {
-          const binRes = await fetch(`https://www.googleapis.com/drive/v3/files/${pdf.id}?alt=media`, { headers:{Authorization:`Bearer ${t}`} })
-          raw = await binRes.text()
+        // Descargar PDF binario y extraer texto con pdf.js
+        const binRes = await fetch(`https://www.googleapis.com/drive/v3/files/${pdf.id}?alt=media`, { headers:{Authorization:`Bearer ${t}`} })
+        const arrayBuf = await binRes.arrayBuffer()
+        let raw = ''
+        try {
+          const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js')
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+          const pdfDoc = await pdfjsLib.getDocument({data: arrayBuf}).promise
+          for(let p=1; p<=pdfDoc.numPages; p++){
+            const page = await pdfDoc.getPage(p)
+            const tc = await page.getTextContent()
+            raw += tc.items.map(i=>i.str).join(' ') + '\n'
+          }
+        } catch(pdfErr) {
+          raw = new TextDecoder('latin1').decode(arrayBuf)
         }
 
         const parsed = parseInvoice(raw)
