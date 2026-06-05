@@ -141,3 +141,19 @@ export const updateBillingStatus = async (id, status) => {
     .eq('id', id)
   if (error) throw error
 }
+
+// ── ENTIDADES: todas para autocomplete ──────────────────────────────────────
+export const getAllEntities = async () => {
+  const { data, error } = await supabase
+    .from('client_entities')
+    .select('id, name, rut')
+    .order('name')
+  if (error) throw error
+  // deduplicar por nombre
+  const seen = new Set()
+  return data.filter(e => {
+    if (seen.has(e.name.toLowerCase())) return false
+    seen.add(e.name.toLowerCase())
+    return true
+  })
+}

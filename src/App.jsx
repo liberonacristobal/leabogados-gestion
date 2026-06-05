@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   supabase, signInWithGoogle, signOut, onAuthChange, getSession, getUserInfo,
   getClients, getMatters, getBilling,
-  getClientEntities, upsertClientEntity, deleteClientEntity,
+  getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
   upsertClient, deleteClient as dbDeleteClient,
   upsertMatter, deleteMatter as dbDeleteMatter,
   upsertBilling, updateBillingStatus
@@ -398,25 +398,50 @@ function BillingForm({bill,clients,onSave,onClose,saving}) {
 }
 
 function EntitiesEditor({clientId}) {
-  const [list,setList] = useState(null)
-  const [name,setName] = useState('')
-  const [rut,setRut]   = useState('')
-  const [edit,setEdit] = useState(null)
-  const [busy,setBusy] = useState(false)
+  const [list,setList]         = useState(null)
+  const [allEntities,setAll]   = useState([])
+  const [name,setName]         = useState('')
+  const [rut,setRut]           = useState('')
+  const [suggestions,setSugg]  = useState([])
+  const [showSugg,setShowSugg] = useState(false)
+  const [edit,setEdit]         = useState(null)
+  const [busy,setBusy]         = useState(false)
   const sortByName = arr => [...arr].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
 
   useEffect(()=>{
     let ok=true
     getClientEntities(clientId).then(d=>ok&&setList(d)).catch(()=>ok&&setList([]))
+    getAllEntities().then(d=>ok&&setAll(d)).catch(()=>{})
     return ()=>{ok=false}
   },[clientId])
+
+  const handleNameChange = (val) => {
+    setName(val)
+    if(val.trim().length < 2) { setSugg([]); setShowSugg(false); return }
+    const q = val.toLowerCase()
+    const matches = allEntities.filter(e=>e.name.toLowerCase().includes(q)).slice(0,6)
+    setSugg(matches)
+    setShowSugg(matches.length > 0)
+  }
+
+  const selectSugg = (e) => {
+    setName(e.name)
+    setRut(e.rut||'')
+    setSugg([])
+    setShowSugg(false)
+  }
 
   const add = async()=>{
     if(!name.trim()) return
     setBusy(true)
     try {
       const saved = await upsertClientEntity({client_id:clientId,name:name.trim(),rut:rut.trim()||null})
-      setList(p=>sortByName([...(p||[]),saved])); setName(''); setRut('')
+      setList(p=>sortByName([...(p||[]),saved]))
+      setName(''); setRut(''); setSugg([]); setShowSugg(false)
+      setAll(p=>{
+        const exists = p.some(x=>x.name.toLowerCase()===saved.name.toLowerCase())
+        return exists ? p : sortByName([...p,saved])
+      })
     } catch(e){ alert('Error al agregar: '+e.message) }
     setBusy(false)
   }
@@ -464,10 +489,35 @@ function EntitiesEditor({clientId}) {
           )}
         </div>
       ))}
-      <div style={{display:'flex',gap:6,marginTop:8}}>
-        <input value={name} onChange={e=>setName(e.target.value)} placeholder='Razón social' style={{...inS,flex:1,minWidth:0}}/>
-        <input value={rut} onChange={e=>setRut(e.target.value)} placeholder='RUT' style={{...inS,width:110,flexShrink:0}}/>
-        <button onClick={add} disabled={busy||!name.trim()} style={{padding:'0 14px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:name.trim()?'pointer':'not-allowed',opacity:name.trim()?1:.6,flexShrink:0}}>Agregar</button>
+      <div style={{marginTop:8,position:'relative'}}>
+        <div style={{display:'flex',gap:6}}>
+          <div style={{flex:1,minWidth:0,position:'relative'}}>
+            <input
+              value={name}
+              onChange={e=>handleNameChange(e.target.value)}
+              onBlur={()=>setTimeout(()=>setShowSugg(false),150)}
+              placeholder='Razón social (escribe para buscar o nueva)'
+              style={{...inS,width:'100%'}}
+            />
+            {showSugg&&suggestions.length>0&&(
+              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,maxHeight:200,overflowY:'auto',marginTop:2}}>
+                {suggestions.map((s,i)=>(
+                  <div key={i} onMouseDown={()=>selectSugg(s)} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
+                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                    onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                    <div style={{fontWeight:500,color:C.text}}>{s.name}</div>
+                    {s.rut&&<div style={{fontSize:11,color:C.muted}}>{s.rut}</div>}
+                  </div>
+                ))}
+                <div style={{padding:'6px 12px',fontSize:11,color:C.muted,fontStyle:'italic',borderTop:`1px solid ${C.border}`}}>
+                  O continúa escribiendo para agregar nueva
+                </div>
+              </div>
+            )}
+          </div>
+          <input value={rut} onChange={e=>setRut(e.target.value)} placeholder='RUT' style={{...inS,width:110,flexShrink:0}}/>
+          <button onClick={add} disabled={busy||!name.trim()} style={{padding:'0 12px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:name.trim()?'pointer':'not-allowed',opacity:name.trim()?1:.6,flexShrink:0,whiteSpace:'nowrap'}}>Agregar</button>
+        </div>
       </div>
     </div>
   )
