@@ -705,7 +705,8 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
     if(!t) { setStep('notoken'); return }
     setToken(t)
     try {
-      const res = await driveGet(t, `https://www.googleapis.com/drive/v3/files?q='${FACTURACION_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
+      const q0 = encodeURIComponent(`'${FACTURACION_ROOT}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`)
+      const res = await driveGet(t, `https://www.googleapis.com/drive/v3/files?q=${q0}&orderBy=name&fields=files(id,name)`)
       setYears(res.files||[])
       setStep('selectMonth')
     } catch(e){ console.error('Drive init error:', e); setStep('error') }
