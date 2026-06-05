@@ -658,20 +658,22 @@ function MatterForm({matter,clients,onSave,onClose,onDelete,saving}) {
 // ── PARSER (mismo que parse-invoice.mjs) ─────────────────────────────────────
 const MESES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}
 function parseInvoice(raw) {
-  const t = raw
-  const fm0 = t.match(/N[°º]\s*(\d+)/)
+  const t = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
+  const fm0 = t.match(/N[°º.\s]{0,3}(\d+)/)
   const folio = fm0 ? fm0[1] : null
-  const cm = t.match(/SE[ÑN]OR\(ES\):\s*(.+?)\s*\nR\.U\.T\.:\s*([\d.]+-\s*[\dkK])/)
+  const cm = t.match(/SE[ÑN]OR(?:\(ES\))?[:\s]+(.+?)\s*\nR\.U\.T\.?[:\s]+([\d.]{6,12}[\-\s]*[\dkK])/i)
   const cliente = cm ? cm[1].trim() : null
   const rut = cm ? cm[2].replace(/\s+/g,'') : null
   let issued_at = null
-  const fm = t.match(/Fecha Emision:\s*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
+  const fm = t.match(/Fecha\s*Emis[io]{1,2}n[:\s]*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
   if(fm){ const dia=+fm[1],mes=MESES[fm[2].toLowerCase()],anio=+fm[3]; if(mes) issued_at=`${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}` }
-  const tm = t.match(/TOTAL\s*\$\s*([\d.]+)/)
+  const tm = t.match(/TOTAL[\s\S]{0,10}?([\d][\d.]{2,})/)
   const total = tm ? parseInt(tm[1].replace(/\./g,''),10) : null
   let concepto = null
-  const gm = t.match(/Valor\s*\n([\s\S]*?)Forma de Pago/)
-  if(gm){ concepto = gm[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*[\d.]+\s*$/,'').trim()||null }
+  const gm = t.match(/(?:Descripcion|Descripción)[\s\S]{0,300}?\n([^\n]{5,120})\n/)
+  if(gm) concepto = gm[1].replace(/\s+/g,' ').trim()||null
+  if(!concepto){ const gm2 = t.match(/Valor\s*\n([\s\S]*?)Forma de Pago/)
+    if(gm2) concepto = gm2[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*[\d.]+\s*$/,'').trim()||null }
   return { folio, cliente, rut, issued_at, total, concepto }
 }
 
