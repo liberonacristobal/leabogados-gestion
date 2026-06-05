@@ -678,7 +678,9 @@ function parseInvoice(raw) {
 const FACTURACION_ROOT = '1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
 
 async function driveGet(token, url) {
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const sep = url.includes('?') ? '&' : '?'
+  const fullUrl = url + sep + 'supportsAllDrives=true&includeItemsFromAllDrives=true'
+  const r = await fetch(fullUrl, { headers: { Authorization: `Bearer ${token}` } })
   if(!r.ok) throw new Error(`Drive API error ${r.status}`)
   return r.json()
 }
