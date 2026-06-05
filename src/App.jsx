@@ -658,7 +658,7 @@ function MatterForm({matter,clients,onSave,onClose,onDelete,saving}) {
 // ── PARSER (mismo que parse-invoice.mjs) ─────────────────────────────────────
 const MESES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}
 function parseInvoice(raw) {
-  const t = raw.replace(/\\/g,'').replace(/ g,' ')
+  const t = raw.replace(/[\\]/g,'').replace(/[ ]+/g,' ')
   const folio = (t.match(/N[°o°]\s*(\d+)/) || [])[1] || null
   let issued_at = null
   const fm = t.match(/Fecha Emision:\s*(\d{1,2})\s*de\s*([A-Za-záéíóúÁÉÍÓÚaeiou]+)\s*del?\s*(\d{4})/i)
