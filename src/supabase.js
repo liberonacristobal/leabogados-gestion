@@ -10,7 +10,8 @@ export const signInWithGoogle = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      queryParams: { hd: 'leabogados.cl' }, // Solo permite cuentas @leabogados.cl
+      queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent' },
+      scopes: 'https://www.googleapis.com/auth/drive.readonly',
       redirectTo: window.location.origin,
     },
   })
