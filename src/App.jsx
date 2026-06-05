@@ -658,19 +658,20 @@ function MatterForm({matter,clients,onSave,onClose,onDelete,saving}) {
 // ── PARSER (mismo que parse-invoice.mjs) ─────────────────────────────────────
 const MESES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}
 function parseInvoice(raw) {
-  const t = raw.replace(/[\\]/g,'').replace(/[ ]+/g,' ')
-  const folio = (t.match(/N[°o°]\s*(\d+)/) || [])[1] || null
-  let issued_at = null
-  const fm = t.match(/Fecha Emision:\s*(\d{1,2})\s*de\s*([A-Za-záéíóúÁÉÍÓÚaeiou]+)\s*del?\s*(\d{4})/i)
-  if(fm){ const dia=+fm[1],mes=MESES[fm[2].toLowerCase()],anio=+fm[3]; if(mes) issued_at=`${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}` }
-  const cm = t.match(/SEÑOR\(ES\):\s*(.+?)\s*R\.U\.T\.:\s*([\d.]+-[\dkK])/)
+  const t = raw
+  const fm0 = t.match(/N[°º]\s*(\d+)/)
+  const folio = fm0 ? fm0[1] : null
+  const cm = t.match(/SE[ÑN]OR\(ES\):\s*(.+?)\s*\nR\.U\.T\.:\s*([\d.]+-\s*[\dkK])/)
   const cliente = cm ? cm[1].trim() : null
   const rut = cm ? cm[2].replace(/\s+/g,'') : null
+  let issued_at = null
+  const fm = t.match(/Fecha Emision:\s*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
+  if(fm){ const dia=+fm[1],mes=MESES[fm[2].toLowerCase()],anio=+fm[3]; if(mes) issued_at=`${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}` }
   const tm = t.match(/TOTAL\s*\$\s*([\d.]+)/)
   const total = tm ? parseInt(tm[1].replace(/\./g,''),10) : null
   let concepto = null
-  const gm = t.match(/Valor\s*([\s\S]*?)\s*Forma de Pago/)
-  if(gm){ concepto = gm[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*\d+\s*[\d.]+\s*$/,'').trim()||null }
+  const gm = t.match(/Valor\s*\n([\s\S]*?)Forma de Pago/)
+  if(gm){ concepto = gm[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*[\d.]+\s*$/,'').trim()||null }
   return { folio, cliente, rut, issued_at, total, concepto }
 }
 
@@ -678,9 +679,7 @@ function parseInvoice(raw) {
 const FACTURACION_ROOT = '1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
 
 async function driveGet(token, url) {
-  const sep = url.includes('?') ? '&' : '?'
-  const fullUrl = url + sep + 'supportsAllDrives=true&includeItemsFromAllDrives=true'
-  const r = await fetch(fullUrl, { headers: { Authorization: `Bearer ${token}` } })
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   if(!r.ok) throw new Error(`Drive API error ${r.status}`)
   return r.json()
 }
@@ -702,14 +701,13 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
     setStep('loading')
     let t = await getDriveToken()
     if(!t) t = getDriveTokenStored()
-    console.log('Drive token:', t ? 'OK ('+t.slice(0,20)+'...)' : 'NULL')
     if(!t) { setStep('notoken'); return }
     setToken(t)
     try {
       const res = await driveGet(t, `https://www.googleapis.com/drive/v3/files?q='${FACTURACION_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
       setYears(res.files||[])
       setStep('selectMonth')
-    } catch(e){ console.error('Drive error:', e); setStep('error') }
+    } catch(e){ setStep('error') }
   }
 
   async function loadMonths(yearId) {
@@ -756,6 +754,24 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
         if(parsed.rut) matchedClient = clients.find(c=>c.rut===parsed.rut)
         if(!matchedClient && parsed.cliente) matchedClient = clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
 
+        // Guardar en Supabase si tenemos datos suficientes
+        if(parsed.folio && parsed.total) {
+          try {
+            await upsertBilling({
+              client_id: matchedClient?.id || null,
+              concept: parsed.concepto || parsed.cliente || pdf.name,
+              amount: parsed.total,
+              status: 'Pendiente',
+              invoice_no: parsed.folio,
+              issued_at: parsed.issued_at,
+              due: parsed.issued_at, // se puede ajustar después
+              notes: `Importado desde Drive: ${pdf.name}`,
+              erasmo: false,
+            })
+          } catch(saveErr) {
+            addLog(`⚠ ${pdf.name} — guardado falló: ${saveErr.message}`)
+          }
+        }
         results.rows.push({ ...parsed, clientMatch: matchedClient, fileName: pdf.name })
         results.imported++
         addLog(`✓ ${pdf.name} — ${parsed.cliente||'?'} · $${parsed.total?.toLocaleString('es-CL')||'?'}`)
