@@ -695,7 +695,7 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
   const [progress, setProgress] = useState({done:0,total:0})
   const addLog = (msg) => setLog(p=>[...p,msg])
 
-  useEffect(()=>{ init() },[])
+  useEffect(()=>{ console.log('DriveImporter mounted'); init() },[])
 
   async function init() {
     setStep('loading')
