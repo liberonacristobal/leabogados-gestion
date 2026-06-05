@@ -3,7 +3,7 @@ import {
   supabase, signInWithGoogle, signOut, onAuthChange, getSession, getUserInfo,
   getClients, getMatters, getBilling,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
-  getDriveToken, connectDrive,
+  getDriveToken, connectDrive, getDriveTokenStored, saveDriveToken,
   upsertClient, deleteClient as dbDeleteClient,
   upsertMatter, deleteMatter as dbDeleteMatter,
   upsertBilling, updateBillingStatus
@@ -698,7 +698,8 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
 
   async function init() {
     setStep('loading')
-    const t = await getDriveToken()
+    let t = await getDriveToken()
+    if(!t) t = getDriveTokenStored()
     if(!t) { setStep('notoken'); return }
     setToken(t)
     try {
@@ -839,8 +840,10 @@ export default function App() {
     })
     const {data:{subscription}} = onAuthChange((_,session)=>{
       setSession(session)
-      if(session) setUser(getUserInfo(session.user.email))
-      else setUser(null)
+      if(session){
+        setUser(getUserInfo(session.user.email))
+        if(session.provider_token) saveDriveToken(session.provider_token)
+      } else setUser(null)
     })
     return ()=>subscription.unsubscribe()
   },[])
