@@ -3,6 +3,7 @@ import {
   supabase, signInWithGoogle, signOut, onAuthChange, getSession, getUserInfo,
   getClients, getMatters, getBilling,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
+  getDriveToken, connectDrive,
   upsertClient, deleteClient as dbDeleteClient,
   upsertMatter, deleteMatter as dbDeleteMatter,
   upsertBilling, updateBillingStatus
@@ -289,7 +290,7 @@ function TasksView({matters,hideErasmo,onEdit}) {
 }
 
 // ─── BILLING VIEW (con botón editar y nuevo cobro) ───────────────────────────
-function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit}) {
+function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onImport}) {
   const [filter,setFilter] = useState('activo')
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
   const filtered = useMemo(()=>{
@@ -305,7 +306,10 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit}) {
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Cobros</div>
-          <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Drive</button>
+            <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+          </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
           {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
@@ -575,7 +579,10 @@ function ClientsView({clients,matters,billing,hideErasmo,onEdit,onAdd}) {
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
-          <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Drive</button>
+            <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+          </div>
         </div>
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 12px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <div style={{display:'flex',gap:6,marginBottom:4}}>
@@ -647,6 +654,169 @@ function MatterForm({matter,clients,onSave,onClose,onDelete,saving}) {
   )
 }
 
+
+// ── PARSER (mismo que parse-invoice.mjs) ─────────────────────────────────────
+const MESES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}
+function parseInvoice(raw) {
+  const t = raw.replace(/\\/g,'').replace(/ g,' ')
+  const folio = (t.match(/N[°o°]\s*(\d+)/) || [])[1] || null
+  let issued_at = null
+  const fm = t.match(/Fecha Emision:\s*(\d{1,2})\s*de\s*([A-Za-záéíóúÁÉÍÓÚaeiou]+)\s*del?\s*(\d{4})/i)
+  if(fm){ const dia=+fm[1],mes=MESES[fm[2].toLowerCase()],anio=+fm[3]; if(mes) issued_at=`${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}` }
+  const cm = t.match(/SEÑOR\(ES\):\s*(.+?)\s*R\.U\.T\.:\s*([\d.]+-[\dkK])/)
+  const cliente = cm ? cm[1].trim() : null
+  const rut = cm ? cm[2].replace(/\s+/g,'') : null
+  const tm = t.match(/TOTAL\s*\$\s*([\d.]+)/)
+  const total = tm ? parseInt(tm[1].replace(/\./g,''),10) : null
+  let concepto = null
+  const gm = t.match(/Valor\s*([\s\S]*?)\s*Forma de Pago/)
+  if(gm){ concepto = gm[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*\d+\s*[\d.]+\s*$/,'').trim()||null }
+  return { folio, cliente, rut, issued_at, total, concepto }
+}
+
+// ── DRIVE IMPORTER ────────────────────────────────────────────────────────────
+const FACTURACION_ROOT = '1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
+
+async function driveGet(token, url) {
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if(!r.ok) throw new Error(`Drive API error ${r.status}`)
+  return r.json()
+}
+
+function DriveImporter({ clients, billing, onImported, onClose }) {
+  const [step, setStep]       = useState('init')   // init | loading | selectMonth | importing | done | error | notoken
+  const [token, setToken]     = useState(null)
+  const [years, setYears]     = useState([])
+  const [months, setMonths]   = useState([])
+  const [selYear, setSelYear] = useState(null)
+  const [selMonth, setSelMonth] = useState(null)
+  const [log, setLog]         = useState([])
+  const [progress, setProgress] = useState({done:0,total:0})
+  const addLog = (msg) => setLog(p=>[...p,msg])
+
+  useEffect(()=>{ init() },[])
+
+  async function init() {
+    setStep('loading')
+    const t = await getDriveToken()
+    if(!t) { setStep('notoken'); return }
+    setToken(t)
+    try {
+      const res = await driveGet(t, `https://www.googleapis.com/drive/v3/files?q='${FACTURACION_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
+      setYears(res.files||[])
+      setStep('selectMonth')
+    } catch(e){ setStep('error') }
+  }
+
+  async function loadMonths(yearId) {
+    setSelYear(yearId)
+    const t = token
+    const res = await driveGet(t, `https://www.googleapis.com/drive/v3/files?q='${yearId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
+    setMonths(res.files||[])
+  }
+
+  async function importMonth(monthId, monthName) {
+    setSelMonth(monthId)
+    setStep('importing')
+    setLog([`Importando ${monthName}…`])
+    const t = token
+    const res = await driveGet(t, `https://www.googleapis.com/drive/v3/files?q='${monthId}'+in+parents+and+mimeType='application/pdf'+and+trashed=false&fields=files(id,name)`)
+    const pdfs = res.files||[]
+    setProgress({done:0,total:pdfs.length})
+    addLog(`${pdfs.length} PDFs encontrados`)
+
+    const results = { imported:0, skipped:0, errors:0, rows:[] }
+
+    for(let i=0;i<pdfs.length;i++){
+      const pdf = pdfs[i]
+      try {
+        // Descargar PDF como texto via exportLinks (Drive extrae texto)
+        const textRes = await fetch(`https://www.googleapis.com/drive/v3/files/${pdf.id}/export?mimeType=text/plain`, { headers:{Authorization:`Bearer ${t}`} })
+        const text = textRes.ok ? await textRes.text() : ''
+
+        // Si no hay texto exportable, intentar con el contenido directamente
+        let raw = text
+        if(!raw || raw.length < 50) {
+          const binRes = await fetch(`https://www.googleapis.com/drive/v3/files/${pdf.id}?alt=media`, { headers:{Authorization:`Bearer ${t}`} })
+          raw = await binRes.text()
+        }
+
+        const parsed = parseInvoice(raw)
+
+        // Verificar si ya existe (por folio)
+        const exists = billing.some(b=>b.invoice_no===parsed.folio)
+        if(exists){ results.skipped++; addLog(`⏭ ${pdf.name} — ya existe`); setProgress(p=>({...p,done:p.done+1})); continue }
+
+        // Buscar cliente por RUT o nombre
+        let matchedClient = null
+        if(parsed.rut) matchedClient = clients.find(c=>c.rut===parsed.rut)
+        if(!matchedClient && parsed.cliente) matchedClient = clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
+
+        results.rows.push({ ...parsed, clientMatch: matchedClient, fileName: pdf.name })
+        results.imported++
+        addLog(`✓ ${pdf.name} — ${parsed.cliente||'?'} · $${parsed.total?.toLocaleString('es-CL')||'?'}`)
+      } catch(e){
+        results.errors++
+        addLog(`✗ ${pdf.name} — error: ${e.message}`)
+      }
+      setProgress(p=>({...p,done:p.done+1}))
+    }
+
+    addLog(`─────────────────────────`)
+    addLog(`✅ ${results.imported} procesadas · ⏭ ${results.skipped} ya existían · ❌ ${results.errors} errores`)
+    setStep('done')
+    onImported(results.rows)
+  }
+
+  return (
+    <div>
+      {step==='loading'&&<div style={{textAlign:'center',padding:20}}><Spin/><p style={{fontSize:13,color:C.muted,marginTop:12}}>Conectando con Drive…</p></div>}
+
+      {step==='notoken'&&(
+        <div style={{textAlign:'center',padding:20}}>
+          <p style={{fontSize:13,color:C.text,marginBottom:16}}>Necesitas autorizar acceso a Google Drive para importar facturas.</p>
+          <button onClick={connectDrive} style={{padding:'10px 20px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>
+            Autorizar Google Drive
+          </button>
+        </div>
+      )}
+
+      {step==='selectMonth'&&(
+        <div>
+          <p style={{fontSize:13,color:C.muted,marginBottom:12}}>Selecciona el año y mes a importar:</p>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
+            {years.map(y=>(
+              <button key={y.id} onClick={()=>loadMonths(y.id)} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${selYear===y.id?C.accent:C.border}`,background:selYear===y.id?'#E6EEF1':'#fff',color:selYear===y.id?C.accent:C.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>{y.name}</button>
+            ))}
+          </div>
+          {months.length>0&&(
+            <>
+              <p style={{fontSize:12,color:C.muted,marginBottom:8}}>Mes:</p>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {months.map(m=>(
+                  <button key={m.id} onClick={()=>importMonth(m.id,m.name)} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:13,cursor:'pointer'}}>{m.name}</button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {(step==='importing'||step==='done')&&(
+        <div>
+          {step==='importing'&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}><Spin/><span style={{fontSize:13,color:C.muted}}>{progress.done}/{progress.total} facturas…</span></div>}
+          <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 12px',maxHeight:260,overflowY:'auto',fontSize:12,fontFamily:'monospace',color:C.text,lineHeight:1.6}}>
+            {log.map((l,i)=><div key={i}>{l}</div>)}
+          </div>
+          {step==='done'&&<button onClick={onClose} style={{marginTop:14,width:'100%',padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>}
+        </div>
+      )}
+
+      {step==='error'&&<div style={{color:C.overdue,fontSize:13,textAlign:'center',padding:20}}>Error al conectar con Drive. Intenta cerrar sesión y volver a entrar.</div>}
+    </div>
+  )
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
@@ -659,6 +829,7 @@ export default function App() {
   const [tab, setTab] = useState('dashboard')
   const [hideErasmo, setHideErasmo] = useState(true)
   const [modal, setModal] = useState(null)
+  const [importedRows, setImportedRows] = useState([])
 
   useEffect(()=>{
     getSession().then(({data:{session}})=>{
@@ -798,7 +969,7 @@ export default function App() {
             {tab==='dashboard'&&<Dashboard matters={matters} billing={billing} clients={clients} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
             {tab==='matters'&&<MattersView matters={matters} clients={clients} hideErasmo={hideErasmo} onEdit={m=>setModal({type:'matter',data:m})} onAdd={()=>setModal({type:'matter',data:null})}/>}
             {tab==='tasks'&&<TasksView matters={matters} hideErasmo={hideErasmo} onEdit={m=>setModal({type:'matter',data:m})}/>}
-            {tab==='billing'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})}/>}
+            {tab==='billing'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})}/>}
             {tab==='clients'&&<ClientsView clients={clients} matters={matters} billing={billing} hideErasmo={hideErasmo} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})}/>}
           </div>
         )}
@@ -815,6 +986,11 @@ export default function App() {
         {modal?.type==='billing'&&(
           <Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}>
             <BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} saving={saving}/>
+          </Modal>
+        )}
+        {modal?.type==='drive'&&(
+          <Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}>
+            <DriveImporter clients={clients} billing={billing} onImported={(rows)=>{setImportedRows(rows);if(rows.length===0)setModal(null)}} onClose={()=>setModal(null)}/>
           </Modal>
         )}
         {modal?.type==='client'&&(

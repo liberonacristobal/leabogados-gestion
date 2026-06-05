@@ -157,3 +157,19 @@ export const getAllEntities = async () => {
     return true
   })
 }
+
+// ── DRIVE: obtener token con scope de Drive ──────────────────────────────────
+export const getDriveToken = async () => {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.provider_token || null
+}
+
+export const connectDrive = () =>
+  supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      queryParams: { hd: 'leabogados.cl', access_type: 'offline' },
+      scopes: 'https://www.googleapis.com/auth/drive.readonly',
+      redirectTo: window.location.origin,
+    }
+  })
