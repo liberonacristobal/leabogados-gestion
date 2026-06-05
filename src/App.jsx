@@ -699,8 +699,9 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
 
   async function init() {
     setStep('loading')
-    let t = await getDriveToken()
-    if(!t) t = localStorage.getItem('drive_token')
+    let t = localStorage.getItem('drive_token')
+    if(!t) { try { t = await getDriveToken() } catch(e){} }
+    console.log('Drive token:', t ? 'OK' : 'NULL')
     if(!t) { setStep('notoken'); return }
     setToken(t)
     try {
