@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vercel --version)",
+      "Bash(echo \"---EXIT: $?---\")",
+      "Bash(vercel whoami *)",
+      "Bash(vercel env *)",
+      "Bash(npm run *)",
+      "Bash(curl -s https://project-q85ri.vercel.app/)",
+      "mcp__claude_ai_Google_Drive__list_recent_files",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "Bash(pbcopy)",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "Bash(node *)"
+    ]
+  }
+}
