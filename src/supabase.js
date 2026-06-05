@@ -173,3 +173,7 @@ export const connectDrive = () =>
       redirectTo: window.location.origin,
     }
   })
+
+// ── DRIVE: guardar token en localStorage al hacer login ──────────────────────
+export const getDriveTokenStored = () => localStorage.getItem('drive_token')
+export const saveDriveToken = (token) => localStorage.setItem('drive_token', token)
