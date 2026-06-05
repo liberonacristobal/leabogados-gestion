@@ -8,10 +8,8 @@ import {
   upsertBilling, updateBillingStatus
 } from './supabase'
 
-// ─── FUENTE ───────────────────────────────────────────────────────────────────
 const FONT = "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
 
-// ─── THEME ───────────────────────────────────────────────────────────────────
 const C = {
   bg: '#F5F5F5', surface: '#FFFFFF', card: '#FFFFFF',
   border: '#E4E4E4', text: '#3D3D3D', muted: '#8A8A8A',
@@ -19,7 +17,6 @@ const C = {
   soon: '#C77F18', normal: '#2E7D55', done: '#A8A8A8',
 }
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtDate = d => { if(!d) return '—'; return new Date(d+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short'}) }
 const daysLeft = d => { if(!d) return null; return Math.round((new Date(d+'T12:00') - new Date()) / 86400000) }
@@ -34,7 +31,6 @@ const urgency = (due, status) => {
 }
 const urgencyColor = (due, status) => ({ overdue:C.overdue, urgent:C.urgent, soon:C.soon, normal:C.normal, done:C.done })[urgency(due,status)] || C.muted
 
-// ─── MICRO UI ────────────────────────────────────────────────────────────────
 const Dot = ({due,status}) => <span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:urgencyColor(due,status),flexShrink:0,marginTop:2}}/>
 const DaysBadge = ({due,status}) => {
   const u = urgency(due,status)
@@ -61,7 +57,6 @@ const Lbl = ({children}) => <div style={{fontSize:11,fontWeight:600,color:C.mute
 const Fld = ({label,children}) => <div style={{marginBottom:14}}><Lbl>{label}</Lbl>{children}</div>
 const Spin = () => <div style={{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
 
-// ─── MODAL ───────────────────────────────────────────────────────────────────
 const Modal = ({title,onClose,children}) => (
   <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,paddingBottom:24}}>
@@ -74,7 +69,6 @@ const Modal = ({title,onClose,children}) => (
   </div>
 )
 
-// ─── LOGIN ───────────────────────────────────────────────────────────────────
 function LoginScreen({loading}) {
   return (
     <div style={{minHeight:'100vh',background:C.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
@@ -92,30 +86,29 @@ function LoginScreen({loading}) {
   )
 }
 
-// ─── BOTTOM NAV ──────────────────────────────────────────────────────────────
+// ─── BOTTOM NAV (arreglado para desktop) ─────────────────────────────────────
 const TABS = [
-  {id:'dashboard',icon:'◈',label:'Inicio'},
-  {id:'matters',  icon:'◻',label:'Asuntos'},
-  {id:'tasks',    icon:'◇',label:'Tareas'},
-  {id:'billing',  icon:'◎',label:'Cobros'},
-  {id:'clients',  icon:'◉',label:'Clientes'},
+  {id:'dashboard', icon:'⬡', label:'Inicio'},
+  {id:'matters',   icon:'⬜', label:'Asuntos'},
+  {id:'tasks',     icon:'◇',  label:'Tareas'},
+  {id:'billing',   icon:'$',  label:'Cobros'},
+  {id:'clients',   icon:'⊙',  label:'Clientes'},
 ]
 function BottomNav({tab,setTab,urgentN,overdueN}) {
   return (
     <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
       {TABS.map(t=>(
-        <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:'10px 0 8px',background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,position:'relative'}}>
-          <span style={{fontSize:17,color:tab===t.id?C.accent:C.muted,transition:'color .15s'}}>{t.icon}</span>
-          <span style={{fontSize:10,color:tab===t.id?C.accent:C.muted,fontWeight:tab===t.id?600:400}}>{t.label}</span>
-          {t.id==='tasks'&&urgentN>0 && <span style={{position:'absolute',top:5,right:'calc(50% - 14px)',background:C.overdue,color:'#fff',borderRadius:10,fontSize:9,fontWeight:700,padding:'1px 5px'}}>{urgentN}</span>}
-          {t.id==='billing'&&overdueN>0 && <span style={{position:'absolute',top:5,right:'calc(50% - 14px)',background:C.overdue,color:'#fff',borderRadius:10,fontSize:9,fontWeight:700,padding:'1px 5px'}}>{overdueN}</span>}
+        <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:'10px 0 8px',background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,position:'relative',minWidth:0}}>
+          <span style={{fontSize:16,lineHeight:1,color:tab===t.id?C.accent:C.muted}}>{t.icon}</span>
+          <span style={{fontSize:10,color:tab===t.id?C.accent:C.muted,fontWeight:tab===t.id?700:400,whiteSpace:'nowrap'}}>{t.label}</span>
+          {t.id==='tasks'&&urgentN>0&&<span style={{position:'absolute',top:4,right:'calc(50% - 16px)',background:C.overdue,color:'#fff',borderRadius:10,fontSize:9,fontWeight:700,padding:'1px 5px'}}>{urgentN}</span>}
+          {t.id==='billing'&&overdueN>0&&<span style={{position:'absolute',top:4,right:'calc(50% - 16px)',background:C.overdue,color:'#fff',borderRadius:10,fontSize:9,fontWeight:700,padding:'1px 5px'}}>{overdueN}</span>}
         </button>
       ))}
     </div>
   )
 }
 
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
 function Dashboard({matters,billing,clients,hideErasmo,setTab,user}) {
   const mm = hideErasmo ? matters.filter(m=>!m.clients?.erasmo) : matters
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
@@ -134,7 +127,6 @@ function Dashboard({matters,billing,clients,hideErasmo,setTab,user}) {
         <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,marginBottom:2}}>Buenas, {user?.name?.split(' ')[0]}</div>
         <div style={{fontSize:12,color:C.muted}}>Liberona Escala Abogados</div>
       </div>
-
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:'16px 20px 0'}}>
         <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
           <div style={{fontSize:11,color:C.muted,fontWeight:500,marginBottom:6,textTransform:'uppercase',letterSpacing:.5}}>Asuntos activos</div>
@@ -147,8 +139,7 @@ function Dashboard({matters,billing,clients,hideErasmo,setTab,user}) {
           <div style={{fontSize:11,color:overdueAmt>0?C.overdue:C.muted,marginTop:4}}>{overdueAmt>0?`${fmt(overdueAmt)} vencido`:'Sin vencidos'}</div>
         </div>
       </div>
-
-      {critical.length>0 && (
+      {critical.length>0&&(
         <div style={{padding:'20px 20px 0'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Requieren atención</span>
@@ -169,8 +160,7 @@ function Dashboard({matters,billing,clients,hideErasmo,setTab,user}) {
           ))}
         </div>
       )}
-
-      {pendingBills.length>0 && (
+      {pendingBills.length>0&&(
         <div style={{padding:'16px 20px 6px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Cobros pendientes</span>
@@ -195,7 +185,6 @@ function Dashboard({matters,billing,clients,hideErasmo,setTab,user}) {
   )
 }
 
-// ─── MATTERS VIEW ────────────────────────────────────────────────────────────
 function MattersView({matters,clients,hideErasmo,onEdit,onAdd}) {
   const [q,setQ] = useState('')
   const [fWho,setFWho] = useState('')
@@ -207,13 +196,11 @@ function MattersView({matters,clients,hideErasmo,onEdit,onAdd}) {
     if(fArea) mm=mm.filter(m=>m.area===fArea)
     return mm.sort((a,b)=>{const o={overdue:0,urgent:1,soon:2,normal:3,done:4};return (o[urgency(a.due,a.status)]||3)-(o[urgency(b.due,b.status)]||3)})
   },[matters,hideErasmo,q,fWho,fArea])
-
   const byClient = useMemo(()=>{
     const map={}
     filtered.forEach(m=>{if(!map[m.client_id])map[m.client_id]=[];map[m.client_id].push(m)})
     return map
   },[filtered])
-
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -241,7 +228,7 @@ function MattersView({matters,clients,hideErasmo,onEdit,onAdd}) {
                 {client?.erasmo&&<Pill label='Erasmo' bg='#EAF0F2' color={C.accent} small/>}
               </div>
               {ms.map(m=>(
-                <div key={m.id} onClick={()=>onEdit(m)} style={{background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`,display:'flex',gap:10,cursor:'pointer',transition:'border-color .12s'}}
+                <div key={m.id} onClick={()=>onEdit(m)} style={{background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`,display:'flex',gap:10,cursor:'pointer'}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
                   onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
                   <Dot due={m.due} status={m.status}/>
@@ -263,7 +250,6 @@ function MattersView({matters,clients,hideErasmo,onEdit,onAdd}) {
   )
 }
 
-// ─── TASKS VIEW ──────────────────────────────────────────────────────────────
 function TasksView({matters,hideErasmo,onEdit}) {
   const [who,setWho] = useState('Cristóbal')
   const filtered = useMemo(()=>{
@@ -302,8 +288,8 @@ function TasksView({matters,hideErasmo,onEdit}) {
   )
 }
 
-// ─── BILLING VIEW ────────────────────────────────────────────────────────────
-function BillingView({billing,hideErasmo,onStatusChange,onAdd}) {
+// ─── BILLING VIEW (con botón editar y nuevo cobro) ───────────────────────────
+function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit}) {
   const [filter,setFilter] = useState('activo')
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
   const filtered = useMemo(()=>{
@@ -317,7 +303,10 @@ function BillingView({billing,hideErasmo,onStatusChange,onAdd}) {
   return (
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Cobros</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Cobros</div>
+          <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+        </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
           {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
@@ -333,18 +322,23 @@ function BillingView({billing,hideErasmo,onStatusChange,onAdd}) {
         </div>
       </div>
       <div style={{padding:'10px 20px 100px'}}>
+        {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40,fontSize:13}}>Sin cobros en esta categoría</div>}
         {filtered.map(b=>(
           <div key={b.id} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.clients?.name?.split('/')[0].trim()}</div>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.clients?.name?.split('/')[0].trim()}</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:1}}>{b.concept}</div>
               </div>
-              <div style={{fontSize:15,fontWeight:600,color:b.status==='Vencido'?C.overdue:C.text,flexShrink:0,marginLeft:12}}>{fmt(b.amount)}</div>
+              <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:12}}>
+                <div style={{fontSize:15,fontWeight:600,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
+                <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',fontSize:11,color:C.muted,cursor:'pointer'}}>✎</button>
+              </div>
             </div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div style={{display:'flex',gap:6,alignItems:'center'}}>
                 <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{b.invoice_no||'—'}</span>
+                <span style={{fontSize:11,color:C.muted}}>· {fmtDate(b.due)}</span>
                 <DaysBadge due={b.due} status={b.status}/>
               </div>
               <select value={b.status} onChange={e=>onStatusChange(b.id,e.target.value)}
@@ -352,6 +346,7 @@ function BillingView({billing,hideErasmo,onStatusChange,onAdd}) {
                 {['Propuesta','Pendiente','Pagado','Vencido','Anulado'].map(s=><option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+            {b.payment_method&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Pago: {b.payment_method}{b.payment_ref?` · ${b.payment_ref}`:''}{b.payment_date?` · ${fmtDate(b.payment_date)}`:''}</div>}
           </div>
         ))}
       </div>
@@ -359,101 +354,54 @@ function BillingView({billing,hideErasmo,onStatusChange,onAdd}) {
   )
 }
 
-// ─── CLIENTS VIEW ────────────────────────────────────────────────────────────
-function ClientsView({clients,matters,billing,hideErasmo,onEdit,onAdd}) {
-  const [sFilter,setSFilter] = useState('Activo')
-  const base = hideErasmo ? clients.filter(c=>!c.erasmo) : clients
-  const activeN = base.filter(c=>(c.status||'Activo')==='Activo').length
-  const endedN  = base.filter(c=>c.status==='Terminado').length
-  const cl = useMemo(()=>{
-    if(sFilter==='Activo')    return base.filter(c=>(c.status||'Activo')==='Activo')
-    if(sFilter==='Terminado') return base.filter(c=>c.status==='Terminado')
-    return base
-  },[base,sFilter])
-  return (
-    <div>
-      <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
-          <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
-        </div>
-        <div style={{fontSize:12,color:C.muted,margin:'4px 0 12px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
-        <div style={{display:'flex',gap:6,marginBottom:4}}>
-          {[['Activo',`Activos (${activeN})`],['Terminado',`Terminados (${endedN})`],['all','Todos']].map(([v,l])=>(
-            <button key={v} onClick={()=>setSFilter(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${sFilter===v?C.accent:C.border}`,background:sFilter===v?'#E6EEF1':'transparent',color:sFilter===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
-          ))}
-        </div>
-      </div>
-      <div style={{padding:'10px 20px 100px'}}>
-        {cl.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes {sFilter==='Terminado'?'terminados':sFilter==='Activo'?'activos':''}</div>}
-        {cl.map(c=>{
-          const ended=c.status==='Terminado'
-          const cm=matters.filter(m=>m.client_id===c.id&&m.status==='Activo').length
-          const cp=billing.filter(b=>b.client_id===c.id&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+(b.amount||0),0)
-          const hasOverdue=billing.some(b=>b.client_id===c.id&&b.status==='Vencido')
-          return (
-            <div key={c.id} onClick={()=>onEdit(c)} style={{background:C.card,borderRadius:10,padding:'13px 16px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${ended?C.done:hasOverdue?C.overdue:C.accent}`,opacity:ended?.7:1,cursor:'pointer',transition:'box-shadow .12s'}}
-              onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.09)'}
-              onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{c.name}</div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:6}}>{c.type}</div>
-                </div>
-                {ended&&<Pill label='Terminado' bg='#ECECEC' color={C.muted} small/>}
-              </div>
-              <div style={{display:'flex',gap:12,fontSize:11,alignItems:'center'}}>
-                {ended
-                  ? <span style={{color:C.muted}}>Terminó {fmtDate(c.ended_at)}</span>
-                  : <span style={{color:C.accent}}>{cm} activos</span>}
-                {cp>0&&<span style={{color:hasOverdue?C.overdue:C.soon,fontWeight:600}}>{fmt(cp)} pendiente</span>}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ─── MATTER FORM ─────────────────────────────────────────────────────────────
-function MatterForm({matter,clients,onSave,onClose,onDelete,saving}) {
-  const [f,setF] = useState(matter||{client_id:'',title:'',area:'Corporativo',status:'Activo',who:'Cristóbal',priority:'Alta',due:'',note:''})
+// ─── BILLING FORM ─────────────────────────────────────────────────────────────
+function BillingForm({bill,clients,onSave,onClose,saving}) {
+  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',payment_method:'',payment_date:'',payment_ref:'',notes:'',erasmo:false})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
     <>
       <Fld label='Cliente'>
-        <select value={f.client_id} onChange={e=>up('client_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14}}>
+        <select value={f.client_id||''} onChange={e=>up('client_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
           <option value=''>— Seleccionar —</option>
           {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Fld>
-      <Fld label='Asunto'><Inp value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Descripción del asunto…'/></Fld>
+      <Fld label='Concepto'><Inp value={f.concept||''} onChange={e=>up('concept',e.target.value)} placeholder='Descripción del cobro…'/></Fld>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Área'><Sel value={f.area} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral']}/></Fld>
-        <Fld label='Responsable'><Sel value={f.who} onChange={e=>up('who',e.target.value)} options={['Cristóbal','Martín','Erasmo','Rodrigo','Martina']}/></Fld>
-        <Fld label='Estado'><Sel value={f.status} onChange={e=>up('status',e.target.value)} options={['Activo','En Revisión','Suspendido','Completado']}/></Fld>
-        <Fld label='Prioridad'><Sel value={f.priority} onChange={e=>up('priority',e.target.value)} options={['Alta','Media','Baja']}/></Fld>
+        <Fld label='Monto (CLP)'><Inp type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0'/></Fld>
+        <Fld label='Estado'><Sel value={f.status||'Pendiente'} onChange={e=>up('status',e.target.value)} options={['Propuesta','Pendiente','Pagado','Vencido','Anulado']}/></Fld>
+        <Fld label='N° Factura'><Inp value={f.invoice_no||''} onChange={e=>up('invoice_no',e.target.value)} placeholder='F-001…'/></Fld>
+        <Fld label='Vencimiento'><Inp type='date' value={f.due||''} onChange={e=>up('due',e.target.value)}/></Fld>
+        <Fld label='Emisión'><Inp type='date' value={f.issued_at||''} onChange={e=>up('issued_at',e.target.value)}/></Fld>
+        <Fld label='Forma de pago'><Sel value={f.payment_method||''} onChange={e=>up('payment_method',e.target.value)} options={['Transferencia','Cheque','Efectivo','Otro']} placeholder='— Opcional —'/></Fld>
       </div>
-      <Fld label='Plazo'><Inp type='date' value={f.due||''} onChange={e=>up('due',e.target.value)}/></Fld>
-      <Fld label='Notas'><Txt value={f.note||''} onChange={e=>up('note',e.target.value)} placeholder='Contexto relevante…'/></Fld>
+      {f.payment_method&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <Fld label='Ref. pago'><Inp value={f.payment_ref||''} onChange={e=>up('payment_ref',e.target.value)} placeholder='N° transferencia…'/></Fld>
+          <Fld label='Fecha pago'><Inp type='date' value={f.payment_date||''} onChange={e=>up('payment_date',e.target.value)}/></Fld>
+        </div>
+      )}
+      <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones…'/></Fld>
+      <Fld label='Cartera'>
+        <button type='button' onClick={()=>up('erasmo',!f.erasmo)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.erasmo?C.accent:C.border}`,background:f.erasmo?'#E6EEF1':'transparent',color:f.erasmo?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+          {f.erasmo?'✓ Cobro de Erasmo':'Marcar como Erasmo'}
+        </button>
+      </Fld>
       <div style={{display:'flex',gap:8,marginTop:4}}>
-        {matter?.id&&<button onClick={()=>onDelete(matter.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-          {saving?<Spin/>:null} {saving?'Guardando…':'Guardar'}
+        <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
+          {saving?<Spin/>:null}{saving?'Guardando…':'Guardar'}
         </button>
       </div>
     </>
   )
 }
 
-// ─── ENTITIES EDITOR (razones sociales) ──────────────────────────────────────
 function EntitiesEditor({clientId}) {
-  const [list,setList] = useState(null)        // null = cargando
+  const [list,setList] = useState(null)
   const [name,setName] = useState('')
   const [rut,setRut]   = useState('')
-  const [edit,setEdit] = useState(null)        // {id,name,rut} en edición
+  const [edit,setEdit] = useState(null)
   const [busy,setBusy] = useState(false)
   const sortByName = arr => [...arr].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
 
@@ -493,8 +441,8 @@ function EntitiesEditor({clientId}) {
   return (
     <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
       <Lbl>Entidades facturables</Lbl>
-      {list===null && <div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Cargando…</div>}
-      {list!==null && list.length===0 && <div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin razones sociales aún.</div>}
+      {list===null&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Cargando…</div>}
+      {list!==null&&list.length===0&&<div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin razones sociales aún.</div>}
       {list?.map(e=>(
         <div key={e.id} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
           {edit?.id===e.id ? (
@@ -525,7 +473,6 @@ function EntitiesEditor({clientId}) {
   )
 }
 
-// ─── CLIENT FORM ─────────────────────────────────────────────────────────────
 function ClientForm({client,onSave,onClose,onDelete,saving}) {
   const [f,setF] = useState(client||{name:'',type:'',email:'',phone:'',contact:'',erasmo:false,status:'Activo',ended_at:'',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -556,30 +503,113 @@ function ClientForm({client,onSave,onClose,onDelete,saving}) {
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={saving||!valid} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:valid?'pointer':'not-allowed',opacity:valid?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
-          {saving?<Spin/>:null} {saving?'Guardando…':'Guardar'}
+          {saving?<Spin/>:null}{saving?'Guardando…':'Guardar'}
         </button>
       </div>
     </>
   )
 }
 
-// ─── APP ROOT ────────────────────────────────────────────────────────────────
+function ClientsView({clients,matters,billing,hideErasmo,onEdit,onAdd}) {
+  const [sFilter,setSFilter] = useState('Activo')
+  const base = hideErasmo ? clients.filter(c=>!c.erasmo) : clients
+  const activeN = base.filter(c=>(c.status||'Activo')==='Activo').length
+  const endedN  = base.filter(c=>c.status==='Terminado').length
+  const cl = useMemo(()=>{
+    if(sFilter==='Activo')    return base.filter(c=>(c.status||'Activo')==='Activo')
+    if(sFilter==='Terminado') return base.filter(c=>c.status==='Terminado')
+    return base
+  },[base,sFilter])
+  return (
+    <div>
+      <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
+          <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+        </div>
+        <div style={{fontSize:12,color:C.muted,margin:'4px 0 12px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
+        <div style={{display:'flex',gap:6,marginBottom:4}}>
+          {[['Activo',`Activos (${activeN})`],['Terminado',`Terminados (${endedN})`],['all','Todos']].map(([v,l])=>(
+            <button key={v} onClick={()=>setSFilter(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${sFilter===v?C.accent:C.border}`,background:sFilter===v?'#E6EEF1':'transparent',color:sFilter===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{padding:'10px 20px 100px'}}>
+        {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes {sFilter==='Terminado'?'terminados':sFilter==='Activo'?'activos':''}</div>}
+        {cl.map(c=>{
+          const ended=c.status==='Terminado'
+          const cm=matters.filter(m=>m.client_id===c.id&&m.status==='Activo').length
+          const cp=billing.filter(b=>b.client_id===c.id&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+(b.amount||0),0)
+          const hasOverdue=billing.some(b=>b.client_id===c.id&&b.status==='Vencido')
+          return (
+            <div key={c.id} onClick={()=>onEdit(c)} style={{background:C.card,borderRadius:10,padding:'13px 16px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${ended?C.done:hasOverdue?C.overdue:C.accent}`,opacity:ended?.7:1,cursor:'pointer'}}
+              onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.09)'}
+              onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{c.name}</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:6}}>{c.type}</div>
+                </div>
+                {ended&&<Pill label='Terminado' bg='#ECECEC' color={C.muted} small/>}
+              </div>
+              <div style={{display:'flex',gap:12,fontSize:11,alignItems:'center'}}>
+                {ended
+                  ? <span style={{color:C.muted}}>Terminó {fmtDate(c.ended_at)}</span>
+                  : <span style={{color:C.accent}}>{cm} activos</span>}
+                {cp>0&&<span style={{color:hasOverdue?C.overdue:C.soon,fontWeight:600}}>{fmt(cp)} pendiente</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function MatterForm({matter,clients,onSave,onClose,onDelete,saving}) {
+  const [f,setF] = useState(matter||{client_id:'',title:'',area:'Corporativo',status:'Activo',who:'Cristóbal',priority:'Alta',due:'',note:''})
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  return (
+    <>
+      <Fld label='Cliente'>
+        <select value={f.client_id} onChange={e=>up('client_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14}}>
+          <option value=''>— Seleccionar —</option>
+          {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </Fld>
+      <Fld label='Asunto'><Inp value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Descripción del asunto…'/></Fld>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Fld label='Área'><Sel value={f.area} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral']}/></Fld>
+        <Fld label='Responsable'><Sel value={f.who} onChange={e=>up('who',e.target.value)} options={['Cristóbal','Martín','Erasmo','Rodrigo','Martina']}/></Fld>
+        <Fld label='Estado'><Sel value={f.status} onChange={e=>up('status',e.target.value)} options={['Activo','En Revisión','Suspendido','Completado']}/></Fld>
+        <Fld label='Prioridad'><Sel value={f.priority} onChange={e=>up('priority',e.target.value)} options={['Alta','Media','Baja']}/></Fld>
+      </div>
+      <Fld label='Plazo'><Inp type='date' value={f.due||''} onChange={e=>up('due',e.target.value)}/></Fld>
+      <Fld label='Notas'><Txt value={f.note||''} onChange={e=>up('note',e.target.value)} placeholder='Contexto relevante…'/></Fld>
+      <div style={{display:'flex',gap:8,marginTop:4}}>
+        {matter?.id&&<button onClick={()=>onDelete(matter.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={saving} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          {saving?<Spin/>:null}{saving?'Guardando…':'Guardar'}
+        </button>
+      </div>
+    </>
+  )
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
   const [user, setUser] = useState(null)
-
   const [clients, setClients] = useState([])
   const [matters, setMatters] = useState([])
   const [billing, setBilling] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-
   const [tab, setTab] = useState('dashboard')
   const [hideErasmo, setHideErasmo] = useState(true)
   const [modal, setModal] = useState(null)
 
-  // Auth
   useEffect(()=>{
     getSession().then(({data:{session}})=>{
       setSession(session)
@@ -594,7 +624,6 @@ export default function App() {
     return ()=>subscription.unsubscribe()
   },[])
 
-  // Load data
   useEffect(()=>{
     if(!session) return
     setLoading(true)
@@ -648,6 +677,24 @@ export default function App() {
     setModal(null)
   },[])
 
+  const handleSaveBilling = useCallback(async(f)=>{
+    setSaving(true)
+    try {
+      const payload = {
+        ...f,
+        amount: parseInt(f.amount)||0,
+        updated_at: new Date().toISOString()
+      }
+      const saved = await upsertBilling(payload)
+      setBilling(p=>{
+        const withClient = {...saved, clients: clients.find(c=>c.id===saved.client_id), erasmo: f.erasmo}
+        return f.id ? p.map(x=>x.id===saved.id?withClient:x) : [withClient,...p]
+      })
+      setModal(null)
+    } catch(e){ alert('Error al guardar: '+e.message) }
+    setSaving(false)
+  },[clients])
+
   const handleStatusChange = useCallback(async(id,status)=>{
     await updateBillingStatus(id,status)
     setBilling(p=>p.map(x=>x.id===id?{...x,status}:x))
@@ -668,11 +715,25 @@ export default function App() {
   return (
     <>
       <link href={FONT} rel='stylesheet'/>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}input,select,textarea{font-family:'DM Sans',sans-serif}input:focus,select:focus,textarea:focus{border-color:${C.accent}!important;box-shadow:0 0 0 3px rgba(0,60,80,.10)}::-webkit-scrollbar{width:0;height:0}option{background:#fff;color:${C.text}}@keyframes spin{to{transform:rotate(360deg)}}@media(min-width:680px){.shell{max-width:600px;margin:0 auto;box-shadow:0 0 0 1px ${C.border},0 12px 50px rgba(0,0,0,.08);min-height:100vh}.bottomnav{max-width:600px;left:50%!important;right:auto!important;transform:translateX(-50%);border-left:1px solid ${C.border};border-right:1px solid ${C.border}}.fab{right:auto!important;left:50%!important;margin-left:228px}}`}</style>
+      <style>{`
+        *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+        body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
+        input,select,textarea{font-family:'DM Sans',sans-serif}
+        input:focus,select:focus,textarea:focus{border-color:${C.accent}!important;box-shadow:0 0 0 3px rgba(0,60,80,.10)}
+        ::-webkit-scrollbar{width:0;height:0}
+        option{background:#fff;color:${C.text}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @media(min-width:680px){
+          .shell{max-width:600px;margin:0 auto;box-shadow:0 0 0 1px ${C.border},0 12px 50px rgba(0,0,0,.08);min-height:100vh}
+          .bottomnav{max-width:600px;left:50%!important;right:auto!important;transform:translateX(-50%);border-left:1px solid ${C.border};border-right:1px solid ${C.border}}
+          .bottomnav button{padding:12px 0 10px}
+          .bottomnav button span:first-child{font-size:18px}
+          .bottomnav button span:last-child{font-size:11px}
+          .fab{right:auto!important;left:50%!important;margin-left:228px}
+        }
+      `}</style>
 
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
-
-        {/* Top bar */}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 4px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <button onClick={signOut} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',fontWeight:500}}>{user?.name} · Salir</button>
           <button onClick={()=>setHideErasmo(h=>!h)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${hideErasmo?C.accent:C.border}`,background:hideErasmo?'#E6EEF1':'transparent',color:hideErasmo?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>
@@ -687,22 +748,25 @@ export default function App() {
             {tab==='dashboard'&&<Dashboard matters={matters} billing={billing} clients={clients} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
             {tab==='matters'&&<MattersView matters={matters} clients={clients} hideErasmo={hideErasmo} onEdit={m=>setModal({type:'matter',data:m})} onAdd={()=>setModal({type:'matter',data:null})}/>}
             {tab==='tasks'&&<TasksView matters={matters} hideErasmo={hideErasmo} onEdit={m=>setModal({type:'matter',data:m})}/>}
-            {tab==='billing'&&<BillingView billing={billing} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})}/>}
+            {tab==='billing'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})}/>}
             {tab==='clients'&&<ClientsView clients={clients} matters={matters} billing={billing} hideErasmo={hideErasmo} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})}/>}
           </div>
         )}
 
         <BottomNav tab={tab} setTab={setTab} urgentN={urgentN} overdueN={overdueN}/>
 
-        {/* FAB */}
-        <button className='fab' onClick={()=>setModal(tab==='clients'?{type:'client',data:null}:{type:'matter',data:null})} style={{position:'fixed',bottom:24,right:20,width:52,height:52,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:24,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
+        <button className='fab' onClick={()=>setModal(tab==='clients'?{type:'client',data:null}:tab==='billing'?{type:'billing',data:null}:{type:'matter',data:null})} style={{position:'fixed',bottom:24,right:20,width:52,height:52,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:24,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
 
         {modal?.type==='matter'&&(
           <Modal title={modal.data?.id?'Editar asunto':'Nuevo asunto'} onClose={()=>setModal(null)}>
             <MatterForm matter={modal.data} clients={clients} onSave={handleSaveMatter} onClose={()=>setModal(null)} onDelete={handleDeleteMatter} saving={saving}/>
           </Modal>
         )}
-
+        {modal?.type==='billing'&&(
+          <Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}>
+            <BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} saving={saving}/>
+          </Modal>
+        )}
         {modal?.type==='client'&&(
           <Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}>
             <ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving}/>
