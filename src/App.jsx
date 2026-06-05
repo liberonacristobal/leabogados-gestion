@@ -700,14 +700,14 @@ function DriveImporter({ clients, billing, onImported, onClose }) {
   async function init() {
     setStep('loading')
     let t = await getDriveToken()
-    if(!t) t = getDriveTokenStored()
+    if(!t) t = localStorage.getItem('drive_token')
     if(!t) { setStep('notoken'); return }
     setToken(t)
     try {
       const res = await driveGet(t, `https://www.googleapis.com/drive/v3/files?q='${FACTURACION_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
       setYears(res.files||[])
       setStep('selectMonth')
-    } catch(e){ setStep('error') }
+    } catch(e){ console.error('Drive init error:', e); setStep('error') }
   }
 
   async function loadMonths(yearId) {
