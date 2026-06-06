@@ -100,6 +100,69 @@ function BottomNav({tab,setTab,overdueN}) {
   )
 }
 
+const WHO_LIST = ['Cristóbal','Martín','Martina','Erasmo']
+
+function TasksByPerson({tasks,clients}) {
+  const [open,setOpen] = useState(null)
+  const active = tasks?.filter(t=>t.status==='Activo')||[]
+
+  return (
+    <div>
+      {WHO_LIST.map(who=>{
+        const mine = active.filter(t=>t.who===who)
+          .sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
+        if(mine.length===0) return null
+        const overdueN = mine.filter(t=>urgency(t.due,t.status)==='overdue').length
+        const urgentN  = mine.filter(t=>urgency(t.due,t.status)==='urgent').length
+        const isOpen = open===who
+        return (
+          <div key={who} style={{marginBottom:8,borderRadius:10,border:`1px solid ${C.border}`,overflow:'hidden',background:C.card}}>
+            <button onClick={()=>setOpen(isOpen?null:who)} style={{width:'100%',padding:'12px 14px',background:'none',border:'none',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',textAlign:'left'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:32,height:32,borderRadius:'50%',background:'#E6EEF1',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.accent,flexShrink:0}}>
+                  {who[0]}
+                </div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{who}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{mine.length} tarea{mine.length!==1?'s':''} pendiente{mine.length!==1?'s':''}</div>
+                </div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                {overdueN>0&&<span style={{fontSize:10,fontWeight:700,color:'#fff',background:C.overdue,borderRadius:10,padding:'2px 7px'}}>{overdueN} venc.</span>}
+                {urgentN>0&&overdueN===0&&<span style={{fontSize:10,fontWeight:700,color:'#fff',background:C.soon,borderRadius:10,padding:'2px 7px'}}>{urgentN} urgente{urgentN!==1?'s':''}</span>}
+                <span style={{fontSize:16,color:C.muted,transform:isOpen?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span>
+              </div>
+            </button>
+            {isOpen&&(
+              <div style={{borderTop:`1px solid ${C.border}`}}>
+                {mine.map(t=>{
+                  const client=clients.find(c=>c.id===t.client_id)
+                  const u=urgency(t.due,t.status)
+                  const rowColor = u==='overdue'?'#FBE9E7':u==='urgent'?'#FFF8EC':u==='soon'?'#FFFBF0':'#fff'
+                  return (
+                    <div key={t.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,background:rowColor,display:'flex',gap:10,alignItems:'flex-start'}}>
+                      <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:500,color:C.text,marginBottom:2}}>{t.title}</div>
+                        <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                          <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name?.split('/')[0].trim()||'—'}</span>
+                          {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+                          {t.note&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontStyle:'italic'}}>{t.note}</span></>}
+                        </div>
+                      </div>
+                      {u==='overdue'&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>VENCIDA</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}) {
   const yr = currentYear
@@ -198,23 +261,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
 
       {tasks?.filter(t=>t.status==='Activo').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tareas activas</div>
-          {tasks.filter(t=>t.status==='Activo').sort((a,b)=>(daysLeft(a.due)||99)-(daysLeft(b.due)||99)).slice(0,6).map(t=>{
-            const client=clients.find(c=>c.id===t.client_id)
-            return (
-              <div key={t.id} style={{background:C.card,borderRadius:10,padding:'10px 13px',marginBottom:6,border:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'flex-start'}}>
-                <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
-                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,alignItems:'center',marginTop:2}}>
-                    <span>{client?.name?.split('/')[0].trim()||'—'}</span>
-                    {t.who&&<><span>·</span><span>{t.who}</span></>}
-                    {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tareas por persona</div>
+          <TasksByPerson tasks={tasks} clients={clients}/>
         </div>
       )}
       <div style={{height:20}}/>
