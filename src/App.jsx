@@ -654,6 +654,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
         </div>
       )}
 
+      {Number(f.monto_terceros)>0 && <div style={{fontSize:11,color:C.accent,marginTop:-4,marginBottom:8}}>Neto firma: {fmt((Number(f.amount)||0)-(Number(f.monto_terceros)||0))} · Terceros: {fmt(Number(f.monto_terceros)||0)}</div>}
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
@@ -821,15 +822,30 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
 
 
 function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
-  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios'})
+  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios'})
+  const [clientQuery,setClientQuery] = useState('')
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
     <>
       <Fld label='Cliente'>
-        <select value={f.client_id||''} onChange={e=>up('client_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
-          <option value=''>— Seleccionar —</option>
-          {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        {f.client_id ? (
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',boxSizing:'border-box'}}>
+            <span style={{flex:1,fontSize:14,color:C.text,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span>
+            <button type='button' onClick={()=>{up('client_id','');setClientQuery('')}} style={{border:'none',background:'transparent',color:C.muted,fontSize:13,cursor:'pointer',fontWeight:600}}>Cambiar</button>
+          </div>
+        ) : (
+          <div>
+            <input value={clientQuery} onChange={e=>setClientQuery(e.target.value)} placeholder='Buscar cliente por nombre...' style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}/>
+            {clientQuery.trim() && (
+              <div style={{maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff'}}>
+                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
+                  <div key={c.id} onClick={()=>{up('client_id',c.id);setClientQuery('')}} style={{padding:'9px 12px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`1px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F2F2F2'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
+                ))}
+                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).length===0 && <div style={{padding:'9px 12px',fontSize:13,color:C.muted}}>Sin resultados</div>}
+              </div>
+            )}
+          </div>
+        )}
       </Fld>
       <Fld label='Tipo de cobro'>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -840,7 +856,8 @@ function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
       </Fld>
       <Fld label='Concepto'><Inp value={f.concept||''} onChange={e=>up('concept',e.target.value)} placeholder='Descripcion del cobro...'/></Fld>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Monto (CLP)'><Inp type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0'/></Fld>
+        <Fld label='Monto total (CLP)'><Inp type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0'/></Fld>
+        <Fld label='De terceros (CLP)'><Inp type='number' value={f.monto_terceros||''} onChange={e=>up('monto_terceros',e.target.value)} placeholder='0'/></Fld>
         <Fld label='Estado'><Sel value={f.status||'Pendiente'} onChange={e=>up('status',e.target.value)} options={['Propuesta','Pendiente','Pagado','Vencido','Anulado']}/></Fld>
         <Fld label='N Factura'><Inp value={f.invoice_no||''} onChange={e=>up('invoice_no',e.target.value)} placeholder='367...'/></Fld>
         <Fld label='Emision'><Inp type='date' value={f.issued_at||''} onChange={e=>up('issued_at',e.target.value)}/></Fld>
