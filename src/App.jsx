@@ -25,6 +25,7 @@ const urgency = (due,status) => {
   const d = daysLeft(due); if(d===null) return 'normal'
   if(d<0) return 'overdue'; if(d<=5) return 'urgent'; if(d<=14) return 'soon'; return 'normal'
 }
+function dueFromIssued(iso){ if(!iso) return null; const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10) }
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
@@ -1663,7 +1664,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div style={{fontSize:13,fontWeight:600,color:C.text}}>Cobros pendientes</div>
               <button onClick={onAddBilling} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
             </div>
-            {porCobrar.sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).map(b=>(
+            {porCobrar.sort((a,b)=>{const ra=(a.receptor_name||'').toLowerCase(),rb=(b.receptor_name||'').toLowerCase();if(ra!==rb)return ra.localeCompare(rb,'es');return (daysLeft(a.due)||0)-(daysLeft(b.due)||0)}).map(b=>(
               <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
@@ -2241,7 +2242,7 @@ function DriveImporter({clients,billing,onImported,onClose}){
         if(parsed.rut)mc=clients.find(c=>c.rut===parsed.rut)
         if(!mc&&parsed.cliente)mc=clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
         if(parsed.folio&&parsed.total){
-          try{await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:parsed.issued_at,notes:null})}
+          try{await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})}
           catch(e){addLog(`error guardando ${pdf.name}: ${e.message}`)}
         }
         results.rows.push({...parsed,clientMatch:mc,fileName:pdf.name});results.imported++
@@ -2394,7 +2395,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
               status: 'Pendiente',
               invoice_no: parsed.folio,
               issued_at: parsed.issued_at,
-              due: parsed.issued_at,
+              due: dueFromIssued(parsed.issued_at),
               notes: null,
             })
             results.imported++
