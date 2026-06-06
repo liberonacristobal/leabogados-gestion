@@ -1681,20 +1681,37 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div style={{fontSize:13,fontWeight:600,color:C.text}}>Cobros pendientes</div>
               <button onClick={onAddBilling} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
             </div>
-            {porCobrar.sort((a,b)=>{const ra=(a.receptor_name||'').toLowerCase(),rb=(b.receptor_name||'').toLowerCase();if(ra!==rb)return ra.localeCompare(rb,'es');return (daysLeft(a.due)||0)-(daysLeft(b.due)||0)}).map(b=>(
-              <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
-                  {b.receptor_name&&<div style={{fontSize:11,color:C.accent,fontWeight:500}}>{b.receptor_name}{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>}
-                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
-                    <span>{b.invoice_no||'—'}</span>
-                    <span>·</span>
-                    <DaysBadge due={b.due} status={b.status}/>
+            {(()=>{
+              const sorted = [...porCobrar].sort((a,b)=>{const ra=(a.receptor_name||'').toLowerCase(),rb=(b.receptor_name||'').toLowerCase();if(ra!==rb)return ra.localeCompare(rb,'es');return new Date(a.issued_at||0)-new Date(b.issued_at||0)})
+              const groups = []
+              sorted.forEach(b=>{
+                const key = b.receptor_name||'Sin razón social'
+                const g = groups.find(g=>g.name===key)
+                if(g) g.items.push(b)
+                else groups.push({name:key, rut:b.receptor_rut||null, items:[b]})
+              })
+              return groups.map(g=>(
+                <div key={g.name} style={{marginBottom:8}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:`2px solid ${C.accent}`}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3}}>{g.name}{g.rut?` · ${g.rut}`:''}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:C.accent}}>{fmt(g.items.reduce((a,b)=>a+(b.amount||0),0))}</div>
                   </div>
+                  {g.items.map(b=>(
+                    <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+                        <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
+                          <span>{b.invoice_no||'—'}</span>
+                          <span>·</span>
+                          <DaysBadge due={b.due} status={b.status}/>
+                        </div>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text,flexShrink:0,marginLeft:12}}>{fmt(b.amount)}</div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{fontSize:13,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text,flexShrink:0,marginLeft:12}}>{fmt(b.amount)}</div>
-              </div>
-            ))}
+              ))
+            })()}
           </div>
         )}
 
@@ -2256,7 +2273,19 @@ function DriveImporter({clients,billing,onImported,onClose}){
         const exists=billing.some(b=>b.invoice_no===parsed.folio)
         if(exists){results.skipped++;addLog(`skip ${pdf.name}`);setProgress(p=>({...p,done:p.done+1}));continue}
         let mc=null
-        if(parsed.rut)mc=clients.find(c=>c.rut===parsed.rut)
+        // 1. Buscar en clientEntities por RUT (aprendizaje previo)
+        if(parsed.rut){
+          const ce=clientEntities.find(e=>e.rut===parsed.rut)
+          if(ce) mc=clients.find(c=>c.id===ce.client_id)
+        }
+        // 2. Buscar en clientEntities por nombre
+        if(!mc&&parsed.cliente){
+          const ce=clientEntities.find(e=>e.name?.toLowerCase()===parsed.cliente?.toLowerCase())
+          if(ce) mc=clients.find(c=>c.id===ce.client_id)
+        }
+        // 3. Buscar en clients por rut directo
+        if(!mc&&parsed.rut)mc=clients.find(c=>c.rut===parsed.rut)
+        // 4. Buscar en clients por nombre
         if(!mc&&parsed.cliente)mc=clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
         if(parsed.folio&&parsed.total){
           try{await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})}
@@ -2391,7 +2420,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
         const {data:existing} = await supabase.from('billing').select('id').eq('invoice_no',parsed.folio).maybeSingle()
         if(existing){ results.skipped++; addLog(`⏭ ${file.name} — ya existe (N° ${parsed.folio})`); setProgress(p=>({...p,done:p.done+1})); continue }
 
-        // Match por RUT: primero en client_entities, luego en clients.rut, luego por nombre
+        // Match por RUT: primero en client_entities (aprendizaje previo), luego en clients.rut, luego por nombre
         let matchedClient = null
         if(parsed.rut) {
           const rutClean = parsed.rut.replace(/[.\-\s]/g,'')
