@@ -254,29 +254,6 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
         {facturado>0&&<div style={{fontSize:12,color:C.muted,textAlign:'right'}}>Tasa de cobro: <span style={{fontWeight:700,color:tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue}}>{tasaCobro}%</span></div>}
       </div>
 
-      {/* Por área */}
-      {topAreas.length>0&&(
-        <div style={{padding:'0 20px 16px'}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Por área {yr}</div>
-          <div style={{background:C.card,borderRadius:12,padding:'12px 16px',border:`1px solid ${C.border}`}}>
-            {topAreas.map(([area,uf])=>{
-              const pct=vendidoBrutoUF>0?Math.round((uf/vendidoBrutoUF)*100):0
-              return (
-                <div key={area} style={{marginBottom:8}}>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                    <span style={{fontSize:12,color:C.text,fontWeight:500}}>{area}</span>
-                    <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{fmtUF(uf)} · {pct}%</span>
-                  </div>
-                  <div style={{height:5,borderRadius:3,background:'#E8EEF0',overflow:'hidden'}}>
-                    <div style={{height:'100%',borderRadius:3,background:C.accent,width:`${pct}%`}}/>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Cobranza */}
       <div style={{padding:'0 20px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
