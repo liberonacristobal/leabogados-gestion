@@ -604,44 +604,242 @@ function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-async function downloadRendicion(client, expenses) {
-  try {
-    const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-    const movs = expenses.filter(e=>e.client_id===client.id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0))
-    const fondos = movs.filter(e=>e.type==='fondo')
-    const gastos = movs.filter(e=>e.type==='gasto')
-    const totalFondos = fondos.reduce((a,e)=>a+e.amount,0)
-    const totalGastos = gastos.reduce((a,e)=>a+e.amount,0)
-    const saldo = totalFondos - totalGastos
-    const byCat = {}
-    gastos.forEach(e=>{ byCat[e.category||'Otro']=(byCat[e.category||'Otro']||0)+e.amount })
-    const wb = XLSX.utils.book_new()
-    const movData = [
-      ['RENDICIÓN DE FONDOS', client.name],
-      ['Fecha generación:', new Date().toLocaleDateString('es-CL')],
-      [],
-      ['Fecha','Tipo','Categoría','Descripción','Monto'],
-      ...movs.map(e=>[e.date||'', e.type==='fondo'?'Fondo recibido':'Gasto', e.type==='fondo'?'—':(e.category||'Otro'), e.concept||'', e.type==='fondo'?e.amount:-e.amount]),
-      [],
-      ['SUBTOTALES POR CATEGORÍA'],['Categoría','Monto'],
-      ...Object.entries(byCat).map(([cat,amt])=>[cat,-amt]),
-      [],
-      ['RESUMEN GENERAL'],
-      ['Fondos recibidos',totalFondos],['Total gastos',-totalGastos],['Saldo',saldo]
-    ]
-    const ws = XLSX.utils.aoa_to_sheet(movData)
-    ws['!cols'] = [{wch:12},{wch:18},{wch:16},{wch:40},{wch:14}]
-    XLSX.utils.book_append_sheet(wb, ws, 'Rendición')
-    const fname = `Rendicion_${client.name.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`
-    XLSX.writeFile(wb, fname)
-  } catch(e) {
-    alert('Error al generar Excel: ' + e.message)
+function RendicionModal({client, expenses, onClose}) {
+  const [periodType, setPeriodType] = useState('month') // month | year | custom
+  const [selYear, setSelYear] = useState(String(currentYear))
+  const [selMonth, setSelMonth] = useState(String(currentMonth))
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+  const allMovs = expenses.filter(e=>e.client_id===client.id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0))
+
+  const filtered = useMemo(()=>{
+    if(periodType==='month') return allMovs.filter(e=>e.date?.startsWith(`${selYear}-${String(selMonth).padStart(2,'0')}`))
+    if(periodType==='year') return allMovs.filter(e=>e.date?.startsWith(selYear))
+    if(periodType==='custom') {
+      return allMovs.filter(e=>{
+        if(!e.date) return false
+        if(fromDate&&e.date<fromDate) return false
+        if(toDate&&e.date>toDate) return false
+        return true
+      })
+    }
+    return allMovs
+  },[allMovs,periodType,selYear,selMonth,fromDate,toDate])
+
+  const getPeriodLabel = () => {
+    if(periodType==='month') return `${MONTHS[parseInt(selMonth)-1]} ${selYear}`
+    if(periodType==='year') return `Año ${selYear}`
+    if(periodType==='custom'&&fromDate&&toDate) return `${fromDate} al ${toDate}`
+    return 'Período seleccionado'
   }
+
+  const fondos = filtered.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
+  const gastos = filtered.filter(e=>e.type==='gasto').reduce((a,e)=>a+e.amount,0)
+  const saldo = fondos - gastos
+  const byCat = {}
+  filtered.filter(e=>e.type==='gasto').forEach(e=>{ byCat[e.category||'Otro']=(byCat[e.category||'Otro']||0)+e.amount })
+
+  const years = [...new Set(allMovs.map(e=>e.date?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+  if(!years.length) years.push(String(currentYear))
+
+  const CATS_COLOR = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  const CATS_TEXT = {'Notaria':'#2A5F7F','CBR':'#8B5C2A','Diario Oficial':'#5C3D8B','Fondo':'#2E7D55','Otro':'#56616B'}
+
+  const generatePDF = () => {
+    const label = getPeriodLabel()
+    const now = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
+    const fmtN = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
+    const A='#003C50', A2='#537281', A4='#E4E8EB', G='#3D3D3D'
+
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Rendición — ${client.name} — ${label}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'DM Sans',sans-serif;color:${G};background:#fff;font-size:11px;padding:0}
+  @page{size:letter portrait;margin:16mm 18mm 16mm 18mm}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}
+  .header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px}
+  .header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+  .firma{font-size:16px;font-weight:700;letter-spacing:-.3px}
+  .firma-sub{font-size:9px;opacity:.7;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
+  .doc-info{text-align:right}
+  .doc-title{font-size:13px;font-weight:600;margin-bottom:2px}
+  .doc-sub{font-size:9px;opacity:.8}
+  .client-name{font-size:20px;font-weight:700;margin-top:6px}
+  .kpi-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px}
+  .kpi{background:${A4};border-radius:6px;padding:10px 12px}
+  .kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600}
+  .kpi-value{font-size:15px;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:16px}
+  thead tr{background:${A};color:#fff}
+  thead th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  tbody tr:nth-child(even){background:${A4}}
+  tbody td{padding:6px 10px;border-bottom:1px solid ${A4}}
+  tfoot tr{background:${A4};font-weight:700}
+  tfoot td{padding:7px 10px;border-top:2px solid ${A2}}
+  .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700}
+  .subtotal-section{margin-bottom:16px}
+  .subtotal-title{font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;border-bottom:1px solid ${A4};padding-bottom:4px}
+  .subtotal-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid ${A4};font-size:10px}
+  .footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}
+  .print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;box-shadow:0 4px 16px rgba(0,60,80,.3)}
+  .saldo-pos{color:#2E7D55} .saldo-neg{color:#C2382B}
+</style></head><body>
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="firma">Liberona Escala Abogados</div>
+      <div class="firma-sub">Av. Presidente Kennedy 7900, of. 905 · Vitacura, Santiago · leabogados.cl</div>
+    </div>
+    <div class="doc-info">
+      <div class="doc-title">Rendición de Fondos</div>
+      <div class="doc-sub">${label} · ${now}</div>
+    </div>
+  </div>
+  <div class="client-name">${client.name}</div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">Fondos recibidos</div><div class="kpi-value" style="color:#2E7D55">${fmtN(fondos)}</div></div>
+  <div class="kpi"><div class="kpi-label">Gastos realizados</div><div class="kpi-value" style="color:#C2382B">${fmtN(gastos)}</div></div>
+  <div class="kpi"><div class="kpi-label">Saldo</div><div class="kpi-value ${saldo>=0?'saldo-pos':'saldo-neg'}">${fmtN(saldo)}</div></div>
+</div>`
+
+    // Tabla de movimientos
+    html += `<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th style="text-align:right">Monto</th></tr></thead><tbody>`
+    filtered.forEach(e=>{
+      const isFondo = e.type==='fondo'
+      const bg = CATS_COLOR[e.category]||CATS_COLOR['Otro']
+      const tc = CATS_TEXT[e.category]||CATS_TEXT['Otro']
+      const badgeLabel = isFondo ? 'Fondo' : (e.category||'Otro')
+      const badgeBg = isFondo ? '#E4F1EA' : bg
+      const badgeTc = isFondo ? '#2E7D55' : tc
+      html += `<tr>
+        <td>${e.date||'—'}</td>
+        <td><span class="badge" style="background:${badgeBg};color:${badgeTc}">${badgeLabel}</span></td>
+        <td>${e.concept||'—'}</td>
+        <td style="text-align:right;font-weight:600;color:${isFondo?'#2E7D55':'#C2382B'}">${isFondo?'+':'-'}${fmtN(e.amount)}</td>
+      </tr>`
+    })
+    html += `</tbody><tfoot><tr><td colspan="3">SALDO</td><td style="text-align:right;color:${saldo>=0?'#2E7D55':'#C2382B'}">${fmtN(saldo)}</td></tr></tfoot></table>`
+
+    // Subtotales por categoría
+    if(Object.keys(byCat).length>0){
+      html += `<div class="subtotal-section"><div class="subtotal-title">Detalle por categoría</div>`
+      Object.entries(byCat).sort((a,b)=>b[1]-a[1]).forEach(([cat,amt])=>{
+        html += `<div class="subtotal-row"><span>${cat}</span><span style="font-weight:600;color:#C2382B">-${fmtN(amt)}</span></div>`
+      })
+      html += `</div>`
+    }
+
+    html += `<div class="footer"><span>Liberona Escala Abogados · leabogados.cl</span><span>CONFIDENCIAL</span></div>
+<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>
+</body></html>`
+
+    const win = window.open('','_blank')
+    win.document.write(html)
+    win.document.close()
+    setTimeout(()=>win.focus(),300)
+  }
+
+  const generateExcel = async() => {
+    try {
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const label = getPeriodLabel()
+      const wb = XLSX.utils.book_new()
+      const movData = [
+        ['RENDICIÓN DE FONDOS'],
+        ['Cliente:', client.name],
+        ['Período:', label],
+        ['Fecha generación:', new Date().toLocaleDateString('es-CL')],
+        ['Dirección:', 'Av. Presidente Kennedy 7900, of. 905, Vitacura, Santiago'],
+        [],
+        ['Fecha','Tipo','Categoría','Descripción','Monto'],
+        ...filtered.map(e=>[e.date||'', e.type==='fondo'?'Fondo recibido':'Gasto', e.type==='fondo'?'—':(e.category||'Otro'), e.concept||'', e.type==='fondo'?e.amount:-e.amount]),
+        [],
+        ['SUBTOTALES POR CATEGORÍA'],
+        ['Categoría','Monto'],
+        ...Object.entries(byCat).map(([cat,amt])=>[cat,-amt]),
+        [],
+        ['RESUMEN GENERAL'],
+        ['Fondos recibidos', fondos],
+        ['Total gastos', -gastos],
+        ['Saldo', saldo],
+      ]
+      const ws = XLSX.utils.aoa_to_sheet(movData)
+      ws['!cols'] = [{wch:12},{wch:16},{wch:16},{wch:40},{wch:16}]
+      XLSX.utils.book_append_sheet(wb, ws, 'Rendición')
+      const fname = `Rendicion_${client.name.replace(/[^a-zA-Z0-9]/g,'_')}_${label.replace(/\s+/g,'_')}.xlsx`
+      XLSX.writeFile(wb, fname)
+    } catch(e) {
+      alert('Error al generar Excel: '+e.message)
+    }
+  }
+
+  return (
+    <div>
+      {/* Selector de período */}
+      <div style={{marginBottom:16}}>
+        <Lbl>Período</Lbl>
+        <div style={{display:'flex',gap:6,marginBottom:10}}>
+          {[['month','Por mes'],['year','Por año'],['custom','Rango']].map(([v,l])=>(
+            <button key={v} onClick={()=>setPeriodType(v)} style={{flex:1,padding:'7px',borderRadius:8,border:`1px solid ${periodType===v?C.accent:C.border}`,background:periodType===v?'#E6EEF1':'transparent',color:periodType===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+        {periodType==='month'&&(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <select value={selYear} onChange={e=>setSelYear(e.target.value)} style={{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13}}>
+              {years.map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+            <select value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13}}>
+              {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+            </select>
+          </div>
+        )}
+        {periodType==='year'&&(
+          <select value={selYear} onChange={e=>setSelYear(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13}}>
+            {years.map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+        )}
+        {periodType==='custom'&&(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <Fld label='Desde'><Inp type='date' value={fromDate} onChange={e=>setFromDate(e.target.value)}/></Fld>
+            <Fld label='Hasta'><Inp type='date' value={toDate} onChange={e=>setToDate(e.target.value)}/></Fld>
+          </div>
+        )}
+      </div>
+
+      {/* Preview saldo */}
+      {filtered.length>0?(
+        <div style={{background:'#F7F7F7',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+            <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Fondos</div><div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(fondos)}</div></div>
+            <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Gastos</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(gastos)}</div></div>
+            <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Saldo</div><div style={{fontSize:13,fontWeight:700,color:saldo>=0?C.normal:C.overdue}}>{fmt(saldo)}</div></div>
+          </div>
+          <div style={{fontSize:11,color:C.muted,marginTop:8}}>{filtered.length} movimiento{filtered.length!==1?'s':''} · {getPeriodLabel()}</div>
+        </div>
+      ):(
+        <div style={{background:'#F7F7F7',borderRadius:10,padding:'12px 14px',marginBottom:16,fontSize:12,color:C.muted,textAlign:'center'}}>Sin movimientos en este período</div>
+      )}
+
+      {/* Botones */}
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={!filtered.length} onClick={generateExcel} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',opacity:!filtered.length?.5:1}}>↓ Excel</button>
+        <button disabled={!filtered.length} onClick={generatePDF} style={{flex:1,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!filtered.length?.5:1}}>↓ PDF</button>
+      </div>
+    </div>
+  )
 }
 
 function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
+  const [rendicionClient,setRendicionClient] = useState(null)
 
   const balances = useMemo(()=>{
     const m={}
@@ -695,7 +893,7 @@ function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
           </div>
           <div style={{display:'flex',gap:6}}>
             {selectedClient&&(
-              <button onClick={()=>downloadRendicion(selectedClient,expenses)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>
+              <button onClick={()=>setRendicionClient(selectedClient)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>
             )}
             <button onClick={onAddFondo} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
             <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
@@ -784,6 +982,7 @@ function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
       )}
     </div>
   )
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} onClose={()=>setRendicionClient(null)}/></Modal>}
 }
 
 function FondoForm({clients,expenses,onSave,onClose,saving,preClient}) {
@@ -1108,7 +1307,7 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion}) {
   const clientSales = sales.filter(s=>s.client_id===client.id)
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
@@ -1249,7 +1448,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose
           })}
           {clientExpenses.length>5&&<div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'8px 0'}}>+{clientExpenses.length-5} más en Gastos y Fondos</div>}
           {clientExpenses.length>0&&(
-            <button onClick={()=>downloadRendicion(client,expenses)} style={{marginTop:8,width:'100%',padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Descargar rendición</button>
+            <button onClick={()=>onRendicion(client)} style={{marginTop:8,width:'100%',padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir fondos</button>
           )}
         </div>
 
@@ -1322,6 +1521,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,onEdit,onAdd,onAddTas
   const [sFilter,setSFilter] = useState('Activo')
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
+  const [rendicionClient,setRendicionClient] = useState(null)
 
   // Actualizar selected cuando cambian los datos
   useEffect(()=>{ if(selected) setSelected(clients.find(c=>c.id===selected.id)||null) },[clients])
@@ -1340,21 +1540,25 @@ function ClientsView({clients,sales,billing,expenses,tasks,onEdit,onAdd,onAddTas
   },[expenses])
 
   if(selected) return (
-    <ClientFicha
-      client={selected}
-      clients={clients}
-      sales={sales}
-      billing={billing}
-      expenses={expenses}
-      tasks={tasks}
-      onEdit={c=>{onEdit(c)}}
-      onClose={()=>setSelected(null)}
-      onAddTask={()=>onAddTask(selected)}
-      onAddGasto={()=>onAddGasto(selected)}
-      onAddFondo={()=>onAddFondo(selected)}
-      onAddSale={()=>onAddSale(selected)}
-      onAddBilling={()=>onAddBilling(selected)}
-    />
+    <>
+      <ClientFicha
+        client={selected}
+        clients={clients}
+        sales={sales}
+        billing={billing}
+        expenses={expenses}
+        tasks={tasks}
+        onEdit={c=>{onEdit(c)}}
+        onClose={()=>setSelected(null)}
+        onAddTask={()=>onAddTask(selected)}
+        onAddGasto={()=>onAddGasto(selected)}
+        onAddFondo={()=>onAddFondo(selected)}
+        onAddSale={()=>onAddSale(selected)}
+        onAddBilling={()=>onAddBilling(selected)}
+        onRendicion={c=>setRendicionClient(c)}
+      />
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} onClose={()=>setRendicionClient(null)}/></Modal>}
+    </>
   )
 
   return (
