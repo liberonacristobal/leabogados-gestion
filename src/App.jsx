@@ -1805,7 +1805,7 @@ export default function App() {
   const handleSaveTask=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const{data,error}=await supabase.from('tasks').upsert(f).select().single()
+      const{data,error}=await supabase.from('tasks').upsert({...f,sale_id:f.sale_id||null,client_id:f.client_id||null}).select().single()
       if(error)throw error
       setTasks(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       setModal(null)
