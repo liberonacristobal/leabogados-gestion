@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 import {
   supabase, signInWithGoogle, signOut, onAuthChange, getSession, getUserInfo,
   getClients, getBilling,
@@ -1695,8 +1698,6 @@ function DriveImporter({clients,billing,onImported,onClose}){
         const arrayBuf=await binRes.arrayBuffer()
         let raw=''
         try{
-          const pdfjsLib=await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js')
-          pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
           const pdfDoc=await pdfjsLib.getDocument({data:arrayBuf}).promise
           for(let p=1;p<=pdfDoc.numPages;p++){const page=await pdfDoc.getPage(p);const tc=await page.getTextContent();raw+=tc.items.map(i=>i.str).join(' ')+'\n'}
         }catch(e){raw=new TextDecoder('latin1').decode(arrayBuf)}
@@ -1758,8 +1759,6 @@ function PDFUploader({clients,billing,onImported,onClose}) {
     const reader = new FileReader()
     reader.onload = async(e)=>{
       try {
-        const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js')
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
         const typedArr = new Uint8Array(e.target.result)
         const pdfDoc = await pdfjsLib.getDocument({data:typedArr}).promise
         let text = ''
