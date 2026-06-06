@@ -549,85 +549,199 @@ function BillingForm({bill,clients,onSave,onClose,saving}) {
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
+function downloadRendicion(client, expenses) {
+  const movs = expenses.filter(e=>e.client_id===client.id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0))
+  const fondos = movs.filter(e=>e.type==='fondo')
+  const gastos = movs.filter(e=>e.type==='gasto')
+  const totalFondos = fondos.reduce((a,e)=>a+e.amount,0)
+  const totalGastos = gastos.reduce((a,e)=>a+e.amount,0)
+  const saldo = totalFondos - totalGastos
+
+  // Subtotales por categoría
+  const byCat = {}
+  gastos.forEach(e=>{ byCat[e.category||'Otro']=(byCat[e.category||'Otro']||0)+e.amount })
+
+  // Generar CSV
+  const rows = []
+  rows.push(['RENDICIÓN DE FONDOS - ' + client.name])
+  rows.push(['Fecha generación:', new Date().toLocaleDateString('es-CL')])
+  rows.push([])
+  rows.push(['MOVIMIENTOS'])
+  rows.push(['Fecha','Tipo','Categoría','Descripción','Monto'])
+  movs.forEach(e=>{
+    rows.push([
+      e.date||'',
+      e.type==='fondo'?'Fondo recibido':'Gasto',
+      e.type==='fondo'?'—':(e.category||'Otro'),
+      e.concept||'',
+      e.type==='fondo'?e.amount:-e.amount
+    ])
+  })
+  rows.push([])
+  rows.push(['RESUMEN POR CATEGORÍA'])
+  rows.push(['Categoría','Total'])
+  Object.entries(byCat).forEach(([cat,amt])=>rows.push([cat, -amt]))
+  rows.push([])
+  rows.push(['RESUMEN GENERAL'])
+  rows.push(['Fondos recibidos', totalFondos])
+  rows.push(['Total gastos', -totalGastos])
+  rows.push(['Saldo', saldo])
+
+  const csv = rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href=url; a.download=`Rendicion_${client.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`
+  a.click(); URL.revokeObjectURL(url)
+}
+
 function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
-  const [fClient,setFClient] = useState('')
+  const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
-  const filtered = useMemo(()=>{
-    let r = fClient ? expenses.filter(e=>e.client_id===fClient) : expenses
-    if(q) r = r.filter(e=>{ const c=clients.find(x=>x.id===e.client_id); return c?.name.toLowerCase().includes(q.toLowerCase()) })
-    return r.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
-  },[expenses,fClient,q,clients])
+
   const balances = useMemo(()=>{
-    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) }); return m
+    const m={}
+    expenses.forEach(e=>{
+      if(!m[e.client_id]) m[e.client_id]={fondos:0,gastos:0}
+      if(e.type==='fondo') m[e.client_id].fondos+=e.amount
+      else m[e.client_id].gastos+=e.amount
+    })
+    return m
   },[expenses])
-  const totalFondos=expenses.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
-  const totalGastos=expenses.filter(e=>e.type==='gasto').reduce((a,e)=>a+e.amount,0)
-  const negatives=clients.filter(c=>balances[c.id]<0)
+
+  // Clientes con movimientos, ordenados: negativos primero, luego por nombre
+  const clientsWithMovs = useMemo(()=>{
+    return clients
+      .filter(c=>balances[c.id])
+      .sort((a,b)=>{
+        const sa=(balances[a.id]?.fondos||0)-(balances[a.id]?.gastos||0)
+        const sb=(balances[b.id]?.fondos||0)-(balances[b.id]?.gastos||0)
+        if(sa<0&&sb>=0) return -1
+        if(sb<0&&sa>=0) return 1
+        return a.name.localeCompare(b.name,'es')
+      })
+  },[clients,balances])
+
+  const filteredClients = useMemo(()=>{
+    if(!q.trim()) return clientsWithMovs
+    return clientsWithMovs.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
+  },[clientsWithMovs,q])
+
+  const filtered = useMemo(()=>{
+    if(!selectedClient) return []
+    return expenses.filter(e=>e.client_id===selectedClient.id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
+  },[expenses,selectedClient])
+
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+
+  const clientBalance = selectedClient ? (balances[selectedClient.id]||{}) : null
+  const saldo = clientBalance ? clientBalance.fondos - clientBalance.gastos : 0
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Gastos y Fondos</div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {selectedClient&&(
+              <button onClick={()=>setSelectedClient(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+            )}
+            <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
+              {selectedClient?selectedClient.name:'Gastos y Fondos'}
+            </div>
+          </div>
           <div style={{display:'flex',gap:6}}>
+            {selectedClient&&(
+              <button onClick={()=>downloadRendicion(selectedClient,expenses)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>
+            )}
             <button onClick={onAddFondo} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
             <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
           </div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-          <div style={{background:'#E4F1EA',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
-            <div style={{fontSize:10,color:C.muted,marginBottom:2}}>FONDOS RECIBIDOS</div>
-            <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(totalFondos)}</div>
-          </div>
-          <div style={{background:'#FBE9E7',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
-            <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS REALIZADOS</div>
-            <div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(totalGastos)}</div>
-          </div>
-        </div>
-        {negatives.length>0&&(
-          <div style={{background:'#FBE9E7',borderRadius:8,padding:'8px 12px',marginBottom:8,border:'1px solid #f5c6c2'}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.overdue,marginBottom:4}}>Saldo negativo</div>
-            {negatives.map(c=>(
-              <div key={c.id} style={{fontSize:12,color:C.text,display:'flex',justifyContent:'space-between'}}>
-                <span>{c.name}</span><span style={{fontWeight:600,color:C.overdue}}>{fmt(balances[c.id])}</span>
+
+        {/* Vista cliente seleccionado: saldo */}
+        {selectedClient&&clientBalance&&(
+          <div style={{background:C.card,borderRadius:10,padding:'12px 14px',border:`1px solid ${saldo<0?C.overdue:C.border}`,marginBottom:8}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+              <div>
+                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>FONDOS</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(clientBalance.fondos||0)}</div>
               </div>
-            ))}
-          </div>
-        )}
-        <Inp value={q} onChange={e=>{setQ(e.target.value);setFClient('')}} placeholder='Buscar cliente...' style={{marginBottom:4}}/>
-      </div>
-      <div style={{padding:'10px 20px 100px'}}>
-        {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin registros</div>}
-        {filtered.map(e=>{
-          const client=clients.find(c=>c.id===e.client_id)
-          const isFondo=e.type==='fondo'
-          const catBg=CATS[e.category]||CATS['Otro']
-          return (
-            <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isFondo?C.normal:C.overdue}`,cursor:'pointer'}}
-              onMouseEnter={x=>x.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.08)'}
-              onMouseLeave={x=>x.currentTarget.style.boxShadow='none'}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
-                    <span style={{fontSize:13,fontWeight:600,color:C.text}}>{client?.name||'—'}</span>
-                    {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}</span>}
-                  </div>
-                  <div style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
-                </div>
-                <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-                  <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
-                </div>
+              <div>
+                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(clientBalance.gastos||0)}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
+                <div style={{fontSize:13,fontWeight:700,color:saldo<0?C.overdue:C.normal}}>{fmt(saldo)}</div>
               </div>
             </div>
-          )
-        })}
+          </div>
+        )}
+
+        {/* Vista general: búsqueda */}
+        {!selectedClient&&(
+          <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:4}}/>
+        )}
       </div>
+
+      {/* Vista general: lista de clientes con saldo */}
+      {!selectedClient&&(
+        <div style={{padding:'4px 20px 100px'}}>
+          {filteredClients.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin registros</div>}
+          {filteredClients.map(c=>{
+            const b=balances[c.id]||{fondos:0,gastos:0}
+            const sal=b.fondos-b.gastos
+            return (
+              <div key={c.id} onClick={()=>setSelectedClient(c)} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${sal<0?C.overdue:C.normal}`,cursor:'pointer'}}
+                onMouseEnter={x=>x.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.08)'}
+                onMouseLeave={x=>x.currentTarget.style.boxShadow='none'}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:4}}>{c.name}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:sal<0?C.overdue:C.normal}}>{fmt(sal)}</div>
+                </div>
+                <div style={{display:'flex',gap:16,fontSize:11,color:C.muted}}>
+                  <span>Fondos: {fmt(b.fondos)}</span>
+                  <span>Gastos: {fmt(b.gastos)}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Vista cliente: movimientos */}
+      {selectedClient&&(
+        <div style={{padding:'4px 20px 100px'}}>
+          {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
+          {filtered.map(e=>{
+            const isFondo=e.type==='fondo'
+            const catBg=CATS[e.category]||CATS['Otro']
+            return (
+              <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isFondo?C.normal:C.overdue}`,cursor:'pointer'}}
+                onMouseEnter={x=>x.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.08)'}
+                onMouseLeave={x=>x.currentTarget.style.boxShadow='none'}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
+                      {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}</span>}
+                      {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
+                    </div>
+                    <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
+                    <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── FONDO FORM (ingreso rápido de fondo recibido) ─────────────────────────────
 function FondoForm({clients,expenses,onSave,onClose,saving}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(null)
