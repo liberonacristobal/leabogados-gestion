@@ -622,19 +622,26 @@ function ExpenseForm({expense,clients,sales,onSave,onClose,onDelete,saving}) {
 }
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function QuickTaskForm({clients,sales,onSave,onClose,saving}) {
+function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(null)
-  const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:''})
+  const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:''})
+  const [showProjects,setShowProjects] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
-  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
   const matches = useMemo(()=>{
     if(!q.trim()) return []
-    const ql = q.toLowerCase()
-    return clients.filter(c=>c.name.toLowerCase().includes(ql)).slice(0,6)
+    return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6)
   },[clients,q])
+
+  // Proyectos existentes del cliente seleccionado
+  const clientProjects = useMemo(()=>{
+    if(!selectedClient) return []
+    return [...new Set(
+      tasks.filter(t=>t.client_id===selectedClient.id&&t.project).map(t=>t.project)
+    )].sort()
+  },[tasks,selectedClient])
 
   const clientSales = sales.filter(s=>s.client_id===selectedClient?.id&&s.status==='Activo')
 
@@ -643,12 +650,7 @@ function QuickTaskForm({clients,sales,onSave,onClose,saving}) {
       {!selectedClient ? (
         <Fld label='Cliente'>
           <div style={{position:'relative'}}>
-            <Inp
-              value={q}
-              onChange={e=>setQ(e.target.value)}
-              placeholder='Escribe para buscar cliente...'
-              autoFocus
-            />
+            <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Escribe para buscar cliente...' autoFocus/>
             {matches.length>0&&(
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:220,overflowY:'auto'}}>
                 {matches.map(c=>(
@@ -675,32 +677,52 @@ function QuickTaskForm({clients,sales,onSave,onClose,saving}) {
             <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
             {selectedClient.type&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.type}</div>}
           </div>
-          <button onClick={()=>{setSelectedClient(null);setF(p=>({...p,sale_id:''}))}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
+          <button onClick={()=>{setSelectedClient(null);setF(p=>({...p,sale_id:'',project:''}))}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
         </div>
       )}
 
       {selectedClient&&(
         <>
           <Fld label='Tarea'><Inp value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Descripción de la tarea...' autoFocus/></Fld>
+
+          <Fld label='Proyecto (opcional)'>
+            <div style={{position:'relative'}}>
+              <Inp
+                value={f.project||''}
+                onChange={e=>up('project',e.target.value)}
+                onFocus={()=>setShowProjects(true)}
+                onBlur={()=>setTimeout(()=>setShowProjects(false),150)}
+                placeholder={clientProjects.length>0?'Selecciona o escribe nuevo proyecto...':'Escribe el nombre del proyecto...'}
+              />
+              {showProjects&&clientProjects.length>0&&(
+                <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
+                  {clientProjects.filter(p=>!f.project||p.toLowerCase().includes(f.project.toLowerCase())).map((p,i)=>(
+                    <div key={i} onMouseDown={()=>up('project',p)}
+                      style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                      onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                      {p}
+                    </div>
+                  ))}
+                  <div style={{padding:'7px 14px',fontSize:11,color:C.muted,fontStyle:'italic',borderTop:`1px solid ${C.border}`}}>
+                    O escribe un proyecto nuevo
+                  </div>
+                </div>
+              )}
+            </div>
+          </Fld>
+
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <Fld label='Responsable'><Sel value={f.who} onChange={e=>up('who',e.target.value)} options={WHO}/></Fld>
             <Fld label='Plazo'><Inp type='date' value={f.due} onChange={e=>up('due',e.target.value)}/></Fld>
           </div>
-          {clientSales.length>0&&(
-            <Fld label='Venta asociada (opcional)'>
-              <select value={f.sale_id} onChange={e=>up('sale_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
-                <option value=''>— Sin venta —</option>
-                {clientSales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
-              </select>
-            </Fld>
-          )}
           <Fld label='Nota'><Inp value={f.note} onChange={e=>up('note',e.target.value)} placeholder='Contexto adicional...'/></Fld>
         </>
       )}
 
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,sale_id:f.sale_id||null})}
+        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,project:f.project||null})}
           style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!f.title.trim())?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar tarea'}
         </button>
@@ -871,8 +893,9 @@ function EntitiesEditor({clientId}) {
 // ─── TASKS EDITOR (dentro de ficha cliente) ───────────────────────────────────
 function TasksEditor({clientId,sales}) {
   const [tasks,setTasks] = useState(null)
-  const [form,setForm] = useState(null) // null=cerrado, {}=nuevo, {id,...}=editar
+  const [form,setForm] = useState(null)
   const [busy,setBusy] = useState(false)
+  const [showProjects,setShowProjects] = useState(false)
   const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
 
   useEffect(()=>{
@@ -882,11 +905,13 @@ function TasksEditor({clientId,sales}) {
     return ()=>{ok=false}
   },[clientId])
 
+  const existingProjects = useMemo(()=>[...new Set((tasks||[]).filter(t=>t.project).map(t=>t.project))].sort(),[tasks])
+
   const save = async()=>{
     if(!form.title?.trim()) return
     setBusy(true)
     try{
-      const p={...form,client_id:clientId,sale_id:form.sale_id||null}
+      const p={...form,client_id:clientId,sale_id:form.sale_id||null,project:form.project||null}
       const{data,error}=await supabase.from('tasks').upsert(p).select().single()
       if(error)throw error
       setTasks(p=>form.id?p.map(x=>x.id===data.id?data:x):[...p,data])
@@ -909,63 +934,73 @@ function TasksEditor({clientId,sales}) {
 
   const active = tasks?.filter(t=>t.status!=='Completado')||[]
   const done   = tasks?.filter(t=>t.status==='Completado')||[]
+  const grouped = {}
+  active.forEach(t=>{ const k=t.project||'__none__'; if(!grouped[k])grouped[k]=[]; grouped[k].push(t) })
 
   return (
     <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
         <Lbl>Tareas</Lbl>
-        <button onClick={()=>setForm({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:''})} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Agregar</button>
+        <button onClick={()=>setForm({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',project:''})} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Agregar</button>
       </div>
       {tasks===null&&<div style={{fontSize:12,color:C.muted}}>Cargando...</div>}
       {tasks?.length===0&&!form&&<div style={{fontSize:12,color:C.muted}}>Sin tareas.</div>}
 
       {form&&(
         <div style={{background:'#fff',borderRadius:8,padding:12,marginBottom:10,border:`1px solid ${C.border}`}}>
-          <input value={form.title||''} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder='Descripción de la tarea...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:13,marginBottom:8,boxSizing:'border-box'}}/>
+          <input value={form.title||''} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder='Descripción...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:13,marginBottom:8,boxSizing:'border-box'}}/>
+          <div style={{position:'relative',marginBottom:8}}>
+            <input value={form.project||''} onChange={e=>setForm(p=>({...p,project:e.target.value}))} onFocus={()=>setShowProjects(true)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} placeholder='Proyecto (opcional)...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}}/>
+            {showProjects&&existingProjects.length>0&&(
+              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,boxShadow:'0 4px 12px rgba(0,0,0,.10)',zIndex:100,marginTop:2,maxHeight:150,overflowY:'auto'}}>
+                {existingProjects.filter(p=>!form.project||p.toLowerCase().includes(form.project.toLowerCase())).map((p,i)=>(
+                  <div key={i} onMouseDown={()=>setForm(f=>({...f,project:p}))} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <select value={form.who||'Cristóbal'} onChange={e=>setForm(p=>({...p,who:e.target.value}))} style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7'}}>
-              {WHO.map(w=><option key={w} value={w}>{w}</option>)}
-            </select>
+            <select value={form.who||'Cristóbal'} onChange={e=>setForm(p=>({...p,who:e.target.value}))} style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7'}}>{WHO.map(w=><option key={w} value={w}>{w}</option>)}</select>
             <input type='date' value={form.due||''} onChange={e=>setForm(p=>({...p,due:e.target.value}))} style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7'}}/>
           </div>
-          {sales?.filter(s=>s.client_id===clientId).length>0&&(
-            <select value={form.sale_id||''} onChange={e=>setForm(p=>({...p,sale_id:e.target.value}))} style={{width:'100%',padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7',marginBottom:8}}>
-              <option value=''>— Sin venta asociada —</option>
-              {sales.filter(s=>s.client_id===clientId).map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
-            </select>
-          )}
           <input value={form.note||''} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder='Nota (opcional)...' style={{width:'100%',padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,marginBottom:8,boxSizing:'border-box'}}/>
           <div style={{display:'flex',gap:6}}>
             <button onClick={()=>setForm(null)} style={{flex:1,padding:'7px',borderRadius:7,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
-            <button onClick={save} disabled={busy||!form.title?.trim()} style={{flex:2,padding:'7px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:!form.title?.trim()?.6:1}}>
-              {busy?'Guardando...':'Guardar'}
-            </button>
+            <button onClick={save} disabled={busy||!form.title?.trim()} style={{flex:2,padding:'7px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>{busy?'Guardando...':'Guardar'}</button>
           </div>
         </div>
       )}
 
-      {active.map(t=>(
-        <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-          <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.accent}`,background:'transparent',cursor:'pointer',flexShrink:0,marginTop:1}}/>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
-            <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>
-              <span>{t.who||'—'}</span>
-              {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-              {t.note&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</span></>}
-            </div>
+      {Object.keys(grouped).map(key=>{
+        const isProject = key!=='__none__'
+        return (
+          <div key={key} style={{marginBottom:10}}>
+            {isProject&&<div style={{fontSize:11,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:4,paddingLeft:2}}>{key}</div>}
+            {grouped[key].map(t=>(
+              <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+                <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.accent}`,background:'transparent',cursor:'pointer',flexShrink:0,marginTop:1}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
+                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>
+                    <span>{t.who||'—'}</span>
+                    {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+                    {t.note&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontStyle:'italic'}}>{t.note}</span></>}
+                  </div>
+                </div>
+                <button onClick={()=>setForm({...t})} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',flexShrink:0}}>ed</button>
+                <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:C.overdue,fontSize:12,cursor:'pointer',flexShrink:0}}>x</button>
+              </div>
+            ))}
           </div>
-          <button onClick={()=>setForm({...t})} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',flexShrink:0}}>ed</button>
-          <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:C.overdue,fontSize:12,cursor:'pointer',flexShrink:0}}>x</button>
-        </div>
-      ))}
+        )
+      })}
 
       {done.length>0&&(
         <div style={{marginTop:8}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Completadas ({done.length})</div>
           {done.map(t=>(
             <div key={t.id} style={{display:'flex',gap:8,alignItems:'center',padding:'5px 0'}}>
-              <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.done}`,background:C.done,cursor:'pointer',flexShrink:0,fontSize:10,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>✓</button>
+              <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.done}`,background:C.done,cursor:'pointer',flexShrink:0,fontSize:10,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>v</button>
               <div style={{flex:1,fontSize:12,color:C.muted,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
               <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>x</button>
             </div>
@@ -975,6 +1010,7 @@ function TasksEditor({clientId,sales}) {
     </div>
   )
 }
+
 
 function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   const [f,setF]=useState(client||{name:'',type:'',email:'',phone:'',contact:'',erasmo:false,status:'Activo',ended_at:'',notes:''})
@@ -1310,7 +1346,7 @@ export default function App() {
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='expense'&&<Modal title={modal.data?.id?'Editar registro':'Nuevo registro'} onClose={()=>setModal(null)}><ExpenseForm expense={modal.data} clients={clients} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving}/></Modal>}
+        {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
     </>
