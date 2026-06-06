@@ -438,18 +438,30 @@ function SaleForm({sale,clients,onSave,onClose,onDelete,saving}) {
 function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onImport}) {
   const [filter,setFilter] = useState('activo')
   const [fYear,setFYear] = useState('')
+  const [q,setQ] = useState('')
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
   const filtered = useMemo(()=>{
     let r = bb
     if(filter==='activo') r = r.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status))
     else if(filter==='pagado') r = r.filter(b=>b.status==='Pagado')
     if(fYear) r = r.filter(b=>b.issued_at?.startsWith(fYear))
+    if(q.trim()) r = r.filter(b=>b.clients?.name?.toLowerCase().includes(q.toLowerCase())||b.concept?.toLowerCase().includes(q.toLowerCase())||b.invoice_no?.toLowerCase().includes(q.toLowerCase()))
     return r.sort((a,b)=>new Date(b.issued_at||0)-new Date(a.issued_at||0))
-  },[bb,filter,fYear])
+  },[bb,filter,fYear,q])
   const pending=bb.filter(b=>b.status==='Pendiente').reduce((s,b)=>s+(b.amount||0),0)
   const overdue=bb.filter(b=>b.status==='Vencido').reduce((s,b)=>s+(b.amount||0),0)
   const paid=bb.filter(b=>b.status==='Pagado').reduce((s,b)=>s+(b.amount||0),0)
   const years=[...new Set(bb.map(b=>b.issued_at?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+
+  const handleTogglePagado = async(b) => {
+    if(b.status==='Pagado') {
+      await onStatusChange(b.id,'Pendiente',null)
+    } else {
+      const today = new Date().toISOString().slice(0,10)
+      await onStatusChange(b.id,'Pagado',today)
+    }
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -468,14 +480,15 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
             </div>
           ))}
         </div>
-        <div style={{display:'flex',gap:6,marginBottom:6}}>
+        <div style={{display:'flex',gap:6,marginBottom:8}}>
           {[['activo','Pendientes'],['pagado','Pagados'],['all','Todos']].map(([v,l])=>(
             <button key={v} onClick={()=>setFilter(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
           ))}
         </div>
+        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, concepto, N° factura...' style={{marginBottom:6}}/>
         {years.length>0&&(
           <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{width:'100%',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12,marginBottom:4}}>
-            <option value=''>Todos los anos</option>
+            <option value=''>Todos los años</option>
             {years.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
         )}
@@ -491,7 +504,7 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:12}}>
                 <div style={{fontSize:15,fontWeight:600,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
-                <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',fontSize:11,color:C.muted,cursor:'pointer'}}>edit</button>
+                <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',fontSize:11,color:C.muted,cursor:'pointer'}}>✎</button>
               </div>
             </div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -501,9 +514,18 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
                 {b.status!=='Pagado'&&<DaysBadge due={b.due} status={b.status}/>}
                 {b.status==='Pagado'&&b.paid_at&&<span style={{fontSize:10,color:C.normal,fontWeight:600}}>Pagado {fmtDate(b.paid_at)}</span>}
               </div>
-              <select value={b.status} onChange={e=>onStatusChange(b.id,e.target.value)} style={{padding:'3px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>
-                {['Propuesta','Pendiente','Pagado','Vencido','Anulado'].map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
+              {/* Toggle pagado */}
+              <button onClick={()=>handleTogglePagado(b)} style={{
+                display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',
+                background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',
+                color:b.status==='Pagado'?C.normal:C.muted,
+                fontSize:11,fontWeight:700,transition:'all .15s'
+              }}>
+                <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>
+                  {b.status==='Pagado'?'✓':''}
+                </span>
+                {b.status==='Pagado'?'Pagado':'Marcar pagado'}
+              </button>
             </div>
           </div>
         ))}
@@ -1847,9 +1869,11 @@ export default function App() {
     setSaving(false)
   },[clients])
 
-  const handleStatusChange=useCallback(async(id,status)=>{
-    await updateBillingStatus(id,status)
-    setBilling(p=>p.map(x=>x.id===id?{...x,status}:x))
+  const handleStatusChange=useCallback(async(id,status,paid_at)=>{
+    const updates={status}
+    if(paid_at!==undefined) updates.paid_at=paid_at
+    await supabase.from('billing').update(updates).eq('id',id)
+    setBilling(p=>p.map(x=>x.id===id?{...x,status,...(paid_at!==undefined?{paid_at}:{})}:x))
   },[])
 
   const overdueN=useMemo(()=>{
