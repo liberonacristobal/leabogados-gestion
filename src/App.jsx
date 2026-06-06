@@ -1356,7 +1356,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,onEdit,onAdd,onAddTas
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{c.name}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{c.type}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
                 </div>
                 {ended&&<Pill label='Terminado' bg='#ECECEC' color={C.muted} small/>}
               </div>
@@ -1593,12 +1593,15 @@ function TasksEditor({clientId,sales}) {
 
 
 function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
-  const [f,setF]=useState(client||{name:'',type:'',email:'',phone:'',contact:'',erasmo:false,status:'Activo',ended_at:'',notes:''})
+  const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,status:'Activo',ended_at:'',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
     <>
       <Fld label='Nombre'><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
-      <Fld label='Tipo'><Sel value={f.type||''} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral']} placeholder='— Seleccionar —'/></Fld>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Fld label='RUT'><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
+        <Fld label='Tipo'><Sel value={f.type||''} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral']} placeholder='— Seleccionar —'/></Fld>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='Email'><Inp type='email' value={f.email||''} onChange={e=>up('email',e.target.value)} placeholder='correo@...'/></Fld>
         <Fld label='Telefono'><Inp value={f.phone||''} onChange={e=>up('phone',e.target.value)} placeholder='+56...'/></Fld>
@@ -1759,10 +1762,12 @@ function DriveImporter({clients,billing,onImported,onClose}){
 }
 
 // ─── PDF UPLOADER ─────────────────────────────────────────────────────────────
-function PDFUploader({clients,billing,onImported,onClose}) {
-  const [step,setStep] = useState('select') // select | processing | done
+function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
+  const [step,setStep] = useState('select') // select | processing | review | done
   const [log,setLog] = useState([])
   const [progress,setProgress] = useState({done:0,total:0})
+  const [unmatched,setUnmatched] = useState([]) // [{invoiceId, folio, rut, cliente, amount, issued_at, concepto}]
+  const [assignments,setAssignments] = useState({}) // {invoiceId: clientId}
   const fileRef = useRef(null)
   const addLog = msg => setLog(p=>[...p,msg])
 
@@ -1780,7 +1785,6 @@ function PDFUploader({clients,billing,onImported,onClose}) {
         }
         resolve(text)
       } catch(err) {
-        // Fallback: leer como texto latin1
         const r2 = new FileReader()
         r2.onload = e2 => resolve(e2.target.result)
         r2.readAsText(file, 'latin1')
@@ -1794,7 +1798,8 @@ function PDFUploader({clients,billing,onImported,onClose}) {
     setStep('processing')
     setLog([`${files.length} archivo${files.length!==1?'s':''} seleccionado${files.length!==1?'s':''}`])
     setProgress({done:0,total:files.length})
-    const results = {imported:0,skipped:0,errors:0,rows:[]}
+    const results = {imported:0,skipped:0,errors:0}
+    const pendingReview = []
 
     for(let i=0;i<files.length;i++){
       const file = files[i]
@@ -1803,9 +1808,12 @@ function PDFUploader({clients,billing,onImported,onClose}) {
         const parsed = parseInvoice(raw)
         const exists = billing.some(b=>b.invoice_no===parsed.folio)
         if(exists){ results.skipped++; addLog(`⏭ ${file.name} — ya existe`); setProgress(p=>({...p,done:p.done+1})); continue }
+
+        // Match por RUT primero, luego por nombre
         let matchedClient = null
-        if(parsed.rut) matchedClient = clients.find(c=>c.rut===parsed.rut)
+        if(parsed.rut) matchedClient = clients.find(c=>c.rut&&c.rut.replace(/[.\-\s]/g,'')===parsed.rut.replace(/[.\-\s]/g,''))
         if(!matchedClient&&parsed.cliente) matchedClient = clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
+
         if(parsed.folio&&parsed.total){
           try {
             await upsertBilling({
@@ -1816,13 +1824,28 @@ function PDFUploader({clients,billing,onImported,onClose}) {
               invoice_no: parsed.folio,
               issued_at: parsed.issued_at,
               due: parsed.issued_at,
-              notes: `Subido: ${file.name}`,
+              notes: parsed.rut ? `RUT: ${parsed.rut}` : `Subido: ${file.name}`,
             })
-          } catch(e){ addLog(`⚠ ${file.name} — error al guardar: ${e.message}`) }
+            results.imported++
+            if(matchedClient){
+              addLog(`✓ ${file.name} — ${matchedClient.name} · ${fmt(parsed.total)}`)
+            } else {
+              addLog(`⚠ ${file.name} — sin cliente · ${fmt(parsed.total)}`)
+              if(parsed.folio) pendingReview.push({
+                id: parsed.folio,
+                folio: parsed.folio,
+                rut: parsed.rut,
+                cliente: parsed.cliente,
+                amount: parsed.total,
+                issued_at: parsed.issued_at,
+                concepto: parsed.concepto,
+                fileName: file.name
+              })
+            }
+          } catch(e){ addLog(`✗ ${file.name} — ${e.message}`) }
+        } else {
+          addLog(`⚠ ${file.name} — no se pudo leer (folio: ${parsed.folio||'?'}, monto: ${parsed.total||'?'})`)
         }
-        results.rows.push({...parsed,clientMatch:matchedClient,fileName:file.name})
-        results.imported++
-        addLog(`✓ ${file.name} — ${parsed.cliente||'?'} · $${parsed.total?.toLocaleString('es-CL')||'?'}`)
       } catch(e){
         results.errors++
         addLog(`✗ ${file.name} — ${e.message}`)
@@ -1832,8 +1855,33 @@ function PDFUploader({clients,billing,onImported,onClose}) {
 
     addLog('─────────────────────────')
     addLog(`✅ ${results.imported} importadas · ⏭ ${results.skipped} ya existían · ❌ ${results.errors} errores`)
+
+    if(pendingReview.length>0){
+      setUnmatched(pendingReview)
+      setStep('review')
+    } else {
+      setStep('done')
+      onImported([])
+    }
+  }
+
+  const saveAssignments = async() => {
+    for(const inv of unmatched){
+      const clientId = assignments[inv.id]
+      if(!clientId) continue
+      // Actualizar el cobro con el cliente
+      await supabase.from('billing').update({client_id:clientId}).eq('invoice_no',inv.folio)
+      // Guardar RUT en el cliente para futuros matches automáticos
+      if(inv.rut){
+        const client = clients.find(c=>c.id===clientId)
+        if(client&&!client.rut){
+          await supabase.from('clients').update({rut:inv.rut}).eq('id',clientId)
+          if(onClientsUpdate) onClientsUpdate()
+        }
+      }
+    }
     setStep('done')
-    onImported(results.rows)
+    onImported([])
   }
 
   return (
@@ -1841,16 +1889,9 @@ function PDFUploader({clients,billing,onImported,onClose}) {
       {step==='select'&&(
         <div>
           <p style={{fontSize:13,color:C.muted,marginBottom:16,lineHeight:1.5}}>
-            Selecciona uno o varios PDFs de facturas desde tu computador o celular. Se importarán automáticamente.
+            Selecciona uno o varios PDFs de facturas. Se importarán automáticamente y se asociarán al cliente por RUT.
           </p>
-          <input
-            ref={fileRef}
-            type='file'
-            accept='.pdf,application/pdf'
-            multiple
-            style={{display:'none'}}
-            onChange={e=>processFiles(Array.from(e.target.files))}
-          />
+          <input ref={fileRef} type='file' accept='.pdf,application/pdf' multiple style={{display:'none'}} onChange={e=>processFiles(Array.from(e.target.files))}/>
           <button onClick={()=>fileRef.current?.click()} style={{width:'100%',padding:'14px',borderRadius:10,border:`2px dashed ${C.accent}`,background:'#F0F5F7',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',marginBottom:8}}>
             ↑ Seleccionar PDFs
           </button>
@@ -1858,28 +1899,68 @@ function PDFUploader({clients,billing,onImported,onClose}) {
         </div>
       )}
 
-      {(step==='processing'||step==='done')&&(
+      {(step==='processing')&&(
         <div>
-          {step==='processing'&&(
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-              <Spin/>
-              <span style={{fontSize:13,color:C.muted}}>{progress.done}/{progress.total} archivos procesados…</span>
-            </div>
-          )}
-          <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 12px',maxHeight:280,overflowY:'auto',fontSize:12,fontFamily:'monospace',color:C.text,lineHeight:1.7}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <Spin/>
+            <span style={{fontSize:13,color:C.muted}}>{progress.done}/{progress.total} archivos procesados…</span>
+          </div>
+          <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 12px',maxHeight:200,overflowY:'auto',fontSize:12,fontFamily:'monospace',color:C.text,lineHeight:1.7}}>
             {log.map((l,i)=><div key={i}>{l}</div>)}
           </div>
-          {step==='done'&&(
-            <div style={{marginTop:12,display:'flex',gap:8}}>
-              <button onClick={()=>{setStep('select');setLog([]);setProgress({done:0,total:0})}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Subir más</button>
-              <button onClick={onClose} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+        </div>
+      )}
+
+      {step==='review'&&(
+        <div>
+          <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 12px',maxHeight:160,overflowY:'auto',fontSize:12,fontFamily:'monospace',color:C.text,lineHeight:1.7,marginBottom:14}}>
+            {log.map((l,i)=><div key={i}>{l}</div>)}
+          </div>
+          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Asignar clientes</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Estas facturas no se pudieron asociar automáticamente. Asígnalas una vez y el RUT quedará guardado para siempre.</div>
+          {unmatched.map(inv=>(
+            <div key={inv.id} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {inv.folio}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{inv.cliente||inv.fileName} {inv.rut?`· RUT: ${inv.rut}`:''}</div>
+                  {inv.concepto&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic'}}>{inv.concepto}</div>}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,marginLeft:8}}>{fmt(inv.amount)}</div>
+              </div>
+              <select
+                value={assignments[inv.id]||''}
+                onChange={e=>setAssignments(p=>({...p,[inv.id]:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${assignments[inv.id]?C.accent:C.border}`,background:'#F7F7F7',color:C.text,fontSize:13}}>
+                <option value=''>— Seleccionar cliente —</option>
+                {[...clients].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>(
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
-          )}
+          ))}
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
+            <button onClick={saveAssignments} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Guardar asignaciones</button>
+          </div>
+        </div>
+      )}
+
+      {step==='done'&&(
+        <div>
+          <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 12px',maxHeight:200,overflowY:'auto',fontSize:12,fontFamily:'monospace',color:C.text,lineHeight:1.7,marginBottom:12}}>
+            {log.map((l,i)=><div key={i}>{l}</div>)}
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={()=>{setStep('select');setLog([]);setProgress({done:0,total:0});setUnmatched([]);setAssignments({})}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Subir más</button>
+            <button onClick={onClose} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+          </div>
         </div>
       )}
     </div>
   )
 }
+
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
@@ -2079,7 +2160,7 @@ export default function App() {
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
-        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} onImported={()=>{}} onClose={()=>{setModal(null)}}/></Modal>}
+        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
