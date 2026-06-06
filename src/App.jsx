@@ -2145,36 +2145,52 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}
 function parseInvoice(raw) {
   const t = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
-  // Folio
-  const fm0 = t.match(/N[°º.\s]{0,3}(\d+)/)
-  const folio = fm0 ? fm0[1] : null
-  // Cliente y RUT receptor
-  const cm = t.match(/SE[ÑN]OR(?:\(ES\))?[:\s]+(.+?)\s*\nR\.U\.T\.?[:\s]+([\d.]{6,12}[\-\s]*[\dkK])/i)
-  const cliente = cm ? cm[1].trim() : null
-  const rut = cm ? cm[2].replace(/\s+/g,'') : null
-  // Fecha
+
+  // Folio — buscar Nº seguido de número
+  const folioM = t.match(/N[ºo°]\s*(\d+)/)
+  const folio = folioM ? folioM[1] : null
+
+  // Receptor — línea después de SEÑOR(ES):
+  const receptorM = t.match(/SE[ÑN]OR(?:\(ES\))?[:\s]+([^\n\r]+)/)
+  const cliente = receptorM ? receptorM[1].trim().replace(/\s+/g,' ') : null
+
+  // RUT receptor — primer R.U.T. que aparece (es el del receptor, no el emisor)
+  // El RUT del emisor aparece al final como R.U.T.:77.700.387-9
+  // El RUT del receptor aparece justo después de SEÑOR(ES)
+  const rutM = t.match(/R\.U\.T\.?\s*:?\s*([\d]{1,2}\.[\d]{3}\.[\d]{3}[\s\-]+[\dkK])/)
+  const rut = rutM ? rutM[1].replace(/\s+/g,'').replace(/\.$/, '') : null
+
+  // Fecha — "02 de Junio del 2026"
   let issued_at = null
-  const fm = t.match(/Fecha\s*Emis[io]{1,2}n[:\s]*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
-  if(fm){ const dia=+fm[1],mes=MESES[fm[2].toLowerCase()],anio=+fm[3]; if(mes) issued_at=`${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}` }
-  // Total
-  const tm = t.match(/TOTAL[\s\S]{0,10}?([\d][\d.]{2,})/)
-  const total = tm ? parseInt(tm[1].replace(/\./g,''),10) : null
-  // Concepto/glosa: buscar descripción del item en la tabla de detalle
+  const fechaM = t.match(/Fecha\s*Emis[io]+n[:\s]*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
+  if(fechaM) {
+    const dia = parseInt(fechaM[1])
+    const mes = MESES[fechaM[2].toLowerCase()]
+    const anio = parseInt(fechaM[3])
+    if(mes) issued_at = `${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
+  }
+
+  // Glosa — texto de descripción en la tabla de detalle
+  // Patrón: línea entre "Descripcion ... Valor" header y la cantidad/precio
   let concepto = null
-  // Patrón 1: texto entre Descripcion y Cantidad/Precio
-  const gm1 = t.match(/(?:Descripcion|Descripción)\s+Cantidad[\s\S]{0,50}?\n([^\n]{5,120})\n/i)
-  if(gm1) concepto = gm1[1].replace(/\s+/g,' ').trim()||null
-  // Patrón 2: línea con descripción antes de "1 " (cantidad) y precio
-  if(!concepto){
-    const gm2 = t.match(/[-\s]\s+([A-Za-záéíóúÁÉÍÓÚñÑ][^\n]{10,100})\s*\n\s*1\s+[\d]/)
-    if(gm2) concepto = gm2[1].replace(/\s+/g,' ').trim()||null
+  // Buscar texto entre "Descripcion" y el número de cantidad (1)
+  const glosaMa = t.match(/Descripcion\s+Cantidad[\s\S]{0,100}?\n-?\s*([^\n]{5,80})\n/)
+  if(glosaMa) concepto = glosaMa[1].replace(/\s+/g,' ').trim()
+  // Si la glosa está en dos líneas (como "Asesoría legal permanente\nMayo 2026")
+  if(!concepto) {
+    const glosaMb = t.match(/Descripcion[\s\S]{0,200}?\n-\s+([^\n]{5,80})\n([^\n]{3,40})\n\s*1\s/)
+    if(glosaMb) concepto = (glosaMb[1]+' '+glosaMb[2]).replace(/\s+/g,' ').trim()
   }
-  // Patrón 3: entre Valor\n y Forma de Pago
-  if(!concepto){
-    const gm3 = t.match(/Valor\s*\n([\s\S]*?)Forma de Pago/)
-    if(gm3) concepto = gm3[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*[\d.]+\s*$/,'').trim()||null
+  if(!concepto) {
+    const glosaMc = t.match(/-\s+([^\n]{5,80})\n([^\n]{3,40})\n\s*1\s+[\d]/)
+    if(glosaMc) concepto = (glosaMc[1]+' '+glosaMc[2]).replace(/\s+/g,' ').trim()
   }
-  return { folio, cliente, rut, issued_at, total, concepto }
+
+  // Total — buscar TOTAL $ monto
+  const totalM = t.match(/TOTAL\s*\$?\s*([\d]{1,3}(?:[.,\s]\d{3})*)/)
+  const total = totalM ? parseInt(totalM[1].replace(/[.,\s]/g,'')) : null
+
+  return { folio, cliente, rut, issued_at, concepto, total }
 }
 const FACTURACION_ROOT='1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
 async function driveGet(token,url){
