@@ -2158,7 +2158,7 @@ function parseInvoice(raw) {
   const cliente = receptorM ? receptorM[1].trim() : null
 
   // RUT receptor
-  const rutZone = t.match(/SE[N\u00d1]OR(?:\(ES\))?:?.+?R\.?U\.?T\.?:?\s*([\d\.]{7,11}[-\u2013][\dkK])/)
+  const rutZone = t.match(/SE[N\u00d1]OR(?:\(ES\))?:?.+?R\.?U\.?T\.?:?\s*([\d\.]{7,11}\s*[-\u2013]\s*[\dkK])/)
   const rut = rutZone ? rutZone[1].replace(/\s/g,'') : null
 
   // Fecha
@@ -2173,8 +2173,9 @@ function parseInvoice(raw) {
 
   // Glosa
   let concepto = null
-  const gM = t.match(/[-\u2013]\s+([A-Za-z\u00c0-\u00ff][^$]{10,120?})\s+1\s+[\d]/)
+  const gM = t.match(/Valor\s*[-\u2013]\s*(.+?)\s+1\s+[\d][\d\.]{3,}/)
   if(gM) concepto = gM[1].replace(/\s+/g,' ').trim()
+  if(!concepto){const gM2 = t.match(/[-\u2013]\s+([A-Za-z\u00c0-\u00ff].{8,90}?)\s+1\s+[\d][\d\.]{3,}/);if(gM2) concepto = gM2[1].replace(/\s+/g,' ').trim()}
 
   // Total
   const totalM = t.match(/TOTAL\s*\$?\s*([\d\.]{4,12})/)
