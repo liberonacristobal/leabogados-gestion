@@ -2218,7 +2218,6 @@ function parseInvoice(raw) {
   // pdfjs entrega texto plano sin saltos reales
   const t = raw.replace(/\r?\n/g,' ').replace(/\s{2,}/g,' ')
   // DEBUG temporal: ver el texto real extraido
-  console.log('=== RAW INVOICE ===', t.slice(0,700))
 
   // Folio
   const folioM = t.match(/N[\xba\xb0o]?\s*(\d{3,7})/)
@@ -2252,7 +2251,6 @@ function parseInvoice(raw) {
   const totalM = t.match(/TOTAL\s*\$?\s*([\d\.]{4,12})/)
   const total = totalM ? parseInt(totalM[1].replace(/\./g,'')) : null
 
-  console.log('=== PARSED ===', JSON.stringify({folio,cliente,rut,issued_at,total}))
   return { folio, cliente, rut, issued_at, concepto, total }
 }
 const FACTURACION_ROOT='1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
