@@ -1989,6 +1989,225 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
 }
 
 
+// ─── REPORT BUILDER ──────────────────────────────────────────────────────────
+function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
+  const [sections,setSections] = useState({
+    ventas: true,
+    cobranza: true,
+    gastos: true,
+    tareas: false,
+  })
+  const [period,setPeriod] = useState('month') // month | year | custom
+  const [selYear,setSelYear] = useState(String(currentYear))
+  const [selMonth,setSelMonth] = useState(String(currentMonth))
+  const [generating,setGenerating] = useState(false)
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const years = [...new Set([...sales.map(s=>s.year),...billing.map(b=>b.issued_at?.slice(0,4)).filter(Boolean)].filter(Boolean))].sort((a,b)=>b-a)
+  if(!years.includes(currentYear)) years.unshift(currentYear)
+
+  const toggle = k => setSections(p=>({...p,[k]:!p[k]}))
+
+  const getPeriodLabel = () => {
+    if(period==='year') return `Año ${selYear}`
+    if(period==='month') return `${MONTHS[parseInt(selMonth)-1]} ${selYear}`
+    return `${selYear}`
+  }
+
+  const filterByPeriod = (items, dateField) => {
+    return items.filter(item => {
+      const d = item[dateField]
+      if(!d) return false
+      if(period==='year') return d.startsWith(selYear)
+      if(period==='month') return d.startsWith(`${selYear}-${String(selMonth).padStart(2,'0')}`)
+      return true
+    })
+  }
+
+  const generateReport = async() => {
+    setGenerating(true)
+    try {
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const wb = XLSX.utils.book_new()
+      const label = getPeriodLabel()
+
+      // ── Hoja 1: Ventas
+      if(sections.ventas) {
+        const ss = filterByPeriod(sales.map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})), 'date')
+        const totalBrutoUF = ss.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
+        const totalCostoUF = ss.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
+        const totalNetoUF = totalBrutoUF - totalCostoUF
+        const rows = [
+          [`REPORTE DE VENTAS — ${label}`],
+          [`Generado: ${new Date().toLocaleDateString('es-CL')}`],
+          [],
+          ['Cliente','Proyecto','Área','Estado','Año','Mes','UF Bruto','UF Costo','UF Neto'],
+          ...ss.map(s=>{
+            const client = clients.find(c=>c.id===s.client_id)
+            const neto = (parseFloat(s.amount_uf)||0)-(parseFloat(s.cost_uf)||0)
+            return [client?.name||'—', s.title||'—', s.area||'—', s.status||'—', s.year||'', s.month||'', parseFloat(s.amount_uf)||0, parseFloat(s.cost_uf)||0, neto]
+          }),
+          [],
+          ['TOTALES','','','','','',totalBrutoUF,totalCostoUF,totalNetoUF],
+          [],
+          ['Meta año:',9800,'UF'],
+          ['Avance neto:',Math.round((totalNetoUF/9800)*100)+'%'],
+        ]
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{wch:28},{wch:32},{wch:14},{wch:12},{wch:6},{wch:6},{wch:12},{wch:12},{wch:12}]
+        XLSX.utils.book_append_sheet(wb, ws, 'Ventas')
+      }
+
+      // ── Hoja 2: Cobranza
+      if(sections.cobranza) {
+        const bb = filterByPeriod(billing, 'issued_at')
+        const rows = [
+          [`REPORTE DE COBRANZA — ${label}`],
+          [`Generado: ${new Date().toLocaleDateString('es-CL')}`],
+          [],
+          ['Cliente','Concepto','N° Factura','Emisión','Vencimiento','Estado','Monto','Días'],
+          ...bb.map(b=>{
+            const client = clients.find(c=>c.id===b.client_id)
+            const dias = b.due ? Math.round((new Date()-new Date(b.due+'T12:00'))/86400000) : ''
+            return [client?.name||'—', b.concept||'—', b.invoice_no||'—', b.issued_at||'', b.due||'', b.status||'—', b.amount||0, dias]
+          }),
+          [],
+          ['RESUMEN'],
+          ['Por cobrar', bb.filter(x=>x.status==='Pendiente').reduce((a,b)=>a+(b.amount||0),0)],
+          ['Vencido',    bb.filter(x=>x.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)],
+          ['Cobrado',    bb.filter(x=>x.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)],
+          ['Total',      bb.reduce((a,b)=>a+(b.amount||0),0)],
+        ]
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{wch:28},{wch:32},{wch:12},{wch:12},{wch:12},{wch:12},{wch:14},{wch:8}]
+        XLSX.utils.book_append_sheet(wb, ws, 'Cobranza')
+      }
+
+      // ── Hoja 3: Gastos y Fondos
+      if(sections.gastos) {
+        const ee = filterByPeriod(expenses, 'date')
+        // Saldos por cliente
+        const balances = {}
+        expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) })
+        const clientsWithMovs = clients.filter(c=>balances[c.id]!==undefined)
+        const rows = [
+          [`REPORTE DE GASTOS Y FONDOS — ${label}`],
+          [`Generado: ${new Date().toLocaleDateString('es-CL')}`],
+          [],
+          ['SALDOS POR CLIENTE'],
+          ['Cliente','Fondos recibidos','Gastos realizados','Saldo'],
+          ...clientsWithMovs.map(c=>{
+            const fondos = expenses.filter(e=>e.client_id===c.id&&e.type==='fondo').reduce((a,e)=>a+e.amount,0)
+            const gastos = expenses.filter(e=>e.client_id===c.id&&e.type==='gasto').reduce((a,e)=>a+e.amount,0)
+            return [c.name, fondos, -gastos, fondos-gastos]
+          }),
+          [],
+          [`MOVIMIENTOS DEL PERÍODO`],
+          ['Fecha','Cliente','Tipo','Categoría','Descripción','Monto'],
+          ...ee.map(e=>{
+            const client = clients.find(c=>c.id===e.client_id)
+            return [e.date||'', client?.name||'—', e.type==='fondo'?'Fondo':'Gasto', e.category||'—', e.concept||'—', e.type==='fondo'?e.amount:-e.amount]
+          }),
+        ]
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{wch:12},{wch:28},{wch:14},{wch:16},{wch:36},{wch:14}]
+        XLSX.utils.book_append_sheet(wb, ws, 'Gastos y Fondos')
+      }
+
+      // ── Hoja 4: Tareas
+      if(sections.tareas) {
+        const activeTasks = tasks.filter(t=>t.status==='Activo')
+        const WHO = ['Cristóbal','Martín','Martina','Erasmo','Rodrigo']
+        const rows = [
+          [`REPORTE DE TAREAS ACTIVAS — ${new Date().toLocaleDateString('es-CL')}`],
+          [],
+        ]
+        WHO.forEach(who=>{
+          const mine = activeTasks.filter(t=>t.who===who).sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
+          if(!mine.length) return
+          rows.push([who.toUpperCase()])
+          rows.push(['Cliente','Proyecto','Tarea','Plazo','Días'])
+          mine.forEach(t=>{
+            const client = clients.find(c=>c.id===t.client_id)
+            const dias = t.due ? Math.round((new Date(t.due+'T12:00')-new Date())/86400000) : ''
+            rows.push([client?.name||'—', t.project||'—', t.title||'—', t.due||'', dias])
+          })
+          rows.push([])
+        })
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws['!cols'] = [{wch:28},{wch:24},{wch:40},{wch:12},{wch:8}]
+        XLSX.utils.book_append_sheet(wb, ws, 'Tareas')
+      }
+
+      const fname = `Reporte_LE_${label.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`
+      XLSX.writeFile(wb, fname)
+    } catch(e) {
+      alert('Error al generar reporte: '+e.message)
+    }
+    setGenerating(false)
+  }
+
+  const anySelected = Object.values(sections).some(Boolean)
+
+  return (
+    <div>
+      {/* Período */}
+      <div style={{marginBottom:16}}>
+        <Lbl>Período</Lbl>
+        <div style={{display:'flex',gap:6,marginBottom:10}}>
+          {[['month','Por mes'],['year','Por año']].map(([v,l])=>(
+            <button key={v} onClick={()=>setPeriod(v)} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${period===v?C.accent:C.border}`,background:period===v?'#E6EEF1':'transparent',color:period===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:period==='month'?'1fr 1fr':'1fr',gap:8}}>
+          <select value={selYear} onChange={e=>setSelYear(e.target.value)} style={{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13}}>
+            {years.map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+          {period==='month'&&(
+            <select value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13}}>
+              {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+            </select>
+          )}
+        </div>
+      </div>
+
+      {/* Secciones */}
+      <div style={{marginBottom:20}}>
+        <Lbl>Secciones a incluir</Lbl>
+        {[
+          ['ventas','Ventas','Meta, proyectos, bruto/costo/neto por cliente'],
+          ['cobranza','Cobranza','Facturas con estado, antigüedad y totales'],
+          ['gastos','Gastos y Fondos','Saldos por cliente y movimientos del período'],
+          ['tareas','Tareas activas','Por responsable con plazo y urgencia'],
+        ].map(([k,label,desc])=>(
+          <div key={k} onClick={()=>toggle(k)} style={{display:'flex',gap:12,alignItems:'flex-start',padding:'10px 14px',borderRadius:10,border:`1px solid ${sections[k]?C.accent:C.border}`,background:sections[k]?'#E6EEF1':'#fff',marginBottom:8,cursor:'pointer'}}>
+            <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${sections[k]?C.accent:C.border}`,background:sections[k]?C.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}>
+              {sections[k]&&<span style={{color:'#fff',fontSize:12,fontWeight:700}}>✓</span>}
+            </div>
+            <div>
+              <div style={{fontSize:13,fontWeight:600,color:sections[k]?C.accent:C.text}}>{label}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>{desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Preview */}
+      {anySelected&&(
+        <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12,color:C.muted}}>
+          Generará un Excel con {Object.entries(sections).filter(([,v])=>v).length} hoja{Object.entries(sections).filter(([,v])=>v).length!==1?'s':''}: {Object.entries(sections).filter(([,v])=>v).map(([k])=>({ventas:'Ventas',cobranza:'Cobranza',gastos:'Gastos',tareas:'Tareas'}[k])).join(', ')} · {getPeriodLabel()}
+        </div>
+      )}
+
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={generating||!anySelected} onClick={generateReport} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!anySelected?.6:1}}>
+          {generating?<Spin/>:null}{generating?'Generando...':'↓ Descargar Excel'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null)
@@ -2161,9 +2380,12 @@ export default function App() {
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 4px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <button onClick={signOut} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',fontWeight:500}}>{user?.name} · Salir</button>
-          <button onClick={()=>setHideErasmo(h=>!h)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${hideErasmo?C.accent:C.border}`,background:hideErasmo?'#E6EEF1':'transparent',color:hideErasmo?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>
-            {hideErasmo?'Vista personal':'Todo el estudio'}
-          </button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>
+            <button onClick={()=>setHideErasmo(h=>!h)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${hideErasmo?C.accent:C.border}`,background:hideErasmo?'#E6EEF1':'transparent',color:hideErasmo?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+              {hideErasmo?'Vista personal':'Todo el estudio'}
+            </button>
+          </div>
         </div>
         {loading?(
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
@@ -2189,6 +2411,7 @@ export default function App() {
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
