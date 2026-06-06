@@ -2146,23 +2146,22 @@ const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,s
 function parseInvoice(raw) {
   const t = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
 
-  // Folio — buscar Nº seguido de número
+  // Folio
   const folioM = t.match(/N[ºo°]\s*(\d+)/)
   const folio = folioM ? folioM[1] : null
 
-  // Receptor — línea después de SEÑOR(ES):
-  const receptorM = t.match(/SE[ÑN]OR(?:\(ES\))?[:\s]+([^\n\r]+)/)
-  const cliente = receptorM ? receptorM[1].trim().replace(/\s+/g,' ') : null
+  // Receptor — solo el nombre en la misma línea que SEÑOR(ES):
+  const receptorM = t.match(/SE[ÑN]OR(?:\(ES\))?:\s*([^\n\r]+)/)
+  const cliente = receptorM ? receptorM[1].trim() : null
 
-  // RUT receptor — primer R.U.T. que aparece (es el del receptor, no el emisor)
-  // El RUT del emisor aparece al final como R.U.T.:77.700.387-9
-  // El RUT del receptor aparece justo después de SEÑOR(ES)
-  const rutM = t.match(/R\.U\.T\.?\s*:?\s*([\d]{1,2}\.[\d]{3}\.[\d]{3}[\s\-]+[\dkK])/)
-  const rut = rutM ? rutM[1].replace(/\s+/g,'').replace(/\.$/, '') : null
+  // RUT receptor — R.U.T.: inmediatamente después del receptor (no el del emisor al final)
+  // El receptor siempre aparece antes que el emisor en el texto
+  const rutM = t.match(/SE[ÑN]OR(?:\(ES\))?:[^\n]+\nR\.U\.T\.?:?\s*([\d]{1,2}\.[\d]{3}\.[\d]{3}[\s\-]+[\dkK])/)
+  const rut = rutM ? rutM[1].replace(/\s+/g,'') : null
 
-  // Fecha — "02 de Junio del 2026"
+  // Fecha
   let issued_at = null
-  const fechaM = t.match(/Fecha\s*Emis[io]+n[:\s]*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
+  const fechaM = t.match(/Fecha\s*Emis[io]+n:?\s*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
   if(fechaM) {
     const dia = parseInt(fechaM[1])
     const mes = MESES[fechaM[2].toLowerCase()]
@@ -2170,25 +2169,19 @@ function parseInvoice(raw) {
     if(mes) issued_at = `${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
   }
 
-  // Glosa — texto de descripción en la tabla de detalle
-  // Patrón: línea entre "Descripcion ... Valor" header y la cantidad/precio
+  // Glosa — texto descriptivo del item, típicamente después de "- " en la tabla
+  // Patrón: "- Texto descripcion\nSegunda línea\n1 precio"
   let concepto = null
-  // Buscar texto entre "Descripcion" y el número de cantidad (1)
-  const glosaMa = t.match(/Descripcion\s+Cantidad[\s\S]{0,100}?\n-?\s*([^\n]{5,80})\n/)
-  if(glosaMa) concepto = glosaMa[1].replace(/\s+/g,' ').trim()
-  // Si la glosa está en dos líneas (como "Asesoría legal permanente\nMayo 2026")
+  const gM1 = t.match(/-\s+([A-Za-záéíóúÁÉÍÓÚñÑ][^\n]{4,60})\n([^\n]{3,50})\n\s*1\s+[\d.,]/)
+  if(gM1) concepto = (gM1[1].trim()+' '+gM1[2].trim()).replace(/\s+/g,' ')
   if(!concepto) {
-    const glosaMb = t.match(/Descripcion[\s\S]{0,200}?\n-\s+([^\n]{5,80})\n([^\n]{3,40})\n\s*1\s/)
-    if(glosaMb) concepto = (glosaMb[1]+' '+glosaMb[2]).replace(/\s+/g,' ').trim()
-  }
-  if(!concepto) {
-    const glosaMc = t.match(/-\s+([^\n]{5,80})\n([^\n]{3,40})\n\s*1\s+[\d]/)
-    if(glosaMc) concepto = (glosaMc[1]+' '+glosaMc[2]).replace(/\s+/g,' ').trim()
+    const gM2 = t.match(/-\s+([A-Za-záéíóúÁÉÍÓÚñÑ][^\n]{4,80})\n\s*1\s+[\d.,]/)
+    if(gM2) concepto = gM2[1].trim()
   }
 
-  // Total — buscar TOTAL $ monto
-  const totalM = t.match(/TOTAL\s*\$?\s*([\d]{1,3}(?:[.,\s]\d{3})*)/)
-  const total = totalM ? parseInt(totalM[1].replace(/[.,\s]/g,'')) : null
+  // Total
+  const totalM = t.match(/TOTAL\s*\$\s*([\d]{1,3}(?:[.\s]\d{3})*)/)
+  const total = totalM ? parseInt(totalM[1].replace(/[.\s]/g,'')) : null
 
   return { folio, cliente, rut, issued_at, concepto, total }
 }
