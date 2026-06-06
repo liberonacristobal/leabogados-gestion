@@ -667,42 +667,54 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
 function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onImport,onUpload}) {
   const [filter,setFilter] = useState('activo')
   const [fYear,setFYear] = useState('')
+  const [fMonth,setFMonth] = useState('')
   const [q,setQ] = useState('')
+  const [payingId,setPayingId] = useState(null)
+  const [payDate,setPayDate] = useState('')
+  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
   const filtered = useMemo(()=>{
     let r = bb
     if(filter==='activo') r = r.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status))
     else if(filter==='pagado') r = r.filter(b=>b.status==='Pagado')
     if(fYear) r = r.filter(b=>b.issued_at?.startsWith(fYear))
-    if(q.trim()) r = r.filter(b=>b.clients?.name?.toLowerCase().includes(q.toLowerCase())||b.concept?.toLowerCase().includes(q.toLowerCase())||b.invoice_no?.toLowerCase().includes(q.toLowerCase()))
+    if(fMonth) r = r.filter(b=>b.issued_at?.slice(5,7)===fMonth)
+    if(q.trim()) r = r.filter(b=>{
+      const c=clients.find(x=>x.id===b.client_id)
+      return c?.name.toLowerCase().includes(q.toLowerCase())||b.concept?.toLowerCase().includes(q.toLowerCase())||b.invoice_no?.toLowerCase().includes(q.toLowerCase())||b.receptor_name?.toLowerCase().includes(q.toLowerCase())
+    })
     return r.sort((a,b)=>new Date(b.issued_at||0)-new Date(a.issued_at||0))
-  },[bb,filter,fYear,q])
+  },[bb,filter,fYear,fMonth,q,clients])
+
+  // Agrupar por cliente → razón social
+  const grouped = useMemo(()=>{
+    const byClient = {}
+    filtered.forEach(b=>{
+      const cid = b.client_id||'__none__'
+      if(!byClient[cid]) byClient[cid] = {client:clients.find(c=>c.id===cid)||{id:'__none__',name:'Sin cliente'}, byEntity:{}}
+      const ename = b.receptor_name||'—'
+      if(!byClient[cid].byEntity[ename]) byClient[cid].byEntity[ename] = []
+      byClient[cid].byEntity[ename].push(b)
+    })
+    return Object.values(byClient).sort((a,b)=>a.client.name.localeCompare(b.client.name,'es'))
+  },[filtered,clients])
+
   const pending=bb.filter(b=>b.status==='Pendiente').reduce((s,b)=>s+(b.amount||0),0)
   const overdue=bb.filter(b=>b.status==='Vencido').reduce((s,b)=>s+(b.amount||0),0)
   const paid=bb.filter(b=>b.status==='Pagado').reduce((s,b)=>s+(b.amount||0),0)
   const years=[...new Set(bb.map(b=>b.issued_at?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
 
-  const [payingId,setPayingId] = useState(null)
-  const [payDate,setPayDate] = useState('')
-
   const handleTogglePagado = async(b) => {
-    if(b.status==='Pagado') {
-      await onStatusChange(b.id,'Pendiente',null)
-    } else {
-      setPayingId(b.id)
-      setPayDate(new Date().toISOString().slice(0,10))
-    }
+    if(b.status==='Pagado') { await onStatusChange(b.id,'Pendiente',null) }
+    else { setPayingId(b.id); setPayDate(new Date().toISOString().slice(0,10)) }
   }
-
-  const confirmPago = async() => {
-    await onStatusChange(payingId,'Pagado',payDate)
-    setPayingId(null)
-  }
+  const confirmPago = async() => { await onStatusChange(payingId,'Pagado',payDate); setPayingId(null) }
 
   return (
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Cobros</div>
           <div style={{display:'flex',gap:6}}>
             <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
@@ -723,21 +735,25 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
             <button key={v} onClick={()=>setFilter(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
           ))}
         </div>
-        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, concepto, N° factura...' style={{marginBottom:6}}/>
-        {years.length>0&&(
-          <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{width:'100%',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12,marginBottom:4}}>
+        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:4}}>
+          <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
             <option value=''>Todos los años</option>
             {years.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
-        )}
+          <select value={fMonth} onChange={e=>setFMonth(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
+            <option value=''>Todos los meses</option>
+            {MONTHS.map((m,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{m}</option>)}
+          </select>
+        </div>
       </div>
+
       {payingId&&(
         <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:520,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
             <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Confirmar pago</div>
-            <div style={{fontSize:13,color:C.muted,marginBottom:14}}>Fecha en que se recibio el pago:</div>
-            <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)}
-              style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',marginBottom:14}}/>
+            <div style={{fontSize:13,color:C.muted,marginBottom:14}}>Fecha en que se recibió el pago:</div>
+            <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',marginBottom:14}}/>
             <div style={{display:'flex',gap:8}}>
               <button onClick={()=>setPayingId(null)} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
               <button onClick={confirmPago} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmar pagado</button>
@@ -745,50 +761,63 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
           </div>
         </div>
       )}
+
       <div style={{padding:'10px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin cobros</div>}
-        {filtered.map(b=>(
-          <div key={b.id} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-              <div style={{minWidth:0,flex:1}}>
-                <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.clients?.name?.split('/')[0].trim()||'—'}</div>
-                  {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#8B5C2A',fontWeight:600,flexShrink:0}}>Reembolso</span>}
+        {grouped.map(({client,byEntity})=>{
+          const clientTotal = Object.values(byEntity).flat().reduce((a,b)=>a+(b.amount||0),0)
+          return (
+            <div key={client.id} style={{marginBottom:16}}>
+              {/* Header cliente */}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,paddingBottom:4,borderBottom:`2px solid ${C.accent}`}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{client.name}</div>
+                <div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(clientTotal)}</div>
+              </div>
+              {/* Por razón social */}
+              {Object.entries(byEntity).map(([ename,bills])=>(
+                <div key={ename} style={{marginBottom:10,marginLeft:8}}>
+                  {ename!=='—'&&<div style={{fontSize:11,fontWeight:600,color:C.muted,marginBottom:4,display:'flex',alignItems:'center',gap:4}}>
+                    <span style={{width:4,height:4,borderRadius:'50%',background:C.muted,display:'inline-block'}}/>
+                    {ename}
+                  </div>}
+                  {bills.map(b=>(
+                    <div key={b.id} style={{background:C.card,borderRadius:10,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                            {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#8B5C2A',fontWeight:600,flexShrink:0}}>Reembolso</span>}
+                          </div>
+                          <div style={{fontSize:12,color:C.text,fontWeight:500,marginTop:2}}>{b.concept||'—'}</div>
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,marginLeft:8}}>
+                          <div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
+                          <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',fontSize:11,color:C.muted,cursor:'pointer'}}>✎</button>
+                        </div>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                          <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{b.invoice_no||'—'}</span>
+                          <span style={{fontSize:11,color:C.muted}}>· {fmtDate(b.issued_at)}</span>
+                          {b.status!=='Pagado'&&<DaysBadge due={b.due} status={b.status}/>}
+                          {b.status==='Pagado'&&b.paid_at&&<span style={{fontSize:10,color:C.normal,fontWeight:600}}>Pagado {fmtDate(b.paid_at)}</span>}
+                        </div>
+                        <button onClick={()=>handleTogglePagado(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',color:b.status==='Pagado'?C.normal:C.muted,fontSize:11,fontWeight:700}}>
+                          <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>{b.status==='Pagado'?'✓':''}</span>
+                          {b.status==='Pagado'?'Pagado':'Marcar pagado'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                {b.receptor_name&&<div style={{fontSize:11,color:C.accent,marginTop:1,fontWeight:500}}>{b.receptor_name}{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>}
-                <div style={{fontSize:11,color:C.muted,marginTop:1}}>{b.concept}</div>
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:12}}>
-                <div style={{fontSize:15,fontWeight:600,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
-                <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 8px',fontSize:11,color:C.muted,cursor:'pointer'}}>✎</button>
-              </div>
+              ))}
             </div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{b.invoice_no||'—'}</span>
-                <span style={{fontSize:11,color:C.muted}}>· {fmtDate(b.issued_at)}</span>
-                {b.status!=='Pagado'&&<DaysBadge due={b.due} status={b.status}/>}
-                {b.status==='Pagado'&&b.paid_at&&<span style={{fontSize:10,color:C.normal,fontWeight:600}}>Pagado {fmtDate(b.paid_at)}</span>}
-              </div>
-              {/* Toggle pagado */}
-              <button onClick={()=>handleTogglePagado(b)} style={{
-                display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',
-                background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',
-                color:b.status==='Pagado'?C.normal:C.muted,
-                fontSize:11,fontWeight:700,transition:'all .15s'
-              }}>
-                <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>
-                  {b.status==='Pagado'?'✓':''}
-                </span>
-                {b.status==='Pagado'?'Pagado':'Marcar pagado'}
-              </button>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
 }
+
 
 function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios'})
@@ -1533,7 +1562,7 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion}) {
   const clientSales = sales.filter(s=>s.client_id===client.id)
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
@@ -1569,6 +1598,23 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose
       </div>
 
       <div style={{padding:'16px 20px 0'}}>
+
+        {/* Razones sociales vinculadas */}
+        {(()=>{
+          const entities = (clientEntities||[]).filter(e=>e.client_id===client.id)
+          if(!entities.length) return null
+          return (
+            <div style={{marginBottom:16,padding:'10px 14px',borderRadius:10,background:'#F7F7F7',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:8}}>Razones sociales facturadas</div>
+              {entities.map(e=>(
+                <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{e.name||'—'}</div>
+                  <div style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* Resumen financiero */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
@@ -1743,7 +1789,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose
   )
 }
 
-function ClientsView({clients,sales,billing,expenses,tasks,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling}) {
+function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling}) {
   const [sFilter,setSFilter] = useState('Activo')
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
@@ -1774,6 +1820,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,onEdit,onAdd,onAddTas
         billing={billing}
         expenses={expenses}
         tasks={tasks}
+        clientEntities={clientEntities}
         onEdit={c=>{onEdit(c)}}
         onClose={()=>setSelected(null)}
         onAddTask={()=>onAddTask(selected)}
@@ -2270,7 +2317,7 @@ function InvoiceClientPicker({inv,clients,assigned,onAssign}) {
   )
 }
 
-function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
+function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientEntities}) {
   const [step,setStep] = useState('select') // select | processing | review | done
   const [log,setLog] = useState([])
   const [progress,setProgress] = useState({done:0,total:0})
@@ -2318,9 +2365,14 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
         const {data:existing} = await supabase.from('billing').select('id').eq('invoice_no',parsed.folio).maybeSingle()
         if(existing){ results.skipped++; addLog(`⏭ ${file.name} — ya existe (N° ${parsed.folio})`); setProgress(p=>({...p,done:p.done+1})); continue }
 
-        // Match por RUT primero, luego por nombre
+        // Match por RUT: primero en client_entities, luego en clients.rut, luego por nombre
         let matchedClient = null
-        if(parsed.rut) matchedClient = clients.find(c=>c.rut&&c.rut.replace(/[.\-\s]/g,'')===parsed.rut.replace(/[.\-\s]/g,''))
+        if(parsed.rut) {
+          const rutClean = parsed.rut.replace(/[.\-\s]/g,'')
+          const entity = (clientEntities||[]).find(e=>e.rut.replace(/[.\-\s]/g,'')===rutClean)
+          if(entity) matchedClient = clients.find(c=>c.id===entity.client_id)
+          if(!matchedClient) matchedClient = clients.find(c=>c.rut&&c.rut.replace(/[.\-\s]/g,'')===rutClean)
+        }
         if(!matchedClient&&parsed.cliente) matchedClient = clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
 
         if(parsed.folio&&parsed.total){
@@ -2382,13 +2434,10 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
       if(!clientId) continue
       // Actualizar el cobro con el cliente
       await supabase.from('billing').update({client_id:clientId}).eq('invoice_no',inv.folio)
-      // Guardar RUT en el cliente para futuros matches automáticos
+      // Guardar en client_entities para match automático futuro
       if(inv.rut){
-        const client = clients.find(c=>c.id===clientId)
-        if(client&&!client.rut){
-          await supabase.from('clients').update({rut:inv.rut}).eq('id',clientId)
-          if(onClientsUpdate) onClientsUpdate()
-        }
+        await supabase.from('client_entities').upsert({client_id:clientId, rut:inv.rut, name:inv.cliente||null},{onConflict:'rut'})
+        if(onClientsUpdate) onClientsUpdate()
       }
     }
     setStep('done')
@@ -2876,6 +2925,8 @@ export default function App() {
     return ()=>subscription.unsubscribe()
   },[])
 
+  const [clientEntities,setClientEntities] = useState([])
+
   useEffect(()=>{
     if(!session) return
     setLoading(true)
@@ -2885,7 +2936,8 @@ export default function App() {
       getBilling(),
       supabase.from('expenses').select('*').order('date',{ascending:false}).then(({data})=>data||[]),
       supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}).then(({data})=>data||[]),
-    ]).then(([c,s,b,e,t])=>{setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t)})
+      supabase.from('client_entities').select('*').then(({data})=>data||[]),
+    ]).then(([c,s,b,e,t,ce])=>{setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
@@ -3052,7 +3104,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})}/>}
           </div>
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
@@ -3066,7 +3118,7 @@ export default function App() {
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
-        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c)}}/></Modal>}
+        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
