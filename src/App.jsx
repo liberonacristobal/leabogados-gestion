@@ -302,15 +302,35 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
       {/* Facturación */}
       <div style={{padding:'0 20px 16px'}}>
         <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Facturación {yr}</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:facturado>0?6:0}}>
-          {[['Facturado',fmt(facturado),'#EEF3E3',C.normal],['Cobrado',fmt(cobrado),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
-            <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
-              <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
-            </div>
-          ))}
-        </div>
-        {facturado>0&&<div style={{fontSize:12,color:C.muted,textAlign:'right'}}>Tasa de cobro: <span style={{fontWeight:700,color:tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue}}>{tasaCobro}%</span></div>}
+        {(()=>{
+          const terceros = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
+          const netoFirma = facturado - terceros
+          return (
+            <>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
+                {[['Facturado (bruto)',fmt(facturado),'#EEF3E3',C.normal],['Cobrado',fmt(cobrado),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
+                  <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {terceros>0&&(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
+                  <div style={{background:'#F0F4F8',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Neto firma</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmt(netoFirma)}</div>
+                  </div>
+                  <div style={{background:'#F7F2EC',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Terceros</div>
+                    <div style={{fontSize:13,fontWeight:700,color:'#8B5C2A'}}>{fmt(terceros)}</div>
+                  </div>
+                </div>
+              )}
+              {facturado>0&&<div style={{fontSize:12,color:C.muted,textAlign:'right',marginBottom:6}}>Tasa de cobro: <span style={{fontWeight:700,color:tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue}}>{tasaCobro}%</span></div>}
+            </>
+          )
+        })()}
       </div>
 
       {/* Cobranza */}
@@ -778,9 +798,12 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
               {/* Por razón social */}
               {Object.entries(byEntity).map(([ename,bills])=>(
                 <div key={ename} style={{marginBottom:10,marginLeft:8}}>
-                  {ename!=='—'&&<div style={{fontSize:11,fontWeight:600,color:C.muted,marginBottom:4,display:'flex',alignItems:'center',gap:4}}>
-                    <span style={{width:4,height:4,borderRadius:'50%',background:C.muted,display:'inline-block'}}/>
-                    {ename}
+                  {ename!=='—'&&<div style={{fontSize:11,fontWeight:600,color:C.muted,marginBottom:4,display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>
+                    <div style={{display:'flex',alignItems:'center',gap:4}}>
+                      <span style={{width:4,height:4,borderRadius:'50%',background:C.muted,display:'inline-block'}}/>
+                      {ename}
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,color:C.muted}}>{fmt(bills.reduce((a,b)=>a+(b.amount||0),0))}</span>
                   </div>}
                   {bills.map(b=>(
                     <div key={b.id} style={{background:C.card,borderRadius:10,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`}}>
