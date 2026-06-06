@@ -523,7 +523,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
     } else if(cobroType==='porcentaje') {
       tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:t.fecha, label:`${t.pct}%`}) })
     } else if(cobroType==='personalizada') {
-      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha) cobros.push({monto:parseInt(c.monto)||0, fecha:c.fecha, label:`Cobro ${i+1}`}) })
+      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha) cobros.push({monto:Math.round((parseFloat(c.monto)||0)*ufVal), fecha:c.fecha, label:`Cobro ${i+1} (${c.monto} UF)`}) })
     }
     return cobros
   }
@@ -630,12 +630,18 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               {cuotasCustom.map((c,i)=>(
                 <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
-                  <Fld label={i===0?'Monto CLP':''}><Inp type='number' value={c.monto} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))} placeholder='0'/></Fld>
-                  <Fld label={i===0?'Fecha':''}><Inp type='date' value={c.fecha} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:e.target.value}:x))}/></Fld>
+                  <Fld label={i===0?'Monto UF':''}><Inp type='number' step='0.01' value={c.monto} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))} placeholder='0.00'/></Fld>
+                  <Fld label={i===0?'Fecha':''}>
+                    <div>
+                      <Inp type='date' value={c.fecha} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:e.target.value}:x))}/>
+                      {c.monto&&ufVal>0&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{fmt(Math.round(parseFloat(c.monto)*ufVal))}</div>}
+                    </div>
+                  </Fld>
                   {cuotasCustom.length>1&&<button onClick={()=>setCuotasCustom(p=>p.filter(x=>x.id!==c.id))} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,paddingBottom:2}}>×</button>}
                 </div>
               ))}
               <button onClick={()=>setCuotasCustom(p=>[...p,{id:Date.now(),monto:'',fecha:''}])} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>+ Agregar cuota</button>
+              {cuotasCustom.some(c=>c.monto)&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Total: <strong style={{color:C.text}}>{fmtUF(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0))}</strong> = {fmt(Math.round(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0)*ufVal))}</div>}
             </div>
           )}
 
