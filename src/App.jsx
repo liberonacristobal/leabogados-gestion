@@ -175,6 +175,56 @@ function TasksByPerson({tasks,clients}) {
 const META_UF = 9800
 const META_CLP = 400000000
 
+function CashflowProjection({billing}) {
+  const [horizon,setHorizon] = useState(3) // 3 | 6 | 12 meses
+  const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due)
+  
+  const months = useMemo(()=>{
+    const result = []
+    const now = new Date()
+    for(let i=0;i<horizon;i++){
+      const d = new Date(now.getFullYear(), now.getMonth()+i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+      const label = d.toLocaleDateString('es-CL',{month:'short',year:'2-digit'})
+      const total = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+      const overdue = pending.filter(b=>b.due<key.slice(0,7)+'-01'&&i===0).reduce((a,b)=>a+(b.amount||0),0)
+      result.push({key,label,total:i===0?total+overdue:total,overdue:i===0?overdue:0})
+    }
+    return result
+  },[billing,horizon])
+
+  const maxVal = Math.max(...months.map(m=>m.total),1)
+  const totalHorizon = months.reduce((a,m)=>a+m.total,0)
+
+  return (
+    <div style={{padding:'16px 20px 0'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Proyección de caja</div>
+        <div style={{display:'flex',gap:4}}>
+          {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
+            <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`,marginBottom:6}}>
+        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Total esperado {horizon} meses: <strong style={{color:C.text,fontSize:13}}>{fmt(totalHorizon)}</strong></div>
+        <div style={{display:'flex',gap:4,alignItems:'flex-end',height:60}}>
+          {months.map(m=>(
+            <div key={m.key} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+              <div style={{fontSize:9,color:C.muted,fontWeight:600}}>{m.total>0?fmt(m.total).replace('$','').replace('.000','k'):''}</div>
+              <div style={{width:'100%',borderRadius:3,overflow:'hidden',background:'#E8EEF0',height:40,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+                {m.total>0&&<div style={{width:'100%',background:m.overdue>0?C.overdue:C.accent,height:`${Math.round((m.total/maxVal)*100)}%`,borderRadius:3,minHeight:3}}/>}
+              </div>
+              <div style={{fontSize:9,color:C.muted,textAlign:'center'}}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {months[0]?.overdue>0&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginTop:4}}>⚠ Incluye {fmt(months[0].overdue)} vencido en este mes</div>}
+    </div>
+  )
+}
+
 function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}) {
   const yr = currentYear
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
@@ -315,6 +365,10 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
           <TasksByPerson tasks={tasks} clients={clients}/>
         </div>
       )}
+
+      {/* Proyección de caja */}
+      <CashflowProjection billing={billing}/>
+
       <div style={{height:20}}/>
     </div>
   )
@@ -404,45 +458,206 @@ function SalesView({sales,clients,onEdit,onAdd}) {
   )
 }
 
-function SaleForm({sale,clients,onSave,onClose,onDelete,saving}) {
-  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const [f,setF] = useState(sale||{client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:''})
+function MiniClientForm({onSave,onCancel}) {
+  const [f,setF] = useState({name:'',rut:'',type:'Corporativo'})
+  const [saving,setSaving] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const save = async() => {
+    if(!f.name.trim()) return
+    setSaving(true)
+    try {
+      const {data,error} = await supabase.from('clients').insert({...f,status:'Activo'}).select().single()
+      if(error) throw error
+      onSave(data)
+    } catch(e) { alert('Error: '+e.message) }
+    setSaving(false)
+  }
+  return (
+    <div style={{background:'#F0F5F7',borderRadius:10,padding:'12px 14px',marginBottom:12,border:`1px solid ${C.accent}`}}>
+      <div style={{fontSize:12,fontWeight:600,color:C.accent,marginBottom:10}}>Nuevo cliente</div>
+      <Fld label='Nombre'><Inp value={f.name} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...' autoFocus/></Fld>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <Fld label='RUT'><Inp value={f.rut} onChange={e=>up('rut',e.target.value)} placeholder='76.xxx.xxx-x'/></Fld>
+        <Fld label='Tipo'><Sel value={f.type} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
+      </div>
+      <div style={{display:'flex',gap:8,marginTop:4}}>
+        <button onClick={onCancel} style={{flex:1,padding:8,borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={saving||!f.name.trim()} onClick={save} style={{flex:2,padding:8,borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>{saving?'Guardando...':'Crear cliente'}</button>
+      </div>
+    </div>
+  )
+}
+
+function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) {
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const [f,setF] = useState(sale||{client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas'})
+  const [clients,setClients] = useState(initialClients)
+  const [clientQ,setClientQ] = useState('')
+  const [showNewClient,setShowNewClient] = useState(false)
+  const [selectedClient,setSelectedClient] = useState(initialClients.find(c=>c.id===sale?.client_id)||null)
+  // Forma de cobro
+  const [cobroType,setCobroType] = useState('cuotas') // cuotas | porcentaje | personalizada
+  const [nCuotas,setNCuotas] = useState(3)
+  const [cobroInicio,setCobroInicio] = useState('')
+  const [tramos,setTramos] = useState([{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
+  const [cuotasCustom,setCuotasCustom] = useState([{id:1,monto:'',fecha:''}])
+
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
+  const ufVal = parseFloat(f.uf_value)||0
+  const amountUF = parseFloat(f.amount_uf)||0
+  const totalCLP = amountUF*ufVal
+
+  // Generar cobros desde forma de cobro
+  const generarCobros = () => {
+    if(!f.client_id||!amountUF||!ufVal) return []
+    const cobros = []
+    if(cobroType==='cuotas' && cobroInicio && nCuotas>0) {
+      const montoCuota = Math.round(totalCLP/nCuotas)
+      for(let i=0;i<nCuotas;i++) {
+        const d = new Date(cobroInicio+'T12:00')
+        d.setMonth(d.getMonth()+i)
+        cobros.push({monto:montoCuota, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${nCuotas}`})
+      }
+    } else if(cobroType==='porcentaje') {
+      tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:t.fecha, label:`${t.pct}%`}) })
+    } else if(cobroType==='personalizada') {
+      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha) cobros.push({monto:parseInt(c.monto)||0, fecha:c.fecha, label:`Cobro ${i+1}`}) })
+    }
+    return cobros
+  }
+  const cobros = generarCobros()
+
+  const handleSave = () => {
+    onSave({...f, cobros, cobroType})
+  }
+
   return (
     <>
-      <Fld label='Cliente'>
-        <select value={f.client_id||''} onChange={e=>up('client_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
-          <option value=''>— Seleccionar —</option>
-          {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </Fld>
+      {/* Selector de cliente con búsqueda */}
+      {!selectedClient ? (
+        <Fld label='Cliente'>
+          <div style={{position:'relative'}}>
+            <div style={{display:'flex',gap:6}}>
+              <Inp value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente...' autoFocus style={{flex:1}}/>
+              <button onClick={()=>setShowNewClient(true)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>+ Nuevo</button>
+            </div>
+            {clientMatches.length>0&&(
+              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
+                {clientMatches.map(c=>(
+                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);up('client_id',c.id);setClientQ('')}}
+                    style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
+                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                    onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                    <div style={{fontWeight:500}}>{c.name}</div>
+                    {c.rut&&<div style={{fontSize:11,color:C.muted}}>{c.rut}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Fld>
+      ) : (
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
+            {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
+          </div>
+          <button onClick={()=>{setSelectedClient(null);up('client_id','')}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
+        </div>
+      )}
+
+      {showNewClient&&<MiniClientForm onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
+
       <Fld label='Proyecto'><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
+
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Area'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
-        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
+        <Fld label='Área'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
+        <Fld label='Responsable'>
+          <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
+            <option value=''>— Seleccionar —</option>
+            {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
+          </select>
+        </Fld>
         <Fld label='Honorarios UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
         <Fld label='Costo UF (terceros)'><Inp type='number' step='0.01' value={f.cost_uf||''} onChange={e=>up('cost_uf',e.target.value)} placeholder='0.00'/></Fld>
         <Fld label='Valor UF (CLP)'><Inp type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder='Ej: 38500'/></Fld>
-        <Fld label='Ano presupuesto'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
+        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
+        <Fld label='Año presupuesto'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
         <Fld label='Mes'>
           <select value={f.month||currentMonth} onChange={e=>up('month',parseInt(e.target.value))} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
             {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
           </select>
         </Fld>
       </div>
+
+      {/* Forma de cobro */}
+      {amountUF>0&&ufVal>0&&(
+        <div style={{marginTop:4,marginBottom:12}}>
+          <Lbl>Forma de cobro</Lbl>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
+            {[['cuotas','Cuotas mensuales'],['porcentaje','Por porcentaje'],['personalizada','Personalizada']].map(([v,l])=>(
+              <button key={v} onClick={()=>setCobroType(v)} style={{padding:'8px 4px',borderRadius:8,border:`2px solid ${cobroType===v?C.accent:C.border}`,background:cobroType===v?'#E6EEF1':'transparent',color:cobroType===v?C.accent:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',textAlign:'center'}}>{l}</button>
+            ))}
+          </div>
+
+          {cobroType==='cuotas'&&(
+            <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
+                <Fld label='N° cuotas'><Inp type='number' min='1' max='36' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>
+                <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(e.target.value)}/></Fld>
+              </div>
+              {cobroInicio&&<div style={{fontSize:11,color:C.muted}}>Cuota mensual: <strong style={{color:C.text}}>{fmt(Math.round(totalCLP/nCuotas))}</strong> · Total: {fmt(totalCLP)}</div>}
+            </div>
+          )}
+
+          {cobroType==='porcentaje'&&(
+            <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
+              {tramos.map((t,i)=>(
+                <div key={t.id} style={{display:'grid',gridTemplateColumns:'60px 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
+                  <Fld label={i===0?'%':''}><Inp type='number' min='0' max='100' value={t.pct} onChange={e=>setTramos(p=>p.map(x=>x.id===t.id?{...x,pct:parseInt(e.target.value)||0}:x))}/></Fld>
+                  <Fld label={i===0?'Fecha':''}><Inp type='date' value={t.fecha} onChange={e=>setTramos(p=>p.map(x=>x.id===t.id?{...x,fecha:e.target.value}:x))}/></Fld>
+                  {tramos.length>2&&<button onClick={()=>setTramos(p=>p.filter(x=>x.id!==t.id))} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,paddingBottom:2}}>×</button>}
+                </div>
+              ))}
+              <button onClick={()=>setTramos(p=>[...p,{id:Date.now(),pct:0,fecha:''}])} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>+ Agregar tramo</button>
+              <div style={{fontSize:11,color:tramos.reduce((a,t)=>a+t.pct,0)!==100?C.overdue:C.normal,marginTop:4}}>Total: {tramos.reduce((a,t)=>a+t.pct,0)}% {tramos.reduce((a,t)=>a+t.pct,0)!==100?'(debe sumar 100%)':''}</div>
+            </div>
+          )}
+
+          {cobroType==='personalizada'&&(
+            <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
+              {cuotasCustom.map((c,i)=>(
+                <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
+                  <Fld label={i===0?'Monto CLP':''}><Inp type='number' value={c.monto} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))} placeholder='0'/></Fld>
+                  <Fld label={i===0?'Fecha':''}><Inp type='date' value={c.fecha} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:e.target.value}:x))}/></Fld>
+                  {cuotasCustom.length>1&&<button onClick={()=>setCuotasCustom(p=>p.filter(x=>x.id!==c.id))} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,paddingBottom:2}}>×</button>}
+                </div>
+              ))}
+              <button onClick={()=>setCuotasCustom(p=>[...p,{id:Date.now(),monto:'',fecha:''}])} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>+ Agregar cuota</button>
+            </div>
+          )}
+
+          {cobros.length>0&&(
+            <div style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#E6EEF1',fontSize:11,color:C.accent}}>
+              Se crearán <strong>{cobros.length} cobro{cobros.length!==1?'s':''}</strong> pendientes: {cobros.map(c=>`${c.label} ${fmt(c.monto)} (${c.fecha})`).join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
+
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.client_id||!f.title} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
+        <button disabled={saving||!f.client_id||!f.title} onClick={handleSave} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
     </>
   )
 }
-
-// ─── BILLING VIEW ─────────────────────────────────────────────────────────────
 function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onImport,onUpload}) {
   const [filter,setFilter] = useState('activo')
   const [fYear,setFYear] = useState('')
@@ -2671,14 +2886,32 @@ export default function App() {
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const p={...f,amount_uf:parseFloat(f.amount_uf)||null,cost_uf:parseFloat(f.cost_uf)||null,uf_value:parseFloat(f.uf_value)||null,updated_at:new Date().toISOString()}
+      const {cobros, cobroType, ...saleData} = f
+      const p={...saleData,amount_uf:parseFloat(f.amount_uf)||null,cost_uf:parseFloat(f.cost_uf)||null,uf_value:parseFloat(f.uf_value)||null,updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
+      // Crear cobros automáticamente si hay forma de cobro definida
+      if(cobros&&cobros.length>0&&!f.id){
+        for(const c of cobros){
+          await supabase.from('billing').insert({
+            client_id:data.client_id,
+            sale_id:data.id,
+            concept:`${data.title} — ${c.label}`,
+            amount:c.monto,
+            status:'Pendiente',
+            issued_at:c.fecha,
+            due:c.fecha,
+            billing_type:'honorarios',
+          })
+        }
+        const {data:newBilling} = await getBilling()
+        if(newBilling) setBilling(newBilling)
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[])
+  },[clients])
 
   const handleDeleteSale=useCallback(async(id)=>{
     if(!confirm('Eliminar esta venta?')) return
@@ -2822,7 +3055,7 @@ export default function App() {
           setModal({type:map[tab]||'sale',data:null})
         }} style={{position:'fixed',bottom:80,right:20,width:48,height:48,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:22,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data} clients={clients} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
