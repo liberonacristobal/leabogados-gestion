@@ -80,19 +80,24 @@ function LoginScreen({loading}) {
   )
 }
 
-const TABS = [
+const TABS_ADMIN = [
   {id:'dashboard',icon:'house',label:'Inicio'},
   {id:'sales',icon:'tag',label:'Ventas'},
   {id:'billing',icon:'dollar',label:'Cobros'},
   {id:'expenses',icon:'minus',label:'Gastos'},
   {id:'clients',icon:'person',label:'Clientes'},
 ]
+const TABS_LIMITED = [
+  {id:'tasks',icon:'check',label:'Tareas'},
+  {id:'expenses',icon:'minus',label:'Gastos'},
+]
 
-function BottomNav({tab,setTab,overdueN}) {
-  const icons = {house:'⌂',tag:'◈',dollar:'$',minus:'⊖',person:'⊙'}
+function BottomNav({tab,setTab,overdueN,userRole}) {
+  const tabs = userRole==='admin' ? TABS_ADMIN : TABS_LIMITED
+  const icons = {house:'⌂',tag:'◈',dollar:'$',minus:'⊖',person:'⊙',check:'✓'}
   return (
     <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
-      {TABS.map(t=>(
+      {tabs.map(t=>(
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:'10px 0 8px',background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,position:'relative',minWidth:0}}>
           <span style={{fontSize:16,lineHeight:1,color:tab===t.id?C.accent:C.muted}}>{icons[t.icon]}</span>
           <span style={{fontSize:10,color:tab===t.id?C.accent:C.muted,fontWeight:tab===t.id?700:400,whiteSpace:'nowrap'}}>{t.label}</span>
@@ -2489,11 +2494,126 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
 }
 
 
+// ─── TASKS ONLY VIEW (para usuarios limited) ──────────────────────────────────
+function TasksOnlyView({tasks,clients,sales,onAddTask}) {
+  const activeTasks = tasks.filter(t=>t.status==='Activo')
+  const taskGroups = {}
+  activeTasks.forEach(t=>{ const k=t.who||'Sin asignar'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
+  return (
+    <div>
+      <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Tareas</div>
+          <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+        </div>
+      </div>
+      <div style={{padding:'4px 20px 100px'}}>
+        {Object.keys(taskGroups).sort().map(who=>(
+          <div key={who} style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>{who} · {taskGroups[who].length}</div>
+            {taskGroups[who].sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999)).map(t=>{
+              const client=clients.find(c=>c.id===t.client_id)
+              return (
+                <div key={t.id} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2}}>{t.title}</div>
+                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap'}}>
+                    {client&&<span>{client.name}</span>}
+                    {t.project&&<span>· {t.project}</span>}
+                    {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+                  </div>
+                  {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
+                </div>
+              )
+            })}
+          </div>
+        ))}
+        {activeTasks.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas</div>}
+      </div>
+    </div>
+  )
+}
+
+// ─── USERS VIEW (gestión de usuarios para admin) ───────────────────────────────
+function UsersView({onClose}) {
+  const [users,setUsers] = useState([])
+  const [loading,setLoading] = useState(true)
+  const [saving,setSaving] = useState(false)
+  const [newEmail,setNewEmail] = useState('')
+  const [newName,setNewName] = useState('')
+  const [newRole,setNewRole] = useState('limited')
+
+  useEffect(()=>{
+    supabase.from('user_roles').select('*').order('name').then(({data})=>{ setUsers(data||[]); setLoading(false) })
+  },[])
+
+  const saveRole = async(id,role) => {
+    await supabase.from('user_roles').update({role}).eq('id',id)
+    setUsers(p=>p.map(u=>u.id===id?{...u,role}:u))
+  }
+
+  const addUser = async() => {
+    if(!newEmail.trim()) return
+    setSaving(true)
+    const {data,error} = await supabase.from('user_roles').insert({email:newEmail.trim().toLowerCase(),name:newName.trim()||newEmail.split('@')[0],role:newRole}).select().single()
+    if(!error) { setUsers(p=>[...p,data]); setNewEmail(''); setNewName('') }
+    else alert('Error: '+error.message)
+    setSaving(false)
+  }
+
+  const removeUser = async(id) => {
+    if(!confirm('¿Eliminar este usuario?')) return
+    await supabase.from('user_roles').delete().eq('id',id)
+    setUsers(p=>p.filter(u=>u.id!==id))
+  }
+
+  return (
+    <div>
+      {loading?<div style={{textAlign:'center',padding:30}}><Spin/></div>:(
+        <>
+          <div style={{marginBottom:16}}>
+            {users.map(u=>(
+              <div key={u.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{u.name}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{u.email}</div>
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <select value={u.role} onChange={e=>saveRole(u.id,e.target.value)} style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
+                    <option value='admin'>Admin</option>
+                    <option value='limited'>Limitado</option>
+                  </select>
+                  <button onClick={()=>removeUser(u.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16}}>×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{background:'#F7F7F7',borderRadius:10,padding:'12px 14px'}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:10}}>Agregar usuario</div>
+            <Fld label='Email (@leabogados.cl)'><Inp value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder='nombre@leabogados.cl'/></Fld>
+            <Fld label='Nombre'><Inp value={newName} onChange={e=>setNewName(e.target.value)} placeholder='Nombre completo'/></Fld>
+            <Fld label='Rol'>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {[['admin','Admin (acceso completo)'],['limited','Limitado (solo tareas y gastos)']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setNewRole(v)} style={{padding:'8px',borderRadius:8,border:`2px solid ${newRole===v?C.accent:C.border}`,background:newRole===v?'#E6EEF1':'transparent',color:newRole===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+                ))}
+              </div>
+            </Fld>
+            <button disabled={saving||!newEmail.trim()} onClick={addUser} style={{width:'100%',padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginTop:8,opacity:!newEmail.trim()?.6:1}}>
+              {saving?'Guardando...':'Agregar usuario'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [user,setUser]=useState(null)
+  const [userRole,setUserRole]=useState(null) // 'admin' | 'limited' | null
   const [clients,setClients]=useState([])
   const [sales,setSales]=useState([])
   const [billing,setBilling]=useState([])
@@ -2505,16 +2625,32 @@ export default function App() {
   const [hideErasmo,setHideErasmo]=useState(true)
   const [modal,setModal]=useState(null)
 
+  const loadUserRole = async(email) => {
+    const {data} = await supabase.from('user_roles').select('*').eq('email',email).maybeSingle()
+    if(data) {
+      setUserRole(data.role)
+      if(data.role==='limited') setTab('tasks')
+      return data
+    }
+    await supabase.from('user_roles').insert({email,role:'limited',name:email.split('@')[0]})
+    setUserRole('limited')
+    setTab('tasks')
+    return {role:'limited',name:email.split('@')[0]}
+  }
+
   useEffect(()=>{
     getSession().then(({data:{session}})=>{
       setSession(session)
-      if(session)setUser(getUserInfo(session.user.email))
+      if(session){ loadUserRole(session.user.email).then(u=>setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})) }
       setLoadingAuth(false)
     })
-    const {data:{subscription}}=onAuthChange((_,session)=>{
+    const {data:{subscription}}=onAuthChange(async(_,session)=>{
       setSession(session)
-      if(session){setUser(getUserInfo(session.user.email));if(session.provider_token)saveDriveToken(session.provider_token)}
-      else setUser(null)
+      if(session){
+        const u = await loadUserRole(session.user.email)
+        setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})
+        if(session.provider_token)saveDriveToken(session.provider_token)
+      } else { setUser(null); setUserRole(null) }
     })
     return ()=>subscription.unsubscribe()
   },[])
@@ -2662,24 +2798,25 @@ export default function App() {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 4px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <button onClick={signOut} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',fontWeight:500}}>{user?.name} · Salir</button>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>
-            <button onClick={()=>setHideErasmo(h=>!h)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${hideErasmo?C.accent:C.border}`,background:hideErasmo?'#E6EEF1':'transparent',color:hideErasmo?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+            {userRole==='admin'&&<button onClick={()=>setModal({type:'users'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>👥</button>}
+            {userRole==='admin'&&<button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>}
+            {userRole==='admin'&&<button onClick={()=>setHideErasmo(h=>!h)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${hideErasmo?C.accent:C.border}`,background:hideErasmo?'#E6EEF1':'transparent',color:hideErasmo?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>
               {hideErasmo?'Vista personal':'Todo el estudio'}
-            </button>
+            </button>}
           </div>
         </div>
         {loading?(
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
-            {tab==='sales'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
-            {tab==='billing'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
+            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
-            {tab==='clients'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})}/>}
           </div>
         )}
-        <BottomNav tab={tab} setTab={setTab} overdueN={overdueN}/>
+        <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
         <button className='fab' onClick={()=>{
           const map={sales:'sale',billing:'billing',expenses:'gastos',clients:'task'}
           setModal({type:map[tab]||'sale',data:null})
@@ -2692,6 +2829,7 @@ export default function App() {
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
