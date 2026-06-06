@@ -538,8 +538,8 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
   )
 }
 
-function BillingForm({bill,clients,onSave,onClose,saving}) {
-  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',erasmo:false})
+function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
+  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
     <>
@@ -553,18 +553,14 @@ function BillingForm({bill,clients,onSave,onClose,saving}) {
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='Monto (CLP)'><Inp type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0'/></Fld>
         <Fld label='Estado'><Sel value={f.status||'Pendiente'} onChange={e=>up('status',e.target.value)} options={['Propuesta','Pendiente','Pagado','Vencido','Anulado']}/></Fld>
-        <Fld label='N Factura'><Inp value={f.invoice_no||''} onChange={e=>up('invoice_no',e.target.value)} placeholder='F-001...'/></Fld>
+        <Fld label='N Factura'><Inp value={f.invoice_no||''} onChange={e=>up('invoice_no',e.target.value)} placeholder='367...'/></Fld>
         <Fld label='Emision'><Inp type='date' value={f.issued_at||''} onChange={e=>up('issued_at',e.target.value)}/></Fld>
         <Fld label='Vencimiento'><Inp type='date' value={f.due||''} onChange={e=>up('due',e.target.value)}/></Fld>
         {f.status==='Pagado'&&<Fld label='Fecha de pago'><Inp type='date' value={f.paid_at||''} onChange={e=>up('paid_at',e.target.value)}/></Fld>}
       </div>
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
-      <Fld label='Cartera'>
-        <button type='button' onClick={()=>up('erasmo',!f.erasmo)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.erasmo?C.accent:C.border}`,background:f.erasmo?'#E6EEF1':'transparent',color:f.erasmo?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-          {f.erasmo?'Cobro de Erasmo':'Marcar como Erasmo'}
-        </button>
-      </Fld>
       <div style={{display:'flex',gap:8,marginTop:4}}>
+        {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
@@ -1634,22 +1630,37 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
 // ─── PARSER + DRIVE IMPORTER (sin cambios) ───────────────────────────────────
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}
 function parseInvoice(raw) {
-  const t=raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
-  const fm0=t.match(/N[°º.\s]{0,3}(\d+)/)
-  const folio=fm0?fm0[1]:null
-  const cm=t.match(/SE[ÑN]OR(?:\(ES\))?[:\s]+(.+?)\s*\nR\.U\.T\.?[:\s]+([\d.]{6,12}[\-\s]*[\dkK])/i)
-  const cliente=cm?cm[1].trim():null
-  const rut=cm?cm[2].replace(/\s+/g,''):null
-  let issued_at=null
-  const fm=t.match(/Fecha\s*Emis[io]{1,2}n[:\s]*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
-  if(fm){const dia=+fm[1],mes=MESES[fm[2].toLowerCase()],anio=+fm[3];if(mes)issued_at=`${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`}
-  const tm=t.match(/TOTAL[\s\S]{0,10}?([\d][\d.]{2,})/)
-  const total=tm?parseInt(tm[1].replace(/\./g,''),10):null
-  let concepto=null
-  const gm=t.match(/(?:Descripcion|Descripción)[\s\S]{0,300}?\n([^\n]{5,120})\n/)
-  if(gm)concepto=gm[1].replace(/\s+/g,' ').trim()||null
-  if(!concepto){const gm2=t.match(/Valor\s*\n([\s\S]*?)Forma de Pago/);if(gm2)concepto=gm2[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*[\d.]+\s*$/,'').trim()||null}
-  return{folio,cliente,rut,issued_at,total,concepto}
+  const t = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
+  // Folio
+  const fm0 = t.match(/N[°º.\s]{0,3}(\d+)/)
+  const folio = fm0 ? fm0[1] : null
+  // Cliente y RUT receptor
+  const cm = t.match(/SE[ÑN]OR(?:\(ES\))?[:\s]+(.+?)\s*\nR\.U\.T\.?[:\s]+([\d.]{6,12}[\-\s]*[\dkK])/i)
+  const cliente = cm ? cm[1].trim() : null
+  const rut = cm ? cm[2].replace(/\s+/g,'') : null
+  // Fecha
+  let issued_at = null
+  const fm = t.match(/Fecha\s*Emis[io]{1,2}n[:\s]*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
+  if(fm){ const dia=+fm[1],mes=MESES[fm[2].toLowerCase()],anio=+fm[3]; if(mes) issued_at=`${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}` }
+  // Total
+  const tm = t.match(/TOTAL[\s\S]{0,10}?([\d][\d.]{2,})/)
+  const total = tm ? parseInt(tm[1].replace(/\./g,''),10) : null
+  // Concepto/glosa: buscar descripción del item en la tabla de detalle
+  let concepto = null
+  // Patrón 1: texto entre Descripcion y Cantidad/Precio
+  const gm1 = t.match(/(?:Descripcion|Descripción)\s+Cantidad[\s\S]{0,50}?\n([^\n]{5,120})\n/i)
+  if(gm1) concepto = gm1[1].replace(/\s+/g,' ').trim()||null
+  // Patrón 2: línea con descripción antes de "1 " (cantidad) y precio
+  if(!concepto){
+    const gm2 = t.match(/[-\s]\s+([A-Za-záéíóúÁÉÍÓÚñÑ][^\n]{10,100})\s*\n\s*1\s+[\d]/)
+    if(gm2) concepto = gm2[1].replace(/\s+/g,' ').trim()||null
+  }
+  // Patrón 3: entre Valor\n y Forma de Pago
+  if(!concepto){
+    const gm3 = t.match(/Valor\s*\n([\s\S]*?)Forma de Pago/)
+    if(gm3) concepto = gm3[1].replace(/\s+/g,' ').replace(/^[-\s]+/,'').replace(/\s*[\d.]+\s*$/,'').trim()||null
+  }
+  return { folio, cliente, rut, issued_at, total, concepto }
 }
 const FACTURACION_ROOT='1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
 async function driveGet(token,url){
@@ -1806,7 +1817,6 @@ function PDFUploader({clients,billing,onImported,onClose}) {
               issued_at: parsed.issued_at,
               due: parsed.issued_at,
               notes: `Subido: ${file.name}`,
-              erasmo: false
             })
           } catch(e){ addLog(`⚠ ${file.name} — error al guardar: ${e.message}`) }
         }
@@ -1987,13 +1997,27 @@ export default function App() {
   const handleSaveBilling=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const payload={...f,amount:parseInt(f.amount)||0,updated_at:new Date().toISOString()}
+      // Limpiar campos virtuales que no van a la DB
+      const {clients:_c, erasmo:_e, ...rest} = f
+      const payload={...rest,amount:parseInt(f.amount)||0,updated_at:new Date().toISOString()}
       const saved=await upsertBilling(payload)
-      setBilling(p=>{const wc={...saved,clients:clients.find(c=>c.id===saved.client_id),erasmo:f.erasmo};return f.id?p.map(x=>x.id===saved.id?wc:x):[wc,...p]})
+      setBilling(p=>{
+        const wc={...saved,clients:clients.find(c=>c.id===saved.client_id)}
+        return f.id?p.map(x=>x.id===saved.id?wc:x):[wc,...p]
+      })
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
   },[clients])
+
+  const handleDeleteBilling=useCallback(async(id)=>{
+    if(!confirm('¿Eliminar este cobro?')) return
+    try{
+      await supabase.from('billing').delete().eq('id',id)
+      setBilling(p=>p.filter(x=>x.id!==id))
+      setModal(null)
+    }catch(e){alert('Error: '+e.message)}
+  },[])
 
   const handleStatusChange=useCallback(async(id,status,paid_at)=>{
     const updates={status}
@@ -2051,7 +2075,7 @@ export default function App() {
         }} style={{position:'fixed',bottom:80,right:20,width:48,height:48,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:22,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
 
         {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data} clients={clients} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
-        {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} saving={saving}/></Modal>}
+        {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
