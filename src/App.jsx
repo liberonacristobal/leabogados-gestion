@@ -184,8 +184,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
 
-  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
-  const cobrado = bb.filter(b=>b.status==='Pagado'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
+  const cobrado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
   const tasaCobro = facturado>0 ? Math.round((cobrado/facturado)*100) : 0
 
   const porCobrar = bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
@@ -269,7 +269,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
             <span style={{fontSize:16,fontWeight:700,color:C.overdue}}>{fmt(totalPorCobrar)}</span>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
-            {[['0-30d',fmt(age0_30),C.soon],['31-60d',fmt(age31_60),C.overdue],['60d+',fmt(age60p),C.overdue]].map(([l,v,col])=>(
+            {[['0-30d',fmt(age0_30),C.normal],['31-60d',fmt(age31_60),C.soon],['60d+',fmt(age60p),C.overdue]].map(([l,v,col])=>(
               <div key={l} style={{textAlign:'center',padding:'6px 0',borderRadius:7,background:'#F7F7F7'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{l}</div>
                 <div style={{fontSize:11,fontWeight:700,color:col}}>{v}</div>
@@ -456,13 +456,21 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
   const paid=bb.filter(b=>b.status==='Pagado').reduce((s,b)=>s+(b.amount||0),0)
   const years=[...new Set(bb.map(b=>b.issued_at?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
 
+  const [payingId,setPayingId] = useState(null)
+  const [payDate,setPayDate] = useState('')
+
   const handleTogglePagado = async(b) => {
     if(b.status==='Pagado') {
       await onStatusChange(b.id,'Pendiente',null)
     } else {
-      const today = new Date().toISOString().slice(0,10)
-      await onStatusChange(b.id,'Pagado',today)
+      setPayingId(b.id)
+      setPayDate(new Date().toISOString().slice(0,10))
     }
+  }
+
+  const confirmPago = async() => {
+    await onStatusChange(payingId,'Pagado',payDate)
+    setPayingId(null)
   }
 
   return (
@@ -497,13 +505,30 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
           </select>
         )}
       </div>
+      {payingId&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:520,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+            <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Confirmar pago</div>
+            <div style={{fontSize:13,color:C.muted,marginBottom:14}}>Fecha en que se recibio el pago:</div>
+            <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)}
+              style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',marginBottom:14}}/>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>setPayingId(null)} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={confirmPago} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmar pagado</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{padding:'10px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin cobros</div>}
         {filtered.map(b=>(
           <div key={b.id} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.clients?.name?.split('/')[0].trim()||'—'}</div>
+                <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.clients?.name?.split('/')[0].trim()||'—'}</div>
+                  {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#8B5C2A',fontWeight:600,flexShrink:0}}>Reembolso</span>}
+                </div>
                 <div style={{fontSize:11,color:C.muted,marginTop:1}}>{b.concept}</div>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:12}}>
@@ -539,7 +564,7 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
 }
 
 function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
-  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:''})
+  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios'})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
     <>
@@ -548,6 +573,13 @@ function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
           <option value=''>— Seleccionar —</option>
           {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+      </Fld>
+      <Fld label='Tipo de cobro'>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {[['honorarios','Honorarios'],['reembolso','Reembolso gastos']].map(([v,l])=>(
+            <button key={v} type='button' onClick={()=>up('billing_type',v)} style={{padding:'9px',borderRadius:8,border:`2px solid ${f.billing_type===v?C.accent:C.border}`,background:f.billing_type===v?'#E6EEF1':'transparent',color:f.billing_type===v?C.accent:C.muted,fontSize:12,fontWeight:700,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
       </Fld>
       <Fld label='Concepto'><Inp value={f.concept||''} onChange={e=>up('concept',e.target.value)} placeholder='Descripcion del cobro...'/></Fld>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -1863,7 +1895,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
           try {
             await upsertBilling({
               client_id: matchedClient?.id||null,
-              concept: parsed.concepto||parsed.cliente||file.name,
+              concept: parsed.concepto||(parsed.cliente?`${parsed.cliente}${parsed.concepto?' — '+parsed.concepto:''}`:file.name),
               amount: parsed.total,
               status: 'Pendiente',
               invoice_no: parsed.folio,
