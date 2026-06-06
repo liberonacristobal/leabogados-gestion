@@ -711,13 +711,16 @@ function QuickTaskForm({clients,sales,onSave,onClose,saving}) {
 
 function ClientsView({clients,sales,billing,expenses,onEdit,onAdd,onAddTask}) {
   const [sFilter,setSFilter] = useState('Activo')
+  const [q,setQ] = useState('')
   const activeN=clients.filter(c=>(c.status||'Activo')==='Activo').length
   const endedN=clients.filter(c=>c.status==='Terminado').length
   const cl = useMemo(()=>{
-    if(sFilter==='Activo') return clients.filter(c=>(c.status||'Activo')==='Activo')
-    if(sFilter==='Terminado') return clients.filter(c=>c.status==='Terminado')
-    return clients
-  },[clients,sFilter])
+    let base = clients
+    if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
+    else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
+    if(q.trim()) base=base.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
+    return base
+  },[clients,sFilter,q])
   const balances = useMemo(()=>{
     const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) }); return m
   },[expenses])
@@ -727,11 +730,12 @@ function ClientsView({clients,sales,billing,expenses,onEdit,onAdd,onAddTask}) {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={onAddTask} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
-            <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+            <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
+            <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
         </div>
-        <div style={{fontSize:12,color:C.muted,margin:'4px 0 12px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
+        <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
+        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
         <div style={{display:'flex',gap:6,marginBottom:4}}>
           {[['Activo',`Activos (${activeN})`],['Terminado',`Terminados (${endedN})`],['all','Todos']].map(([v,l])=>(
             <button key={v} onClick={()=>setSFilter(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${sFilter===v?C.accent:C.border}`,background:sFilter===v?'#E6EEF1':'transparent',color:sFilter===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
@@ -1298,7 +1302,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN}/>
         <button className='fab' onClick={()=>{
-          const map={sales:'sale',billing:'billing',expenses:'expense',clients:'client'}
+          const map={sales:'sale',billing:'billing',expenses:'expense',clients:'task'}
           setModal({type:map[tab]||'sale',data:null})
         }} style={{position:'fixed',bottom:24,right:20,width:52,height:52,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:24,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
 
