@@ -1991,166 +1991,208 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
 
 // ─── REPORT BUILDER ──────────────────────────────────────────────────────────
 function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
-  const [sections,setSections] = useState({
-    ventas: true,
-    cobranza: true,
-    gastos: true,
-    tareas: false,
-  })
-  const [period,setPeriod] = useState('month') // month | year | custom
+  const [sections,setSections] = useState({ventas:true,cobranza:true,gastos:true,tareas:false})
+  const [period,setPeriod] = useState('month')
   const [selYear,setSelYear] = useState(String(currentYear))
   const [selMonth,setSelMonth] = useState(String(currentMonth))
-  const [generating,setGenerating] = useState(false)
-  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const years = [...new Set([...sales.map(s=>s.year),...billing.map(b=>b.issued_at?.slice(0,4)).filter(Boolean)].filter(Boolean))].sort((a,b)=>b-a)
+  const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const years=[...new Set([...sales.map(s=>s.year),...billing.map(b=>b.issued_at?.slice(0,4)).filter(Boolean)].filter(Boolean))].sort((a,b)=>b-a)
   if(!years.includes(currentYear)) years.unshift(currentYear)
+  const toggle=k=>setSections(p=>({...p,[k]:!p[k]}))
+  const getPeriodLabel=()=>period==='year'?`Año ${selYear}`:`${MONTHS[parseInt(selMonth)-1]} ${selYear}`
 
-  const toggle = k => setSections(p=>({...p,[k]:!p[k]}))
+  const filterByPeriod=(items,dateField)=>items.filter(item=>{
+    const d=item[dateField]; if(!d) return false
+    if(period==='year') return d.startsWith(selYear)
+    return d.startsWith(`${selYear}-${String(selMonth).padStart(2,'0')}`)
+  })
 
-  const getPeriodLabel = () => {
-    if(period==='year') return `Año ${selYear}`
-    if(period==='month') return `${MONTHS[parseInt(selMonth)-1]} ${selYear}`
-    return `${selYear}`
+  const generatePDF=()=>{
+    const label=getPeriodLabel()
+    const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
+    const A='#003C50', A2='#537281', A3='#99ABB4', A4='#E4E8EB', G='#3D3D3D'
+    const fmtN=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
+    const fmtUFN=n=>n?`UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—'
+
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Reporte LE — ${label}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'DM Sans',sans-serif;color:${G};background:#fff;font-size:11px}
+  @page{size:letter portrait;margin:18mm 18mm 18mm 18mm}
+  @media print{
+    .no-print{display:none}
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .page-break{page-break-before:always}
   }
+  .header{background:${A};color:#fff;padding:24px 28px;margin-bottom:24px;border-radius:0}
+  .header-top{display:flex;justify-content:space-between;align-items:flex-start}
+  .firma-name{font-size:20px;font-weight:700;letter-spacing:-.5px;margin-bottom:2px}
+  .firma-sub{font-size:10px;opacity:.75;letter-spacing:.5px;text-transform:uppercase}
+  .report-title{text-align:right}
+  .report-title h1{font-size:16px;font-weight:600;margin-bottom:4px}
+  .report-title p{font-size:10px;opacity:.8}
+  .section{margin-bottom:28px}
+  .section-title{font-size:13px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.8px;border-bottom:2px solid ${A};padding-bottom:6px;margin-bottom:14px}
+  .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .kpi{background:${A4};border-radius:6px;padding:12px 14px}
+  .kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;font-weight:600}
+  .kpi-value{font-size:16px;font-weight:700;color:${A}}
+  .kpi-sub{font-size:9px;color:${A2};margin-top:2px}
+  .progress-bar{height:8px;background:#E8EEF0;border-radius:4px;overflow:hidden;margin:6px 0 2px}
+  .progress-fill{height:100%;background:${A};border-radius:4px}
+  table{width:100%;border-collapse:collapse;font-size:10px}
+  thead tr{background:${A};color:#fff}
+  thead th{padding:7px 10px;text-align:left;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.4px}
+  tbody tr:nth-child(even){background:${A4}}
+  tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:6px 10px;color:${G};border-bottom:1px solid ${A4}}
+  tfoot tr{background:${A4};font-weight:700}
+  tfoot td{padding:7px 10px;border-top:2px solid ${A3}}
+  .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700}
+  .badge-pending{background:#E3EEF3;color:${A}}
+  .badge-overdue{background:#FBE9E7;color:#C2382B}
+  .badge-paid{background:#E4F1EA;color:#2E7D55}
+  .badge-area{background:${A4};color:${A2}}
+  .who-section{margin-bottom:16px}
+  .who-title{font-size:11px;font-weight:700;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding:4px 0;border-bottom:1px solid ${A4}}
+  .footer{margin-top:32px;padding-top:12px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A3}}
+  .print-btn{position:fixed;bottom:24px;right:24px;background:${A};color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;box-shadow:0 4px 16px rgba(0,60,80,.3)}
+</style></head><body>`
 
-  const filterByPeriod = (items, dateField) => {
-    return items.filter(item => {
-      const d = item[dateField]
-      if(!d) return false
-      if(period==='year') return d.startsWith(selYear)
-      if(period==='month') return d.startsWith(`${selYear}-${String(selMonth).padStart(2,'0')}`)
-      return true
-    })
-  }
+    // Header
+    html+=`<div class="header">
+      <div class="header-top">
+        <div>
+          <div class="firma-name">Liberona Escala Abogados</div>
+          <div class="firma-sub">leabogados.cl</div>
+        </div>
+        <div class="report-title">
+          <h1>Reporte de Gestión</h1>
+          <p>${label} · Generado ${now}</p>
+        </div>
+      </div>
+    </div>`
 
-  const generateReport = async() => {
-    setGenerating(true)
-    try {
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const wb = XLSX.utils.book_new()
-      const label = getPeriodLabel()
-
-      // ── Hoja 1: Ventas
-      if(sections.ventas) {
-        const ss = filterByPeriod(sales.map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})), 'date')
-        const totalBrutoUF = ss.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
-        const totalCostoUF = ss.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
-        const totalNetoUF = totalBrutoUF - totalCostoUF
-        const rows = [
-          [`REPORTE DE VENTAS — ${label}`],
-          [`Generado: ${new Date().toLocaleDateString('es-CL')}`],
-          [],
-          ['Cliente','Proyecto','Área','Estado','Año','Mes','UF Bruto','UF Costo','UF Neto'],
-          ...ss.map(s=>{
-            const client = clients.find(c=>c.id===s.client_id)
-            const neto = (parseFloat(s.amount_uf)||0)-(parseFloat(s.cost_uf)||0)
-            return [client?.name||'—', s.title||'—', s.area||'—', s.status||'—', s.year||'', s.month||'', parseFloat(s.amount_uf)||0, parseFloat(s.cost_uf)||0, neto]
-          }),
-          [],
-          ['TOTALES','','','','','',totalBrutoUF,totalCostoUF,totalNetoUF],
-          [],
-          ['Meta año:',9800,'UF'],
-          ['Avance neto:',Math.round((totalNetoUF/9800)*100)+'%'],
-        ]
-        const ws = XLSX.utils.aoa_to_sheet(rows)
-        ws['!cols'] = [{wch:28},{wch:32},{wch:14},{wch:12},{wch:6},{wch:6},{wch:12},{wch:12},{wch:12}]
-        XLSX.utils.book_append_sheet(wb, ws, 'Ventas')
-      }
-
-      // ── Hoja 2: Cobranza
-      if(sections.cobranza) {
-        const bb = filterByPeriod(billing, 'issued_at')
-        const rows = [
-          [`REPORTE DE COBRANZA — ${label}`],
-          [`Generado: ${new Date().toLocaleDateString('es-CL')}`],
-          [],
-          ['Cliente','Concepto','N° Factura','Emisión','Vencimiento','Estado','Monto','Días'],
-          ...bb.map(b=>{
-            const client = clients.find(c=>c.id===b.client_id)
-            const dias = b.due ? Math.round((new Date()-new Date(b.due+'T12:00'))/86400000) : ''
-            return [client?.name||'—', b.concept||'—', b.invoice_no||'—', b.issued_at||'', b.due||'', b.status||'—', b.amount||0, dias]
-          }),
-          [],
-          ['RESUMEN'],
-          ['Por cobrar', bb.filter(x=>x.status==='Pendiente').reduce((a,b)=>a+(b.amount||0),0)],
-          ['Vencido',    bb.filter(x=>x.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)],
-          ['Cobrado',    bb.filter(x=>x.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)],
-          ['Total',      bb.reduce((a,b)=>a+(b.amount||0),0)],
-        ]
-        const ws = XLSX.utils.aoa_to_sheet(rows)
-        ws['!cols'] = [{wch:28},{wch:32},{wch:12},{wch:12},{wch:12},{wch:12},{wch:14},{wch:8}]
-        XLSX.utils.book_append_sheet(wb, ws, 'Cobranza')
-      }
-
-      // ── Hoja 3: Gastos y Fondos
-      if(sections.gastos) {
-        const ee = filterByPeriod(expenses, 'date')
-        // Saldos por cliente
-        const balances = {}
-        expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) })
-        const clientsWithMovs = clients.filter(c=>balances[c.id]!==undefined)
-        const rows = [
-          [`REPORTE DE GASTOS Y FONDOS — ${label}`],
-          [`Generado: ${new Date().toLocaleDateString('es-CL')}`],
-          [],
-          ['SALDOS POR CLIENTE'],
-          ['Cliente','Fondos recibidos','Gastos realizados','Saldo'],
-          ...clientsWithMovs.map(c=>{
-            const fondos = expenses.filter(e=>e.client_id===c.id&&e.type==='fondo').reduce((a,e)=>a+e.amount,0)
-            const gastos = expenses.filter(e=>e.client_id===c.id&&e.type==='gasto').reduce((a,e)=>a+e.amount,0)
-            return [c.name, fondos, -gastos, fondos-gastos]
-          }),
-          [],
-          [`MOVIMIENTOS DEL PERÍODO`],
-          ['Fecha','Cliente','Tipo','Categoría','Descripción','Monto'],
-          ...ee.map(e=>{
-            const client = clients.find(c=>c.id===e.client_id)
-            return [e.date||'', client?.name||'—', e.type==='fondo'?'Fondo':'Gasto', e.category||'—', e.concept||'—', e.type==='fondo'?e.amount:-e.amount]
-          }),
-        ]
-        const ws = XLSX.utils.aoa_to_sheet(rows)
-        ws['!cols'] = [{wch:12},{wch:28},{wch:14},{wch:16},{wch:36},{wch:14}]
-        XLSX.utils.book_append_sheet(wb, ws, 'Gastos y Fondos')
-      }
-
-      // ── Hoja 4: Tareas
-      if(sections.tareas) {
-        const activeTasks = tasks.filter(t=>t.status==='Activo')
-        const WHO = ['Cristóbal','Martín','Martina','Erasmo','Rodrigo']
-        const rows = [
-          [`REPORTE DE TAREAS ACTIVAS — ${new Date().toLocaleDateString('es-CL')}`],
-          [],
-        ]
-        WHO.forEach(who=>{
-          const mine = activeTasks.filter(t=>t.who===who).sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
-          if(!mine.length) return
-          rows.push([who.toUpperCase()])
-          rows.push(['Cliente','Proyecto','Tarea','Plazo','Días'])
-          mine.forEach(t=>{
-            const client = clients.find(c=>c.id===t.client_id)
-            const dias = t.due ? Math.round((new Date(t.due+'T12:00')-new Date())/86400000) : ''
-            rows.push([client?.name||'—', t.project||'—', t.title||'—', t.due||'', dias])
-          })
-          rows.push([])
+    // ── VENTAS
+    if(sections.ventas){
+      const ss=filterByPeriod(sales.map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})),'date')
+      const brutoUF=ss.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
+      const costoUF=ss.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
+      const netoUF=brutoUF-costoUF
+      const pct=Math.min(100,Math.round((netoUF/9800)*100))
+      html+=`<div class="section">
+        <div class="section-title">Ventas</div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">Bruto</div><div class="kpi-value">${fmtUFN(brutoUF)}</div></div>
+          <div class="kpi"><div class="kpi-label">Costo terceros</div><div class="kpi-value" style="color:#C2382B">${costoUF>0?fmtUFN(costoUF):'—'}</div></div>
+          <div class="kpi"><div class="kpi-label">Neto</div><div class="kpi-value" style="color:#2E7D55">${fmtUFN(netoUF)}</div></div>
+        </div>
+        <div style="margin-bottom:16px;padding:10px 14px;background:${A4};border-radius:6px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:10px;font-weight:600;color:${A}">Avance meta anual UF 9.800</span>
+            <span style="font-size:13px;font-weight:700;color:${A}">${pct}%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>`
+      if(ss.length>0){
+        html+=`<table><thead><tr><th>Cliente</th><th>Proyecto</th><th>Área</th><th>Estado</th><th style="text-align:right">UF Bruto</th><th style="text-align:right">UF Costo</th><th style="text-align:right">UF Neto</th></tr></thead><tbody>`
+        ss.forEach(s=>{
+          const c=clients.find(x=>x.id===s.client_id)
+          const neto=(parseFloat(s.amount_uf)||0)-(parseFloat(s.cost_uf)||0)
+          html+=`<tr><td>${c?.name||'—'}</td><td>${s.title||'—'}</td><td><span class="badge badge-area">${s.area||'—'}</span></td><td>${s.status||'—'}</td><td style="text-align:right">${fmtUFN(s.amount_uf)}</td><td style="text-align:right;color:#C2382B">${s.cost_uf>0?fmtUFN(s.cost_uf):'—'}</td><td style="text-align:right;color:#2E7D55;font-weight:600">${fmtUFN(neto)}</td></tr>`
         })
-        const ws = XLSX.utils.aoa_to_sheet(rows)
-        ws['!cols'] = [{wch:28},{wch:24},{wch:40},{wch:12},{wch:8}]
-        XLSX.utils.book_append_sheet(wb, ws, 'Tareas')
+        html+=`</tbody><tfoot><tr><td colspan="4">TOTAL</td><td style="text-align:right">${fmtUFN(brutoUF)}</td><td style="text-align:right;color:#C2382B">${fmtUFN(costoUF)}</td><td style="text-align:right;color:#2E7D55">${fmtUFN(netoUF)}</td></tr></tfoot></table>`
+      } else {
+        html+=`<p style="color:${A3};font-style:italic;text-align:center;padding:16px">Sin ventas en este período</p>`
       }
-
-      const fname = `Reporte_LE_${label.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`
-      XLSX.writeFile(wb, fname)
-    } catch(e) {
-      alert('Error al generar reporte: '+e.message)
+      html+=`</div>`
     }
-    setGenerating(false)
+
+    // ── COBRANZA
+    if(sections.cobranza){
+      const bb=filterByPeriod(billing,'issued_at')
+      const pending=bb.filter(b=>b.status==='Pendiente').reduce((a,b)=>a+(b.amount||0),0)
+      const overdue=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+      const paid=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+      html+=`<div class="section${sections.ventas?' page-break':''}">
+        <div class="section-title">Cobranza</div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">Por cobrar</div><div class="kpi-value">${fmtN(pending)}</div></div>
+          <div class="kpi"><div class="kpi-label">Vencido</div><div class="kpi-value" style="color:#C2382B">${fmtN(overdue)}</div></div>
+          <div class="kpi"><div class="kpi-label">Cobrado</div><div class="kpi-value" style="color:#2E7D55">${fmtN(paid)}</div></div>
+        </div>`
+      if(bb.length>0){
+        html+=`<table><thead><tr><th>Cliente</th><th>Concepto</th><th>N° Factura</th><th>Emisión</th><th>Estado</th><th style="text-align:right">Monto</th><th>Antigüedad</th></tr></thead><tbody>`
+        bb.sort((a,b)=>(a.status==='Vencido'?0:1)-(b.status==='Vencido'?0:1)).forEach(b=>{
+          const c=clients.find(x=>x.id===b.client_id)
+          const dias=b.due?Math.round((new Date()-new Date(b.due+'T12:00'))/86400000):null
+          const badgeClass=b.status==='Pagado'?'badge-paid':b.status==='Vencido'?'badge-overdue':'badge-pending'
+          const diasStr=dias!==null&&dias>0?`${dias}d vencido`:dias!==null&&dias<0?`${Math.abs(dias)}d restantes`:'—'
+          html+=`<tr><td>${c?.name||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.concept||'—'}</td><td style="font-family:monospace">${b.invoice_no||'—'}</td><td>${b.issued_at||'—'}</td><td><span class="badge ${badgeClass}">${b.status}</span></td><td style="text-align:right;font-weight:600">${fmtN(b.amount)}</td><td style="color:${dias>0?'#C2382B':A2}">${diasStr}</td></tr>`
+        })
+        html+=`</tbody><tfoot><tr><td colspan="5">TOTAL</td><td style="text-align:right">${fmtN(pending+overdue+paid)}</td><td></td></tr></tfoot></table>`
+      } else {
+        html+=`<p style="color:${A3};font-style:italic;text-align:center;padding:16px">Sin cobros en este período</p>`
+      }
+      html+=`</div>`
+    }
+
+    // ── GASTOS
+    if(sections.gastos){
+      const balances={}
+      expenses.forEach(e=>{ if(!balances[e.client_id])balances[e.client_id]={fondos:0,gastos:0}; e.type==='fondo'?balances[e.client_id].fondos+=e.amount:balances[e.client_id].gastos+=e.amount })
+      const clientsWithMovs=clients.filter(c=>balances[c.id])
+      html+=`<div class="section page-break">
+        <div class="section-title">Gastos y Fondos</div>
+        <table style="margin-bottom:16px"><thead><tr><th>Cliente</th><th style="text-align:right">Fondos recibidos</th><th style="text-align:right">Gastos realizados</th><th style="text-align:right">Saldo</th></tr></thead><tbody>`
+      clientsWithMovs.forEach(c=>{
+        const b=balances[c.id]
+        const sal=b.fondos-b.gastos
+        html+=`<tr><td>${c.name}</td><td style="text-align:right;color:#2E7D55">${fmtN(b.fondos)}</td><td style="text-align:right;color:#C2382B">${fmtN(b.gastos)}</td><td style="text-align:right;font-weight:700;color:${sal<0?'#C2382B':'#2E7D55'}">${fmtN(sal)}</td></tr>`
+      })
+      html+=`</tbody></table></div>`
+    }
+
+    // ── TAREAS
+    if(sections.tareas){
+      const activeTasks=tasks.filter(t=>t.status==='Activo')
+      const WHO=['Cristóbal','Martín','Martina','Erasmo','Rodrigo']
+      html+=`<div class="section page-break"><div class="section-title">Tareas Activas</div>`
+      WHO.forEach(who=>{
+        const mine=activeTasks.filter(t=>t.who===who).sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
+        if(!mine.length) return
+        html+=`<div class="who-section"><div class="who-title">${who} · ${mine.length} tarea${mine.length!==1?'s':''}</div>
+        <table><thead><tr><th>Cliente</th><th>Proyecto</th><th>Tarea</th><th>Plazo</th><th>Estado</th></tr></thead><tbody>`
+        mine.forEach(t=>{
+          const c=clients.find(x=>x.id===t.client_id)
+          const u=urgency(t.due,t.status)
+          const color=u==='overdue'?'#C2382B':u==='urgent'?'#C77F18':u==='soon'?'#C77F18':'#2E7D55'
+          const dias=t.due?daysLeft(t.due):null
+          const diasStr=dias!==null?(dias<0?`${Math.abs(dias)}d vencido`:dias===0?'hoy':`${dias}d`):''
+          html+=`<tr><td>${c?.name||'—'}</td><td>${t.project||'—'}</td><td>${t.title}</td><td>${t.due||'—'}</td><td style="color:${color};font-weight:600">${diasStr}</td></tr>`
+        })
+        html+=`</tbody></table></div>`
+      })
+      html+=`</div>`
+    }
+
+    // Footer
+    html+=`<div class="footer"><span>Liberona Escala Abogados · leabogados.cl</span><span>Reporte ${label} · ${now}</span><span>CONFIDENCIAL</span></div>`
+    html+=`<button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar PDF</button>`
+    html+=`</body></html>`
+
+    const win=window.open('','_blank')
+    win.document.write(html)
+    win.document.close()
+    setTimeout(()=>win.focus(),300)
   }
 
-  const anySelected = Object.values(sections).some(Boolean)
+  const anySelected=Object.values(sections).some(Boolean)
 
   return (
     <div>
-      {/* Período */}
       <div style={{marginBottom:16}}>
         <Lbl>Período</Lbl>
         <div style={{display:'flex',gap:6,marginBottom:10}}>
@@ -2170,18 +2212,17 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         </div>
       </div>
 
-      {/* Secciones */}
       <div style={{marginBottom:20}}>
         <Lbl>Secciones a incluir</Lbl>
         {[
-          ['ventas','Ventas','Meta, proyectos, bruto/costo/neto por cliente'],
-          ['cobranza','Cobranza','Facturas con estado, antigüedad y totales'],
-          ['gastos','Gastos y Fondos','Saldos por cliente y movimientos del período'],
-          ['tareas','Tareas activas','Por responsable con plazo y urgencia'],
+          ['ventas','Ventas','Meta, proyectos, bruto/costo/neto'],
+          ['cobranza','Cobranza','Facturas, estado y antigüedad'],
+          ['gastos','Gastos y Fondos','Saldos por cliente'],
+          ['tareas','Tareas activas','Por responsable con urgencia'],
         ].map(([k,label,desc])=>(
           <div key={k} onClick={()=>toggle(k)} style={{display:'flex',gap:12,alignItems:'flex-start',padding:'10px 14px',borderRadius:10,border:`1px solid ${sections[k]?C.accent:C.border}`,background:sections[k]?'#E6EEF1':'#fff',marginBottom:8,cursor:'pointer'}}>
             <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${sections[k]?C.accent:C.border}`,background:sections[k]?C.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}>
-              {sections[k]&&<span style={{color:'#fff',fontSize:12,fontWeight:700}}>✓</span>}
+              {sections[k]&&<span style={{color:'#fff',fontSize:11,fontWeight:700}}>✓</span>}
             </div>
             <div>
               <div style={{fontSize:13,fontWeight:600,color:sections[k]?C.accent:C.text}}>{label}</div>
@@ -2191,22 +2232,22 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         ))}
       </div>
 
-      {/* Preview */}
       {anySelected&&(
         <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12,color:C.muted}}>
-          Generará un Excel con {Object.entries(sections).filter(([,v])=>v).length} hoja{Object.entries(sections).filter(([,v])=>v).length!==1?'s':''}: {Object.entries(sections).filter(([,v])=>v).map(([k])=>({ventas:'Ventas',cobranza:'Cobranza',gastos:'Gastos',tareas:'Tareas'}[k])).join(', ')} · {getPeriodLabel()}
+          {Object.entries(sections).filter(([,v])=>v).length} sección{Object.entries(sections).filter(([,v])=>v).length!==1?'es':''} · {getPeriodLabel()} · Tamaño carta vertical
         </div>
       )}
 
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={generating||!anySelected} onClick={generateReport} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!anySelected?.6:1}}>
-          {generating?<Spin/>:null}{generating?'Generando...':'↓ Descargar Excel'}
+        <button disabled={!anySelected} onClick={generatePDF} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!anySelected?.6:1}}>
+          Ver reporte
         </button>
       </div>
     </div>
   )
 }
+
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
