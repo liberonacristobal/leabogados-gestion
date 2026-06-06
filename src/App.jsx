@@ -101,7 +101,7 @@ function BottomNav({tab,setTab,overdueN}) {
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({sales,billing,clients,expenses,hideErasmo,setTab,user}) {
+function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}) {
   const yr = currentYear
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
   const ss = hideErasmo ? sales : sales
@@ -193,6 +193,28 @@ function Dashboard({sales,billing,clients,expenses,hideErasmo,setTab,user}) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {tasks?.filter(t=>t.status==='Activo').length>0&&(
+        <div style={{padding:'16px 20px 0'}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tareas activas</div>
+          {tasks.filter(t=>t.status==='Activo').sort((a,b)=>(daysLeft(a.due)||99)-(daysLeft(b.due)||99)).slice(0,6).map(t=>{
+            const client=clients.find(c=>c.id===t.client_id)
+            return (
+              <div key={t.id} style={{background:C.card,borderRadius:10,padding:'10px 13px',marginBottom:6,border:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'flex-start'}}>
+                <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,alignItems:'center',marginTop:2}}>
+                    <span>{client?.name?.split('/')[0].trim()||'—'}</span>
+                    {t.who&&<><span>·</span><span>{t.who}</span></>}
+                    {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
       <div style={{height:20}}/>
@@ -704,7 +726,115 @@ function EntitiesEditor({clientId}) {
   )
 }
 
-function ClientForm({client,onSave,onClose,onDelete,saving}) {
+// ─── TASKS EDITOR (dentro de ficha cliente) ───────────────────────────────────
+function TasksEditor({clientId,sales}) {
+  const [tasks,setTasks] = useState(null)
+  const [form,setForm] = useState(null) // null=cerrado, {}=nuevo, {id,...}=editar
+  const [busy,setBusy] = useState(false)
+  const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
+
+  useEffect(()=>{
+    let ok=true
+    supabase.from('tasks').select('*').eq('client_id',clientId).order('due',{ascending:true,nullsFirst:false})
+      .then(({data})=>ok&&setTasks(data||[]))
+    return ()=>{ok=false}
+  },[clientId])
+
+  const save = async()=>{
+    if(!form.title?.trim()) return
+    setBusy(true)
+    try{
+      const p={...form,client_id:clientId,sale_id:form.sale_id||null}
+      const{data,error}=await supabase.from('tasks').upsert(p).select().single()
+      if(error)throw error
+      setTasks(p=>form.id?p.map(x=>x.id===data.id?data:x):[...p,data])
+      setForm(null)
+    }catch(e){alert('Error: '+e.message)}
+    setBusy(false)
+  }
+
+  const toggle = async(t)=>{
+    const status=t.status==='Completado'?'Activo':'Completado'
+    await supabase.from('tasks').update({status}).eq('id',t.id)
+    setTasks(p=>p.map(x=>x.id===t.id?{...x,status}:x))
+  }
+
+  const del = async(id)=>{
+    if(!confirm('Eliminar tarea?')) return
+    await supabase.from('tasks').delete().eq('id',id)
+    setTasks(p=>p.filter(x=>x.id!==id))
+  }
+
+  const active = tasks?.filter(t=>t.status!=='Completado')||[]
+  const done   = tasks?.filter(t=>t.status==='Completado')||[]
+
+  return (
+    <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <Lbl>Tareas</Lbl>
+        <button onClick={()=>setForm({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:''})} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Agregar</button>
+      </div>
+      {tasks===null&&<div style={{fontSize:12,color:C.muted}}>Cargando...</div>}
+      {tasks?.length===0&&!form&&<div style={{fontSize:12,color:C.muted}}>Sin tareas.</div>}
+
+      {form&&(
+        <div style={{background:'#fff',borderRadius:8,padding:12,marginBottom:10,border:`1px solid ${C.border}`}}>
+          <input value={form.title||''} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder='Descripción de la tarea...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:13,marginBottom:8,boxSizing:'border-box'}}/>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <select value={form.who||'Cristóbal'} onChange={e=>setForm(p=>({...p,who:e.target.value}))} style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7'}}>
+              {WHO.map(w=><option key={w} value={w}>{w}</option>)}
+            </select>
+            <input type='date' value={form.due||''} onChange={e=>setForm(p=>({...p,due:e.target.value}))} style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7'}}/>
+          </div>
+          {sales?.filter(s=>s.client_id===clientId).length>0&&(
+            <select value={form.sale_id||''} onChange={e=>setForm(p=>({...p,sale_id:e.target.value}))} style={{width:'100%',padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7',marginBottom:8}}>
+              <option value=''>— Sin venta asociada —</option>
+              {sales.filter(s=>s.client_id===clientId).map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+            </select>
+          )}
+          <input value={form.note||''} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder='Nota (opcional)...' style={{width:'100%',padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,marginBottom:8,boxSizing:'border-box'}}/>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>setForm(null)} style={{flex:1,padding:'7px',borderRadius:7,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
+            <button onClick={save} disabled={busy||!form.title?.trim()} style={{flex:2,padding:'7px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:!form.title?.trim()?.6:1}}>
+              {busy?'Guardando...':'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {active.map(t=>(
+        <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+          <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.accent}`,background:'transparent',cursor:'pointer',flexShrink:0,marginTop:1}}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
+            <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>
+              <span>{t.who||'—'}</span>
+              {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+              {t.note&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</span></>}
+            </div>
+          </div>
+          <button onClick={()=>setForm({...t})} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',flexShrink:0}}>ed</button>
+          <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:C.overdue,fontSize:12,cursor:'pointer',flexShrink:0}}>x</button>
+        </div>
+      ))}
+
+      {done.length>0&&(
+        <div style={{marginTop:8}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Completadas ({done.length})</div>
+          {done.map(t=>(
+            <div key={t.id} style={{display:'flex',gap:8,alignItems:'center',padding:'5px 0'}}>
+              <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.done}`,background:C.done,cursor:'pointer',flexShrink:0,fontSize:10,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>✓</button>
+              <div style={{flex:1,fontSize:12,color:C.muted,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+              <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>x</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   const [f,setF]=useState(client||{name:'',type:'',email:'',phone:'',contact:'',erasmo:false,status:'Activo',ended_at:'',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
@@ -727,6 +857,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving}) {
       </Fld>
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
       {client?.id?<EntitiesEditor clientId={client.id}/>:<div style={{fontSize:11,color:C.muted,marginBottom:14}}>Guarda el cliente para agregar entidades facturables.</div>}
+      {client?.id&&<TasksEditor clientId={client.id} sales={sales}/>}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -865,6 +996,7 @@ export default function App() {
   const [sales,setSales]=useState([])
   const [billing,setBilling]=useState([])
   const [expenses,setExpenses]=useState([])
+  const [tasks,setTasks]=useState([])
   const [loading,setLoading]=useState(false)
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
@@ -893,7 +1025,8 @@ export default function App() {
       supabase.from('sales').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
       getBilling(),
       supabase.from('expenses').select('*').order('date',{ascending:false}).then(({data})=>data||[]),
-    ]).then(([c,s,b,e])=>{setClients(c);setSales(s);setBilling(b);setExpenses(e)})
+      supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}).then(({data})=>data||[]),
+    ]).then(([c,s,b,e,t])=>{setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
@@ -1007,7 +1140,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
+            {tab==='dashboard'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
             {tab==='sales'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} sales={sales} onAdd={()=>setModal({type:'expense',data:null})} onEdit={e=>setModal({type:'expense',data:e})}/>}
@@ -1024,7 +1157,7 @@ export default function App() {
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='expense'&&<Modal title={modal.data?.id?'Editar registro':'Nuevo registro'} onClose={()=>setModal(null)}><ExpenseForm expense={modal.data} clients={clients} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving}/></Modal>}
+        {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
     </>
   )
