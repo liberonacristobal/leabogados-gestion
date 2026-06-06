@@ -1762,6 +1762,50 @@ function DriveImporter({clients,billing,onImported,onClose}){
 }
 
 // ─── PDF UPLOADER ─────────────────────────────────────────────────────────────
+function InvoiceClientPicker({inv,clients,assigned,onAssign}) {
+  const [q,setQ] = useState('')
+  const matches = useMemo(()=>{
+    if(!q.trim()) return []
+    return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'es')).slice(0,6)
+  },[q,clients])
+  return (
+    <div style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${assigned?C.accent:C.border}`}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {inv.folio}</div>
+          <div style={{fontSize:11,color:C.muted}}>{inv.cliente||inv.fileName}{inv.rut?` · RUT: ${inv.rut}`:''}</div>
+          {inv.concepto&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic'}}>{inv.concepto}</div>}
+        </div>
+        <div style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,marginLeft:8}}>{fmt(inv.amount)}</div>
+      </div>
+      {assigned?(
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`}}>
+          <span style={{fontSize:13,fontWeight:600,color:C.accent}}>{assigned.name}</span>
+          <button onClick={()=>{onAssign('');setQ('')}} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer'}}>Cambiar</button>
+        </div>
+      ):(
+        <div style={{position:'relative'}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Escribe para buscar cliente...'
+            style={{width:'100%',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+          {matches.length>0&&(
+            <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
+              {matches.map(c=>(
+                <div key={c.id} onMouseDown={()=>{onAssign(c.id);setQ('')}}
+                  style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
+                  onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                  onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                  <div style={{fontWeight:500}}>{c.name}</div>
+                  {c.rut&&<div style={{fontSize:11,color:C.muted}}>{c.rut}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
   const [step,setStep] = useState('select') // select | processing | review | done
   const [log,setLog] = useState([])
@@ -1806,8 +1850,9 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
       try {
         const raw = await readPdfText(file)
         const parsed = parseInvoice(raw)
-        const exists = billing.some(b=>b.invoice_no===parsed.folio)
-        if(exists){ results.skipped++; addLog(`⏭ ${file.name} — ya existe`); setProgress(p=>({...p,done:p.done+1})); continue }
+        // Verificar duplicado en DB directamente (más confiable que el estado en memoria)
+        const {data:existing} = await supabase.from('billing').select('id').eq('invoice_no',parsed.folio).maybeSingle()
+        if(existing){ results.skipped++; addLog(`⏭ ${file.name} — ya existe (N° ${parsed.folio})`); setProgress(p=>({...p,done:p.done+1})); continue }
 
         // Match por RUT primero, luego por nombre
         let matchedClient = null
@@ -1919,25 +1964,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
           <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Asignar clientes</div>
           <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Estas facturas no se pudieron asociar automáticamente. Asígnalas una vez y el RUT quedará guardado para siempre.</div>
           {unmatched.map(inv=>(
-            <div key={inv.id} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {inv.folio}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{inv.cliente||inv.fileName} {inv.rut?`· RUT: ${inv.rut}`:''}</div>
-                  {inv.concepto&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic'}}>{inv.concepto}</div>}
-                </div>
-                <div style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,marginLeft:8}}>{fmt(inv.amount)}</div>
-              </div>
-              <select
-                value={assignments[inv.id]||''}
-                onChange={e=>setAssignments(p=>({...p,[inv.id]:e.target.value}))}
-                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${assignments[inv.id]?C.accent:C.border}`,background:'#F7F7F7',color:C.text,fontSize:13}}>
-                <option value=''>— Seleccionar cliente —</option>
-                {[...clients].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(c=>(
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+            <InvoiceClientPicker key={inv.id} inv={inv} clients={clients} assigned={clients.find(c=>c.id===assignments[inv.id])} onAssign={clientId=>setAssignments(p=>({...p,[inv.id]:clientId}))}/>
           ))}
           <div style={{display:'flex',gap:8,marginTop:4}}>
             <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
