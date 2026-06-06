@@ -549,50 +549,39 @@ function BillingForm({bill,clients,onSave,onClose,saving}) {
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function downloadRendicion(client, expenses) {
-  const movs = expenses.filter(e=>e.client_id===client.id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0))
-  const fondos = movs.filter(e=>e.type==='fondo')
-  const gastos = movs.filter(e=>e.type==='gasto')
-  const totalFondos = fondos.reduce((a,e)=>a+e.amount,0)
-  const totalGastos = gastos.reduce((a,e)=>a+e.amount,0)
-  const saldo = totalFondos - totalGastos
-
-  // Subtotales por categoría
-  const byCat = {}
-  gastos.forEach(e=>{ byCat[e.category||'Otro']=(byCat[e.category||'Otro']||0)+e.amount })
-
-  // Generar CSV
-  const rows = []
-  rows.push(['RENDICIÓN DE FONDOS - ' + client.name])
-  rows.push(['Fecha generación:', new Date().toLocaleDateString('es-CL')])
-  rows.push([])
-  rows.push(['MOVIMIENTOS'])
-  rows.push(['Fecha','Tipo','Categoría','Descripción','Monto'])
-  movs.forEach(e=>{
-    rows.push([
-      e.date||'',
-      e.type==='fondo'?'Fondo recibido':'Gasto',
-      e.type==='fondo'?'—':(e.category||'Otro'),
-      e.concept||'',
-      e.type==='fondo'?e.amount:-e.amount
-    ])
-  })
-  rows.push([])
-  rows.push(['RESUMEN POR CATEGORÍA'])
-  rows.push(['Categoría','Total'])
-  Object.entries(byCat).forEach(([cat,amt])=>rows.push([cat, -amt]))
-  rows.push([])
-  rows.push(['RESUMEN GENERAL'])
-  rows.push(['Fondos recibidos', totalFondos])
-  rows.push(['Total gastos', -totalGastos])
-  rows.push(['Saldo', saldo])
-
-  const csv = rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n')
-  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'})
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href=url; a.download=`Rendicion_${client.name.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`
-  a.click(); URL.revokeObjectURL(url)
+async function downloadRendicion(client, expenses) {
+  try {
+    const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+    const movs = expenses.filter(e=>e.client_id===client.id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0))
+    const fondos = movs.filter(e=>e.type==='fondo')
+    const gastos = movs.filter(e=>e.type==='gasto')
+    const totalFondos = fondos.reduce((a,e)=>a+e.amount,0)
+    const totalGastos = gastos.reduce((a,e)=>a+e.amount,0)
+    const saldo = totalFondos - totalGastos
+    const byCat = {}
+    gastos.forEach(e=>{ byCat[e.category||'Otro']=(byCat[e.category||'Otro']||0)+e.amount })
+    const wb = XLSX.utils.book_new()
+    const movData = [
+      ['RENDICIÓN DE FONDOS', client.name],
+      ['Fecha generación:', new Date().toLocaleDateString('es-CL')],
+      [],
+      ['Fecha','Tipo','Categoría','Descripción','Monto'],
+      ...movs.map(e=>[e.date||'', e.type==='fondo'?'Fondo recibido':'Gasto', e.type==='fondo'?'—':(e.category||'Otro'), e.concept||'', e.type==='fondo'?e.amount:-e.amount]),
+      [],
+      ['SUBTOTALES POR CATEGORÍA'],['Categoría','Monto'],
+      ...Object.entries(byCat).map(([cat,amt])=>[cat,-amt]),
+      [],
+      ['RESUMEN GENERAL'],
+      ['Fondos recibidos',totalFondos],['Total gastos',-totalGastos],['Saldo',saldo]
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(movData)
+    ws['!cols'] = [{wch:12},{wch:18},{wch:16},{wch:40},{wch:14}]
+    XLSX.utils.book_append_sheet(wb, ws, 'Rendición')
+    const fname = `Rendicion_${client.name.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`
+    XLSX.writeFile(wb, fname)
+  } catch(e) {
+    alert('Error al generar Excel: ' + e.message)
+  }
 }
 
 function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
@@ -1123,19 +1112,22 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose
             <button onClick={onAddSale} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Nueva</button>
           </div>
           {clientSales.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin ventas registradas</div>}
-          {clientSales.map(s=>(
+          {clientSales.map(s=>{
+            const saleTasks = clientTasks.filter(t=>t.project===s.title)
+            return (
             <div key={s.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
-                <div style={{display:'flex',gap:6,marginTop:2}}>
+                <div style={{display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
                   <AreaChip area={s.area}/>
                   <span style={{fontSize:10,color:C.muted}}>{s.year}</span>
                   <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Terminado'?C.done:'#C77F18'} small/>
+                  {saleTasks.length>0&&<span style={{fontSize:10,color:C.muted}}>{saleTasks.length} tarea{saleTasks.length!==1?'s':''}</span>}
                 </div>
               </div>
               {s.amount_uf>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent,flexShrink:0,marginLeft:12}}>{fmtUF(s.amount_uf)}</div>}
             </div>
-          ))}
+          )})}
         </div>
 
         {/* Cobros pendientes */}
@@ -1205,26 +1197,38 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose
           )}
         </div>
 
-        {/* Tareas */}
+        {/* Proyectos y Tareas */}
         <div style={{marginBottom:20}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text}}>Tareas activas</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.text}}>Proyectos y Tareas</div>
             <button onClick={onAddTask} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
           {clientTasks.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin tareas activas</div>}
-          {Object.keys(taskGroups).map(key=>{
-            const isProject=key!=='__none__'
+
+          {/* Proyectos nombrados */}
+          {Object.keys(taskGroups).filter(k=>k!=='__none__').map(key=>{
+            const taskList = taskGroups[key]
+            const overdueN = taskList.filter(t=>urgency(t.due,t.status)==='overdue').length
+            const urgentN = taskList.filter(t=>urgency(t.due,t.status)==='urgent').length
             return (
-              <div key={key} style={{marginBottom:10}}>
-                {isProject&&<div style={{fontSize:11,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>{key}</div>}
-                {taskGroups[key].map(t=>(
-                  <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+              <div key={key} style={{marginBottom:12,borderRadius:10,border:`1px solid ${C.border}`,overflow:'hidden',background:C.card}}>
+                <div style={{padding:'10px 14px',background:'#F0F5F7',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>{key}</div>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    {overdueN>0&&<span style={{fontSize:10,fontWeight:700,color:'#fff',background:C.overdue,borderRadius:10,padding:'1px 7px'}}>{overdueN} venc.</span>}
+                    {urgentN>0&&overdueN===0&&<span style={{fontSize:10,fontWeight:700,color:'#fff',background:C.soon,borderRadius:10,padding:'1px 7px'}}>{urgentN} urg.</span>}
+                    <span style={{fontSize:11,color:C.muted}}>{taskList.length} tarea{taskList.length!==1?'s':''}</span>
+                  </div>
+                </div>
+                {taskList.map(t=>(
+                  <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 14px',borderBottom:`1px solid ${C.border}`}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
                       <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
                         <span>{t.who||'—'}</span>
                         {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+                        {t.note&&<><span>·</span><span style={{fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</span></>}
                       </div>
                     </div>
                   </div>
@@ -1232,6 +1236,25 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose
               </div>
             )
           })}
+
+          {/* Tareas sin proyecto */}
+          {taskGroups['__none__']&&(
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Sin proyecto</div>
+              {taskGroups['__none__'].map(t=>(
+                <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
+                    <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
+                      <span>{t.who||'—'}</span>
+                      {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
@@ -1857,7 +1880,7 @@ export default function App() {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 4px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <button onClick={signOut} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',fontWeight:500}}>{user?.name} · Salir</button>
           <button onClick={()=>setHideErasmo(h=>!h)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${hideErasmo?C.accent:C.border}`,background:hideErasmo?'#E6EEF1':'transparent',color:hideErasmo?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>
-            {hideErasmo?'Solo Cristobal':'Todo el estudio'}
+            {hideErasmo?'Vista personal':'Todo el estudio'}
           </button>
         </div>
         {loading?(
