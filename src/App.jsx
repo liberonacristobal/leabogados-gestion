@@ -164,18 +164,26 @@ function TasksByPerson({tasks,clients}) {
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
+const META_UF = 9800
+const META_CLP = 400000000
+
 function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}) {
   const yr = currentYear
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
-  const ss = hideErasmo ? sales : sales
+  const salesYr = sales.filter(s=>s.year===yr)
 
-  const vendido = ss.filter(s=>s.year===yr).reduce((a,s)=>{
-    const clp = s.amount_clp || (s.amount_uf&&s.uf_value ? Math.round(s.amount_uf*s.uf_value) : 0)
-    return a+clp
-  },0)
-  const vendidoUF = ss.filter(s=>s.year===yr).reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
+  const vendidoBrutoUF = salesYr.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
+  const costoUF = salesYr.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
+  const vendidoNetoUF = vendidoBrutoUF - costoUF
+  const ufRef = salesYr.find(s=>s.uf_value)?.uf_value || 40000
+  const vendidoBrutoCLP = salesYr.reduce((a,s)=>{ const clp=s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef)); return a+clp },0)
+  const costoCLP = Math.round(costoUF * ufRef)
+  const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
+  const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
+
   const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = bb.filter(b=>b.status==='Pagado'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
+  const tasaCobro = facturado>0 ? Math.round((cobrado/facturado)*100) : 0
 
   const porCobrar = bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrar.reduce((a,b)=>a+(b.amount||0),0)
@@ -183,6 +191,10 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
   const age31_60 = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-30&&d>=-60 }).reduce((a,b)=>a+(b.amount||0),0)
   const age60p   = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-60 }).reduce((a,b)=>a+(b.amount||0),0)
   const top5 = [...porCobrar].sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,5)
+
+  const byArea = {}
+  salesYr.forEach(s=>{ byArea[s.area]=(byArea[s.area]||0)+(parseFloat(s.amount_uf)||0) })
+  const topAreas = Object.entries(byArea).sort((a,b)=>b[1]-a[1]).slice(0,3)
 
   const balances = {}
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) })
@@ -196,23 +208,76 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
         <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Liberona Escala Abogados</div>
       </div>
 
-      <div style={{padding:'0 20px'}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Pipeline {yr}</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
-          {[
-            ['Vendido',fmt(vendido),vendidoUF>0?fmtUF(vendidoUF):null,'#E3EEF3',C.accent],
-            ['Facturado',fmt(facturado),null,'#EEF3E3',C.normal],
-            ['Cobrado',fmt(cobrado),null,'#E4F1EA',C.normal],
-          ].map(([l,v,sub,bg,col])=>(
-            <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
-              <div style={{fontSize:12,fontWeight:700,color:col,lineHeight:1.2}}>{v}</div>
-              {sub&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{sub}</div>}
+      {/* Meta anual */}
+      <div style={{padding:'0 20px 16px'}}>
+        <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Meta {yr}</div>
+              <div style={{fontSize:11,color:C.muted}}>UF {META_UF.toLocaleString('es-CL')} · {fmt(META_CLP)}</div>
             </div>
-          ))}
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:22,fontWeight:700,color:pctMeta>=100?C.normal:C.accent}}>{pctMeta}%</div>
+              <div style={{fontSize:10,color:C.muted}}>completado</div>
+            </div>
+          </div>
+          <div style={{height:8,borderRadius:4,background:'#E8EEF0',marginBottom:12,overflow:'hidden'}}>
+            <div style={{height:'100%',borderRadius:4,background:pctMeta>=100?C.normal:C.accent,width:`${pctMeta}%`,transition:'width .5s ease'}}/>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+            {[
+              ['Bruto',fmtUF(vendidoBrutoUF),fmt(vendidoBrutoCLP),'#E3EEF3',C.accent],
+              ['Costo',costoUF>0?fmtUF(costoUF):'-',costoUF>0?fmt(costoCLP):'-','#FBE9E7',C.overdue],
+              ['Neto',fmtUF(vendidoNetoUF),fmt(vendidoNetoCLP),'#E4F1EA',C.normal],
+            ].map(([l,v,sub,bg,col])=>(
+              <div key={l} style={{background:bg,borderRadius:8,padding:'8px 10px'}}>
+                <div style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
+                <div style={{fontSize:12,fontWeight:700,color:col}}>{v}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:1}}>{sub}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
+      {/* Facturación */}
+      <div style={{padding:'0 20px 16px'}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Facturación {yr}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:facturado>0?6:0}}>
+          {[['Facturado',fmt(facturado),'#EEF3E3',C.normal],['Cobrado',fmt(cobrado),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
+            <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
+              <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
+            </div>
+          ))}
+        </div>
+        {facturado>0&&<div style={{fontSize:12,color:C.muted,textAlign:'right'}}>Tasa de cobro: <span style={{fontWeight:700,color:tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue}}>{tasaCobro}%</span></div>}
+      </div>
+
+      {/* Por área */}
+      {topAreas.length>0&&(
+        <div style={{padding:'0 20px 16px'}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Por área {yr}</div>
+          <div style={{background:C.card,borderRadius:12,padding:'12px 16px',border:`1px solid ${C.border}`}}>
+            {topAreas.map(([area,uf])=>{
+              const pct=vendidoBrutoUF>0?Math.round((uf/vendidoBrutoUF)*100):0
+              return (
+                <div key={area} style={{marginBottom:8}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                    <span style={{fontSize:12,color:C.text,fontWeight:500}}>{area}</span>
+                    <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{fmtUF(uf)} · {pct}%</span>
+                  </div>
+                  <div style={{height:5,borderRadius:3,background:'#E8EEF0',overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:3,background:C.accent,width:`${pct}%`}}/>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Cobranza */}
       <div style={{padding:'0 20px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Cobranza</div>
@@ -224,7 +289,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
             <span style={{fontSize:16,fontWeight:700,color:C.overdue}}>{fmt(totalPorCobrar)}</span>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
-            {[['0-30d',fmt(age0_30),C.soon],['31-60d',fmt(age31_60),C.overdue],['+60d',fmt(age60p),C.overdue]].map(([l,v,col])=>(
+            {[['0-30d',fmt(age0_30),C.soon],['31-60d',fmt(age31_60),C.overdue],['60d+',fmt(age60p),C.overdue]].map(([l,v,col])=>(
               <div key={l} style={{textAlign:'center',padding:'6px 0',borderRadius:7,background:'#F7F7F7'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{l}</div>
                 <div style={{fontSize:11,fontWeight:700,color:col}}>{v}</div>
@@ -248,7 +313,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
 
       {negatives.length>0&&(
         <div style={{padding:'16px 20px 0'}}>
-          <div style={{background:'#FBE9E7',borderRadius:10,padding:'12px 14px',border:`1px solid #f5c6c2`}}>
+          <div style={{background:'#FBE9E7',borderRadius:10,padding:'12px 14px',border:'1px solid #f5c6c2'}}>
             <div style={{fontSize:11,fontWeight:600,color:C.overdue,marginBottom:6}}>Fondos negativos</div>
             {negatives.map(c=>(
               <div key={c.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:C.text,marginBottom:2}}>
@@ -269,6 +334,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
     </div>
   )
 }
+
 
 // ─── SALES VIEW ───────────────────────────────────────────────────────────────
 function SalesView({sales,clients,onEdit,onAdd}) {
@@ -355,7 +421,7 @@ function SalesView({sales,clients,onEdit,onAdd}) {
 
 function SaleForm({sale,clients,onSave,onClose,onDelete,saving}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const [f,setF] = useState(sale||{client_id:'',title:'',area:'Corporativo',amount_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:''})
+  const [f,setF] = useState(sale||{client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
     <>
@@ -370,6 +436,7 @@ function SaleForm({sale,clients,onSave,onClose,onDelete,saving}) {
         <Fld label='Area'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
         <Fld label='Honorarios UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
+        <Fld label='Costo UF (terceros)'><Inp type='number' step='0.01' value={f.cost_uf||''} onChange={e=>up('cost_uf',e.target.value)} placeholder='0.00'/></Fld>
         <Fld label='Valor UF (CLP)'><Inp type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder='Ej: 38500'/></Fld>
         <Fld label='Ano presupuesto'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
         <Fld label='Mes'>
@@ -1211,7 +1278,7 @@ export default function App() {
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const p={...f,amount_uf:parseFloat(f.amount_uf)||null,uf_value:parseFloat(f.uf_value)||null,updated_at:new Date().toISOString()}
+      const p={...f,amount_uf:parseFloat(f.amount_uf)||null,cost_uf:parseFloat(f.cost_uf)||null,uf_value:parseFloat(f.uf_value)||null,updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
