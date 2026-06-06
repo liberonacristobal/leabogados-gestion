@@ -353,18 +353,31 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
             ))}
           </div>
         </div>
-        {top5.map(b=>(
-          <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.clients?.name?.split('/')[0].trim()||'—'}</div>
-              <div style={{fontSize:11,color:C.muted}}>{b.invoice_no||'—'} · {fmtDate(b.due)}</div>
-            </div>
-            <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-              <div style={{fontSize:13,fontWeight:600,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
-              <DaysBadge due={b.due} status={b.status}/>
-            </div>
-          </div>
-        ))}
+        {(()=>{
+          const byClient = {}
+          porCobrar.forEach(b=>{
+            const cid = b.client_id||'__none__'
+            const cname = clients.find(c=>c.id===cid)?.name||'Sin cliente'
+            if(!byClient[cid]) byClient[cid]={name:cname,total:0,vencido:0,count:0}
+            byClient[cid].total += (b.amount||0)
+            byClient[cid].count += 1
+            if(b.status==='Vencido') byClient[cid].vencido += (b.amount||0)
+          })
+          return Object.values(byClient)
+            .sort((a,b)=>b.total-a.total)
+            .slice(0,5)
+            .map(c=>(
+              <div key={c.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{c.count} factura{c.count!==1?'s':''}{c.vencido>0?` · `+fmt(c.vencido)+' vencido':''}</div>
+                </div>
+                <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
+                  <div style={{fontSize:13,fontWeight:700,color:c.vencido>0?C.overdue:C.text}}>{fmt(c.total)}</div>
+                </div>
+              </div>
+            ))
+        })()}
       </div>
 
       {negatives.length>0&&(
