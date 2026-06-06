@@ -408,7 +408,7 @@ function SaleForm({sale,clients,onSave,onClose,onDelete,saving}) {
           {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Fld>
-      <Fld label='Descripcion'><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
+      <Fld label='Proyecto'><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='Area'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
@@ -968,13 +968,13 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
     return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6)
   },[clients,q])
 
-  // Proyectos existentes del cliente seleccionado
+  // Proyectos existentes del cliente: de tareas + de ventas
   const clientProjects = useMemo(()=>{
     if(!selectedClient) return []
-    return [...new Set(
-      tasks.filter(t=>t.client_id===selectedClient.id&&t.project).map(t=>t.project)
-    )].sort()
-  },[tasks,selectedClient])
+    const fromTasks = tasks.filter(t=>t.client_id===selectedClient.id&&t.project).map(t=>t.project)
+    const fromSales = sales.filter(s=>s.client_id===selectedClient.id&&s.title).map(s=>s.title)
+    return [...new Set([...fromSales,...fromTasks])].sort()
+  },[tasks,sales,selectedClient])
 
   const clientSales = sales.filter(s=>s.client_id===selectedClient?.id&&s.status==='Activo')
 
@@ -1436,7 +1436,11 @@ function TasksEditor({clientId,sales}) {
     return ()=>{ok=false}
   },[clientId])
 
-  const existingProjects = useMemo(()=>[...new Set((tasks||[]).filter(t=>t.project).map(t=>t.project))].sort(),[tasks])
+  const existingProjects = useMemo(()=>{
+    const fromTasks = [...new Set((tasks||[]).filter(t=>t.project).map(t=>t.project))]
+    const fromSales = (sales||[]).filter(s=>s.client_id===clientId&&s.title).map(s=>s.title)
+    return [...new Set([...fromSales,...fromTasks])].sort()
+  },[tasks,sales,clientId])
 
   const save = async()=>{
     if(!form.title?.trim()) return
@@ -1871,7 +1875,7 @@ export default function App() {
         <button className='fab' onClick={()=>{
           const map={sales:'sale',billing:'billing',expenses:'gastos',clients:'task'}
           setModal({type:map[tab]||'sale',data:null})
-        }} style={{position:'fixed',bottom:24,right:20,width:52,height:52,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:24,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
+        }} style={{position:'fixed',bottom:80,right:20,width:48,height:48,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:22,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
 
         {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data} clients={clients} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} saving={saving}/></Modal>}
