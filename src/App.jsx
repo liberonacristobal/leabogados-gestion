@@ -529,6 +529,7 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
                   <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.clients?.name?.split('/')[0].trim()||'—'}</div>
                   {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#8B5C2A',fontWeight:600,flexShrink:0}}>Reembolso</span>}
                 </div>
+                {b.receptor_name&&<div style={{fontSize:11,color:C.accent,marginTop:1,fontWeight:500}}>{b.receptor_name}{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>}
                 <div style={{fontSize:11,color:C.muted,marginTop:1}}>{b.concept}</div>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:12}}>
@@ -1195,6 +1196,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,onEdit,onClose
               <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+                  {b.receptor_name&&<div style={{fontSize:11,color:C.accent,fontWeight:500}}>{b.receptor_name}{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>}
                   <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
                     <span>{b.invoice_no||'—'}</span>
                     <span>·</span>
@@ -1754,7 +1756,7 @@ function DriveImporter({clients,billing,onImported,onClose}){
         if(parsed.rut)mc=clients.find(c=>c.rut===parsed.rut)
         if(!mc&&parsed.cliente)mc=clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
         if(parsed.folio&&parsed.total){
-          try{await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||parsed.cliente||pdf.name,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:parsed.issued_at,notes:`Drive: ${pdf.name}`,erasmo:false})}
+          try{await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:parsed.issued_at,notes:null})}
           catch(e){addLog(`error guardando ${pdf.name}: ${e.message}`)}
         }
         results.rows.push({...parsed,clientMatch:mc,fileName:pdf.name});results.imported++
@@ -1895,19 +1897,21 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate}) {
           try {
             await upsertBilling({
               client_id: matchedClient?.id||null,
-              concept: parsed.concepto||(parsed.cliente?`${parsed.cliente}${parsed.concepto?' — '+parsed.concepto:''}`:file.name),
+              concept: parsed.concepto||'Sin descripción',
+              receptor_name: parsed.cliente||null,
+              receptor_rut: parsed.rut||null,
               amount: parsed.total,
               status: 'Pendiente',
               invoice_no: parsed.folio,
               issued_at: parsed.issued_at,
               due: parsed.issued_at,
-              notes: parsed.rut ? `RUT: ${parsed.rut}` : `Subido: ${file.name}`,
+              notes: null,
             })
             results.imported++
             if(matchedClient){
-              addLog(`✓ ${file.name} — ${matchedClient.name} · ${fmt(parsed.total)}`)
+              addLog(`✓ ${file.name} — ${matchedClient.name}${parsed.concepto?' · '+parsed.concepto:''} · ${fmt(parsed.total)}`)
             } else {
-              addLog(`⚠ ${file.name} — sin cliente · ${fmt(parsed.total)}`)
+              addLog(`⚠ ${file.name} — ${parsed.cliente||'sin cliente'} · ${fmt(parsed.total)}`)
               if(parsed.folio) pendingReview.push({
                 id: parsed.folio,
                 folio: parsed.folio,
