@@ -2144,24 +2144,26 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
 // ─── PARSER + DRIVE IMPORTER (sin cambios) ───────────────────────────────────
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12}
 function parseInvoice(raw) {
-  const t = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
+  // pdfjs entrega texto plano sin saltos reales
+  const t = raw.replace(/\r?\n/g,' ').replace(/\s{2,}/g,' ')
+  // DEBUG temporal: ver el texto real extraido
+  console.log('=== RAW INVOICE ===', t.slice(0,700))
 
   // Folio
-  const folioM = t.match(/N[ºo°]\s*(\d+)/)
+  const folioM = t.match(/N[\xba\xb0o]?\s*(\d{3,7})/)
   const folio = folioM ? folioM[1] : null
 
-  // Receptor — solo el nombre en la misma línea que SEÑOR(ES):
-  const receptorM = t.match(/SE[ÑN]OR(?:\(ES\))?:\s*([^\n\r]+)/)
+  // Receptor
+  const receptorM = t.match(/SE[N\u00d1]OR(?:\(ES\))?:?\s*(.+?)\s*R\.?U\.?T\.?:/)
   const cliente = receptorM ? receptorM[1].trim() : null
 
-  // RUT receptor — R.U.T.: inmediatamente después del receptor (no el del emisor al final)
-  // El receptor siempre aparece antes que el emisor en el texto
-  const rutM = t.match(/SE[ÑN]OR(?:\(ES\))?:[^\n]+\nR\.U\.T\.?:?\s*([\d]{1,2}\.[\d]{3}\.[\d]{3}[\s\-]+[\dkK])/)
-  const rut = rutM ? rutM[1].replace(/\s+/g,'') : null
+  // RUT receptor
+  const rutZone = t.match(/SE[N\u00d1]OR(?:\(ES\))?:?.+?R\.?U\.?T\.?:?\s*([\d\.]{7,11}[-\u2013][\dkK])/)
+  const rut = rutZone ? rutZone[1].replace(/\s/g,'') : null
 
   // Fecha
   let issued_at = null
-  const fechaM = t.match(/Fecha\s*Emis[io]+n:?\s*(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})/i)
+  const fechaM = t.match(/(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+de[l]?\s+(\d{4})/i)
   if(fechaM) {
     const dia = parseInt(fechaM[1])
     const mes = MESES[fechaM[2].toLowerCase()]
@@ -2169,20 +2171,16 @@ function parseInvoice(raw) {
     if(mes) issued_at = `${anio}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
   }
 
-  // Glosa — texto descriptivo del item, típicamente después de "- " en la tabla
-  // Patrón: "- Texto descripcion\nSegunda línea\n1 precio"
+  // Glosa
   let concepto = null
-  const gM1 = t.match(/-\s+([A-Za-záéíóúÁÉÍÓÚñÑ][^\n]{4,60})\n([^\n]{3,50})\n\s*1\s+[\d.,]/)
-  if(gM1) concepto = (gM1[1].trim()+' '+gM1[2].trim()).replace(/\s+/g,' ')
-  if(!concepto) {
-    const gM2 = t.match(/-\s+([A-Za-záéíóúÁÉÍÓÚñÑ][^\n]{4,80})\n\s*1\s+[\d.,]/)
-    if(gM2) concepto = gM2[1].trim()
-  }
+  const gM = t.match(/[-\u2013]\s+([A-Za-z\u00c0-\u00ff][^$]{10,120?})\s+1\s+[\d]/)
+  if(gM) concepto = gM[1].replace(/\s+/g,' ').trim()
 
   // Total
-  const totalM = t.match(/TOTAL\s*\$\s*([\d]{1,3}(?:[.\s]\d{3})*)/)
-  const total = totalM ? parseInt(totalM[1].replace(/[.\s]/g,'')) : null
+  const totalM = t.match(/TOTAL\s*\$?\s*([\d\.]{4,12})/)
+  const total = totalM ? parseInt(totalM[1].replace(/\./g,'')) : null
 
+  console.log('=== PARSED ===', JSON.stringify({folio,cliente,rut,issued_at,total}))
   return { folio, cliente, rut, issued_at, concepto, total }
 }
 const FACTURACION_ROOT='1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
