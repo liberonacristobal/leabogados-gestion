@@ -985,9 +985,9 @@ function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
           })}
         </div>
       )}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} onClose={()=>setRendicionClient(null)}/></Modal>}
     </div>
   )
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} onClose={()=>setRendicionClient(null)}/></Modal>}
 }
 
 function FondoForm({clients,expenses,onSave,onClose,saving,preClient}) {
