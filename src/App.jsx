@@ -574,7 +574,94 @@ function ExpenseForm({expense,clients,sales,onSave,onClose,onDelete,saving}) {
 }
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function ClientsView({clients,sales,billing,expenses,onEdit,onAdd}) {
+function QuickTaskForm({clients,sales,onSave,onClose,saving}) {
+  const [q,setQ] = useState('')
+  const [selectedClient,setSelectedClient] = useState(null)
+  const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:''})
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
+  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+  const matches = useMemo(()=>{
+    if(!q.trim()) return []
+    const ql = q.toLowerCase()
+    return clients.filter(c=>c.name.toLowerCase().includes(ql)).slice(0,6)
+  },[clients,q])
+
+  const clientSales = sales.filter(s=>s.client_id===selectedClient?.id&&s.status==='Activo')
+
+  return (
+    <>
+      {!selectedClient ? (
+        <Fld label='Cliente'>
+          <div style={{position:'relative'}}>
+            <Inp
+              value={q}
+              onChange={e=>setQ(e.target.value)}
+              placeholder='Escribe para buscar cliente...'
+              autoFocus
+            />
+            {matches.length>0&&(
+              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:220,overflowY:'auto'}}>
+                {matches.map(c=>(
+                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);setQ('')}}
+                    style={{padding:'10px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
+                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                    onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                    <div style={{fontWeight:500,color:C.text}}>{c.name}</div>
+                    {c.type&&<div style={{fontSize:11,color:C.muted}}>{c.type}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {q.length>0&&matches.length===0&&(
+              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',fontSize:13,color:C.muted,marginTop:4}}>
+                Sin resultados para "{q}"
+              </div>
+            )}
+          </div>
+        </Fld>
+      ) : (
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.border}`}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
+            {selectedClient.type&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.type}</div>}
+          </div>
+          <button onClick={()=>{setSelectedClient(null);setF(p=>({...p,sale_id:''}))}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
+        </div>
+      )}
+
+      {selectedClient&&(
+        <>
+          <Fld label='Tarea'><Inp value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Descripción de la tarea...' autoFocus/></Fld>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <Fld label='Responsable'><Sel value={f.who} onChange={e=>up('who',e.target.value)} options={WHO}/></Fld>
+            <Fld label='Plazo'><Inp type='date' value={f.due} onChange={e=>up('due',e.target.value)}/></Fld>
+          </div>
+          {clientSales.length>0&&(
+            <Fld label='Venta asociada (opcional)'>
+              <select value={f.sale_id} onChange={e=>up('sale_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
+                <option value=''>— Sin venta —</option>
+                {clientSales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+              </select>
+            </Fld>
+          )}
+          <Fld label='Nota'><Inp value={f.note} onChange={e=>up('note',e.target.value)} placeholder='Contexto adicional...'/></Fld>
+        </>
+      )}
+
+      <div style={{display:'flex',gap:8,marginTop:4}}>
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,sale_id:f.sale_id||null})}
+          style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!f.title.trim())?.6:1}}>
+          {saving?<Spin/>:null}{saving?'Guardando...':'Guardar tarea'}
+        </button>
+      </div>
+    </>
+  )
+}
+
+function ClientsView({clients,sales,billing,expenses,onEdit,onAdd,onAddTask}) {
   const [sFilter,setSFilter] = useState('Activo')
   const activeN=clients.filter(c=>(c.status||'Activo')==='Activo').length
   const endedN=clients.filter(c=>c.status==='Terminado').length
@@ -591,7 +678,10 @@ function ClientsView({clients,sales,billing,expenses,onEdit,onAdd}) {
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
-          <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={onAddTask} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+            <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+          </div>
         </div>
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 12px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <div style={{display:'flex',gap:6,marginBottom:4}}>
@@ -1066,6 +1156,17 @@ export default function App() {
     setExpenses(p=>p.filter(x=>x.id!==id));setModal(null)
   },[])
 
+  const handleSaveTask=useCallback(async(f)=>{
+    setSaving(true)
+    try{
+      const{data,error}=await supabase.from('tasks').upsert(f).select().single()
+      if(error)throw error
+      setTasks(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
+      setModal(null)
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(false)
+  },[])
+
   const handleSaveClient=useCallback(async(f)=>{
     setSaving(true)
     try{
@@ -1144,7 +1245,7 @@ export default function App() {
             {tab==='sales'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} sales={sales} onAdd={()=>setModal({type:'expense',data:null})} onEdit={e=>setModal({type:'expense',data:e})}/>}
-            {tab==='clients'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})}/>}
+            {tab==='clients'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={()=>setModal({type:'task',data:null})}/>}
           </div>
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN}/>
@@ -1157,6 +1258,7 @@ export default function App() {
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='expense'&&<Modal title={modal.data?.id?'Editar registro':'Nuevo registro'} onClose={()=>setModal(null)}><ExpenseForm expense={modal.data} clients={clients} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
     </>
