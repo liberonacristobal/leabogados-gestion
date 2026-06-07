@@ -2321,7 +2321,13 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
         // 4. Buscar en clients por nombre
         if(!mc&&parsed.cliente)mc=clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
         if(parsed.folio&&parsed.total){
-          try{await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})}
+          try{
+            await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})
+            // Guardar aprendizaje en client_entities si hubo match
+            if(mc?.id&&parsed.rut){
+              await supabase.from('client_entities').upsert({client_id:mc.id,rut:parsed.rut,name:parsed.cliente||null},{onConflict:'rut'})
+            }
+          }
           catch(e){addLog(`error guardando ${pdf.name}: ${e.message}`)}
         }
         results.rows.push({...parsed,clientMatch:mc,fileName:pdf.name});results.imported++
