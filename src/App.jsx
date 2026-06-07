@@ -2251,6 +2251,7 @@ function parseInvoice(raw) {
   const total = totalM ? parseInt(totalM[1].replace(/\./g,'')) : null
 
   return { folio, cliente, rut, issued_at, concepto, total }
+}
 const FACTURACION_ROOT='1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
 async function driveGet(token,url){
   const fullUrl=url+(url.includes('?')?'&':'?')+'supportsAllDrives=true&includeItemsFromAllDrives=true'
