@@ -411,9 +411,9 @@ function VentasPorMes({sales}) {
   )
 }
 
-function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}) {
+function Dashboard({sales,billing,clients,expenses,tasks,setTab,user}) {
   const yr = currentYear
-  const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
+  const bb = billing
   const salesYr = sales.filter(s=>s.year===yr)
 
   const vendidoBrutoUF = salesYr.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
@@ -982,7 +982,7 @@ function AsignarClienteInline({bill,clients,onAssign}) {
   )
 }
 
-function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient}) {
+function BillingView({billing,clients,sales,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient}) {
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -997,7 +997,7 @@ function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,o
   const clearSel = () => setSelected(new Set())
   const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-  const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
+  const bb = billing
   const isProg = filter==='programadas'
   // En Programadas la fecha relevante es el vencimiento (due); en el resto, la emisión (issued_at)
   const dateField = b => isProg ? b.due : b.issued_at
@@ -3982,7 +3982,6 @@ export default function App() {
   const [loading,setLoading]=useState(false)
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
-  const [hideErasmo,setHideErasmo]=useState(true)
   const [modal,setModal]=useState(null)
 
   const loadUserRole = async(email) => {
@@ -4268,9 +4267,8 @@ export default function App() {
   },[])
 
   const overdueN=useMemo(()=>{
-    const bb=hideErasmo?billing.filter(b=>!b.erasmo):billing
-    return bb.filter(b=>b.status==='Vencido').length
-  },[billing,hideErasmo])
+    return billing.filter(b=>b.status==='Vencido').length
+  },[billing])
 
   if(loadingAuth) return <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center'}}><Spin/></div>
   if(!session) return <LoginScreen loading={loadingAuth}/>
@@ -4296,18 +4294,15 @@ export default function App() {
           <div style={{display:'flex',gap:6}}>
             {userRole==='admin'&&<button onClick={()=>setModal({type:'users'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>👥</button>}
             {userRole==='admin'&&<button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>}
-            {userRole==='admin'&&<button onClick={()=>setHideErasmo(h=>!h)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${hideErasmo?C.accent:C.border}`,background:hideErasmo?'#E6EEF1':'transparent',color:hideErasmo?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>
-              {hideErasmo?'Vista personal':'Todo el estudio'}
-            </button>}
           </div>
         </div>
         {loading?(
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
-            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} hideErasmo={hideErasmo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user}/>}
+            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
