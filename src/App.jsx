@@ -1913,7 +1913,7 @@ function FondoForm({clients,expenses,clientEntities,onSave,onClose,saving,preCli
           <Fld label='Descripción'><Inp value={concept} onChange={e=>setConcept(e.target.value)} placeholder='Ej: Provisión fondos abril...'/></Fld>
           {rsList.length>1&&(
             <Fld label='Razón social'>
-              <Sel value={entityId} onChange={e=>setEntityId(e.target.value)} options={[{value:'',label:'— Sin asignar —'},...rsList.map(e=>({value:e.id,label:e.name+(e.rut?` · ${e.rut}`:'')}))]}/>
+              <select value={entityId} onChange={e=>setEntityId(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
             </Fld>
           )}
         </>
@@ -2009,7 +2009,7 @@ function GastosForm({clients,expenses,clientEntities,onSave,onClose,preClient}) 
           {rsList.length>1&&(
             <div style={{marginBottom:10}}>
               <Fld label='Razón social'>
-                <Sel value={entityId} onChange={e=>setEntityId(e.target.value)} options={[{value:'',label:'— Sin asignar —'},...rsList.map(e=>({value:e.id,label:e.name+(e.rut?` · ${e.rut}`:'')}))]}/>
+                <select value={entityId} onChange={e=>setEntityId(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
               </Fld>
             </div>
           )}
@@ -2085,7 +2085,7 @@ function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete
       <Fld label='Descripción'><Inp value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Descripción...'/></Fld>
       {rsList.length>1&&(
         <Fld label='Razón social'>
-          <Sel value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} options={[{value:'',label:'— Sin asignar —'},...rsList.map(e=>({value:e.id,label:e.name+(e.rut?` · ${e.rut}`:'')}))]}/>
+          <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
         </Fld>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
