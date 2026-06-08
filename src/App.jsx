@@ -2400,7 +2400,7 @@ function ClienteDriveImporter({clients,onImported,onClose}){
           <div style={{display:'flex',gap:8,marginTop:8,position:'sticky',bottom:0,background:C.bg,paddingBottom:8}}>
             <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
             <button onClick={saveSelected} disabled={saving||selectedCount===0} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:selectedCount===0?.5:1}}>
-              {saving?'Importando...`:`Importar ${selectedCount} cliente${selectedCount!==1?'s':''}`}
+              {saving?'Importando...':`Importar ${selectedCount} cliente${selectedCount!==1?'s':''}`}
             </button>
           </div>
         </div>
