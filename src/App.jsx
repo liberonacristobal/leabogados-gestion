@@ -292,7 +292,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
           <div style={{height:8,borderRadius:4,background:'#E8EEF0',marginBottom:12,overflow:'hidden'}}>
             <div style={{height:'100%',borderRadius:4,background:pctMeta>=100?C.normal:C.accent,width:`${pctMeta}%`,transition:'width .5s ease'}}/>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {[
               ['Bruto',fmtUF(vendidoBrutoUF),fmt(vendidoBrutoCLP),'#E3EEF3',C.accent],
               ['Costo',costoUF>0?fmtUF(costoUF):'-',costoUF>0?fmt(costoCLP):'-','#FBE9E7',C.overdue],
@@ -545,6 +545,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
   const [cobroInicio,setCobroInicio] = useState(sale?.cobro_config?.cobroInicio||'')
   const [tramos,setTramos] = useState(sale?.cobro_config?.tramos||[{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
   const [cuotasCustom,setCuotasCustom] = useState(sale?.cobro_config?.cuotasCustom||[{id:1,monto:'',fecha:''}])
+  const [mensualInicio,setMensualInicio] = useState(sale?.cobro_config?.mensualInicio||'')
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
@@ -556,7 +557,18 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
   const generarCobros = () => {
     if(!f.client_id||!amountUF||!ufVal) return []
     const cobros = []
-    if(cobroType==='cuotas' && cobroInicio && nCuotas>0) {
+    if(cobroType==='mensual' && mensualInicio && f.year) {
+      const [y,m] = mensualInicio.split('-').map(Number)
+      const endMonth = 12
+      const endYear = parseInt(f.year)||currentYear
+      let cy=y, cm=m
+      while(cy<endYear||(cy===endYear&&cm<=endMonth)){
+        const d=new Date(cy,cm-1,1); d.setDate(1)
+        const fecha=`${cy}-${String(cm).padStart(2,'0')}-01`
+        cobros.push({monto:Math.round(totalCLP), fecha, label:`Mensual ${MONTHS[cm-1]} ${cy}`})
+        cm++; if(cm>12){cm=1;cy++}
+      }
+    } else if(cobroType==='cuotas' && cobroInicio && nCuotas>0) {
       const montoCuota = Math.round(totalCLP/nCuotas)
       for(let i=0;i<nCuotas;i++) {
         const d = new Date(cobroInicio+'T12:00')
@@ -573,7 +585,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
   const cobros = generarCobros()
 
   const handleSave = () => {
-    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom}})
+    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}})
   }
 
   return (
@@ -640,10 +652,20 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
         <div style={{marginTop:4,marginBottom:12}}>
           <Lbl>Forma de cobro</Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
-            {[['cuotas','Cuotas mensuales'],['porcentaje','Por porcentaje'],['personalizada','Personalizada']].map(([v,l])=>(
+            {[['cuotas','Cuotas mensuales'],['mensual','Mensual recurrente'],['porcentaje','Por porcentaje'],['personalizada','Personalizada']].map(([v,l])=>(
               <button key={v} onClick={()=>setCobroType(v)} style={{padding:'8px 4px',borderRadius:8,border:`2px solid ${cobroType===v?C.accent:C.border}`,background:cobroType===v?'#E6EEF1':'transparent',color:cobroType===v?C.accent:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',textAlign:'center'}}>{l}</button>
             ))}
           </div>
+
+          {cobroType==='mensual'&&(
+            <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
+                <Fld label='Monto mensual UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
+                <Fld label='Inicio cobro'><Inp type='date' value={mensualInicio} onChange={e=>setMensualInicio(e.target.value)}/></Fld>
+              </div>
+              {mensualInicio&&ufVal>0&&amountUF>0&&<div style={{fontSize:11,color:C.muted}}>Genera cobros de <strong style={{color:C.text}}>{fmt(Math.round(totalCLP))}</strong>/mes desde {mensualInicio.slice(0,7)} hasta dic {f.year||currentYear}</div>}
+            </div>
+          )}
 
           {cobroType==='cuotas'&&(
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
