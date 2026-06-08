@@ -1459,7 +1459,142 @@ function RendicionModal({client, expenses, onClose}) {
   )
 }
 
-function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
+function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
+  const [tipo,setTipo] = useState('gasto') // gasto | fondo
+  const [rows,setRows] = useState(null)    // null = sin cargar
+  const [cargando,setCargando] = useState(false)
+  const [guardando,setGuardando] = useState(false)
+  const [hechos,setHechos] = useState(0)
+
+  const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
+
+  const matchCliente = (rut,nombre) => {
+    const nr = normRut(rut)
+    if(nr){ const byRut = clients.find(c=>normRut(c.rut)===nr); if(byRut) return byRut }
+    if(nombre){ const nn=nombre.toString().trim().toLowerCase(); const byName = clients.find(c=>c.name?.toLowerCase()===nn); if(byName) return byName }
+    return null
+  }
+
+  const parseFecha = v => {
+    if(!v) return ''
+    if(v instanceof Date) return v.toISOString().slice(0,10)
+    const str = v.toString().trim()
+    // dd-mm-yyyy o dd/mm/yyyy
+    const m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/)
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
+    // yyyy-mm-dd ya viene bien
+    if(/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0,10)
+    return str
+  }
+
+  const onFile = async(e) => {
+    const file = e.target.files?.[0]; if(!file) return
+    setCargando(true)
+    try{
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf,{type:'array',cellDates:true})
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const data = XLSX.utils.sheet_to_json(ws,{defval:''})
+      const parsed = data.map((r,i)=>{
+        const get = (...keys)=>{ for(const k of Object.keys(r)){ if(keys.some(kk=>k.toLowerCase().trim()===kk)) return r[k] } return '' }
+        const rut = get('rut','rut cliente')
+        const nombre = get('nombre','nombre cliente','cliente')
+        const fecha = parseFecha(get('fecha'))
+        const monto = parseInt((get('monto')||'').toString().replace(/[^0-9]/g,''))||0
+        const concepto = get('concepto','descripcion','descripción','glosa')
+        const categoria = get('categoria','categoría','tipo')||'Otro'
+        const cli = matchCliente(rut,nombre)
+        return {id:i, rut, nombre, fecha, monto, concepto, categoria, client_id:cli?.id||null, clientName:cli?.name||null}
+      }).filter(r=>r.monto>0)
+      setRows(parsed)
+    }catch(err){ alert('Error al leer el Excel: '+err.message) }
+    setCargando(false)
+  }
+
+  const asignar = (rowId,clientId) => {
+    const c = clients.find(x=>x.id===clientId)
+    setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null}:r))
+  }
+
+  const conMatch = (rows||[]).filter(r=>r.client_id)
+  const sinMatch = (rows||[]).filter(r=>!r.client_id)
+  const totalMonto = (rows||[]).reduce((a,r)=>a+(r.monto||0),0)
+
+  const guardar = async() => {
+    if(conMatch.length===0){ alert('No hay filas con cliente para cargar.'); return }
+    setGuardando(true); let n=0
+    for(const r of conMatch){
+      try{
+        await onSave({client_id:r.client_id,type:tipo,amount:r.monto,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null})
+        n++
+      }catch(e){ console.error(e) }
+    }
+    setHechos(n)
+    if(onClientsUpdate) await onClientsUpdate()
+    setGuardando(false)
+  }
+
+  const inS = {padding:'7px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7',color:C.text,boxSizing:'border-box',outline:'none',width:'100%'}
+
+  if(hechos>0) return (
+    <div style={{textAlign:'center',padding:'20px 0'}}>
+      <div style={{fontSize:15,fontWeight:700,color:C.normal,marginBottom:6}}>✓ {hechos} {tipo==='fondo'?'fondo(s)':'gasto(s)'} cargado(s)</div>
+      {sinMatch.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:12}}>Quedaron {sinMatch.length} fila(s) sin cliente, no se cargaron.</div>}
+      <button onClick={onClose} style={{padding:'10px 20px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Listo</button>
+    </div>
+  )
+
+  return (
+    <>
+      {/* Paso 1: tipo + subir archivo */}
+      {!rows&&(
+        <>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Sube un Excel con las columnas indicadas. Cada fila debe traer RUT, Nombre, Fecha, Monto, Concepto{tipo==='gasto'?' y Categoría':''}.</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+            {[['gasto','Gastos'],['fondo','Fondos']].map(([v,l])=>(
+              <button key={v} type='button' onClick={()=>setTipo(v)} style={{padding:'10px',borderRadius:8,border:`2px solid ${tipo===v?C.accent:C.border}`,background:tipo===v?'#E6EEF1':'transparent',color:tipo===v?C.accent:C.muted,fontSize:13,fontWeight:700,cursor:'pointer'}}>{l}</button>
+            ))}
+          </div>
+          <label style={{display:'block',padding:'24px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#FAFBFC'}}>
+            <input type='file' accept='.xlsx,.xls' onChange={onFile} style={{display:'none'}}/>
+            <div style={{fontSize:13,color:C.accent,fontWeight:600}}>{cargando?'Leyendo...':'📄 Seleccionar archivo Excel'}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}>.xlsx o .xls</div>
+          </label>
+        </>
+      )}
+
+      {/* Paso 2: vista previa */}
+      {rows&&(
+        <>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{rows.length} fila(s) · {fmt(totalMonto)}</div>
+            <div style={{fontSize:11,color:C.muted}}>{conMatch.length} con cliente{sinMatch.length>0&&<span style={{color:C.overdue}}> · {sinMatch.length} sin asignar</span>}</div>
+          </div>
+          <div style={{maxHeight:320,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
+            {rows.map(r=>(
+              <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.border}`,background:r.client_id?'#fff':'#FFF8EC'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'(sin concepto)'} · {fmt(r.monto)}</div>
+                  <div style={{fontSize:10,color:C.muted}}>{r.fecha||'sin fecha'}{tipo==='gasto'?` · ${r.categoria}`:''} · {r.rut||r.nombre||'—'}</div>
+                </div>
+                {r.client_id
+                  ? <span style={{fontSize:11,color:C.normal,fontWeight:600,flexShrink:0}}>✓ {r.clientName}</span>
+                  : <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)}/>}
+              </div>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={()=>setRows(null)} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver</button>
+            <button disabled={guardando||conMatch.length===0} onClick={guardar} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:conMatch.length===0?.5:1}}>{guardando?'Cargando...':`Cargar ${conMatch.length} ${tipo==='fondo'?'fondo(s)':'gasto(s)'}`}</button>
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo,onBulk}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
   const [rendicionClient,setRendicionClient] = useState(null)
@@ -1518,6 +1653,7 @@ function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo}) {
             {selectedClient&&(
               <button onClick={()=>setRendicionClient(selectedClient)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>
             )}
+            {!selectedClient&&<button onClick={onBulk} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Carga masiva</button>}
             <button onClick={onAddFondo} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
             <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
           </div>
@@ -3943,7 +4079,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} hideErasmo={hideErasmo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
         )}
@@ -3952,6 +4088,7 @@ export default function App() {
         {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
