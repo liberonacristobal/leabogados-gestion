@@ -326,21 +326,33 @@ function PorFacturarMes({billing,clients}) {
   )
 }
 
-function VentasPorMes({sales}) {
+function VentasPorMes({sales,ufHoy}) {
   const [moneda,setMoneda] = useState('UF') // UF | CLP
   const yr = currentYear
   const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   const data = useMemo(()=>{
     const arr = Array.from({length:12},(_,i)=>({mes:MESES[i], uf:0, clp:0}))
+    const ufConv = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
     sales.filter(s=>s.year===yr).forEach(s=>{
-      const m = (parseInt(s.month)||0)-1
-      if(m<0||m>11) return
-      const uf = parseFloat(s.amount_uf)||0
-      const clp = s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0)
-      arr[m].uf += uf; arr[m].clp += clp
+      const esRec = s.cobro_type==='mensual' && s.status==='Activo'
+      // Monto mensual de esta venta en UF y CLP
+      const uf = s.moneda==='CLP'
+        ? (ufConv ? (parseFloat(s.amount_clp)||0)/ufConv : 0)
+        : (parseFloat(s.amount_uf)||0)
+      const clp = s.moneda==='CLP'
+        ? (parseFloat(s.amount_clp)||0)
+        : (s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufConv)))
+      if(esRec){
+        // recurrente: suma su monto mensual en los 12 meses
+        for(let m=0;m<12;m++){ arr[m].uf += uf; arr[m].clp += clp }
+      } else {
+        const m = (parseInt(s.month)||0)-1
+        if(m<0||m>11) return
+        arr[m].uf += uf; arr[m].clp += clp
+      }
     })
     return arr
-  },[sales])
+  },[sales,ufHoy])
   const val = m => moneda==='UF'? m.uf : m.clp
   const maxVal = Math.max(...data.map(val),1)
   const totalUF = data.reduce((a,m)=>a+m.uf,0)
@@ -501,7 +513,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user}) {
         </div>
       </div>
 
-      <VentasPorMes sales={salesYr.length?sales:sales}/>
+      <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy}/>
 
       {/* Facturación */}
       <div style={{padding:'0 20px 16px'}}>
