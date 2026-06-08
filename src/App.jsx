@@ -360,7 +360,7 @@ function VentasPorMes({sales,ufHoy}) {
   // Ingreso recurrente: ventas mensuales recurrentes activas
   const recurrentes = sales.filter(s=>s.cobro_type==='mensual'&&s.status==='Activo')
   const recUF = recurrentes.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
-  const recCLP = recurrentes.reduce((a,s)=>{ const clp=s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0); return a+clp },0)
+  const recCLP = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||40000; const clp=s.amount_clp||(s.amount_uf?Math.round(s.amount_uf*uref):0); return a+clp },0)
   const [sel,setSel] = useState(null)
   // Formato compacto para la etiqueta sobre cada barra
   const compact = m => {
@@ -413,8 +413,7 @@ function VentasPorMes({sales,ufHoy}) {
               <div style={{fontSize:10,color:C.muted,marginTop:1}}>{recurrentes.length} asesoría{recurrentes.length!==1?'s':''} permanente{recurrentes.length!==1?'s':''}</div>
             </div>
             <div style={{textAlign:'right'}}>
-              <div style={{fontSize:14,fontWeight:700,color:C.normal}}>{moneda==='UF'?fmtUF(recUF):fmt(recCLP)}<span style={{fontSize:10,color:C.muted,fontWeight:500}}> /mes</span></div>
-              <div style={{fontSize:10,color:C.muted}}>{moneda==='UF'?fmt(recCLP):fmtUF(recUF)} /mes</div>
+              <div style={{fontSize:16,fontWeight:700,color:C.normal}}>{moneda==='UF'?fmtUF(recUF):fmt(recCLP)}<span style={{fontSize:10,color:C.muted,fontWeight:500}}> /mes</span></div>
             </div>
           </div>
         )}
