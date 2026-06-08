@@ -1328,7 +1328,7 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, expenses, onClose}) {
+function RendicionModal({client, expenses, clientEntities, onClose}) {
   const [periodType, setPeriodType] = useState('month') // month | year | custom
   const [selYear, setSelYear] = useState(String(currentYear))
   const [selMonth, setSelMonth] = useState(String(currentMonth))
@@ -1337,6 +1337,11 @@ function RendicionModal({client, expenses, onClose}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
   const allMovs = expenses.filter(e=>e.client_id===client.id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0))
+  const rsList = (clientEntities||[]).filter(e=>e.client_id===client.id)
+  const haySinAsignar = allMovs.some(e=>!e.entity_id)
+  // IDs marcados por defecto: todas las RS + 'sin' (si hay movimientos sin asignar)
+  const [rsSel,setRsSel] = useState(()=>{ const ids=rsList.map(e=>e.id); if(haySinAsignar) ids.push('sin'); return new Set(ids) })
+  const toggleRS = id => setRsSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
 
   const filtered = useMemo(()=>{
     if(periodType==='month') return allMovs.filter(e=>e.date?.startsWith(`${selYear}-${String(selMonth).padStart(2,'0')}`))
@@ -1586,11 +1591,32 @@ function RendicionModal({client, expenses, onClose}) {
         <div style={{background:'#F7F7F7',borderRadius:10,padding:'12px 14px',marginBottom:16,fontSize:12,color:C.muted,textAlign:'center'}}>Sin movimientos en este período</div>
       )}
 
+      {rsList.length>0&&(
+        <div style={{marginBottom:14,padding:'10px 12px',borderRadius:10,background:'#F7F9FA',border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Rendir a razon social</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {rsList.map(e=>(
+              <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.text,cursor:'pointer'}}>
+                <input type='checkbox' checked={rsSel.has(e.id)} onChange={()=>toggleRS(e.id)}/>
+                <span>{e.name}{e.rut?` · ${e.rut}`:''}</span>
+              </label>
+            ))}
+            {haySinAsignar&&(
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.muted,cursor:'pointer'}}>
+                <input type='checkbox' checked={rsSel.has('sin')} onChange={()=>toggleRS('sin')}/>
+                <span>Sin asignar</span>
+              </label>
+            )}
+          </div>
+          <div style={{fontSize:11,color:C.muted,marginTop:8}}>Se genera un PDF por cada razon social marcada.</div>
+        </div>
+      )}
+
       {/* Botones */}
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={!filtered.length} onClick={generateExcel} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',opacity:!filtered.length?.5:1}}>↓ Excel</button>
-        <button disabled={!filtered.length} onClick={generatePDF} style={{flex:1,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!filtered.length?.5:1}}>↓ PDF</button>
+        <button disabled={!filtered.length} onClick={()=>{ if(rsList.length===0){ generatePDF(); return } const marcadas=rsList.filter(e=>rsSel.has(e.id)); marcadas.forEach(rs=>generatePDF(rs)); if(rsSel.has('sin')) generatePDF({id:null,name:'Sin razon social asignada',rut:''}) }} style={{flex:1,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!filtered.length?.5:1}}>↓ PDF</button>
       </div>
     </div>
   )
@@ -1894,7 +1920,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
           })}
         </div>
       )}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} onClose={()=>setRendicionClient(null)}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)}/></Modal>}
     </div>
   )
 }
@@ -2560,7 +2586,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         onAddBilling={()=>onAddBilling(selected)}
         onRendicion={c=>setRendicionClient(c)}
       />
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} onClose={()=>setRendicionClient(null)}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)}/></Modal>}
     </>
   )
 
