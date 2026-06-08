@@ -85,7 +85,7 @@ function LoginScreen({loading}) {
 const TABS_ADMIN = [
   {id:'dashboard',icon:'house',label:'Inicio'},
   {id:'sales',icon:'tag',label:'Ventas'},
-  {id:'billing',icon:'dollar',label:'Cobros'},
+  {id:'billing',icon:'dollar',label:'Facturación'},
   {id:'expenses',icon:'minus',label:'Gastos'},
   {id:'clients',icon:'person',label:'Clientes'},
 ]
