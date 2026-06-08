@@ -781,7 +781,7 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Cobros</div>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
           <div style={{display:'flex',gap:6}}>
             <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
             <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Drive</button>
