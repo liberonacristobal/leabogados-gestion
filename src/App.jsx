@@ -3744,8 +3744,18 @@ export default function App() {
 
   const handleDeleteSale=useCallback(async(id)=>{
     if(!confirm('Eliminar esta venta?')) return
-    await supabase.from('sales').delete().eq('id',id)
-    setSales(p=>p.filter(x=>x.id!==id));setModal(null)
+    try{
+      // Salvaguarda: avisar si hay facturas emitidas (con folio) asociadas
+      const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('sale_id',id)
+      const emitidas = (cuotas||[]).filter(b=>b.invoice_no)
+      if(emitidas.length>0 && !confirm(`Esta venta tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar la venta y TODAS sus cuotas igual?`)) return
+      // Borrar cuotas asociadas y la venta
+      await supabase.from('billing').delete().eq('sale_id',id)
+      await supabase.from('sales').delete().eq('id',id)
+      setBilling(p=>p.filter(b=>b.sale_id!==id))
+      setSales(p=>p.filter(x=>x.id!==id))
+      setModal(null)
+    }catch(e){alert('Error: '+e.message)}
   },[])
 
   const handleSaveExpense=useCallback(async(f)=>{
@@ -3802,6 +3812,13 @@ export default function App() {
   const handleDeleteClient=useCallback(async(id)=>{
     if(!confirm('Eliminar este cliente y todos sus datos?')) return
     try{
+      // Salvaguarda: avisar si el cliente tiene facturas emitidas (con folio)
+      const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('client_id',id)
+      const emitidas = (cuotas||[]).filter(b=>b.invoice_no)
+      if(emitidas.length>0 && !confirm(`Este cliente tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar el cliente y TODOS sus datos igual?`)) return
+      // Borrar cuotas y ventas del cliente, luego el cliente
+      await supabase.from('billing').delete().eq('client_id',id)
+      await supabase.from('sales').delete().eq('client_id',id)
       await dbDeleteClient(id)
       setClients(p=>p.filter(x=>x.id!==id));setSales(p=>p.filter(s=>s.client_id!==id))
       setBilling(p=>p.filter(b=>b.client_id!==id));setExpenses(p=>p.filter(e=>e.client_id!==id))
