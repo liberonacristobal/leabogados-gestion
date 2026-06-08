@@ -359,8 +359,8 @@ function VentasPorMes({sales,ufHoy}) {
   const totalCLP = data.reduce((a,m)=>a+m.clp,0)
   // Ingreso recurrente: ventas mensuales recurrentes activas
   const recurrentes = sales.filter(s=>s.cobro_type==='mensual'&&s.status==='Activo')
-  const recUF = recurrentes.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
-  const recCLP = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||40000; const clp=s.amount_clp||(s.amount_uf?Math.round(s.amount_uf*uref):0); return a+clp },0)
+  const recUF = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||40000; const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0); return a+uf },0)
+  const recCLP = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||40000; const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref); return a+clp },0)
   const [sel,setSel] = useState(null)
   // Formato compacto para la etiqueta sobre cada barra
   const compact = m => {
