@@ -497,17 +497,6 @@ function SalesView({sales,clients,onEdit,onAdd}) {
           )
         })}
       </div>
-      {isProg&&selected.size>0&&(
-        <div style={{position:'fixed',bottom:70,left:0,right:0,display:'flex',justifyContent:'center',zIndex:200,padding:'0 16px'}}>
-          <div style={{background:C.accent,color:'#fff',borderRadius:24,padding:'10px 16px',display:'flex',alignItems:'center',gap:12,boxShadow:'0 8px 28px rgba(0,0,0,.25)',maxWidth:520,width:'100%',justifyContent:'space-between'}}>
-            <span style={{fontSize:13,fontWeight:600}}>{selected.size} seleccionada{selected.size!==1?'s':''}</span>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={clearSel} style={{padding:'6px 12px',borderRadius:18,border:'1px solid rgba(255,255,255,.5)',background:'transparent',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={marcarEmitidasBulk} style={{padding:'6px 14px',borderRadius:18,border:'none',background:'#fff',color:C.accent,fontSize:12,fontWeight:700,cursor:'pointer'}}>Marcar emitidas</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -842,9 +831,17 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onDelete,onAdd,o
             {MONTHS.map((m,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{m}</option>)}
           </select>
         </div>
-        {openClients.size>0&&(
-          <div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}>
-            <button onClick={collapseAll} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Colapsar todo</button>
+        {(openClients.size>0||(isProg&&selected.size>0))&&(
+          <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
+            {isProg&&selected.size>0&&(
+              <button onClick={marcarEmitidasBulk} style={{padding:'4px 12px',borderRadius:8,border:`1px solid ${C.overdue}`,background:C.overdue,color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer'}}>Marcar {selected.size} emitida{selected.size!==1?'s':''}</button>
+            )}
+            {isProg&&selected.size>0&&(
+              <button onClick={clearSel} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Deseleccionar</button>
+            )}
+            {openClients.size>0&&(
+              <button onClick={collapseAll} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Colapsar todo</button>
+            )}
           </div>
         )}
       </div>
@@ -923,9 +920,11 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onDelete,onAdd,o
                           </>)}
                         </div>
                         {b.status==='Programada'?(
+                          selected.size===0&&(
                           <button onClick={()=>marcarEmitida(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:`1px solid ${C.accent}`,cursor:'pointer',background:'transparent',color:C.accent,fontSize:11,fontWeight:700}}>
                             Ya emitida
                           </button>
+                          )
                         ):(
                           <button onClick={()=>handleTogglePagado(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',color:b.status==='Pagado'?C.normal:C.muted,fontSize:11,fontWeight:700}}>
                             <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>{b.status==='Pagado'?'✓':''}</span>
