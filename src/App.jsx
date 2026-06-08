@@ -1861,7 +1861,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   )
 }
 
-function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling}) {
+function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive}) {
   const [sFilter,setSFilter] = useState('Activo')
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
@@ -1912,6 +1912,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onEdit
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <div style={{display:'flex',gap:6}}>
+            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Drive</button>
             <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
             <button onClick={()=>onAddTask(null)} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
@@ -2254,12 +2255,168 @@ function parseInvoice(raw) {
   return { folio, cliente, rut, issued_at, concepto, total }
 }
 const FACTURACION_ROOT='1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
+const CLIENTES_ROOT='19JsFeh9icekmXMKyubkbLxfXVujmc3eh'
+const CLIENTES_TERMINADOS_ROOT='1_wi0td0ib9QlBLjUvDkr6QzdLn1sPwGX'
 async function driveGet(token,url){
   const fullUrl=url+(url.includes('?')?'&':'?')+'supportsAllDrives=true&includeItemsFromAllDrives=true'
   const r=await fetch(fullUrl,{headers:{Authorization:'Bearer '+token}})
   if(!r.ok) throw new Error('Drive API error '+r.status)
   return r.json()
 }
+function ClienteDriveImporter({clients,onImported,onClose}){
+  const [step,setStep]=useState('loading')
+  const [token,setToken]=useState(null)
+  const [newClients,setNewClients]=useState([])
+  const [terminados2024,setTerminados2024]=useState([])
+  const [terminados2025,setTerminados2025]=useState([])
+  const [selected,setSelected]=useState({})
+  const [saving,setSaving]=useState(false)
+  const [log,setLog]=useState([])
+  const addLog=msg=>setLog(p=>[...p,msg])
+
+  useEffect(()=>{init()},[])
+
+  async function init(){
+    setStep('loading')
+    let t=localStorage.getItem('drive_token')
+    if(!t){try{t=await getDriveToken()}catch(e){}}
+    if(!t){setStep('notoken');return}
+    setToken(t)
+    try{
+      // Clientes activos
+      const resActivos=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${CLIENTES_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
+      const activos=(resActivos.files||[]).filter(f=>!f.name.startsWith('1. CLIENTES'))
+      const existingNames=clients.map(c=>c.name.toLowerCase().trim())
+      const nuevos=activos.filter(f=>!existingNames.includes(f.name.toLowerCase().trim()))
+      setNewClients(nuevos)
+
+      // Clientes terminados - buscar subcarpetas 2024 y 2025
+      const resTerminados=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${CLIENTES_TERMINADOS_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
+      const yearFolders=resTerminados.files||[]
+
+      for(const yf of yearFolders){
+        const resYear=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${yf.id}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
+        const yearClients=(resYear.files||[]).filter(f=>!existingNames.includes(f.name.toLowerCase().trim()))
+        if(yf.name.includes('2024')) setTerminados2024(yearClients)
+        if(yf.name.includes('2025')) setTerminados2025(yearClients)
+      }
+      setStep('review')
+    }catch(e){setStep('error');addLog('Error: '+e.message)}
+  }
+
+  const toggle=(id)=>setSelected(p=>({...p,[id]:!p[id]}))
+  const toggleAll=(list)=>{
+    const allSelected=list.every(f=>selected[f.id])
+    const upd={...selected}
+    list.forEach(f=>{upd[f.id]=!allSelected})
+    setSelected(upd)
+  }
+
+  const saveSelected=async()=>{
+    const toImport=[...newClients,...terminados2024,...terminados2025].filter(f=>selected[f.id])
+    if(!toImport.length) return
+    setSaving(true);setStep('saving')
+    let imported=0
+    for(const f of toImport){
+      const isTerminado=terminados2024.find(x=>x.id===f.id)||terminados2025.find(x=>x.id===f.id)
+      const payload={name:f.name,area:isTerminado?'Terminado':''}
+      const {error}=await supabase.from('clients').insert(payload)
+      if(!error){imported++;addLog(`✓ ${f.name}`)}
+      else addLog(`✗ ${f.name}: ${error.message}`)
+    }
+    addLog(`─────────────────`)
+    addLog(`${imported} clientes importados`)
+    setStep('done')
+    onImported()
+    setSaving(false)
+  }
+
+  const allNew=[...newClients,...terminados2024,...terminados2025]
+  const selectedCount=allNew.filter(f=>selected[f.id]).length
+
+  return (
+    <div>
+      {step==='loading'&&<div style={{textAlign:'center',padding:20}}><Spin/><p style={{fontSize:13,color:C.muted,marginTop:12}}>Conectando con Drive...</p></div>}
+      {step==='notoken'&&<div style={{textAlign:'center',padding:20}}><p style={{fontSize:13,marginBottom:16}}>Necesitas autorizar Drive.</p><button onClick={()=>getDriveToken().then(t=>{setToken(t);init()})} style={{padding:'10px 20px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Autorizar Drive</button></div>}
+      {step==='error'&&<div style={{padding:20}}>{log.map((l,i)=><div key={i} style={{fontSize:12,color:C.overdue}}>{l}</div>)}</div>}
+      {(step==='review'||step==='saving')&&(
+        <div>
+          {/* Clientes nuevos */}
+          {newClients.length>0&&(
+            <div style={{marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Clientes nuevos ({newClients.length})</div>
+                <button onClick={()=>toggleAll(newClients)} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{newClients.every(f=>selected[f.id])?'Deseleccionar todos':'Seleccionar todos'}</button>
+              </div>
+              {newClients.map(f=>(
+                <div key={f.id} onClick={()=>toggle(f.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,marginBottom:4,background:selected[f.id]?'#E6EEF1':'#F7F7F7',cursor:'pointer',border:`1px solid ${selected[f.id]?C.accent:C.border}`}}>
+                  <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${selected[f.id]?C.accent:C.border}`,background:selected[f.id]?C.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    {selected[f.id]&&<span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span>}
+                  </div>
+                  <span style={{fontSize:13,color:C.text}}>{f.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Terminados 2024 */}
+          {terminados2024.length>0&&(
+            <div style={{marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Terminados 2024 ({terminados2024.length})</div>
+                <button onClick={()=>toggleAll(terminados2024)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{terminados2024.every(f=>selected[f.id])?'Deseleccionar todos':'Seleccionar todos'}</button>
+              </div>
+              {terminados2024.map(f=>(
+                <div key={f.id} onClick={()=>toggle(f.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,marginBottom:4,background:selected[f.id]?'#F7F2EC':'#F7F7F7',cursor:'pointer',border:`1px solid ${selected[f.id]?'#8B5C2A':C.border}`}}>
+                  <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${selected[f.id]?'#8B5C2A':C.border}`,background:selected[f.id]?'#8B5C2A':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    {selected[f.id]&&<span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span>}
+                  </div>
+                  <span style={{fontSize:13,color:C.text}}>{f.name}</span>
+                  <span style={{fontSize:10,color:'#8B5C2A',fontWeight:600,marginLeft:'auto'}}>2024</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Terminados 2025 */}
+          {terminados2025.length>0&&(
+            <div style={{marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Terminados 2025 ({terminados2025.length})</div>
+                <button onClick={()=>toggleAll(terminados2025)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{terminados2025.every(f=>selected[f.id])?'Deseleccionar todos':'Seleccionar todos'}</button>
+              </div>
+              {terminados2025.map(f=>(
+                <div key={f.id} onClick={()=>toggle(f.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,marginBottom:4,background:selected[f.id]?'#F7F2EC':'#F7F7F7',cursor:'pointer',border:`1px solid ${selected[f.id]?'#8B5C2A':C.border}`}}>
+                  <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${selected[f.id]?'#8B5C2A':C.border}`,background:selected[f.id]?'#8B5C2A':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    {selected[f.id]&&<span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span>}
+                  </div>
+                  <span style={{fontSize:13,color:C.text}}>{f.name}</span>
+                  <span style={{fontSize:10,color:'#8B5C2A',fontWeight:600,marginLeft:'auto'}}>2025</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {newClients.length===0&&terminados2024.length===0&&terminados2025.length===0&&(
+            <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todos los clientes de Drive ya están en la app ✓</div>
+          )}
+          <div style={{display:'flex',gap:8,marginTop:8,position:'sticky',bottom:0,background:C.bg,paddingBottom:8}}>
+            <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+            <button onClick={saveSelected} disabled={saving||selectedCount===0} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:selectedCount===0?.5:1}}>
+              {saving?'Importando...`:`Importar ${selectedCount} cliente${selectedCount!==1?'s':''}`}
+            </button>
+          </div>
+        </div>
+      )}
+      {step==='done'&&(
+        <div>
+          <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 12px',maxHeight:200,overflowY:'auto',fontSize:12,fontFamily:'monospace',color:C.text,lineHeight:1.7,marginBottom:12}}>
+            {log.map((l,i)=><div key={i}>{l}</div>)}
+          </div>
+          <button onClick={onClose} style={{width:'100%',padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
   const [step,setStep]=useState('init')
   const [token,setToken]=useState(null)
@@ -3249,7 +3406,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
@@ -3263,6 +3420,7 @@ export default function App() {
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
+        {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
