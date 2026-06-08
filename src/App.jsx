@@ -2323,24 +2323,29 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
         // 4. Buscar en clients por nombre
         if(!mc&&parsed.cliente)mc=clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
         if(parsed.folio&&parsed.total){
-          try{
-            await upsertBilling({client_id:mc?.id||null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})
+          if(!mc){
+            // Sin cliente: guardar en Supabase sin client_id y agregar a review
+            try{
+              await upsertBilling({client_id:null,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})
+            }catch(e){
+              if(!e.message?.includes('duplicate')) addLog(`error guardando ${pdf.name}: ${e.message}`)
+            }
+            results.unmatched = results.unmatched||[]
+            results.unmatched.push({id:parsed.folio,folio:parsed.folio,rut:parsed.rut,cliente:parsed.cliente,amount:parsed.total,issued_at:parsed.issued_at,concepto:parsed.concepto})
+            addLog(`⚠ ${pdf.name} — sin cliente (${parsed.cliente||'?'})`)
+          } else {
+            // Con cliente: guardar con client_id y aprendizaje
+            try{
+              await upsertBilling({client_id:mc.id,concept:parsed.concepto||'Sin descripción',receptor_name:parsed.cliente||null,receptor_rut:parsed.rut||null,amount:parsed.total,status:'Pendiente',invoice_no:parsed.folio,issued_at:parsed.issued_at,due:dueFromIssued(parsed.issued_at),notes:null})
+              if(parsed.rut){
+                await supabase.from('client_entities').upsert({client_id:mc.id,rut:parsed.rut,name:parsed.cliente||null},{onConflict:'rut'})
+              }
+            }catch(e){
+              if(!e.message?.includes('duplicate')) addLog(`error guardando ${pdf.name}: ${e.message}`)
+            }
+            results.rows.push({...parsed,clientMatch:mc,fileName:pdf.name});results.imported++
+            addLog(`ok ${pdf.name} — ${parsed.cliente||'?'} · $${parsed.total?.toLocaleString('es-CL')||'?'}`)
           }
-          catch(e){
-            if(!e.message?.includes('duplicate')) addLog(`error guardando ${pdf.name}: ${e.message}`)
-          }
-          // Guardar aprendizaje SIEMPRE que haya match (fuera del try para que no lo interrumpa el duplicate)
-          if(mc?.id&&parsed.rut){
-            await supabase.from('client_entities').upsert({client_id:mc.id,rut:parsed.rut,name:parsed.cliente||null},{onConflict:'rut'})
-          }
-        }
-        if(!mc) {
-          results.unmatched = results.unmatched||[]
-          results.unmatched.push({id:pdf.id||pdf.name,folio:parsed.folio,rut:parsed.rut,cliente:parsed.cliente,amount:parsed.total,issued_at:parsed.issued_at,concepto:parsed.concepto})
-          addLog(`⚠ ${pdf.name} — sin cliente asignado (${parsed.cliente||'?'})`)
-        } else {
-          results.rows.push({...parsed,clientMatch:mc,fileName:pdf.name});results.imported++
-          addLog(`ok ${pdf.name} — ${parsed.cliente||'?'} · $${parsed.total?.toLocaleString('es-CL')||'?'}`)
         }
       }catch(e){results.errors++;addLog(`error ${pdf.name}: ${e.message}`)}
       setProgress(p=>({...p,done:p.done+1}))
@@ -2361,6 +2366,8 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
       await supabase.from('billing').update({client_id:clientId}).eq('invoice_no',inv.folio)
       if(inv.rut){
         await supabase.from('client_entities').upsert({client_id:clientId,rut:inv.rut,name:inv.cliente||null},{onConflict:'rut'})
+      } else if(inv.cliente){
+        await supabase.from('client_entities').upsert({client_id:clientId,rut:null,name:inv.cliente},{onConflict:'rut'})
       }
     }
     setStep('done');onImported([])
