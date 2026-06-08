@@ -99,6 +99,14 @@ function BottomNav({tab,setTab,overdueN,userRole}) {
   const icons = {house:'⌂',tag:'◈',dollar:'$',minus:'⊖',person:'⊙',check:'✓'}
   return (
     <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
+      <style>{`
+        @media(min-width:768px){
+          .bottomnav { max-width: 680px; left: 50% !important; right: auto !important; transform: translateX(-50%); border-radius: 16px 16px 0 0; border-left: 1px solid #e5e5e5; border-right: 1px solid #e5e5e5; }
+          .bottomnav button { padding: 14px 0 12px !important; }
+          .bottomnav button span:first-child { font-size: 22px !important; }
+          .bottomnav button span:last-child { font-size: 12px !important; }
+        }
+      `}</style>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:'10px 0 8px',background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,position:'relative',minWidth:0}}>
           <span style={{fontSize:16,lineHeight:1,color:tab===t.id?C.accent:C.muted}}>{icons[t.icon]}</span>
