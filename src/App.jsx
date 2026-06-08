@@ -2265,6 +2265,8 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
   const [years,setYears]=useState([])
   const [months,setMonths]=useState([])
   const [selYear,setSelYear]=useState(null)
+  const [unmatched,setUnmatched]=useState([])
+  const [assignments,setAssignments]=useState({})
   const [log,setLog]=useState([])
   const [progress,setProgress]=useState({done:0,total:0})
   const addLog=msg=>setLog(p=>[...p,msg])
@@ -2332,15 +2334,38 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
             await supabase.from('client_entities').upsert({client_id:mc.id,rut:parsed.rut,name:parsed.cliente||null},{onConflict:'rut'})
           }
         }
-        results.rows.push({...parsed,clientMatch:mc,fileName:pdf.name});results.imported++
-        addLog(`ok ${pdf.name} — ${parsed.cliente||'?'} · $${parsed.total?.toLocaleString('es-CL')||'?'}`)
+        if(!mc) {
+          results.unmatched = results.unmatched||[]
+          results.unmatched.push({id:pdf.id||pdf.name,folio:parsed.folio,rut:parsed.rut,cliente:parsed.cliente,amount:parsed.total,issued_at:parsed.issued_at,concepto:parsed.concepto})
+          addLog(`⚠ ${pdf.name} — sin cliente asignado (${parsed.cliente||'?'})`)
+        } else {
+          results.rows.push({...parsed,clientMatch:mc,fileName:pdf.name});results.imported++
+          addLog(`ok ${pdf.name} — ${parsed.cliente||'?'} · $${parsed.total?.toLocaleString('es-CL')||'?'}`)
+        }
       }catch(e){results.errors++;addLog(`error ${pdf.name}: ${e.message}`)}
       setProgress(p=>({...p,done:p.done+1}))
     }
     addLog('—————————————————————————')
-    addLog(`${results.imported} procesadas · ${results.skipped} ya existian · ${results.errors} errores`)
-    setStep('done');onImported(results.rows)
+    addLog(`${results.imported} procesadas · ${results.skipped} ya existian · ${results.errors} errores${results.unmatched?.length?` · ${results.unmatched.length} sin cliente`:''}`)
+    if(results.unmatched?.length>0){
+      setUnmatched(results.unmatched)
+      setStep('review')
+    } else {
+      setStep('done');onImported(results.rows)
+    }
   }
+  const saveAssignmentsDrive = async() => {
+    for(const inv of unmatched){
+      const clientId = assignments[inv.id]
+      if(!clientId) continue
+      await supabase.from('billing').update({client_id:clientId}).eq('invoice_no',inv.folio)
+      if(inv.rut){
+        await supabase.from('client_entities').upsert({client_id:clientId,rut:inv.rut,name:inv.cliente||null},{onConflict:'rut'})
+      }
+    }
+    setStep('done');onImported([])
+  }
+
   return (
     <div>
       {step==='loading'&&<div style={{textAlign:'center',padding:20}}><Spin/><p style={{fontSize:13,color:C.muted,marginTop:12}}>Conectando...</p></div>}
@@ -2352,6 +2377,22 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
             {years.map(y=><button key={y.id} onClick={()=>loadMonths(y.id)} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${selYear===y.id?C.accent:C.border}`,background:selYear===y.id?'#E6EEF1':'#fff',color:selYear===y.id?C.accent:C.text,fontSize:13,fontWeight:600,cursor:'pointer'}}>{y.name}</button>)}
           </div>
           {months.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{months.map(m=><button key={m.id} onClick={()=>importMonth(m.id,m.name)} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:13,cursor:'pointer'}}>{m.name}</button>)}</div>}
+        </div>
+      )}
+      {step==='review'&&(
+        <div>
+          <div style={{background:'#F7F7F7',borderRadius:8,padding:'10px 12px',maxHeight:120,overflowY:'auto',fontSize:12,fontFamily:'monospace',color:C.text,lineHeight:1.7,marginBottom:14}}>
+            {log.map((l,i)=><div key={i}>{l}</div>)}
+          </div>
+          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Asignar clientes</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Estas facturas no se pudieron asociar automáticamente. Asígnalas una vez y el RUT quedará guardado para siempre.</div>
+          {unmatched.map(inv=>(
+            <InvoiceClientPicker key={inv.id} inv={inv} clients={clients} assigned={clients.find(c=>c.id===assignments[inv.id])} onAssign={clientId=>setAssignments(p=>({...p,[inv.id]:clientId}))}/>
+          ))}
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
+            <button onClick={saveAssignmentsDrive} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Guardar asignaciones</button>
+          </div>
         </div>
       )}
       {(step==='importing'||step==='done')&&(
