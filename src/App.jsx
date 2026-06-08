@@ -161,12 +161,16 @@ function TasksByPerson({tasks,clients}) {
                     <div key={t.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,background:rowColor,display:'flex',gap:10,alignItems:'flex-start'}}>
                       <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:500,color:C.text,marginBottom:2}}>{t.title}</div>
-                        <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                        {/* Línea 1: contexto (cliente · proyecto › subproyecto · días) */}
+                        <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:2}}>
                           <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name?.split('/')[0].trim()||'—'}</span>
+                          {t.project&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.project}{t.subproject?` › ${t.subproject}`:''}</span></>}
                           {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-                          {t.note&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontStyle:'italic'}}>{t.note}</span></>}
                         </div>
+                        {/* Línea 2: la tarea, en cursiva */}
+                        <div style={{fontSize:13,fontWeight:500,fontStyle:'italic',color:C.text}}>{t.title}</div>
+                        {/* Línea 3: nota, más tenue */}
+                        {t.note&&<div style={{fontSize:11,color:C.muted,opacity:.75,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</div>}
                       </div>
                       {u==='overdue'&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>VENCIDA</span>}
                     </div>
