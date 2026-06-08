@@ -737,6 +737,9 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
   const [payDate,setPayDate] = useState('')
+  const [openClients,setOpenClients] = useState(()=>new Set())
+  const toggleClient = id => setOpenClients(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
+  const collapseAll = () => setOpenClients(new Set())
   const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
@@ -823,6 +826,11 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
             {MONTHS.map((m,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{m}</option>)}
           </select>
         </div>
+        {openClients.size>0&&(
+          <div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}>
+            <button onClick={collapseAll} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Colapsar todo</button>
+          </div>
+        )}
       </div>
 
       {payingId&&(
@@ -842,16 +850,26 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
       <div style={{padding:'10px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{isProg?'Sin facturas programadas':'Sin cobros'}</div>}
         {grouped.map(({client,byEntity})=>{
-          const clientTotal = Object.values(byEntity).flat().reduce((a,b)=>a+(b.amount||0),0)
+          const allBills = Object.values(byEntity).flat()
+          const clientTotal = allBills.reduce((a,b)=>a+(b.amount||0),0)
+          const nDocs = allBills.length
+          const vencidoMonto = allBills.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+          const isOpen = openClients.has(client.id)
           return (
-            <div key={client.id} style={{marginBottom:16}}>
-              {/* Header cliente */}
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,paddingBottom:4,borderBottom:`2px solid ${C.accent}`}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{client.name}</div>
-                <div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(clientTotal)}</div>
-              </div>
-              {/* Por razón social */}
-              {Object.entries(byEntity).map(([ename,bills])=>(
+            <div key={client.id} style={{marginBottom:isOpen?16:8}}>
+              {/* Header cliente (clickeable) */}
+              <button onClick={()=>toggleClient(client.id)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:isOpen?6:0,paddingBottom:4,borderBottom:`2px solid ${C.accent}`,background:'none',border:'none',borderBottomColor:C.accent,cursor:'pointer',textAlign:'left'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                  <span style={{fontSize:12,color:C.accent,transform:isOpen?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+                    {!isOpen&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{nDocs} doc{nDocs!==1?'s':''}{vencidoMonto>0&&<span style={{color:C.overdue,fontWeight:700}}> · {fmt(vencidoMonto)} vencido</span>}</div>}
+                  </div>
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0,marginLeft:8}}>{fmt(clientTotal)}</div>
+              </button>
+              {/* Por razón social (solo si abierto) */}
+              {isOpen&&Object.entries(byEntity).map(([ename,bills])=>(
                 <div key={ename} style={{marginBottom:10,marginLeft:8}}>
                   {ename!=='—'&&<div style={{fontSize:11,fontWeight:600,color:C.muted,marginBottom:4,display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>
                     <div style={{display:'flex',alignItems:'center',gap:4}}>
