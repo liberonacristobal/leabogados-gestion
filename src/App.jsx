@@ -531,10 +531,10 @@ function MiniClientForm({onSave,onCancel}) {
   )
 }
 
-function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) {
+function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onDelete,saving}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
-  const [f,setF] = useState(sale||{client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas'})
+  const [f,setF] = useState(sale||{client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas',entity_id:''})
   const [clients,setClients] = useState(initialClients)
   const [clientQ,setClientQ] = useState('')
   const [showNewClient,setShowNewClient] = useState(false)
@@ -549,6 +549,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
+  const clientEntitiesList = useMemo(()=>{ if(!f.client_id) return []; return (clientEntities||[]).filter(e=>e.client_id===f.client_id) },[clientEntities,f.client_id])
   const ufVal = parseFloat(f.uf_value)||0
   const amountUF = parseFloat(f.amount_uf)||0
   const totalCLP = amountUF*ufVal
@@ -626,6 +627,19 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
       {showNewClient&&<MiniClientForm onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
 
       <Fld label='Proyecto'><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
+
+      {f.client_id&&(
+        <Fld label='Razón social a facturar'>
+          {clientEntitiesList.length>0?(
+            <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
+              <option value=''>— Asociar después —</option>
+              {clientEntitiesList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
+            </select>
+          ):(
+            <div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Este cliente no tiene razones sociales registradas. Se asociará al emitir la primera factura.</div>
+          )}
+        </Fld>
+      )}
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='Área'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
@@ -3502,31 +3516,41 @@ export default function App() {
     setSaving(true)
     try{
       const {cobros, cobroType, ...saleData} = f
-      const p={...saleData,amount_uf:parseFloat(f.amount_uf)||null,cost_uf:parseFloat(f.cost_uf)||null,uf_value:parseFloat(f.uf_value)||null,updated_at:new Date().toISOString()}
+      const entIdRaw = saleData.entity_id || null
+      const p={...saleData,entity_id:entIdRaw,amount_uf:parseFloat(f.amount_uf)||null,cost_uf:parseFloat(f.cost_uf)||null,uf_value:parseFloat(f.uf_value)||null,updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
-      // Crear cobros automáticamente si hay forma de cobro definida
+      // Crear cobros sólo al crear la venta (programadas = sin folio)
       if(cobros&&cobros.length>0&&!f.id){
         for(const c of cobros){
           await supabase.from('billing').insert({
             client_id:data.client_id,
             sale_id:data.id,
+            entity_id:entIdRaw,
             concept:`${data.title} — ${c.label}`,
             amount:c.monto,
-            status: c.fecha > '2026-06-15' ? 'Programado' : 'Pendiente',
-            issued_at:c.fecha,
+            status:'Programada',
             due:c.fecha,
             billing_type:'honorarios',
           })
         }
-        const {data:newBilling} = await getBilling()
-        if(newBilling) setBilling(newBilling)
       }
+      // Propagar razón social a las cuotas Programadas de esta venta (crea o edita)
+      if(entIdRaw){
+        const ent = (clientEntities||[]).find(e=>e.id===entIdRaw)
+        await supabase.from('billing').update({
+          entity_id:entIdRaw,
+          receptor_name:ent?.name||null,
+          receptor_rut:ent?.rut||null,
+        }).eq('sale_id',data.id).eq('status','Programada')
+      }
+      const {data:newBilling} = await getBilling()
+      if(newBilling) setBilling(newBilling)
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[clients])
+  },[clients,clientEntities])
 
   const handleDeleteSale=useCallback(async(id)=>{
     if(!confirm('Eliminar esta venta?')) return
@@ -3688,7 +3712,7 @@ export default function App() {
           setModal({type:map[tab]||'sale',data:null})
         }} style={{position:'fixed',bottom:80,right:20,width:48,height:48,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:22,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
