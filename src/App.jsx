@@ -540,11 +540,11 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
   const [showNewClient,setShowNewClient] = useState(false)
   const [selectedClient,setSelectedClient] = useState(initialClients.find(c=>c.id===sale?.client_id)||null)
   // Forma de cobro
-  const [cobroType,setCobroType] = useState('cuotas') // cuotas | porcentaje | personalizada
-  const [nCuotas,setNCuotas] = useState(3)
-  const [cobroInicio,setCobroInicio] = useState('')
-  const [tramos,setTramos] = useState([{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
-  const [cuotasCustom,setCuotasCustom] = useState([{id:1,monto:'',fecha:''}])
+  const [cobroType,setCobroType] = useState(sale?.cobro_type||'cuotas')
+  const [nCuotas,setNCuotas] = useState(sale?.cobro_config?.nCuotas||3)
+  const [cobroInicio,setCobroInicio] = useState(sale?.cobro_config?.cobroInicio||'')
+  const [tramos,setTramos] = useState(sale?.cobro_config?.tramos||[{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
+  const [cuotasCustom,setCuotasCustom] = useState(sale?.cobro_config?.cuotasCustom||[{id:1,monto:'',fecha:''}])
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
@@ -573,7 +573,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
   const cobros = generarCobros()
 
   const handleSave = () => {
-    onSave({...f, cobros, cobroType})
+    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom}})
   }
 
   return (
