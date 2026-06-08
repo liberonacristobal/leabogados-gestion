@@ -1865,12 +1865,15 @@ function ExpensesView({expenses,clients,onAdd,onEdit,onAddFondo,onBulk}) {
   )
 }
 
-function FondoForm({clients,expenses,onSave,onClose,saving,preClient}) {
+function FondoForm({clients,expenses,clientEntities,onSave,onClose,saving,preClient}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const [amount,setAmount] = useState('')
   const [concept,setConcept] = useState('')
   const [date,setDate] = useState(new Date().toISOString().slice(0,10))
+  const rsList = useMemo(()=>{ if(!selectedClient) return []; return (clientEntities||[]).filter(e=>e.client_id===selectedClient.id) },[clientEntities,selectedClient])
+  const [entityId,setEntityId] = useState('')
+  useEffect(()=>{ setEntityId(rsList.length===1?rsList[0].id:'') },[rsList])
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
   const balance = selectedClient ? (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===selectedClient.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })() : null
   return (
@@ -1908,11 +1911,16 @@ function FondoForm({clients,expenses,onSave,onClose,saving,preClient}) {
             <Fld label='Fecha'><Inp type='date' value={date} onChange={e=>setDate(e.target.value)}/></Fld>
           </div>
           <Fld label='Descripción'><Inp value={concept} onChange={e=>setConcept(e.target.value)} placeholder='Ej: Provisión fondos abril...'/></Fld>
+          {rsList.length>1&&(
+            <Fld label='Razón social'>
+              <Sel value={entityId} onChange={e=>setEntityId(e.target.value)} options={[{value:'',label:'— Sin asignar —'},...rsList.map(e=>({value:e.id,label:e.name+(e.rut?` · ${e.rut}`:'')}))]}/>
+            </Fld>
+          )}
         </>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!selectedClient||!amount} onClick={()=>onSave({client_id:selectedClient.id,type:'fondo',amount:parseInt(amount),concept,date,category:'Fondo'})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!amount)?.6:1}}>
+        <button disabled={saving||!selectedClient||!amount} onClick={()=>onSave({client_id:selectedClient.id,type:'fondo',amount:parseInt(amount),concept,date,category:'Fondo',entity_id:entityId||null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!amount)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar fondo'}
         </button>
       </div>
@@ -1922,13 +1930,16 @@ function FondoForm({clients,expenses,onSave,onClose,saving,preClient}) {
 
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Otro']
-function GastosForm({clients,expenses,onSave,onClose,preClient}) {
+function GastosForm({clients,expenses,clientEntities,onSave,onClose,preClient}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const hoy = new Date().toISOString().slice(0,10)
   const [rows,setRows] = useState([{id:1,category:'CBR',concept:'',amount:'',date:hoy}])
   const [saving,setSaving] = useState(false)
   const [saved,setSaved] = useState(0)
+  const rsList = useMemo(()=>{ if(!selectedClient) return []; return (clientEntities||[]).filter(e=>e.client_id===selectedClient.id) },[clientEntities,selectedClient])
+  const [entityId,setEntityId] = useState('')
+  useEffect(()=>{ setEntityId(rsList.length===1?rsList[0].id:'') },[rsList])
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
   const balance = selectedClient ? (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===selectedClient.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })() : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
@@ -1951,7 +1962,7 @@ function GastosForm({clients,expenses,onSave,onClose,preClient}) {
     let count=0
     for(const r of valid) {
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null})
+        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null})
         count++
       } catch(e){ console.error(e) }
     }
@@ -2039,11 +2050,12 @@ function GastosForm({clients,expenses,onSave,onClose,preClient}) {
 }
 
 // ── EXPENSE EDIT FORM (editar/eliminar registro individual) ───────────────────
-function ExpenseEditForm({expense,clients,onSave,onClose,onDelete,saving}) {
+function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete,saving}) {
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro'})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const client=clients.find(c=>c.id===f.client_id)
   const isFondo=f.type==='fondo'
+  const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
   return (
     <>
       <div style={{padding:'8px 14px',borderRadius:8,background:'#F7F7F7',marginBottom:14,fontSize:13,color:C.muted}}>
@@ -2063,6 +2075,11 @@ function ExpenseEditForm({expense,clients,onSave,onClose,onDelete,saving}) {
         <Fld label='Fecha'><Inp type='date' value={f.date||''} onChange={e=>up('date',e.target.value)}/></Fld>
       </div>
       <Fld label='Descripción'><Inp value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Descripción...'/></Fld>
+      {rsList.length>1&&(
+        <Fld label='Razón social'>
+          <Sel value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} options={[{value:'',label:'— Sin asignar —'},...rsList.map(e=>({value:e.id,label:e.name+(e.rut?` · ${e.rut}`:'')}))]}/>
+        </Fld>
+      )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -4210,10 +4227,10 @@ export default function App() {
 
         {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
-        {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
-        {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
+        {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
