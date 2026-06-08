@@ -101,7 +101,7 @@ function BottomNav({tab,setTab,overdueN,userRole}) {
     <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
       <style>{`
         @media(min-width:768px){
-          .bottomnav { max-width: 520px; left: 50% !important; right: auto !important; transform: translateX(-50%); border-radius: 16px 16px 0 0; border-left: 1px solid #e5e5e5; border-right: 1px solid #e5e5e5; }
+          .bottomnav { max-width: 600px; left: 50% !important; right: auto !important; transform: translateX(-50%); border-radius: 16px 16px 0 0; border-left: 1px solid #e5e5e5; border-right: 1px solid #e5e5e5; }
           .bottomnav button { padding: 14px 0 12px !important; }
           .bottomnav button span:first-child { font-size: 22px !important; }
           .bottomnav button span:last-child { font-size: 12px !important; }
