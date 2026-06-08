@@ -497,6 +497,17 @@ function SalesView({sales,clients,onEdit,onAdd}) {
           )
         })}
       </div>
+      {isProg&&selected.size>0&&(
+        <div style={{position:'fixed',bottom:70,left:0,right:0,display:'flex',justifyContent:'center',zIndex:200,padding:'0 16px'}}>
+          <div style={{background:C.accent,color:'#fff',borderRadius:24,padding:'10px 16px',display:'flex',alignItems:'center',gap:12,boxShadow:'0 8px 28px rgba(0,0,0,.25)',maxWidth:520,width:'100%',justifyContent:'space-between'}}>
+            <span style={{fontSize:13,fontWeight:600}}>{selected.size} seleccionada{selected.size!==1?'s':''}</span>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={clearSel} style={{padding:'6px 12px',borderRadius:18,border:'1px solid rgba(255,255,255,.5)',background:'transparent',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={marcarEmitidasBulk} style={{padding:'6px 14px',borderRadius:18,border:'none',background:'#fff',color:C.accent,fontSize:12,fontWeight:700,cursor:'pointer'}}>Marcar emitidas</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -730,7 +741,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
     </>
   )
 }
-function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onImport,onUpload}) {
+function BillingView({billing,clients,hideErasmo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload}) {
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -740,6 +751,9 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
   const [openClients,setOpenClients] = useState(()=>new Set())
   const toggleClient = id => setOpenClients(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
   const collapseAll = () => setOpenClients(new Set())
+  const [selected,setSelected] = useState(()=>new Set())
+  const toggleSel = id => setSelected(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
+  const clearSel = () => setSelected(new Set())
   const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
@@ -790,6 +804,8 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
     else { setPayingId(b.id); setPayDate(new Date().toISOString().slice(0,10)) }
   }
   const confirmPago = async() => { await onStatusChange(payingId,'Pagado',payDate); setPayingId(null) }
+  const marcarEmitida = async(b) => { if(confirm('¿Confirmas que la factura ya se emitió? Se quitará de programadas.')) await onDelete(b.id) }
+  const marcarEmitidasBulk = async() => { const ids=[...selected]; if(ids.length&&confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Se quitarán de programadas.`)){ await onDelete(ids); clearSel() } }
 
   return (
     <div>
@@ -812,7 +828,7 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>
           {[['emitidas',`Emitidas (${nEmitidas})`],['programadas',`Programadas (${nProgramadas})`],['pagado',`Pagadas (${nPagadas})`],['all','Todas']].map(([v,l])=>(
-            <button key={v} onClick={()=>setFilter(v)} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+            <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
@@ -881,11 +897,14 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
                   {bills.map(b=>(
                     <div key={b.id} style={{background:C.card,borderRadius:10,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
-                        <div style={{minWidth:0,flex:1}}>
-                          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                            {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#8B5C2A',fontWeight:600,flexShrink:0}}>Reembolso</span>}
+                        <div style={{minWidth:0,flex:1,display:'flex',gap:8,alignItems:'flex-start'}}>
+                          {isProg&&<input type='checkbox' checked={selected.has(b.id)} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
+                          <div style={{minWidth:0,flex:1}}>
+                            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                              {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#8B5C2A',fontWeight:600,flexShrink:0}}>Reembolso</span>}
+                            </div>
+                            <div style={{fontSize:12,color:C.text,fontWeight:500,marginTop:2}}>{b.concept||'—'}</div>
                           </div>
-                          <div style={{fontSize:12,color:C.text,fontWeight:500,marginTop:2}}>{b.concept||'—'}</div>
                         </div>
                         <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,marginLeft:8}}>
                           <div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
@@ -894,15 +913,25 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
                       </div>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                         <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                          <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{b.invoice_no||'—'}</span>
-                          <span style={{fontSize:11,color:C.muted}}>· {fmtDate(b.issued_at)}</span>
-                          {b.status!=='Pagado'&&<DaysBadge due={b.due} status={b.status}/>}
-                          {b.status==='Pagado'&&b.paid_at&&<span style={{fontSize:10,color:C.normal,fontWeight:600}}>Pagado {fmtDate(b.paid_at)}</span>}
+                          {b.status==='Programada'?(
+                            <span style={{fontSize:11,color:C.muted}}>Facturar: {fmtDate(b.due)}</span>
+                          ):(<>
+                            <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{b.invoice_no||'—'}</span>
+                            <span style={{fontSize:11,color:C.muted}}>· {fmtDate(b.issued_at)}</span>
+                            {b.status!=='Pagado'&&<DaysBadge due={b.due} status={b.status}/>}
+                            {b.status==='Pagado'&&b.paid_at&&<span style={{fontSize:10,color:C.normal,fontWeight:600}}>Pagado {fmtDate(b.paid_at)}</span>}
+                          </>)}
                         </div>
-                        <button onClick={()=>handleTogglePagado(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',color:b.status==='Pagado'?C.normal:C.muted,fontSize:11,fontWeight:700}}>
-                          <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>{b.status==='Pagado'?'✓':''}</span>
-                          {b.status==='Pagado'?'Pagado':'Marcar pagado'}
-                        </button>
+                        {b.status==='Programada'?(
+                          <button onClick={()=>marcarEmitida(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:`1px solid ${C.accent}`,cursor:'pointer',background:'transparent',color:C.accent,fontSize:11,fontWeight:700}}>
+                            Ya emitida
+                          </button>
+                        ):(
+                          <button onClick={()=>handleTogglePagado(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',color:b.status==='Pagado'?C.normal:C.muted,fontSize:11,fontWeight:700}}>
+                            <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>{b.status==='Pagado'?'✓':''}</span>
+                            {b.status==='Pagado'?'Pagado':'Marcar pagado'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -3545,6 +3574,16 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  // Eliminar una o varias cuotas (usado por "Ya emitida"); el confirm lo hace el componente
+  const handleDeleteBillingBulk=useCallback(async(ids)=>{
+    const arr=Array.isArray(ids)?ids:[ids]
+    if(arr.length===0) return
+    try{
+      await supabase.from('billing').delete().in('id',arr)
+      setBilling(p=>p.filter(x=>!arr.includes(x.id)))
+    }catch(e){alert('Error: '+e.message)}
+  },[])
+
   const handleStatusChange=useCallback(async(id,status,paid_at)=>{
     const updates={status}
     if(paid_at!==undefined) updates.paid_at=paid_at
@@ -3592,7 +3631,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
