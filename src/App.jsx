@@ -3489,7 +3489,6 @@ export default function App() {
         @keyframes spin{to{transform:rotate(360deg)}}
         @media(min-width:680px){
           .shell{max-width:600px;margin:0 auto;box-shadow:0 0 0 1px ${C.border},0 12px 50px rgba(0,0,0,.08);min-height:100vh}
-          .bottomnav{max-width:600px;left:50%!important;right:auto!important;transform:translateX(-50%);border-left:1px solid ${C.border};border-right:1px solid ${C.border}}
           .fab{right:auto!important;left:50%!important;margin-left:228px}
         }
       `}</style>
