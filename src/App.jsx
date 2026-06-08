@@ -3112,41 +3112,82 @@ function printTasks(tasks, clients, filterLabel) {
   w.document.close()
 }
 
-function TasksOnlyView({tasks,clients,sales,onAddTask}) {
-  const activeTasks = tasks.filter(t=>t.status==='Activo')
-  const taskGroups = {}
-  activeTasks.forEach(t=>{ const k=t.who||'Sin asignar'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
+function TasksOnlyView({tasks,clients,sales,onAddTask,currentUserName}) {
+  const [filterWho,setFilterWho] = useState(currentUserName||'todos')
+  const [filterClient,setFilterClient] = useState('')
+  const [filterProject,setFilterProject] = useState('')
+  const [filterDay,setFilterDay] = useState('')
+
+  const today = new Date().toISOString().slice(0,10)
+  const tomorrow = new Date(Date.now()+86400000).toISOString().slice(0,10)
+  const weekEnd = new Date(Date.now()+7*86400000).toISOString().slice(0,10)
+  const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const allProjects = [...new Set(tasks.filter(t=>t.project).map(t=>t.project))].sort()
+
+  const filtered = tasks.filter(t=>{
+    if(t.status!=='Activo') return false
+    if(filterWho!=='todos' && t.who!==filterWho) return false
+    if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
+    if(filterProject && t.project!==filterProject) return false
+    if(filterDay==='hoy' && t.due!==today) return false
+    if(filterDay==='mañana' && t.due!==tomorrow) return false
+    if(filterDay==='semana' && (t.due<today||t.due>weekEnd)) return false
+    if(filterDay==='sinFecha' && t.due) return false
+    return true
+  }).sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Tareas</div>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mis Tareas</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={()=>printTasks(activeTasks,clients,'')} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
+            <button onClick={()=>printTasks(filtered,clients,filterWho!=='todos'?filterWho:'')} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
             <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
         </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+          <select value={filterWho} onChange={e=>setFilterWho(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'#F7F7F7',color:C.text}}>
+            <option value='todos'>Todos</option>
+            {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
+          </select>
+          <select value={filterDay} onChange={e=>setFilterDay(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterDay?C.accent:C.border}`,fontSize:11,background:filterDay?'#E6EEF1':'#F7F7F7',color:filterDay?C.accent:C.text}}>
+            <option value=''>Cualquier fecha</option>
+            <option value='hoy'>Hoy</option>
+            <option value='mañana'>Mañana</option>
+            <option value='semana'>Esta semana</option>
+            <option value='sinFecha'>Sin fecha</option>
+          </select>
+          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text}}>
+            <option value=''>Todos los proyectos</option>
+            {allProjects.map(p=><option key={p} value={p}>{p}</option>)}
+          </select>
+          <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:110}}/>
+          {(filterWho!=='todos'||filterDay||filterProject||filterClient)&&
+            <button onClick={()=>{setFilterWho(currentUserName||'todos');setFilterDay('');setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
+          }
+        </div>
+        <div style={{fontSize:11,color:C.muted}}>{filtered.length} tarea{filtered.length!==1?'s':''}</div>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
-        {Object.keys(taskGroups).sort().map(who=>(
-          <div key={who} style={{marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>{who} · {taskGroups[who].length}</div>
-            {taskGroups[who].sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999)).map(t=>{
-              const client=clients.find(c=>c.id===t.client_id)
-              return (
-                <div key={t.id} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2}}>{t.title}</div>
-                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap'}}>
-                    {client&&<span>{client.name}</span>}
-                    {t.project&&<span>· {t.project}</span>}
-                    {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-                  </div>
-                  {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
-                </div>
-              )
-            })}
-          </div>
-        ))}
+        {filtered.map(t=>{
+          const client=clients.find(c=>c.id===t.client_id)
+          return (
+            <div key={t.id} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,flex:1}}>{t.title}</div>
+                {t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{t.who}</span>}
+              </div>
+              <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
+                {client&&<span>{client.name}</span>}
+                {t.project&&<span>· {t.project}</span>}
+                {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+              </div>
+              {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
+            </div>
+          )
+        })}
+        {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas{filterDay||filterProject||filterClient?' con estos filtros':' activas'}</div>}
         {activeTasks.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas</div>}
       </div>
     </div>
