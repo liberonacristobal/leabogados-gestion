@@ -1413,14 +1413,14 @@ function RendicionModal({client, expenses, clientEntities, onClose}) {
   @page{size:letter portrait;margin:16mm 18mm 16mm 18mm}
   @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}
   .header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px}
-  .header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+  .header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   .firma{font-size:16px;font-weight:700;letter-spacing:-.3px}
   .firma-sub{font-size:9px;opacity:.7;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
   .doc-info{text-align:right}
   .doc-title{font-size:13px;font-weight:600;margin-bottom:2px}
   .doc-sub{font-size:9px;opacity:.8}
   .firma-logo{height:30px;width:auto;display:block}
-  .rs-line{font-size:14px;font-weight:400;letter-spacing:.5px;margin-top:32px;text-transform:uppercase}
+  .rs-line{font-size:14px;font-weight:400;letter-spacing:.5px;margin-top:44px;text-transform:uppercase}
   .doc-client{font-size:20px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px}
   .doc-url{font-size:9px;opacity:.7;text-transform:lowercase;margin-top:3px}
   .client-name{font-size:20px;font-weight:700;margin-top:6px}
@@ -1442,6 +1442,18 @@ function RendicionModal({client, expenses, clientEntities, onClose}) {
   .footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}
   .print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;box-shadow:0 4px 16px rgba(0,60,80,.3)}
   .saldo-pos{color:#2E7D55} .saldo-neg{color:#C2382B}
+  @media (max-width:600px){
+    .header{padding:14px 16px}
+    .firma-logo{height:24px}
+    .rs-line{font-size:11px;margin-top:28px;letter-spacing:.3px}
+    .doc-client{font-size:15px}
+    .doc-title{font-size:11px}
+    .doc-sub,.doc-url{font-size:8px}
+    .kpi-row{grid-template-columns:1fr 1fr;gap:6px}
+    .kpi-value{font-size:13px}
+    table{font-size:9px}
+    thead th,tbody td{padding:4px 6px}
+  }
 </style></head><body>
 <div class="header">
   <div class="header-top">
