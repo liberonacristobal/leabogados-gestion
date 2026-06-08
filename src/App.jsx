@@ -730,7 +730,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
     </>
   )
 }
-function BillingView({billing,clients,hideErasmo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload}) {
+function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload}) {
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -796,12 +796,59 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onDelete,onAdd,o
   const marcarEmitida = async(b) => { if(confirm('¿Confirmas que la factura ya se emitió? Se quitará de programadas.')) await onDelete(b.id) }
   const marcarEmitidasBulk = async() => { const ids=[...selected]; if(ids.length&&confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Se quitarán de programadas.`)){ await onDelete(ids); clearSel() } }
 
+  const [descargando,setDescargando] = useState(false)
+  const descargarProgramadas = async() => {
+    if(filtered.length===0){ alert('No hay programadas en el filtro actual.'); return }
+    setDescargando(true)
+    try{
+      // UF del día (mindicador.cl). Si falla, seguimos sin "Monto hoy".
+      let ufHoy = null
+      try{
+        const r = await fetch('https://mindicador.cl/api/uf')
+        const j = await r.json()
+        ufHoy = j?.serie?.[0]?.valor || null
+      }catch(_){}
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const header = ['Cliente','Razón social','Proyecto','UF','Monto guardado ($)', ufHoy?`Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}`:'Monto hoy ($)','Vencimiento']
+      const rows = filtered.map(b=>{
+        const c = clients.find(x=>x.id===b.client_id)
+        const venta = (sales||[]).find(v=>v.id===b.sale_id)
+        const ufVal = venta?.uf_value || null
+        const ufEq = ufVal ? (b.amount/ufVal) : null
+        const montoHoy = (ufEq && ufHoy) ? Math.round(ufEq*ufHoy) : null
+        return [
+          c?.name || 'Sin cliente',
+          b.receptor_name || '',
+          venta?.title || b.concept || '',
+          ufEq ? Number(ufEq.toFixed(2)) : '',
+          b.amount || 0,
+          montoHoy ?? '',
+          b.due || '',
+        ]
+      })
+      // Fila de totales
+      const totalGuardado = rows.reduce((a,r)=>a+(Number(r[4])||0),0)
+      const totalHoy = rows.reduce((a,r)=>a+(Number(r[5])||0),0)
+      rows.push([])
+      rows.push(['','','TOTAL','', totalGuardado, totalHoy||'', ''])
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+      ws['!cols'] = [{wch:24},{wch:26},{wch:30},{wch:10},{wch:16},{wch:18},{wch:14}]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Programadas')
+      const mesLbl = fMonth ? `_${MONTHS[parseInt(fMonth)-1]}` : ''
+      const anioLbl = fYear ? `_${fYear}` : ''
+      XLSX.writeFile(wb, `Programadas${mesLbl}${anioLbl}_${new Date().toISOString().slice(0,10)}.xlsx`)
+    }catch(e){ alert('Error al generar Excel: '+e.message) }
+    setDescargando(false)
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
           <div style={{display:'flex',gap:6}}>
+            {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:descargando?'default':'pointer',opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
             <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Drive</button>
             <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
@@ -3630,7 +3677,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
