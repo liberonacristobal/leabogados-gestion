@@ -2006,6 +2006,14 @@ function GastosForm({clients,expenses,clientEntities,onSave,onClose,preClient}) 
         <>
           {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>✓ {saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
 
+          {rsList.length>1&&(
+            <div style={{marginBottom:10}}>
+              <Fld label='Razón social'>
+                <Sel value={entityId} onChange={e=>setEntityId(e.target.value)} options={[{value:'',label:'— Sin asignar —'},...rsList.map(e=>({value:e.id,label:e.name+(e.rut?` · ${e.rut}`:'')}))]}/>
+              </Fld>
+            </div>
+          )}
+
           {/* Tabla de filas */}
           <div style={{marginBottom:8}}>
             <div style={{display:'grid',gridTemplateColumns:'78px 110px 1fr 80px 24px',gap:4,marginBottom:4}}>
