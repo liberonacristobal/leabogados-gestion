@@ -982,7 +982,7 @@ function AsignarClienteInline({bill,clients,onAssign}) {
   )
 }
 
-function BillingView({billing,clients,sales,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient}) {
+function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient}) {
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -1061,7 +1061,7 @@ function BillingView({billing,clients,sales,onStatusChange,onDelete,onAdd,onEdit
         ufHoy = j?.serie?.[0]?.valor || null
       }catch(_){}
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const header = ['Cliente','Razón social','Proyecto','UF','Monto guardado ($)', ufHoy?`Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}`:'Monto hoy ($)','Vencimiento']
+      const header = ['Cliente','Razón social','RUT','Proyecto','UF','Monto guardado ($)', ufHoy?`Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}`:'Monto hoy ($)','Vencimiento']
       const rows = filtered.map(b=>{
         const c = clients.find(x=>x.id===b.client_id)
         const venta = (sales||[]).find(v=>v.id===b.sale_id)
@@ -1069,9 +1069,17 @@ function BillingView({billing,clients,sales,onStatusChange,onDelete,onAdd,onEdit
         const ufVal = venta?.uf_value || null
         const ufEq = (!esCLP && ufVal) ? (b.amount/ufVal) : null
         const montoHoy = esCLP ? (b.amount||0) : ((ufEq && ufHoy) ? Math.round(ufEq*ufHoy) : null)
+        // Razon social + RUT desde client_entities (fuente unica)
+        const ents = (clientEntities||[]).filter(e=>e.client_id===b.client_id)
+        let rs = null
+        if(b.entity_id) rs = ents.find(e=>e.id===b.entity_id) || null
+        else if(ents.length===1) rs = ents[0]
+        const rsName = rs ? rs.name : (ents.length>1 ? '⚠ definir razón social' : (b.receptor_name||''))
+        const rsRut = rs ? (rs.rut||'') : (b.entity_id?'':(ents.length>1?'':(b.receptor_rut||'')))
         return [
           c?.name || 'Sin cliente',
-          b.receptor_name || '',
+          rsName,
+          rsRut,
           venta?.title || b.concept || '',
           esCLP ? '—' : (ufEq ? Number(ufEq.toFixed(2)) : ''),
           b.amount || 0,
@@ -1080,12 +1088,12 @@ function BillingView({billing,clients,sales,onStatusChange,onDelete,onAdd,onEdit
         ]
       })
       // Fila de totales
-      const totalGuardado = rows.reduce((a,r)=>a+(Number(r[4])||0),0)
-      const totalHoy = rows.reduce((a,r)=>a+(Number(r[5])||0),0)
+      const totalGuardado = rows.reduce((a,r)=>a+(Number(r[5])||0),0)
+      const totalHoy = rows.reduce((a,r)=>a+(Number(r[6])||0),0)
       rows.push([])
-      rows.push(['','','TOTAL','', totalGuardado, totalHoy||'', ''])
+      rows.push(['','','','TOTAL','', totalGuardado, totalHoy||'', ''])
       const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
-      ws['!cols'] = [{wch:24},{wch:26},{wch:30},{wch:10},{wch:16},{wch:18},{wch:14}]
+      ws['!cols'] = [{wch:24},{wch:26},{wch:14},{wch:30},{wch:10},{wch:16},{wch:18},{wch:14}]
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Programadas')
       const mesLbl = fMonth ? `_${MONTHS[parseInt(fMonth)-1]}` : ''
@@ -4302,7 +4310,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
