@@ -326,6 +326,58 @@ function PorFacturarMes({billing,clients}) {
   )
 }
 
+function VentasPorMes({sales}) {
+  const [moneda,setMoneda] = useState('UF') // UF | CLP
+  const yr = currentYear
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+  const data = useMemo(()=>{
+    const arr = Array.from({length:12},(_,i)=>({mes:MESES[i], uf:0, clp:0}))
+    sales.filter(s=>s.year===yr).forEach(s=>{
+      const m = (parseInt(s.month)||0)-1
+      if(m<0||m>11) return
+      const uf = parseFloat(s.amount_uf)||0
+      const clp = s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0)
+      arr[m].uf += uf; arr[m].clp += clp
+    })
+    return arr
+  },[sales])
+  const val = m => moneda==='UF'? m.uf : m.clp
+  const maxVal = Math.max(...data.map(val),1)
+  const totalUF = data.reduce((a,m)=>a+m.uf,0)
+  const totalCLP = data.reduce((a,m)=>a+m.clp,0)
+  if(totalUF===0&&totalCLP===0) return null
+
+  return (
+    <div style={{padding:'0 20px 16px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Ventas por mes {yr}</div>
+        <div style={{display:'flex',gap:4}}>
+          {['UF','CLP'].map(v=>(
+            <button key={v} onClick={()=>setMoneda(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${moneda===v?C.accent:C.border}`,background:moneda===v?'#E6EEF1':'transparent',color:moneda===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{v}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Total {yr}: <strong style={{color:C.text,fontSize:13}}>{moneda==='UF'?fmtUF(totalUF):fmt(totalCLP)}</strong></div>
+        <div style={{display:'flex',gap:3,alignItems:'flex-end',height:70}}>
+          {data.map((m,i)=>{
+            const v = val(m)
+            const hoy = new Date().getMonth()
+            return (
+              <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                <div style={{width:'100%',background:'#E8EEF0',borderRadius:3,height:46,display:'flex',flexDirection:'column',justifyContent:'flex-end',overflow:'hidden'}}>
+                  {v>0&&<div style={{width:'100%',background:i===hoy?C.accent:'#7FA0AD',height:`${Math.round((v/maxVal)*100)}%`,minHeight:2,borderRadius:3}} title={moneda==='UF'?fmtUF(v):fmt(v)}/>}
+                </div>
+                <div style={{fontSize:8,color:i===hoy?C.accent:C.muted,fontWeight:i===hoy?700:400}}>{m.mes}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}) {
   const yr = currentYear
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
@@ -398,6 +450,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
           </div>
         </div>
       </div>
+
+      <VentasPorMes sales={salesYr.length?sales:sales}/>
 
       {/* Facturación */}
       <div style={{padding:'0 20px 16px'}}>
