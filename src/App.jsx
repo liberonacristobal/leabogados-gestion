@@ -2079,6 +2079,15 @@ function TasksEditor({clientId,sales}) {
       const{data,error}=await supabase.from('tasks').upsert(p).select().single()
       if(error)throw error
       setTasks(p=>form.id?p.map(x=>x.id===data.id?data:x):[...p,data])
+      // Alerta email solo en tarea NUEVA con quien asignado
+      if(!form.id && data.who){
+        const client=clients?.find(c=>c.id===data.client_id)
+        fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
+          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:'el estudio'})
+        }).catch(()=>{})
+      }
       setForm(null)
     }catch(e){alert('Error: '+e.message)}
     setBusy(false)
@@ -3303,6 +3312,15 @@ export default function App() {
       const{data,error}=await supabase.from('tasks').upsert({...f,sale_id:f.sale_id||null,client_id:f.client_id||null}).select().single()
       if(error)throw error
       setTasks(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
+      // Alerta email solo en tarea NUEVA con quien asignado
+      if(!f.id && data.who){
+        const client=clients.find(c=>c.id===data.client_id)
+        fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
+          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.user_metadata?.name||'el estudio'})
+        }).catch(()=>{})
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
