@@ -3076,6 +3076,42 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
 
 
 // ─── TASKS ONLY VIEW (para usuarios limited) ──────────────────────────────────
+function printTasks(tasks, clients, filterLabel) {
+  const today = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+  const rows = tasks.map(t=>{
+    const client = clients.find(c=>c.id===t.client_id)
+    const due = t.due ? new Date(t.due+'T00:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : '—'
+    const urgent = t.due && daysLeft(t.due)<0 ? 'color:#C2382B;font-weight:600' : ''
+    return `<tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:12px">${t.title}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${client?.name||'—'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${t.project||'—'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;${urgent}">${due}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${t.who||'—'}</td>
+    </tr>`
+  }).join('')
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Tareas pendientes</title>
+  <style>
+    body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:24px;color:#1a1a1a}
+    h1{font-size:18px;font-weight:700;color:#003C50;margin:0 0 4px}
+    .sub{font-size:11px;color:#999;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#003C50;color:#fff}
+    th{padding:8px 10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+    @media print{body{padding:0}}
+  </style></head><body>
+  <h1>Tareas pendientes${filterLabel?' — '+filterLabel:''}</h1>
+  <div class="sub">Liberona Escala Abogados · ${today} · ${tasks.length} tarea${tasks.length!==1?'s':''}</div>
+  <table><thead><tr><th>Tarea</th><th>Cliente</th><th>Proyecto</th><th>Vence</th><th>Responsable</th></tr></thead>
+  <tbody>${rows}</tbody></table>
+  <script>window.onload=()=>{window.print()}<\/script>
+  </body></html>`
+  const w = window.open('','_blank')
+  w.document.write(html)
+  w.document.close()
+}
+
 function TasksOnlyView({tasks,clients,sales,onAddTask}) {
   const activeTasks = tasks.filter(t=>t.status==='Activo')
   const taskGroups = {}
@@ -3085,7 +3121,10 @@ function TasksOnlyView({tasks,clients,sales,onAddTask}) {
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Tareas</div>
-          <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>printTasks(activeTasks,clients,'')} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
+            <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+          </div>
         </div>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
