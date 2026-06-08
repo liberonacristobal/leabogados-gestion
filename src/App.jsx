@@ -1541,7 +1541,7 @@ function ExpenseEditForm({expense,clients,onSave,onClose,onDelete,saving}) {
 function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
-  const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:''})
+  const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
   const [showProjects,setShowProjects] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
@@ -1599,7 +1599,7 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
 
       {selectedClient&&(
         <>
-          <Fld label='Tarea'><Inp value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Descripción de la tarea...' autoFocus/></Fld>
+          <Fld label='Tarea'><textarea value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Descripción de la tarea...' autoFocus rows={3} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/></Fld>
 
           <Fld label='Proyecto (opcional)'>
             <div style={{position:'relative'}}>
@@ -1628,17 +1628,17 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
             </div>
           </Fld>
 
+          <Fld label='Subproyecto (opcional)'><Inp value={f.subproject||''} onChange={e=>up('subproject',e.target.value)} placeholder='Ej: Contrato arriendo, Juicio laboral...'/></Fld>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <Fld label='Responsable'><Sel value={f.who} onChange={e=>up('who',e.target.value)} options={WHO}/></Fld>
             <Fld label='Plazo'><Inp type='date' value={f.due} onChange={e=>up('due',e.target.value)}/></Fld>
           </div>
-          <Fld label='Nota'><Inp value={f.note} onChange={e=>up('note',e.target.value)} placeholder='Contexto adicional...'/></Fld>
         </>
       )}
 
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,project:f.project||null})}
+        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,project:f.project||null,subproject:f.subproject||null})}
           style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!f.title.trim())?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar tarea'}
         </button>
