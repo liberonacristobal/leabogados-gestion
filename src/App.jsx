@@ -2207,7 +2207,7 @@ function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete
 
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
+function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,user}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
@@ -2816,7 +2816,7 @@ function TasksEditor({clientId,sales}) {
         fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
-          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:'el estudio'})
+          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.name||'el estudio'})
         }).catch(()=>{})
       }
       setForm(null)
@@ -4184,7 +4184,7 @@ export default function App() {
         fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
-          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.user_metadata?.name||'el estudio'})
+          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.name||'el estudio'})
         }).catch(()=>{})
       }
       setModal(null)
@@ -4354,7 +4354,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
+        {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} user={user}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
     </>
