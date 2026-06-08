@@ -443,6 +443,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
   const balances = {}
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) })
   const negatives = clients.filter(c=>balances[c.id]<0)
+  const [openCobranza,setOpenCobranza] = useState(false)
+  const [openCaja,setOpenCaja] = useState(false)
 
   return (
     <div>
@@ -523,9 +525,14 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
       {/* Cobranza */}
       <div style={{padding:'0 20px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Cobranza</div>
+          <button onClick={()=>setOpenCobranza(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0}}>
+            <span style={{fontSize:10,color:C.muted,transform:openCobranza?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
+            <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Cobranza</span>
+            <span style={{fontSize:12,fontWeight:700,color:C.overdue,marginLeft:4}}>{fmt(totalPorCobrar)}</span>
+          </button>
           <button onClick={()=>setTab('billing')} style={{background:'none',border:'none',color:C.accent,fontSize:12,cursor:'pointer',fontWeight:600}}>Ver todos</button>
         </div>
+        {openCobranza&&<>
         <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`,marginBottom:10}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <span style={{fontSize:13,color:C.muted}}>Total por cobrar</span>
@@ -565,6 +572,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
               </div>
             ))
         })()}
+        </>}
       </div>
 
       {negatives.length>0&&(
@@ -590,7 +598,13 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
       )}
 
       {/* Proyección de caja */}
-      <CashflowProjection billing={billing}/>
+      <div style={{padding:'16px 20px 0'}}>
+        <button onClick={()=>setOpenCaja(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:openCaja?4:0}}>
+          <span style={{fontSize:10,color:C.muted,transform:openCaja?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
+          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Proyección de caja</span>
+        </button>
+      </div>
+      {openCaja&&<CashflowProjection billing={billing}/>}
 
       <div style={{height:20}}/>
     </div>
