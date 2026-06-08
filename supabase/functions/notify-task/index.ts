@@ -97,6 +97,15 @@ serve(async (req) => {
     const subproject = task.subproject || "";
     const due = task.due ? new Date(task.due + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
     const by = assignedBy || "el estudio";
+    let calUrl = "";
+    if (task.due) {
+      const d = String(task.due).replace(/-/g, "");
+      const start = d + "T090000";
+      const end = d + "T091500";
+      const text = encodeURIComponent("Tarea: " + (task.title || ""));
+      const details = encodeURIComponent((task.client_name ? "Cliente: " + task.client_name + "\n" : "") + "Asignada por " + by);
+      calUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + text + "&dates=" + start + "/" + end + "&details=" + details + "&ctz=America/Santiago";
+    }
 
     const html = `
 <!DOCTYPE html>
@@ -119,6 +128,7 @@ serve(async (req) => {
       </table>
       <div style="margin-top: 24px;">
         <a href="https://gestion.leabogados.cl" style="display: inline-block; background: #003C50; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 600;">Ver en la app →</a>
+        ${calUrl ? `<a href="${calUrl}" style="display: inline-block; background: #fff; color: #003C50; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid #003C50; margin-left: 8px;">Agregar recordatorio</a>` : ""}
       </div>
     </div>
     <div style="padding: 16px 28px; background: #f9f9f9; border-top: 1px solid #eee;">
