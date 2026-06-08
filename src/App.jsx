@@ -1420,7 +1420,7 @@ function RendicionModal({client, expenses, clientEntities, onClose}) {
   .doc-title{font-size:13px;font-weight:600;margin-bottom:2px}
   .doc-sub{font-size:9px;opacity:.8}
   .firma-logo{height:30px;width:auto;display:block}
-  .rs-line{font-size:15px;font-weight:700;letter-spacing:.3px;margin-top:8px;text-transform:uppercase}
+  .rs-line{font-size:14px;font-weight:400;letter-spacing:.5px;margin-top:18px;text-transform:uppercase}
   .doc-client{font-size:20px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px}
   .doc-url{font-size:9px;opacity:.7;text-transform:lowercase;margin-top:3px}
   .client-name{font-size:20px;font-weight:700;margin-top:6px}
