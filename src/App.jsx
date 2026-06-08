@@ -345,6 +345,16 @@ function VentasPorMes({sales}) {
   const maxVal = Math.max(...data.map(val),1)
   const totalUF = data.reduce((a,m)=>a+m.uf,0)
   const totalCLP = data.reduce((a,m)=>a+m.clp,0)
+  const [sel,setSel] = useState(null)
+  // Formato compacto para la etiqueta sobre cada barra
+  const compact = m => {
+    const v = val(m)
+    if(v===0) return ''
+    if(moneda==='UF') return v>=1000? (v/1000).toFixed(v>=10000?0:1)+'k' : Math.round(v).toString()
+    if(v>=1000000) return (v/1000000).toFixed(v>=10000000?0:1).replace('.',',')+'M'
+    if(v>=1000) return Math.round(v/1000)+'k'
+    return Math.round(v).toString()
+  }
   if(totalUF===0&&totalCLP===0) return null
 
   return (
@@ -358,15 +368,22 @@ function VentasPorMes({sales}) {
         </div>
       </div>
       <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
-        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Total {yr}: <strong style={{color:C.text,fontSize:13}}>{moneda==='UF'?fmtUF(totalUF):fmt(totalCLP)}</strong></div>
-        <div style={{display:'flex',gap:3,alignItems:'flex-end',height:70}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:8}}>
+          <div style={{fontSize:11,color:C.muted}}>Total {yr}: <strong style={{color:C.text,fontSize:13}}>{moneda==='UF'?fmtUF(totalUF):fmt(totalCLP)}</strong></div>
+          {sel!==null&&data[sel]&&val(data[sel])>0&&(
+            <div style={{fontSize:11,color:C.accent,fontWeight:600,textAlign:'right'}}>{MESES[sel]}: {fmtUF(data[sel].uf)} · {fmt(data[sel].clp)}</div>
+          )}
+        </div>
+        <div style={{display:'flex',gap:3,alignItems:'flex-end',height:84}}>
           {data.map((m,i)=>{
             const v = val(m)
             const hoy = new Date().getMonth()
+            const activo = sel===i
             return (
-              <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+              <div key={i} onClick={()=>setSel(s=>s===i?null:i)} onMouseEnter={()=>setSel(i)} onMouseLeave={()=>setSel(null)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,cursor:v>0?'pointer':'default'}}>
+                <div style={{fontSize:8,fontWeight:700,color:activo?C.accent:C.muted,height:11,lineHeight:'11px',whiteSpace:'nowrap'}}>{compact(m)}</div>
                 <div style={{width:'100%',background:'#E8EEF0',borderRadius:3,height:46,display:'flex',flexDirection:'column',justifyContent:'flex-end',overflow:'hidden'}}>
-                  {v>0&&<div style={{width:'100%',background:i===hoy?C.accent:'#7FA0AD',height:`${Math.round((v/maxVal)*100)}%`,minHeight:2,borderRadius:3}} title={moneda==='UF'?fmtUF(v):fmt(v)}/>}
+                  {v>0&&<div style={{width:'100%',background:activo?C.accent:(i===hoy?C.accent:'#7FA0AD'),opacity:activo?1:.95,height:`${Math.round((v/maxVal)*100)}%`,minHeight:2,borderRadius:3,transition:'background .15s'}}/>}
                 </div>
                 <div style={{fontSize:8,color:i===hoy?C.accent:C.muted,fontWeight:i===hoy?700:400}}>{m.mes}</div>
               </div>
