@@ -1543,6 +1543,7 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
   const [showProjects,setShowProjects] = useState(false)
+  const [showSubprojects,setShowSubprojects] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
 
@@ -1558,6 +1559,11 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
     const fromSales = sales.filter(s=>s.client_id===selectedClient.id&&s.title).map(s=>s.title)
     return [...new Set([...fromSales,...fromTasks])].sort()
   },[tasks,sales,selectedClient])
+
+  const clientSubprojects = useMemo(()=>{
+    if(!selectedClient) return []
+    return [...new Set(tasks.filter(t=>t.client_id===selectedClient.id&&t.subproject).map(t=>t.subproject))].sort()
+  },[tasks,selectedClient])
 
   const clientSales = sales.filter(s=>s.client_id===selectedClient?.id&&s.status==='Activo')
 
@@ -1628,7 +1634,32 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient}) {
             </div>
           </Fld>
 
-          <Fld label='Subproyecto (opcional)'><Inp value={f.subproject||''} onChange={e=>up('subproject',e.target.value)} placeholder='Ej: Contrato arriendo, Juicio laboral...'/></Fld>
+          <Fld label='Subproyecto (opcional)'>
+            <div style={{position:'relative'}}>
+              <Inp
+                value={f.subproject||''}
+                onChange={e=>up('subproject',e.target.value)}
+                onFocus={()=>setShowSubprojects(true)}
+                onBlur={()=>setTimeout(()=>setShowSubprojects(false),150)}
+                placeholder={clientSubprojects.length>0?'Selecciona o escribe subproyecto...':'Ej: Contrato arriendo, Juicio laboral...'}
+              />
+              {showSubprojects&&clientSubprojects.length>0&&(
+                <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
+                  {clientSubprojects.filter(p=>!f.subproject||p.toLowerCase().includes(f.subproject.toLowerCase())).map((p,i)=>(
+                    <div key={i} onMouseDown={()=>up('subproject',p)}
+                      style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                      onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                      {p}
+                    </div>
+                  ))}
+                  <div style={{padding:'7px 14px',fontSize:11,color:C.muted,fontStyle:'italic',borderTop:`1px solid ${C.border}`}}>
+                    O escribe un subproyecto nuevo
+                  </div>
+                </div>
+              )}
+            </div>
+          </Fld>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <Fld label='Responsable'><Sel value={f.who} onChange={e=>up('who',e.target.value)} options={WHO}/></Fld>
             <Fld label='Plazo'><Inp type='date' value={f.due} onChange={e=>up('due',e.target.value)}/></Fld>
@@ -2086,6 +2117,7 @@ function TasksEditor({clientId,sales}) {
   const [form,setForm] = useState(null)
   const [busy,setBusy] = useState(false)
   const [showProjects,setShowProjects] = useState(false)
+  const [showSubprojects,setShowSubprojects] = useState(false)
   const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
 
   useEffect(()=>{
