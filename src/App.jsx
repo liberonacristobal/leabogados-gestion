@@ -3410,7 +3410,7 @@ export default function App() {
             sale_id:data.id,
             concept:`${data.title} — ${c.label}`,
             amount:c.monto,
-            status:'Pendiente',
+            status: c.fecha > '2026-06-15' ? 'Programado' : 'Pendiente',
             issued_at:c.fecha,
             due:c.fecha,
             billing_type:'honorarios',
