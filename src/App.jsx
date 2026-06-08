@@ -1116,13 +1116,15 @@ function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,o
                             Ya emitida
                           </button>
                           )
-                        ):(<>
+                        ):(
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
                           {client.id==='__none__'&&onAssignClient&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
                           <button onClick={()=>handleTogglePagado(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',color:b.status==='Pagado'?C.normal:C.muted,fontSize:11,fontWeight:700}}>
                             <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>{b.status==='Pagado'?'✓':''}</span>
                             {b.status==='Pagado'?'Pagado':'Marcar pagado'}
                           </button>
-                          </>)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
