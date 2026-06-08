@@ -3921,7 +3921,6 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,currentUserName}) {
           )
         })}
         {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas{filterDay||filterProject||filterClient?' con estos filtros':' activas'}</div>}
-        {activeTasks.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas</div>}
       </div>
     </div>
   )
@@ -4175,7 +4174,9 @@ export default function App() {
   const handleSaveTask=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const{data,error}=await supabase.from('tasks').upsert({...f,sale_id:f.sale_id||null,client_id:f.client_id||null}).select().single()
+      const taskPayload={...f,sale_id:f.sale_id||null,client_id:f.client_id||null}
+      if(!f.id && !taskPayload.assigned_by) taskPayload.assigned_by = user?.name || null
+      const{data,error}=await supabase.from('tasks').upsert(taskPayload).select().single()
       if(error)throw error
       setTasks(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       // Alerta email solo en tarea NUEVA con quien asignado
@@ -4190,7 +4191,7 @@ export default function App() {
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[])
+  },[user])
 
   const handleSaveClient=useCallback(async(f)=>{
     setSaving(true)
