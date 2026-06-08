@@ -1006,10 +1006,12 @@ function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,o
 }
 
 
-function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
-  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios'})
+function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving}) {
+  const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
+  const [nuevaRS,setNuevaRS] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
   return (
     <>
       <Fld label='Cliente'>
@@ -1045,6 +1047,28 @@ function BillingForm({bill,clients,onSave,onClose,onDelete,saving}) {
         <Fld label='De terceros (CLP)'><Inp type='number' value={f.monto_terceros||''} onChange={e=>up('monto_terceros',e.target.value)} placeholder='0'/></Fld>
         <Fld label='Estado'><Sel value={f.status||'Pendiente'} onChange={e=>up('status',e.target.value)} options={['Propuesta','Pendiente','Pagado','Vencido','Anulado']}/></Fld>
         <Fld label='N Factura'><Inp value={f.invoice_no||''} onChange={e=>up('invoice_no',e.target.value)} placeholder='367...'/></Fld>
+      </div>
+      {f.client_id&&(
+        <Fld label='Razón social'>
+          {!nuevaRS&&rsList.length>0?(
+            <select value={f.receptor_rut||''} onChange={e=>{
+              if(e.target.value==='__nueva__'){setNuevaRS(true);up('receptor_name','');up('receptor_rut','')}
+              else{const ce=rsList.find(x=>x.rut===e.target.value);up('receptor_name',ce?.name||'');up('receptor_rut',ce?.rut||'')}
+            }} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
+              <option value=''>— Sin especificar —</option>
+              {rsList.map(e=><option key={e.id} value={e.rut||e.name}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
+              <option value='__nueva__'>+ Nueva razón social...</option>
+            </select>
+          ):(
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              <Inp value={f.receptor_name||''} onChange={e=>up('receptor_name',e.target.value)} placeholder='Nombre / razón social'/>
+              <Inp value={f.receptor_rut||''} onChange={e=>up('receptor_rut',e.target.value)} placeholder='RUT (76.xxx.xxx-x)'/>
+              {rsList.length>0&&<button type='button' onClick={()=>{setNuevaRS(false);up('receptor_name','');up('receptor_rut','')}} style={{alignSelf:'flex-start',background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>← Elegir de las existentes</button>}
+            </div>
+          )}
+        </Fld>
+      )}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='Emision'><Inp type='date' value={f.issued_at||''} onChange={e=>up('issued_at',e.target.value)}/></Fld>
         <Fld label='Vencimiento'><Inp type='date' value={f.due||''} onChange={e=>up('due',e.target.value)}/></Fld>
         {f.status==='Pagado'&&<Fld label='Fecha de pago'><Inp type='date' value={f.paid_at||''} onChange={e=>up('paid_at',e.target.value)}/></Fld>}
@@ -3630,10 +3654,19 @@ export default function App() {
         const wc={...saved,clients:clients.find(c=>c.id===saved.client_id)}
         return f.id?p.map(x=>x.id===saved.id?wc:x):[wc,...p]
       })
+      // Aprendizaje universal: si la factura trae razón social, la guarda en el catálogo
+      if(saved.client_id && (saved.receptor_name||saved.receptor_rut)){
+        const yaExiste=(clientEntities||[]).some(e=>e.client_id===saved.client_id&&((e.rut&&e.rut===saved.receptor_rut)||(e.name?.toLowerCase()===saved.receptor_name?.toLowerCase())))
+        if(!yaExiste){
+          await supabase.from('client_entities').insert({client_id:saved.client_id,name:saved.receptor_name||null,rut:saved.receptor_rut||null})
+          const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[])
+          setClientEntities(ce)
+        }
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[clients])
+  },[clients,clientEntities])
 
   const handleDeleteBilling=useCallback(async(id)=>{
     if(!confirm('¿Eliminar este cobro?')) return
@@ -3713,7 +3746,7 @@ export default function App() {
         }} style={{position:'fixed',bottom:80,right:20,width:48,height:48,borderRadius:'50%',background:C.accent,border:'none',cursor:'pointer',fontSize:22,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 6px 20px rgba(0,60,80,.32)',zIndex:100}}>+</button>
 
         {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
-        {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
+        {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
