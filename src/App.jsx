@@ -554,21 +554,20 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
   const clientEntitiesList = useMemo(()=>{ if(!f.client_id) return []; return (clientEntities||[]).filter(e=>e.client_id===f.client_id) },[clientEntities,f.client_id])
+  const moneda = f.moneda||'UF'
   const ufVal = parseFloat(f.uf_value)||0
   const amountUF = parseFloat(f.amount_uf)||0
-  const totalCLP = amountUF*ufVal
+  const montoCLP = parseFloat(f.amount_clp)||0
+  const totalCLP = moneda==='CLP' ? montoCLP : amountUF*ufVal
 
   // Generar cobros desde forma de cobro
   const generarCobros = () => {
-    if(!f.client_id||!amountUF||!ufVal) return []
+    if(!f.client_id||!totalCLP) return []
     const cobros = []
-    if(cobroType==='mensual' && mensualInicio && f.year) {
+    if(cobroType==='mensual' && mensualInicio) {
       const [y,m] = mensualInicio.split('-').map(Number)
-      const endMonth = 12
-      const endYear = parseInt(f.year)||currentYear
       let cy=y, cm=m
-      while(cy<endYear||(cy===endYear&&cm<=endMonth)){
-        const d=new Date(cy,cm-1,1); d.setDate(1)
+      for(let i=0;i<12;i++){
         const fecha=`${cy}-${String(cm).padStart(2,'0')}-01`
         cobros.push({monto:Math.round(totalCLP), fecha, label:`Mensual ${MONTHS[cm-1]} ${cy}`})
         cm++; if(cm>12){cm=1;cy++}
@@ -583,7 +582,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
     } else if(cobroType==='porcentaje') {
       tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:t.fecha, label:`${t.pct}%`}) })
     } else if(cobroType==='personalizada') {
-      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha) cobros.push({monto:Math.round((parseFloat(c.monto)||0)*ufVal), fecha:c.fecha, label:`Cobro ${i+1} (${c.monto} UF)`}) })
+      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha){ const mm = moneda==='CLP' ? Math.round(parseFloat(c.monto)||0) : Math.round((parseFloat(c.monto)||0)*ufVal); cobros.push({monto:mm, fecha:c.fecha, label: moneda==='CLP'?`Cobro ${i+1}`:`Cobro ${i+1} (${c.monto} UF)`}) } })
     }
     return cobros
   }
@@ -645,6 +644,14 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
         </Fld>
       )}
 
+      <div style={{marginBottom:10}}>
+        <Lbl>Moneda</Lbl>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+          {[['UF','UF'],['CLP','Pesos (CLP)']].map(([v,l])=>(
+            <button key={v} type='button' onClick={()=>up('moneda',v)} style={{padding:'8px',borderRadius:8,border:`2px solid ${moneda===v?C.accent:C.border}`,background:moneda===v?'#E6EEF1':'transparent',color:moneda===v?C.accent:C.muted,fontSize:12,fontWeight:700,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='Área'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
         <Fld label='Responsable'>
@@ -653,9 +660,13 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
             {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
           </select>
         </Fld>
+        {moneda==='UF'?<>
         <Fld label='Honorarios UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
         <Fld label='Costo UF (terceros)'><Inp type='number' step='0.01' value={f.cost_uf||''} onChange={e=>up('cost_uf',e.target.value)} placeholder='0.00'/></Fld>
         <Fld label='Valor UF (CLP)'><Inp type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder='Ej: 38500'/></Fld>
+        </>:<>
+        <Fld label='Monto total (CLP)'><Inp type='number' value={f.amount_clp||''} onChange={e=>up('amount_clp',e.target.value)} placeholder='Ej: 1500000'/></Fld>
+        </>}
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
         <Fld label='Año presupuesto'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
         <Fld label='Mes'>
@@ -666,7 +677,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
       </div>
 
       {/* Forma de cobro */}
-      {amountUF>0&&ufVal>0&&(
+      {totalCLP>0&&(
         <div style={{marginTop:4,marginBottom:12}}>
           <Lbl>Forma de cobro</Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
@@ -678,10 +689,12 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
           {cobroType==='mensual'&&(
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
-                <Fld label='Monto mensual UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
+                {moneda==='UF'
+                  ? <Fld label='Monto mensual UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
+                  : <Fld label='Monto mensual (CLP)'><Inp type='number' value={f.amount_clp||''} onChange={e=>up('amount_clp',e.target.value)} placeholder='Ej: 1500000'/></Fld>}
                 <Fld label='Inicio cobro'><Inp type='date' value={mensualInicio} onChange={e=>setMensualInicio(e.target.value)}/></Fld>
               </div>
-              {mensualInicio&&ufVal>0&&amountUF>0&&<div style={{fontSize:11,color:C.muted}}>Genera cobros de <strong style={{color:C.text}}>{fmt(Math.round(totalCLP))}</strong>/mes desde {mensualInicio.slice(0,7)} hasta dic {f.year||currentYear}</div>}
+              {mensualInicio&&totalCLP>0&&<div style={{fontSize:11,color:C.muted}}>Genera <strong style={{color:C.text}}>12 cobros</strong> de <strong style={{color:C.text}}>{fmt(Math.round(totalCLP))}</strong>/mes desde {mensualInicio.slice(0,7)}</div>}
             </div>
           )}
 
@@ -3545,7 +3558,8 @@ export default function App() {
     try{
       const {cobros, cobroType, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
-      const p={...saleData,entity_id:entIdRaw,amount_uf:parseFloat(f.amount_uf)||null,cost_uf:parseFloat(f.cost_uf)||null,uf_value:parseFloat(f.uf_value)||null,updated_at:new Date().toISOString()}
+      const esCLP = (f.moneda||'UF')==='CLP'
+      const p={...saleData,entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
