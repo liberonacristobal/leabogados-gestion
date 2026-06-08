@@ -1361,7 +1361,15 @@ function RendicionModal({client, expenses, onClose}) {
 
   const fondos = filtered.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
   const gastos = filtered.filter(e=>e.type==='gasto').reduce((a,e)=>a+e.amount,0)
-  const saldo = fondos - gastos
+  // Rendicion acumulada: arrastrar saldo anterior al inicio del periodo
+  const periodStart = (()=>{
+    if(periodType==='month') return `${selYear}-${String(selMonth).padStart(2,'0')}-01`
+    if(periodType==='year') return `${selYear}-01-01`
+    if(periodType==='custom') return fromDate||null
+    return null
+  })()
+  const saldoAnterior = periodStart ? allMovs.filter(e=>e.date && e.date < periodStart).reduce((a,e)=>a+(e.type==='fondo'?e.amount:-e.amount),0) : 0
+  const saldo = saldoAnterior + fondos - gastos
   const byCat = {}
   filtered.filter(e=>e.type==='gasto').forEach(e=>{ byCat[e.category||'Otro']=(byCat[e.category||'Otro']||0)+e.amount })
 
@@ -1430,13 +1438,22 @@ function RendicionModal({client, expenses, onClose}) {
 </div>
 
 <div class="kpi-row">
-  <div class="kpi"><div class="kpi-label">Fondos recibidos</div><div class="kpi-value" style="color:#2E7D55">${fmtN(fondos)}</div></div>
-  <div class="kpi"><div class="kpi-label">Gastos realizados</div><div class="kpi-value" style="color:#C2382B">${fmtN(gastos)}</div></div>
-  <div class="kpi"><div class="kpi-label">Saldo</div><div class="kpi-value ${saldo>=0?'saldo-pos':'saldo-neg'}">${fmtN(saldo)}</div></div>
+  ${saldoAnterior!==0?`<div class="kpi"><div class="kpi-label">Saldo anterior</div><div class="kpi-value ${saldoAnterior>=0?'saldo-pos':'saldo-neg'}">${fmtN(saldoAnterior)}</div></div>`:''}
+  <div class="kpi"><div class="kpi-label">Fondos del período</div><div class="kpi-value" style="color:#2E7D55">${fmtN(fondos)}</div></div>
+  <div class="kpi"><div class="kpi-label">Gastos del período</div><div class="kpi-value" style="color:#C2382B">${fmtN(gastos)}</div></div>
+  <div class="kpi"><div class="kpi-label">Saldo final</div><div class="kpi-value ${saldo>=0?'saldo-pos':'saldo-neg'}">${fmtN(saldo)}</div></div>
 </div>`
 
     // Tabla de movimientos
     html += `<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th style="text-align:right">Monto</th></tr></thead><tbody>`
+    if(saldoAnterior!==0){
+      html += `<tr style="background:#F7F9FA">
+        <td>—</td>
+        <td><span class="badge" style="background:#E4E8EB;color:#537281">Saldo anterior</span></td>
+        <td>Saldo acumulado antes del período</td>
+        <td style="text-align:right;font-weight:600;color:${saldoAnterior>=0?'#2E7D55':'#C2382B'}">${fmtN(saldoAnterior)}</td>
+      </tr>`
+    }
     filtered.forEach(e=>{
       const isFondo = e.type==='fondo'
       const bg = CATS_COLOR[e.category]||CATS_COLOR['Otro']
