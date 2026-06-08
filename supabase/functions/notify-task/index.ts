@@ -13,56 +13,9 @@ const EMAILS: Record<string, string> = {
   "Cristobal": "cl@leabogados.cl",
 };
 
-async function sendEmail(to: string, subject: string, html: string) {
-  const boundary = "----=_Part_" + Math.random().toString(36).slice(2);
-  const message = [
-    `From: Gestión LE <${GMAIL_USER}>`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ``,
-    `--${boundary}`,
-    `Content-Type: text/html; charset=UTF-8`,
-    ``,
-    html,
-    `--${boundary}--`,
-  ].join("\r\n");
-
-  const credentials = btoa(`\0${GMAIL_USER}\0${GMAIL_PASS}`);
-  
-  // Usar Gmail API via SMTP sobre HTTPS (Nodemailer-style via fetch a smtp2go o similar no disponible en Deno)
-  // Usamos el endpoint de Gmail API REST
-  const response = await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send", {
-    method: "POST",
-    headers: {
-      "Authorization": `Basic ${credentials}`,
-      "Content-Type": "message/rfc822",
-    },
-    body: message,
-  });
-
-  return response;
-}
-
 async function sendViaSMTP(to: string, subject: string, html: string) {
-  // Usar Resend como relay SMTP (más confiable en Deno/Edge)
-  // Fallback: llamar a un relay SMTP externo
   const encoder = new TextEncoder();
-  
-  // Construcción del email en formato RFC 2822
-  const emailContent = [
-    `From: Gestión LE <${GMAIL_USER}>`,
-    `To: ${to}`,
-    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=UTF-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
-    ``,
-    html,
-  ].join("\r\n");
 
-  // Enviar via Gmail SMTP usando Deno TCP
   const conn = await Deno.connectTls({
     hostname: "smtp.gmail.com",
     port: 465,
@@ -86,31 +39,32 @@ async function sendViaSMTP(to: string, subject: string, html: string) {
     await writer.write(encoder.encode(line + "\r\n"));
   };
 
-  await readLine(); // greeting
+  await readLine();
   await writeLine(`EHLO leabogados.cl`);
-  
   let resp = "";
-  while (!resp.includes("250 ")) {
-    resp = await readLine();
-  }
-
+  while (!resp.includes("250 ")) { resp = await readLine(); }
   await writeLine(`AUTH PLAIN ${btoa(`\0${GMAIL_USER}\0${GMAIL_PASS}`)}`);
-  await readLine(); // 235
-
+  await readLine();
   await writeLine(`MAIL FROM:<${GMAIL_USER}>`);
   await readLine();
-
   await writeLine(`RCPT TO:<${to}>`);
   await readLine();
-
   await writeLine(`DATA`);
   await readLine();
 
+  const emailContent = [
+    `From: Gestión LE <${GMAIL_USER}>`,
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/html; charset=UTF-8`,
+    ``,
+    html,
+  ].join("\r\n");
+
   await writeLine(emailContent + "\r\n.");
   await readLine();
-
   await writeLine(`QUIT`);
-  
   reader.cancel();
   writer.close();
   conn.close();
@@ -128,7 +82,7 @@ serve(async (req) => {
 
   try {
     const { task, assignedBy } = await req.json();
-    
+
     if (!task || !task.who) {
       return new Response(JSON.stringify({ error: "Falta task.who" }), { status: 400 });
     }
@@ -140,6 +94,7 @@ serve(async (req) => {
 
     const clienteName = task.client_name || "";
     const project = task.project || "";
+    const subproject = task.subproject || "";
     const due = task.due ? new Date(task.due + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
     const by = assignedBy || "el estudio";
 
@@ -158,8 +113,8 @@ serve(async (req) => {
       <table style="width: 100%; border-collapse: collapse;">
         ${clienteName ? `<tr><td style="padding: 8px 0; color: #666; font-size: 13px; width: 100px;">Cliente</td><td style="padding: 8px 0; font-size: 13px; color: #1a1a1a; font-weight: 500;">${clienteName}</td></tr>` : ""}
         ${project ? `<tr><td style="padding: 8px 0; color: #666; font-size: 13px;">Proyecto</td><td style="padding: 8px 0; font-size: 13px; color: #1a1a1a; font-weight: 500;">${project}</td></tr>` : ""}
+        ${subproject ? `<tr><td style="padding: 8px 0; color: #666; font-size: 13px;">Subproyecto</td><td style="padding: 8px 0; font-size: 13px; color: #1a1a1a; font-weight: 500;">${subproject}</td></tr>` : ""}
         ${due ? `<tr><td style="padding: 8px 0; color: #666; font-size: 13px;">Vence</td><td style="padding: 8px 0; font-size: 13px; color: #C2382B; font-weight: 600;">${due}</td></tr>` : ""}
-        ${task.note ? `<tr><td style="padding: 8px 0; color: #666; font-size: 13px;">Nota</td><td style="padding: 8px 0; font-size: 13px; color: #1a1a1a; font-style: italic;">${task.note}</td></tr>` : ""}
         <tr><td style="padding: 8px 0; color: #666; font-size: 13px;">Asignada por</td><td style="padding: 8px 0; font-size: 13px; color: #1a1a1a;">${by}</td></tr>
       </table>
       <div style="margin-top: 24px;">
