@@ -844,14 +844,15 @@ function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,o
       const rows = filtered.map(b=>{
         const c = clients.find(x=>x.id===b.client_id)
         const venta = (sales||[]).find(v=>v.id===b.sale_id)
+        const esCLP = venta?.moneda==='CLP'
         const ufVal = venta?.uf_value || null
-        const ufEq = ufVal ? (b.amount/ufVal) : null
-        const montoHoy = (ufEq && ufHoy) ? Math.round(ufEq*ufHoy) : null
+        const ufEq = (!esCLP && ufVal) ? (b.amount/ufVal) : null
+        const montoHoy = esCLP ? (b.amount||0) : ((ufEq && ufHoy) ? Math.round(ufEq*ufHoy) : null)
         return [
           c?.name || 'Sin cliente',
           b.receptor_name || '',
           venta?.title || b.concept || '',
-          ufEq ? Number(ufEq.toFixed(2)) : '',
+          esCLP ? '—' : (ufEq ? Number(ufEq.toFixed(2)) : ''),
           b.amount || 0,
           montoHoy ?? '',
           b.due || '',
