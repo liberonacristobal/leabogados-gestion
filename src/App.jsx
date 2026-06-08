@@ -25,6 +25,7 @@ const urgency = (due,status) => {
   const d = daysLeft(due); if(d===null) return 'normal'
   if(d<0) return 'overdue'; if(d<=5) return 'urgent'; if(d<=14) return 'soon'; return 'normal'
 }
+function normRut(r){ return (r||'').replace(/\s/g,'').replace(/\./g,'').toLowerCase() }
 function dueFromIssued(iso){ if(!iso) return null; const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10) }
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
 const currentYear = new Date().getFullYear()
@@ -2310,7 +2311,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
         let mc=null
         // 1. Buscar en clientEntities por RUT (aprendizaje previo)
         if(parsed.rut){
-          const ce=clientEntities.find(e=>e.rut===parsed.rut)
+          const ce=clientEntities.find(e=>normRut(e.rut)===normRut(parsed.rut))
           if(ce) mc=clients.find(c=>c.id===ce.client_id)
         }
         // 2. Buscar en clientEntities por nombre
@@ -2319,7 +2320,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
           if(ce) mc=clients.find(c=>c.id===ce.client_id)
         }
         // 3. Buscar en clients por rut directo
-        if(!mc&&parsed.rut)mc=clients.find(c=>c.rut===parsed.rut)
+        if(!mc&&parsed.rut)mc=clients.find(c=>normRut(c.rut)===normRut(parsed.rut))
         // 4. Buscar en clients por nombre
         if(!mc&&parsed.cliente)mc=clients.find(c=>c.name?.toLowerCase()===parsed.cliente?.toLowerCase())
         if(parsed.folio&&parsed.total){
