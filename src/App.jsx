@@ -731,7 +731,7 @@ function SaleForm({sale,clients:initialClients,onSave,onClose,onDelete,saving}) 
   )
 }
 function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onImport,onUpload}) {
-  const [filter,setFilter] = useState('activo')
+  const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
   const [q,setQ] = useState('')
@@ -740,18 +740,24 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
   const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
+  const isProg = filter==='programadas'
+  // En Programadas la fecha relevante es el vencimiento (due); en el resto, la emisión (issued_at)
+  const dateField = b => isProg ? b.due : b.issued_at
   const filtered = useMemo(()=>{
     let r = bb
-    if(filter==='activo') r = r.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status))
+    if(filter==='emitidas') r = r.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status))
+    else if(filter==='programadas') r = r.filter(b=>b.status==='Programada')
     else if(filter==='pagado') r = r.filter(b=>b.status==='Pagado')
-    if(fYear) r = r.filter(b=>b.issued_at?.startsWith(fYear))
-    if(fMonth) r = r.filter(b=>b.issued_at?.slice(5,7)===fMonth)
+    if(fYear) r = r.filter(b=>dateField(b)?.startsWith(fYear))
+    if(fMonth) r = r.filter(b=>dateField(b)?.slice(5,7)===fMonth)
     if(q.trim()) r = r.filter(b=>{
       const c=clients.find(x=>x.id===b.client_id)
       return c?.name.toLowerCase().includes(q.toLowerCase())||b.concept?.toLowerCase().includes(q.toLowerCase())||b.invoice_no?.toLowerCase().includes(q.toLowerCase())||b.receptor_name?.toLowerCase().includes(q.toLowerCase())
     })
-    return r.sort((a,b)=>new Date(b.issued_at||0)-new Date(a.issued_at||0))
-  },[bb,filter,fYear,fMonth,q,clients])
+    return r.sort((a,b)=> isProg
+      ? new Date(a.due||0)-new Date(b.due||0)
+      : new Date(b.issued_at||0)-new Date(a.issued_at||0))
+  },[bb,filter,fYear,fMonth,q,clients,isProg])
 
   // Agrupar por cliente → razón social
   const grouped = useMemo(()=>{
@@ -769,6 +775,11 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
   const pending=bb.filter(b=>b.status==='Pendiente').reduce((s,b)=>s+(b.amount||0),0)
   const overdue=bb.filter(b=>b.status==='Vencido').reduce((s,b)=>s+(b.amount||0),0)
   const paid=bb.filter(b=>b.status==='Pagado').reduce((s,b)=>s+(b.amount||0),0)
+  const programado=bb.filter(b=>b.status==='Programada').reduce((s,b)=>s+(b.amount||0),0)
+  // Contadores por nº de documentos para las tabs
+  const nEmitidas=bb.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status)).length
+  const nProgramadas=bb.filter(b=>b.status==='Programada').length
+  const nPagadas=bb.filter(b=>b.status==='Pagado').length
   const years=[...new Set(bb.map(b=>b.issued_at?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
 
   const handleTogglePagado = async(b) => {
@@ -788,8 +799,8 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
             <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
           </div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
-          {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
+          {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Programado',fmt(programado),'#EEEAF3','#5B4B8A'],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
               <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
@@ -797,8 +808,8 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
           ))}
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>
-          {[['activo','Pendientes'],['pagado','Pagados'],['all','Todos']].map(([v,l])=>(
-            <button key={v} onClick={()=>setFilter(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          {[['emitidas',`Emitidas (${nEmitidas})`],['programadas',`Programadas (${nProgramadas})`],['pagado',`Pagadas (${nPagadas})`],['all','Todas']].map(([v,l])=>(
+            <button key={v} onClick={()=>setFilter(v)} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
@@ -829,7 +840,7 @@ function BillingView({billing,clients,hideErasmo,onStatusChange,onAdd,onEdit,onI
       )}
 
       <div style={{padding:'10px 20px 100px'}}>
-        {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin cobros</div>}
+        {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{isProg?'Sin facturas programadas':'Sin cobros'}</div>}
         {grouped.map(({client,byEntity})=>{
           const clientTotal = Object.values(byEntity).flat().reduce((a,b)=>a+(b.amount||0),0)
           return (
