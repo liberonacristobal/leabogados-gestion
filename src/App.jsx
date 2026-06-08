@@ -173,6 +173,7 @@ function TasksByPerson({tasks,clients}) {
                         {t.note&&<div style={{fontSize:11,color:C.muted,opacity:.75,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</div>}
                       </div>
                       {u==='overdue'&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>VENCIDA</span>}
+                      {t.due&&(()=>{ const dd=t.due.replace(/-/g,''); const cal=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Vence: '+(t.title||'Tarea')+(client?.name?' · '+client.name.split('/')[0].trim():''))}&dates=${dd}T090000/${dd}T091500&ctz=America/Santiago`; return <a href={cal} target='_blank' rel='noopener noreferrer' title='Agregar a Google Calendar' style={{flexShrink:0,fontSize:13,textDecoration:'none',opacity:.6,marginLeft:2}}>📅</a> })()}
                     </div>
                   )
                 })}
