@@ -416,11 +416,24 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user}) {
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr)
 
-  const vendidoBrutoUF = salesYr.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
-  const costoUF = salesYr.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
+  const ufRef = ufHoy || salesYr.find(s=>s.uf_value)?.uf_value || 40000
+  // Recurrentes proyectadas x12; no-recurrentes tal cual. Sin doble conteo.
+  const esRec = s => s.cobro_type==='mensual' && s.status==='Activo'
+  const ufDeVenta = s => { // aporte en UF de una venta
+    const factor = esRec(s) ? 12 : 1
+    if(s.moneda==='CLP'){ const clp=(parseFloat(s.amount_clp)||0); return ufRef ? (clp*factor)/ufRef : 0 }
+    return (parseFloat(s.amount_uf)||0)*factor
+  }
+  const clpDeVenta = s => { // aporte en CLP de una venta
+    const factor = esRec(s) ? 12 : 1
+    if(s.moneda==='CLP') return (parseFloat(s.amount_clp)||0)*factor
+    const clp = s.amount_clp || (s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
+    return (clp||0)*factor
+  }
+  const vendidoBrutoUF = salesYr.reduce((a,s)=>a+ufDeVenta(s),0)
+  const costoUF = salesYr.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1)),0)
   const vendidoNetoUF = vendidoBrutoUF - costoUF
-  const ufRef = salesYr.find(s=>s.uf_value)?.uf_value || 40000
-  const vendidoBrutoCLP = salesYr.reduce((a,s)=>{ const clp=s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef)); return a+clp },0)
+  const vendidoBrutoCLP = Math.round(salesYr.reduce((a,s)=>a+clpDeVenta(s),0))
   const costoCLP = Math.round(costoUF * ufRef)
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
@@ -445,6 +458,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user}) {
   const negatives = clients.filter(c=>balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [openCaja,setOpenCaja] = useState(false)
+  const [ufHoy,setUfHoy] = useState(null)
+  useEffect(()=>{ let ok=true; (async()=>{ try{ const r=await fetch('https://mindicador.cl/api/uf'); const j=await r.json(); if(ok) setUfHoy(j?.serie?.[0]?.valor||null) }catch(_){} })(); return ()=>{ok=false} },[])
 
   return (
     <div>
