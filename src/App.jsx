@@ -1668,15 +1668,15 @@ const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Otro']
 function GastosForm({clients,expenses,onSave,onClose,preClient}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
-  const [date,setDate] = useState(new Date().toISOString().slice(0,10))
-  const [rows,setRows] = useState([{id:1,category:'CBR',concept:'',amount:''}])
+  const hoy = new Date().toISOString().slice(0,10)
+  const [rows,setRows] = useState([{id:1,category:'CBR',concept:'',amount:'',date:hoy}])
   const [saving,setSaving] = useState(false)
   const [saved,setSaved] = useState(0)
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
   const balance = selectedClient ? (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===selectedClient.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })() : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
 
-  const addRow = () => setRows(p=>[...p,{id:Date.now(),category:'CBR',concept:'',amount:''}])
+  const addRow = () => setRows(p=>[...p,{id:Date.now(),category:'CBR',concept:'',amount:'',date:p[p.length-1]?.date||hoy}])
   const removeRow = id => setRows(p=>p.filter(r=>r.id!==id))
   const updateRow = (id,k,v) => setRows(p=>p.map(r=>r.id===id?{...r,[k]:v}:r))
 
@@ -1694,12 +1694,12 @@ function GastosForm({clients,expenses,onSave,onClose,preClient}) {
     let count=0
     for(const r of valid) {
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date,sale_id:null})
+        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null})
         count++
       } catch(e){ console.error(e) }
     }
     setSaved(count)
-    setRows([{id:Date.now(),category:'CBR',concept:'',amount:''}])
+    setRows([{id:Date.now(),category:'CBR',concept:'',amount:'',date:hoy}])
     setSaving(false)
   }
 
@@ -1736,25 +1736,23 @@ function GastosForm({clients,expenses,onSave,onClose,preClient}) {
 
       {selectedClient&&(
         <>
-          <Fld label='Fecha (aplica a todos)'>
-            <Inp type='date' value={date} onChange={e=>setDate(e.target.value)}/>
-          </Fld>
-
           {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>✓ {saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
 
           {/* Tabla de filas */}
           <div style={{marginBottom:8}}>
-            <div style={{display:'grid',gridTemplateColumns:'90px 1fr 90px 28px',gap:4,marginBottom:4}}>
+            <div style={{display:'grid',gridTemplateColumns:'78px 110px 1fr 80px 24px',gap:4,marginBottom:4}}>
               <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Tipo</div>
+              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Fecha</div>
               <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Descripción</div>
               <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Monto</div>
               <div/>
             </div>
             {rows.map((row,idx)=>(
-              <div key={row.id} style={{display:'grid',gridTemplateColumns:'90px 1fr 90px 28px',gap:4,marginBottom:5}}>
+              <div key={row.id} style={{display:'grid',gridTemplateColumns:'78px 110px 1fr 80px 24px',gap:4,marginBottom:5}}>
                 <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12}}>
                   {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
+                <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11}}/>
                 <input value={row.concept} onChange={e=>updateRow(row.id,'concept',e.target.value)} placeholder='Descripción...' style={inS} onKeyDown={e=>handleKeyDown(e,row.id,'concept')}/>
                 <input type='number' value={row.amount} onChange={e=>updateRow(row.id,'amount',e.target.value)} placeholder='0' style={{...inS,textAlign:'right'}} onKeyDown={e=>handleKeyDown(e,row.id,'amount')} autoFocus={idx===rows.length-1&&idx>0}/>
                 <button onClick={()=>removeRow(row.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
