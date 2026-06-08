@@ -192,7 +192,8 @@ const META_CLP = 400000000
 function CashflowProjection({billing}) {
   const [horizon,setHorizon] = useState(3) // 3 | 6 | 12 meses
   const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due)
-  
+  const programadas = billing.filter(b=>b.status==='Programada'&&b.due)
+
   const months = useMemo(()=>{
     const result = []
     const now = new Date()
@@ -200,15 +201,19 @@ function CashflowProjection({billing}) {
       const d = new Date(now.getFullYear(), now.getMonth()+i, 1)
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
       const label = d.toLocaleDateString('es-CL',{month:'short',year:'2-digit'})
-      const total = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+      const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
       const overdue = pending.filter(b=>b.due<key.slice(0,7)+'-01'&&i===0).reduce((a,b)=>a+(b.amount||0),0)
-      result.push({key,label,total:i===0?total+overdue:total,overdue:i===0?overdue:0})
+      const emitido = i===0?emitidoMes+overdue:emitidoMes
+      const programado = programadas.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+      result.push({key,label,emitido,programado,total:emitido+programado,overdue:i===0?overdue:0})
     }
     return result
   },[billing,horizon])
 
   const maxVal = Math.max(...months.map(m=>m.total),1)
   const totalHorizon = months.reduce((a,m)=>a+m.total,0)
+  const totalEmitido = months.reduce((a,m)=>a+m.emitido,0)
+  const totalProgramado = months.reduce((a,m)=>a+m.programado,0)
 
   return (
     <div style={{padding:'16px 20px 0'}}>
@@ -221,13 +226,18 @@ function CashflowProjection({billing}) {
         </div>
       </div>
       <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`,marginBottom:6}}>
-        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Total esperado {horizon} meses: <strong style={{color:C.text,fontSize:13}}>{fmt(totalHorizon)}</strong></div>
-        <div style={{display:'flex',gap:4,alignItems:'flex-end',height:60}}>
+        <div style={{fontSize:11,color:C.muted,marginBottom:2}}>Total esperado {horizon} meses: <strong style={{color:C.text,fontSize:13}}>{fmt(totalHorizon)}</strong></div>
+        <div style={{display:'flex',gap:12,marginBottom:8,fontSize:10,color:C.muted}}>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:2,background:C.accent,display:'inline-block'}}/>Emitido {fmt(totalEmitido)}</span>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:2,background:'#7C5CBF',display:'inline-block'}}/>Programado {fmt(totalProgramado)}</span>
+        </div>
+        <div style={{display:'flex',gap:4,alignItems:'flex-end',height:64}}>
           {months.map(m=>(
             <div key={m.key} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
               <div style={{fontSize:9,color:C.muted,fontWeight:600}}>{m.total>0?fmt(m.total).replace('$','').replace('.000','k'):''}</div>
               <div style={{width:'100%',borderRadius:3,overflow:'hidden',background:'#E8EEF0',height:40,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
-                {m.total>0&&<div style={{width:'100%',background:m.overdue>0?C.overdue:C.accent,height:`${Math.round((m.total/maxVal)*100)}%`,borderRadius:3,minHeight:3}}/>}
+                {m.programado>0&&<div style={{width:'100%',background:'#7C5CBF',height:`${Math.round((m.programado/maxVal)*100)}%`,minHeight:2}}/>}
+                {m.emitido>0&&<div style={{width:'100%',background:m.overdue>0?C.overdue:C.accent,height:`${Math.round((m.emitido/maxVal)*100)}%`,minHeight:2}}/>}
               </div>
               <div style={{fontSize:9,color:C.muted,textAlign:'center'}}>{m.label}</div>
             </div>
