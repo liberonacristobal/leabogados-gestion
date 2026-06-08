@@ -639,6 +639,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
   const [tramos,setTramos] = useState(sale?.cobro_config?.tramos||[{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
   const [cuotasCustom,setCuotasCustom] = useState(sale?.cobro_config?.cuotasCustom||[{id:1,monto:'',fecha:''}])
   const [mensualInicio,setMensualInicio] = useState(sale?.cobro_config?.mensualInicio||'')
+  const [actualizarPago,setActualizarPago] = useState(false)
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
@@ -678,7 +679,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
   const cobros = generarCobros()
 
   const handleSave = () => {
-    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}})
+    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:actualizarPago})
   }
 
   return (
@@ -840,6 +841,12 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
 
       {Number(f.monto_terceros)>0 && <div style={{fontSize:11,color:C.accent,marginTop:-4,marginBottom:8}}>Neto firma: {fmt((Number(f.amount)||0)-(Number(f.monto_terceros)||0))} · Terceros: {fmt(Number(f.monto_terceros)||0)}</div>}
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
+      {sale?.id&&cobros.length>0&&(
+        <label style={{display:'flex',alignItems:'flex-start',gap:8,padding:'10px 12px',borderRadius:8,background:'#FFF8EC',border:`1px solid #E8D9B5`,marginBottom:10,marginTop:4,cursor:'pointer'}}>
+          <input type='checkbox' checked={actualizarPago} onChange={e=>setActualizarPago(e.target.checked)} style={{marginTop:2,flexShrink:0,cursor:'pointer'}}/>
+          <span style={{fontSize:12,color:C.text}}>Actualizar forma de pago<br/><span style={{fontSize:11,color:C.muted}}>Reemplaza las cuotas programadas por las nuevas. Conserva las ya emitidas y pagadas.</span></span>
+        </label>
+      )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -3673,15 +3680,15 @@ export default function App() {
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const {cobros, cobroType, ...saleData} = f
+      const {cobros, cobroType, _actualizarPago, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
       const p={...saleData,entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
-      // Crear cobros sólo al crear la venta (programadas = sin folio)
-      if(cobros&&cobros.length>0&&!f.id){
+      // Insertar cuotas (función reutilizable)
+      const insertarCuotas = async() => {
         for(const c of cobros){
           await supabase.from('billing').insert({
             client_id:data.client_id,
@@ -3693,6 +3700,30 @@ export default function App() {
             due:c.fecha,
             billing_type:'honorarios',
           })
+        }
+      }
+      // A) Venta NUEVA: crear las cuotas directamente
+      if(cobros&&cobros.length>0&&!f.id){
+        await insertarCuotas()
+      }
+      // B) Venta EDITADA con "Actualizar forma de pago": regeneración segura
+      if(f.id&&_actualizarPago&&cobros&&cobros.length>0){
+        const {data:actuales} = await supabase.from('billing').select('id,invoice_no,status,amount').eq('sale_id',data.id)
+        const programadas = (actuales||[]).filter(b=>b.status==='Programada'&&!b.invoice_no)
+        const conservadas = (actuales||[]).filter(b=>!(b.status==='Programada'&&!b.invoice_no))
+        const nNuevas = cobros.length
+        const totalNuevas = cobros.reduce((a,c)=>a+(c.monto||0),0)
+        const ok = confirm(
+          `Actualizar forma de pago:\n\n`+
+          `• Se CONSERVAN ${conservadas.length} cuota(s) ya emitidas/pagadas (no se tocan).\n`+
+          `• Se REEMPLAZAN ${programadas.length} cuota(s) programadas por ${nNuevas} nueva(s) (total ${fmt(totalNuevas)}).\n\n`+
+          `¿Continuar?`
+        )
+        if(ok){
+          if(programadas.length>0){
+            await supabase.from('billing').delete().in('id', programadas.map(b=>b.id))
+          }
+          await insertarCuotas()
         }
       }
       // Propagar razón social a las cuotas Programadas de esta venta (crea o edita)
