@@ -249,6 +249,82 @@ function CashflowProjection({billing}) {
   )
 }
 
+function PorFacturarMes({billing,clients}) {
+  const [abierto,setAbierto] = useState(false)
+  const [openClient,setOpenClient] = useState(null)
+  const now = new Date()
+  const key = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+  const mesLabel = now.toLocaleDateString('es-CL',{month:'long'})
+  const delMes = billing.filter(b=>b.status==='Programada'&&b.due?.startsWith(key))
+  const total = delMes.reduce((a,b)=>a+(b.amount||0),0)
+
+  // Agrupar por cliente
+  const porCliente = useMemo(()=>{
+    const g = {}
+    delMes.forEach(b=>{
+      const c = clients.find(x=>x.id===b.client_id)
+      const cid = b.client_id||'__none__'
+      const cname = c?.name||'Sin cliente'
+      if(!g[cid]) g[cid] = {name:cname, items:[], total:0}
+      g[cid].items.push(b); g[cid].total += (b.amount||0)
+    })
+    return Object.entries(g).map(([id,v])=>({id,...v})).sort((a,b)=>b.total-a.total)
+  },[billing])
+
+  if(delMes.length===0) return null
+
+  // Sub-agrupar las cuotas de un cliente por razón social
+  const porRazon = (items) => {
+    const g = {}
+    items.forEach(b=>{
+      const rkey = b.receptor_name||'Sin razón social'
+      if(!g[rkey]) g[rkey] = {name:rkey, rut:b.receptor_rut||null, total:0, n:0}
+      g[rkey].total += (b.amount||0); g[rkey].n += 1
+    })
+    return Object.values(g)
+  }
+
+  return (
+    <div style={{padding:'16px 20px 0'}}>
+      <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Por facturar este mes</div>
+      <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+        {/* Fila resumen */}
+        <div onClick={()=>setAbierto(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',cursor:'pointer'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:11,color:C.muted,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
+            <span style={{fontSize:13,color:C.text,fontWeight:600,textTransform:'capitalize'}}>{mesLabel}</span>
+            <span style={{fontSize:11,color:C.muted}}>· {delMes.length} factura{delMes.length!==1?'s':''}</span>
+          </div>
+          <span style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmt(total)}</span>
+        </div>
+        {/* Detalle por cliente */}
+        {abierto&&porCliente.map(cl=>(
+          <div key={cl.id} style={{borderTop:`1px solid ${C.border}`}}>
+            <div onClick={()=>setOpenClient(o=>o===cl.id?null:cl.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px 10px 28px',cursor:'pointer'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:10,color:C.muted,transform:openClient===cl.id?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
+                <span style={{fontSize:13,color:C.text}}>{cl.name}</span>
+                <span style={{fontSize:11,color:C.muted}}>· {cl.items.length}</span>
+              </div>
+              <span style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(cl.total)}</span>
+            </div>
+            {/* Razones sociales + RUT */}
+            {openClient===cl.id&&porRazon(cl.items).map((r,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 14px 7px 46px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+                  {r.rut&&<div style={{fontSize:10,color:C.muted}}>{r.rut}</div>}
+                </div>
+                <div style={{fontSize:11,color:C.muted,flexShrink:0,marginLeft:8}}>{r.n} · {fmt(r.total)}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}) {
   const yr = currentYear
   const bb = hideErasmo ? billing.filter(b=>!b.erasmo) : billing
@@ -415,6 +491,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,hideErasmo,setTab,user}
           </div>
         </div>
       )}
+
+      <PorFacturarMes billing={billing} clients={clients}/>
 
       {tasks?.filter(t=>t.status==='Activo').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
