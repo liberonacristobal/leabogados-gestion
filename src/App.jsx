@@ -849,7 +849,31 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
     </>
   )
 }
-function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload}) {
+function AsignarClienteInline({bill,clients,onAssign}) {
+  const [open,setOpen] = useState(false)
+  const [q,setQ] = useState('')
+  const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'es')).slice(0,6) },[q,clients])
+  if(!open) return (
+    <button onClick={()=>setOpen(true)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Asignar cliente</button>
+  )
+  return (
+    <div style={{position:'relative',minWidth:180}}>
+      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder='Buscar cliente...' style={{width:'100%',padding:'6px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12,boxSizing:'border-box',outline:'none'}}/>
+      {matches.length>0&&(
+        <div style={{position:'absolute',top:'100%',right:0,left:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
+          {matches.map(c=>(
+            <div key={c.id} onMouseDown={()=>{onAssign(bill,c.id);setOpen(false);setQ('')}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:12}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+              <div style={{fontWeight:500}}>{c.name}</div>
+              {c.rut&&<div style={{fontSize:10,color:C.muted}}>{c.rut}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient}) {
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -1072,6 +1096,7 @@ function BillingView({billing,clients,sales,hideErasmo,onStatusChange,onDelete,o
                         </div>
                         <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,marginLeft:8}}>
                           <div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
+                          {client.id==='__none__'&&onAssignClient&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
                           <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',fontSize:11,color:C.muted,cursor:'pointer'}}>✎</button>
                         </div>
                       </div>
@@ -3793,6 +3818,24 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  const handleAssignClient=useCallback(async(bill,clientId)=>{
+    if(!clientId) return
+    try{
+      // 1. Asignar el cliente a la factura
+      await supabase.from('billing').update({client_id:clientId,updated_at:new Date().toISOString()}).eq('id',bill.id)
+      setBilling(p=>p.map(x=>x.id===bill.id?{...x,client_id:clientId}:x))
+      // 2. Aprender el RUT/razón social ↔ cliente (para que próximas facturas se asocien solas)
+      if(bill.receptor_rut||bill.receptor_name){
+        const yaExiste=(clientEntities||[]).some(e=>e.client_id===clientId&&((e.rut&&e.rut===bill.receptor_rut)||(e.name?.toLowerCase()===bill.receptor_name?.toLowerCase())))
+        if(!yaExiste){
+          await supabase.from('client_entities').insert({client_id:clientId,name:bill.receptor_name||null,rut:bill.receptor_rut||null})
+          const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[])
+          setClientEntities(ce)
+        }
+      }
+    }catch(e){alert('Error: '+e.message)}
+  },[clientEntities])
+
   // Eliminar una o varias cuotas (usado por "Ya emitida"); el confirm lo hace el componente
   const handleDeleteBillingBulk=useCallback(async(ids)=>{
     const arr=Array.isArray(ids)?ids:[ids]
@@ -3850,7 +3893,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} hideErasmo={hideErasmo} setTab={setTab} user={user}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} hideErasmo={hideErasmo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
