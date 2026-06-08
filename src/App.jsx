@@ -2025,6 +2025,7 @@ function FondoForm({clients,expenses,clientEntities,onSave,onClose,saving,preCli
         </>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
+        {task && task.status!=='Terminado' && <button onClick={()=>onSave({...f,client_id:selectedClient?.id||task.client_id,status:'Terminado',project:f.project||null,subproject:f.subproject||null})} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.normal}`,background:'transparent',color:C.normal,fontSize:13,fontWeight:700,cursor:'pointer'}}>✓ Marcar terminada</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={saving||!selectedClient||!amount} onClick={()=>onSave({client_id:selectedClient.id,type:'fondo',amount:parseInt(amount),concept,date,category:'Fondo',entity_id:entityId||null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!amount)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar fondo'}
@@ -2207,10 +2208,10 @@ function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete
 
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,user}) {
+function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,user,task}) {
   const [q,setQ] = useState('')
-  const [selectedClient,setSelectedClient] = useState(preClient||null)
-  const [f,setF] = useState({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
+  const [selectedClient,setSelectedClient] = useState(preClient || (task ? clients.find(c=>c.id===task.client_id)||null : null))
+  const [f,setF] = useState(task ? {id:task.id,title:task.title||'',who:task.who||'Cristóbal',due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by} : {title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
   const [showProjects,setShowProjects] = useState(false)
   const [showSubprojects,setShowSubprojects] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -4356,7 +4357,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal title='Nueva tarea' onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} user={user}/></Modal>}
+        {modal?.type==='task'&&<Modal title={modal.data?.id?'Editar tarea':'Nueva tarea'} onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
     </>
