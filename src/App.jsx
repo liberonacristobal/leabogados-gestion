@@ -2064,7 +2064,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   )
 }
 
-function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive}) {
+function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive}) {
   const [sFilter,setSFilter] = useState('Activo')
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
@@ -2145,7 +2145,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onEdit
                   <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{c.name}</div>
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
                 </div>
-                {ended&&<Pill label='Terminado' bg='#ECECEC' color={C.muted} small/>}
+                <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`1px solid ${ended?C.border:C.normal}`,background:ended?'#ECECEC':'transparent',color:ended?C.muted:C.normal,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminar'}</button>
               </div>
               <div style={{display:'flex',gap:12,fontSize:11,flexWrap:'wrap'}}>
                 {!ended&&<span style={{color:C.accent}}>{activeSales} ventas activas</span>}
@@ -3677,6 +3677,15 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  const handleToggleClientStatus=useCallback(async(client)=>{
+    const nuevo = client.status==='Terminado' ? 'Activo' : 'Terminado'
+    try{
+      const {data,error} = await supabase.from('clients').update({status:nuevo,updated_at:new Date().toISOString()}).eq('id',client.id).select().single()
+      if(error) throw error
+      setClients(p=>p.map(x=>x.id===client.id?{...x,status:nuevo}:x))
+    }catch(e){alert('Error: '+e.message)}
+  },[])
+
   // Eliminar una o varias cuotas (usado por "Ya emitida"); el confirm lo hace el componente
   const handleDeleteBillingBulk=useCallback(async(ids)=>{
     const arr=Array.isArray(ids)?ids:[ids]
@@ -3736,7 +3745,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} hideErasmo={hideErasmo} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} hideErasmo={hideErasmo} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
