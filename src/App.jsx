@@ -1921,6 +1921,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                     </div>
                     <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                     <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
+                    {e.entity_id&&(()=>{ const rs=(clientEntities||[]).find(x=>x.id===e.entity_id); return rs?<div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:'uppercase',letterSpacing:.3,opacity:.8}}>{rs.name}{rs.rut?` · ${rs.rut}`:''}</div>:null })()}
                   </div>
                   <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
                     <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
