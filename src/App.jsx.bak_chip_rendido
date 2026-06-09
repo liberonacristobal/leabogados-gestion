@@ -3176,7 +3176,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                 <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
                   {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                   {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600,flexShrink:0}}>Fondo</span>}
-                  {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600,flexShrink:0}}>✓ Rendido</span>}
                   <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                 </div>
                 <div style={{fontSize:12,fontWeight:600,color:isFondo?C.normal:C.overdue,flexShrink:0,marginLeft:8}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
