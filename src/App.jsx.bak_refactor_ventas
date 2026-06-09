@@ -422,22 +422,6 @@ function VentasPorMes({sales,ufHoy}) {
   )
 }
 
-// === CALCULO DE VENTA: unica fuente de verdad (modulo) ===
-// Recurrentes mensuales ACTIVAS se proyectan x12. No-recurrentes tal cual.
-// Lo usan Dashboard y SalesView para que los totales NUNCA difieran.
-const esRecurrente = s => s.cobro_type==='mensual' && s.status==='Activo'
-const ventaUF = (s, ufRef) => {
-  const factor = esRecurrente(s) ? 12 : 1
-  if(s.moneda==='CLP'){ const clp=(parseFloat(s.amount_clp)||0); return ufRef ? (clp*factor)/ufRef : 0 }
-  return (parseFloat(s.amount_uf)||0)*factor
-}
-const ventaCLP = (s, ufRef) => {
-  const factor = esRecurrente(s) ? 12 : 1
-  if(s.moneda==='CLP') return (parseFloat(s.amount_clp)||0)*factor
-  const clp = s.amount_clp || (s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
-  return (clp||0)*factor
-}
-
 function DashboardTasks({tasks,clients,onEdit,onComplete}) {
   const [sortBy,setSortBy] = useState('encargo')
   const [openPersonas,setOpenPersonas] = useState({})
@@ -566,10 +550,19 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,
   useEffect(()=>{ let ok=true; (async()=>{ try{ const r=await fetch('https://mindicador.cl/api/uf'); const j=await r.json(); if(ok) setUfHoy(j?.serie?.[0]?.valor||null) }catch(_){} })(); return ()=>{ok=false} },[])
 
   const ufRef = ufHoy || salesYr.find(s=>s.uf_value)?.uf_value || 40000
-  // Calculo centralizado: delega a funciones de modulo (single source of truth)
-  const esRec = s => esRecurrente(s)
-  const ufDeVenta = s => ventaUF(s, ufRef)
-  const clpDeVenta = s => ventaCLP(s, ufRef)
+  // Recurrentes proyectadas x12; no-recurrentes tal cual. Sin doble conteo.
+  const esRec = s => s.cobro_type==='mensual' && s.status==='Activo'
+  const ufDeVenta = s => {
+    const factor = esRec(s) ? 12 : 1
+    if(s.moneda==='CLP'){ const clp=(parseFloat(s.amount_clp)||0); return ufRef ? (clp*factor)/ufRef : 0 }
+    return (parseFloat(s.amount_uf)||0)*factor
+  }
+  const clpDeVenta = s => {
+    const factor = esRec(s) ? 12 : 1
+    if(s.moneda==='CLP') return (parseFloat(s.amount_clp)||0)*factor
+    const clp = s.amount_clp || (s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
+    return (clp||0)*factor
+  }
   const vendidoBrutoUF = salesYr.reduce((a,s)=>a+ufDeVenta(s),0)
   const costoUF = salesYr.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1)),0)
   const vendidoNetoUF = vendidoBrutoUF - costoUF
@@ -769,9 +762,6 @@ function SalesView({sales,clients,onEdit,onAdd}) {
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
   const [fStatus,setFStatus] = useState('Activo')
-  const [ufHoy,setUfHoy] = useState(null)
-  useEffect(()=>{ let ok=true; (async()=>{ try{ const r=await fetch('https://mindicador.cl/api/uf'); const j=await r.json(); if(ok) setUfHoy(j?.serie?.[0]?.valor||null) }catch(_){} })(); return ()=>{ok=false} },[])
-  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
   const filtered = useMemo(()=>{
     let r = sales
     if(fYear) r = r.filter(s=>String(s.year)===fYear)
@@ -779,8 +769,8 @@ function SalesView({sales,clients,onEdit,onAdd}) {
     if(fStatus) r = r.filter(s=>s.status===fStatus)
     return r.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))
   },[sales,fYear,fArea,fStatus])
-  const totalUF = filtered.reduce((a,s)=>a+ventaUF(s,ufRef),0)
-  const totalCLP = Math.round(filtered.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
+  const totalUF = filtered.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
+  const totalCLP = filtered.reduce((a,s)=>{ const clp=s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0); return a+clp },0)
   const years = [...new Set(sales.map(s=>s.year).filter(Boolean))].sort((a,b)=>b-a)
   if(!years.includes(currentYear)) years.unshift(currentYear)
   return (
@@ -820,7 +810,7 @@ function SalesView({sales,clients,onEdit,onAdd}) {
       <div style={{padding:'4px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>}
         {filtered.map(s=>{
-          const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
+          const clp=s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0)
           const client=clients.find(c=>c.id===s.client_id)
           return (
             <div key={s.id} onClick={()=>onEdit(s)} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`,cursor:'pointer'}}
@@ -832,8 +822,8 @@ function SalesView({sales,clients,onEdit,onAdd}) {
                   <div style={{fontSize:11,color:C.muted}}>{client?.name||'—'}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /a\u00f1o</span>:null}</div>}
-                  {clpA>0&&<div style={{fontSize:11,color:C.muted}}>{fmt(clpA)}</div>}
+                  {s.amount_uf>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(s.amount_uf)}</div>}
+                  {clp>0&&<div style={{fontSize:11,color:C.muted}}>{fmt(clp)}</div>}
                 </div>
               </div>
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
