@@ -4261,7 +4261,6 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
   })
   const terminadas = tasks.filter(t=>{
     if(t.status!=='Terminado') return false
-    if(t.who!==me && t.assigned_by!==me) return false
     if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
     if(filterProject && t.project!==filterProject) return false
     return true
@@ -4382,18 +4381,12 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
         <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
         {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
         {totalMias===0 && asignadas.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas{filterProject||filterClient?' con estos filtros':''}</div>}
-        {terminadas.length>0&&(()=>{
-          const [openTerm,setOpenTerm] = React.useState(false)
-          return (
-            <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-              <div onClick={()=>setOpenTerm(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',userSelect:'none',marginBottom:openTerm?8:0}}>
-                <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,flex:1}}>Terminadas · {terminadas.length}</span>
-                <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:openTerm?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:openTerm?-2:2}}></span>
-              </div>
-              {openTerm&&terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
-            </div>
-          )
-        })()}
+        {terminadas.length>0&&(
+          <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Terminadas · {terminadas.length}</div>
+            {terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
+          </div>
+        )}
       </div>
     </div>
   )
