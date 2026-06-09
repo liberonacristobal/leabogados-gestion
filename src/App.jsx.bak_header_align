@@ -486,8 +486,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
   }
   return (
     <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Tareas del estudio</div>
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
         <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'#F7F7F7',color:C.text}}>
           <option value='encargo'>Orden: fecha de encargo</option>
           <option value='vencimiento'>Orden: fecha de vencimiento</option>
