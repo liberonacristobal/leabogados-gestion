@@ -832,7 +832,7 @@ function SalesView({sales,clients,onEdit,onAdd}) {
                   <div style={{fontSize:11,color:C.muted}}>{client?.name||'—'}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</div>}
+                  {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /a\u00f1o</span>:null}</div>}
                   {clpA>0&&<div style={{fontSize:11,color:C.muted}}>{fmt(clpA)}</div>}
                 </div>
               </div>
