@@ -422,59 +422,79 @@ function VentasPorMes({sales,ufHoy}) {
   )
 }
 
-function DashboardTasks({tasks,clients,onEdit}) {
+function DashboardTasks({tasks,clients,onEdit,onComplete}) {
+  const [openId,setOpenId] = useState(null)
+  const [sortBy,setSortBy] = useState('encargo')
   const activas = tasks.filter(t=>t.status==='Activo')
-  const g = {atrasadas:[],hoy:[],proximas:[],adelante:[],sinFecha:[]}
-  activas.forEach(t=>{
-    if(!t.due){ g.sinFecha.push(t); return }
-    const d = daysLeft(t.due)
-    if(d<0) g.atrasadas.push(t)
-    else if(d===0) g.hoy.push(t)
-    else if(d<=14) g.proximas.push(t)
-    else g.adelante.push(t)
-  })
-  Object.keys(g).forEach(k=>g[k].sort((a,b)=>(daysLeft(a.due)??999)-(daysLeft(b.due)??999)))
-  const SECCIONES = [
-    {key:'atrasadas',label:'Atrasadas',color:C.overdue},
-    {key:'hoy',label:'Hoy',color:C.urgent},
-    {key:'proximas',label:'Próximas',color:C.soon},
-    {key:'adelante',label:'Más adelante',color:C.normal},
-    {key:'sinFecha',label:'Sin fecha',color:C.muted},
-  ]
-  const Card = ({t}) => {
-    const client=clients.find(c=>c.id===t.client_id)
-    return (
-      <div onClick={()=>onEdit&&onEdit(t)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,flex:1}}>{t.title}</div>
-          {t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{t.who}</span>}
-        </div>
-        <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
-          {client&&<span>{client.name}</span>}
-          {t.project&&<span>· {t.project}</span>}
-          {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-        </div>
-        {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
-      </div>
-    )
+  const porPersona = {}
+  activas.forEach(t=>{ const w=t.who||'Sin asignar'; (porPersona[w]=porPersona[w]||[]).push(t) })
+  const nombreCliente = id => clients.find(c=>c.id===id)?.name || ''
+  const cmp = (a,b) => {
+    if(sortBy==='vencimiento'){
+      const da=a.due||'9999-12-31', db=b.due||'9999-12-31'
+      return da<db?-1:da>db?1:0
+    }
+    if(sortBy==='cliente'){
+      const na=nombreCliente(a.client_id).toLowerCase(), nb=nombreCliente(b.client_id).toLowerCase()
+      return na<nb?-1:na>nb?1:0
+    }
+    if(sortBy==='alfabetico'){
+      const ta=(a.title||'').toLowerCase(), tb=(b.title||'').toLowerCase()
+      return ta<tb?-1:ta>tb?1:0
+    }
+    const ca=a.created_at||'', cb=b.created_at||''  // 'encargo' (default)
+    return ca<cb?-1:ca>cb?1:0
   }
+  Object.keys(porPersona).forEach(w=>porPersona[w].sort(cmp))
+  const personas = Object.keys(porPersona).sort()
+  const fmtCreated = iso => { if(!iso) return ''; try{return new Date(iso).toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'2-digit'})}catch(e){return ''} }
   return (
     <div>
-      {SECCIONES.map(sec=>{
-        const items = g[sec.key]
-        if(!items.length) return null
-        return (
-          <div key={sec.key} style={{marginBottom:12}}>
-            <div style={{fontSize:11,fontWeight:700,color:sec.color,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{sec.label} · {items.length}</div>
-            {items.map(t=><Card key={t.id} t={t}/>)}
-          </div>
-        )
-      })}
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
+        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'#F7F7F7',color:C.text}}>
+          <option value='encargo'>Orden: fecha de encargo</option>
+          <option value='vencimiento'>Orden: fecha de vencimiento</option>
+          <option value='cliente'>Orden: cliente</option>
+          <option value='alfabetico'>Orden: alfabético</option>
+        </select>
+      </div>
+      {personas.map(persona=>(
+        <div key={persona} style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{persona} · {porPersona[persona].length}</div>
+          {porPersona[persona].map(t=>{
+            const client=clients.find(c=>c.id===t.client_id)
+            const isOpen=openId===t.id
+            return (
+              <div key={t.id} style={{background:C.card,borderRadius:10,marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,overflow:'hidden'}}>
+                <div onClick={()=>setOpenId(isOpen?null:t.id)} style={{padding:'11px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,flex:1}}>{t.title}</div>
+                  {t.due&&<DaysBadge due={t.due} status={t.status}/>}
+                </div>
+                {isOpen&&(
+                  <div style={{padding:'0 14px 12px',borderTop:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',margin:'8px 0'}}>
+                      {client&&<span>{client.name}</span>}
+                      {t.project&&<span>· {t.project}</span>}
+                      {t.created_at&&<span>· encargada {fmtCreated(t.created_at)}</span>}
+                      {t.due&&<span>· plazo {fmtDate(t.due)}</span>}
+                    </div>
+                    {t.note&&<div style={{fontSize:12,color:C.text,fontStyle:'italic',marginBottom:10}}>{t.note}</div>}
+                    <div style={{display:'flex',gap:8}}>
+                      <button onClick={(e)=>{e.stopPropagation();onComplete&&onComplete(t)}} style={{flex:1,padding:'8px 12px',borderRadius:8,border:`1px solid ${C.normal}`,background:'transparent',color:C.normal,fontSize:12,fontWeight:700,cursor:'pointer'}}>✓ Marcar terminada</button>
+                      <button onClick={(e)=>{e.stopPropagation();onEdit&&onEdit(t)}} style={{flex:1,padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }
 
-function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask}) {
+function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,onCompleteTask}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr)
@@ -671,7 +691,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask}
       {tasks?.filter(t=>t.status==='Activo').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
           <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tareas del estudio</div>
-          <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask}/>
+          <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask} onComplete={onCompleteTask}/>
         </div>
       )}
 
@@ -4425,7 +4445,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} currentUserName={user?.name}/>}
