@@ -403,7 +403,10 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
           + 'Total: $' + totalSel.toLocaleString('es-CL') + '\n\n'
           + 'Quedo a disposición para cualquier consulta.'
         )
-        window.location.href = 'mailto:ee@leabogados.cl,cl@leabogados.cl?subject=' + asunto + '&body=' + cuerpo
+        const mailLink = document.createElement('a')
+        mailLink.href = 'mailto:ee@leabogados.cl,cl@leabogados.cl?subject=' + asunto + '&body=' + cuerpo
+        mailLink.click()
+        setTimeout(()=>generatePDF(), 500)
       }
     } catch(e) { alert('Error: '+e.message) }
     setSaving(false)
