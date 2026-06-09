@@ -3278,15 +3278,6 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
     } catch(e) { alert('Error: '+e.message) }
   }
-  const handleAnularRendicion = async(r) => {
-    if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
-    try {
-      await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
-      await supabase.from('rendiciones').delete().eq('id',r.id)
-      if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
-      if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
-    } catch(e) { alert('Error: '+e.message) }
-  }
   const [sFilter,setSFilter] = useState('Activo')
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
