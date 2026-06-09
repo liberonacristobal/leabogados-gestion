@@ -2076,7 +2076,7 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, expenses, clientEntities, onClose, onRendicionComplete, setExpenses}) {
+function RendicionModal({client, expenses, clientEntities, onClose}) {
   const [periodType, setPeriodType] = useState('month') // month | year | custom
   const [selYear, setSelYear] = useState(String(currentYear))
   const [selMonth, setSelMonth] = useState(String(currentMonth))
@@ -2084,10 +2084,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
   const [toDate, setToDate] = useState('')
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-  const [saving,setSaving] = useState(false)
   const allMovs = expenses.filter(e=>e.client_id===client.id).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0))
-  // Gastos ya rendidos al cliente (para mostrar indicador)
-  const yaRendidos = new Set(allMovs.filter(e=>e.client_rendered_at).map(e=>e.id))
   const rsList = (clientEntities||[]).filter(e=>e.client_id===client.id)
   const haySinAsignar = allMovs.some(e=>!e.entity_id)
   // IDs marcados por defecto: todas las RS + 'sin' (si hay movimientos sin asignar)
@@ -2374,53 +2371,11 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
         </div>
       )}
 
-      {/* Indicador gastos ya rendidos */}
-      {yaRendidos.size>0&&(
-        <div style={{background:'#E4F1EA',borderRadius:8,padding:'8px 12px',marginBottom:10,fontSize:11,color:'#0F6E56'}}>
-          ℹ️ {yaRendidos.size} gasto{yaRendidos.size!==1?'s':''} de este cliente ya fueron rendidos anteriormente y están marcados.
-        </div>
-      )}
       {/* Botones */}
-      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={!filtered.length} onClick={generateExcel} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',opacity:!filtered.length?.5:1}}>↓ Excel</button>
-        <button disabled={!filtered.length||saving} onClick={async()=>{
-          setSaving(true)
-          try {
-            const renderId = crypto.randomUUID()
-            const now = new Date().toISOString()
-            const label = getPeriodLabel()
-            // Generar PDF(s)
-            if(rsList.length===0){ generatePDF() }
-            else { const marcadas=rsList.filter(e=>rsSel.has(e.id)); marcadas.forEach(rs=>generatePDF(rs)); if(rsSel.has('sin')) generatePDF({id:null,name:'Sin razon social asignada',rut:''}) }
-            // Marcar gastos como rendidos al cliente
-            const gastosRendir = filtered.filter(e=>e.type==='gasto'&&!e.client_rendered_at)
-            for(const e of gastosRendir) {
-              await supabase.from('expenses').update({client_rendered_at:now,client_render_id:renderId}).eq('id',e.id)
-            }
-            // Actualizar estado local
-            if(setExpenses) setExpenses(p=>p.map(e=>gastosRendir.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
-            // Registrar rendicion en DB
-            await supabase.from('rendiciones').insert({
-              id: renderId,
-              user_name: 'admin',
-              client_id: client.id,
-              periodo: label,
-              total: gastos,
-              n_gastos: gastosRendir.length,
-              n_clientes: 1,
-              tipo: 'cliente'
-            })
-            if(onRendicionComplete) onRendicionComplete({id:renderId,client_id:client.id,periodo:label,total:gastos,n_gastos:gastosRendir.length,created_at:now,tipo:'cliente'})
-            // Mailto
-            const asunto = encodeURIComponent(`Rendión de fondos — ${client.name} — ${label}`)
-            const cuerpo = encodeURIComponent(`Estimado cliente,\n\nAdjunto la rendión de fondos correspondiente al período ${label}.\n\nCliente: ${client.name}\nPeríodo: ${label}\nGastos: ${gastosRendir.length}\nTotal gastos: $${gastos.toLocaleString('es-CL')}\nSaldo: $${saldo.toLocaleString('es-CL')}\n\nQuedamos a su disposición.\n\nLiberona Escala Abogados\nleabogados.cl`)
-            window.location.href = `mailto:?subject=${asunto}&body=${cuerpo}`
-          } catch(e) { alert('Error: '+e.message) }
-          setSaving(false)
-        }} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(!filtered.length||saving)?.5:1}}>
-          {saving?'Generando...':'↓ PDF + Enviar'}
-        </button>
+        <button disabled={!filtered.length} onClick={()=>{ if(rsList.length===0){ generatePDF(); return } const marcadas=rsList.filter(e=>rsSel.has(e.id)); marcadas.forEach(rs=>generatePDF(rs)); if(rsSel.has('sin')) generatePDF({id:null,name:'Sin razon social asignada',rut:''}) }} style={{flex:1,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!filtered.length?.5:1}}>↓ PDF</button>
       </div>
     </div>
   )
@@ -2725,7 +2680,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
           })}
         </div>
       )}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)}/></Modal>}
     </div>
   )
 }
@@ -3391,7 +3346,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         onAddBilling={()=>onAddBilling(selected)}
         onRendicion={c=>setRendicionClient(c)}
       />
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)}/></Modal>}
     </>
   )
 
