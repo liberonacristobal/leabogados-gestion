@@ -422,7 +422,59 @@ function VentasPorMes({sales,ufHoy}) {
   )
 }
 
-function Dashboard({sales,billing,clients,expenses,tasks,setTab,user}) {
+function DashboardTasks({tasks,clients,onEdit}) {
+  const activas = tasks.filter(t=>t.status==='Activo')
+  const g = {atrasadas:[],hoy:[],proximas:[],adelante:[],sinFecha:[]}
+  activas.forEach(t=>{
+    if(!t.due){ g.sinFecha.push(t); return }
+    const d = daysLeft(t.due)
+    if(d<0) g.atrasadas.push(t)
+    else if(d===0) g.hoy.push(t)
+    else if(d<=14) g.proximas.push(t)
+    else g.adelante.push(t)
+  })
+  Object.keys(g).forEach(k=>g[k].sort((a,b)=>(daysLeft(a.due)??999)-(daysLeft(b.due)??999)))
+  const SECCIONES = [
+    {key:'atrasadas',label:'Atrasadas',color:C.overdue},
+    {key:'hoy',label:'Hoy',color:C.urgent},
+    {key:'proximas',label:'Próximas',color:C.soon},
+    {key:'adelante',label:'Más adelante',color:C.normal},
+    {key:'sinFecha',label:'Sin fecha',color:C.muted},
+  ]
+  const Card = ({t}) => {
+    const client=clients.find(c=>c.id===t.client_id)
+    return (
+      <div onClick={()=>onEdit&&onEdit(t)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,flex:1}}>{t.title}</div>
+          {t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{t.who}</span>}
+        </div>
+        <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
+          {client&&<span>{client.name}</span>}
+          {t.project&&<span>· {t.project}</span>}
+          {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+        </div>
+        {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
+      </div>
+    )
+  }
+  return (
+    <div>
+      {SECCIONES.map(sec=>{
+        const items = g[sec.key]
+        if(!items.length) return null
+        return (
+          <div key={sec.key} style={{marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:sec.color,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{sec.label} · {items.length}</div>
+            {items.map(t=><Card key={t.id} t={t}/>)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr)
@@ -618,8 +670,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user}) {
 
       {tasks?.filter(t=>t.status==='Activo').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tareas por persona</div>
-          <TasksByPerson tasks={tasks} clients={clients}/>
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tareas del estudio</div>
+          <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask}/>
         </div>
       )}
 
@@ -4373,7 +4425,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} currentUserName={user?.name}/>}
