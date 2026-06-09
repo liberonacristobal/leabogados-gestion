@@ -329,6 +329,7 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
   const [tab,setTab] = useState('liquidar') // liquidar | historial | caja
   const [selected,setSelected] = useState(new Set())
   const [saving,setSaving] = useState(false)
+  const [openRendicion,setOpenRendicion] = useState(null)
   const [newMonto,setNewMonto] = useState('')
   const [newFecha,setNewFecha] = useState(new Date().toISOString().slice(0,10))
   const [newNota,setNewNota] = useState('')
@@ -595,26 +596,63 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
       {tab==='historial'&&(
         <div style={{padding:'12px 20px 100px'}}>
           {rendiciones.filter(r=>r.user_name===me).length===0&&<div style={{color:'#888',textAlign:'center',padding:40}}>No hay liquidaciones registradas</div>}
-          {rendiciones.filter(r=>r.user_name===me).sort((a,b)=>b.created_at>a.created_at?1:-1).map(r=>(
-            <div key={r.id} style={{background:'#fff',borderRadius:8,padding:'12px 14px',marginBottom:8,border:'1px solid #E8E8E8'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                <div>
+          {rendiciones.filter(r=>r.user_name===me).sort((a,b)=>b.created_at>a.created_at?1:-1).map(r=>{
+            const isOpen = openRendicion===r.id
+            const gastosR = expenses.filter(e=>e.render_id===r.id)
+            const fmtD = iso => { try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+            return (
+            <div key={r.id} style={{background:'#fff',borderRadius:8,marginBottom:8,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+              <div onClick={()=>setOpenRendicion(isOpen?null:r.id)} style={{padding:'12px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{r.periodo}</div>
-                  <div style={{fontSize:11,color:'#888',marginTop:2}}>{r.n_gastos} gastos · {r.n_clientes} clientes</div>
+                  <div style={{fontSize:11,color:'#888',marginTop:2}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {r.n_clientes} cliente{r.n_clientes!==1?'s':''}</div>
+                  <div style={{fontSize:10,color:'#aaa',marginTop:3}}>{new Date(r.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}</div>
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <div style={{fontSize:14,fontWeight:700,color:'#E24B4A'}}>-{fmtCLP(r.total)}</div>
-                  <button onClick={()=>{
-                    const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
-                    const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+r.n_gastos+'\nTotal: $'+r.total.toLocaleString('es-CL'))
-                    window.location.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2
-                  }} title='Enviar por correo' style={{width:28,height:28,borderRadius:6,border:'1px solid #E8E8E8',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14}}>✉️</button>
+                  <span style={{fontSize:12,color:'#888',transform:isOpen?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
                 </div>
               </div>
-              <div style={{fontSize:10,color:'#aaa',marginTop:6}}>{new Date(r.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}</div>
+              {isOpen&&(
+                <div style={{borderTop:'1px solid #E8E8E8',padding:'10px 14px'}}>
+                  {gastosR.length===0&&<div style={{fontSize:12,color:'#888',textAlign:'center',padding:'8px 0'}}>Sin detalle disponible</div>}
+                  {gastosR.map(e=>{
+                    const cl=clients.find(x=>x.id===e.client_id)
+                    const catBg={'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Otro':'#ECECEC'}[e.category]||'#ECECEC'
+                    return (
+                      <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid #F4F4F4'}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,color:'#3D3D3D',fontWeight:500}}>{e.concept||'—'}</div>
+                          <div style={{fontSize:10,color:'#888',marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
+                            {cl&&<span>{cl.name}</span>}
+                            {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                            {e.date&&<span>{fmtD(e.date)}</span>}
+                          </div>
+                        </div>
+                        <div style={{fontSize:12,fontWeight:700,color:'#E24B4A',flexShrink:0}}>-{fmtCLP(e.amount)}</div>
+                      </div>
+                    )
+                  })}
+                  <div style={{display:'flex',gap:8,marginTop:10}}>
+                    <button onClick={()=>{
+                      const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
+                      const fmtN=n=>'$'+Math.abs(n||0).toLocaleString('es-CL')
+                      const A='#003C50',A2='#537281',A4='#E4E8EB'
+                      const porCliente={}
+                      gastosR.forEach(e=>{ const cn=clients.find(x=>x.id===e.client_id)?.name||'Sin cliente'; if(!porCliente[cn])porCliente[cn]=[]; porCliente[cn].push(e) })
+                      let html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Liquidación — ${r.user_name} — ${r.periodo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;color:#3D3D3D;font-size:11px}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}.firma{font-size:16px;font-weight:700}.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.kpi{background:${A4};border-radius:6px;padding:10px 12px}.kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600}.kpi-value{font-size:15px;font-weight:700;color:${A}}table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:16px}thead tr{background:${A};color:#fff}thead th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase}tbody tr:nth-child(even){background:${A4}}tbody td{padding:6px 10px;border-bottom:1px solid ${A4}}tfoot tr{background:${A4};font-weight:700}tfoot td{padding:7px 10px;border-top:2px solid ${A2}}.section-title{font-size:12px;font-weight:700;color:${A};border-bottom:2px solid ${A};padding-bottom:4px;margin:16px 0 10px}.footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='header'><div><div class='firma'>Liberona Escala Abogados</div><div style='font-size:9px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Liquidación de Caja Chica</div><div style='font-size:11px;opacity:.8;margin-top:2px'>${r.user_name} · ${r.periodo}</div></div></div><div class='kpi-row'><div class='kpi'><div class='kpi-label'>Gastos</div><div class='kpi-value'>${gastosR.length}</div></div><div class='kpi'><div class='kpi-label'>Clientes</div><div class='kpi-value'>${Object.keys(porCliente).length}</div></div><div class='kpi'><div class='kpi-label'>Total</div><div class='kpi-value'>${fmtN(r.total)}</div></div></div>`
+                      Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+e.amount,0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#C2382B'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#C2382B'>-${fmtN(tot)}</td></tr></tfoot></table>` })
+                      html+=`<div class='footer'><span>Liberona Escala Abogados</span><span>${r.user_name} · ${r.periodo}</span><span>CONFIDENCIAL</span></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / PDF</button></body></html>`
+                      const w=window.open('','_blank'); w.document.write(html); w.document.close()
+                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #003C50',background:'transparent',color:'#003C50',fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Descargar PDF</button>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
+            )
+          })}
         </div>
+      )}
       )}
 
       {tab==='caja'&&(
