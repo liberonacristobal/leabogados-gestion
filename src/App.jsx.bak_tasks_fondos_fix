@@ -2617,8 +2617,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text}}>Gastos y Fondos</div>
             <div style={{display:'flex',gap:6}}>
-              <button onClick={()=>onAddFondo(client)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
-              <button onClick={()=>onAddGasto(client)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Gasto</button>
+              <button onClick={onAddFondo} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
+              <button onClick={onAddGasto} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Gasto</button>
             </div>
           </div>
           {clientExpenses.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin movimientos</div>}
@@ -3978,25 +3978,19 @@ function printTasks(tasks, clients, filterLabel) {
   w.document.close()
 }
 
-function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentUserName}) {
+function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,currentUserName}) {
   const [filterClient,setFilterClient] = useState('')
   const [filterProject,setFilterProject] = useState('')
   const me = currentUserName || ''
   const allProjects = [...new Set(tasks.filter(t=>t.project).map(t=>t.project))].sort()
 
-  // Tareas activas (filtradas) y terminadas recientes
+  // Solo tareas activas, aplicando filtros opcionales de cliente/proyecto
   const base = tasks.filter(t=>{
     if(t.status!=='Activo') return false
     if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
     if(filterProject && t.project!==filterProject) return false
     return true
   })
-  const terminadas = tasks.filter(t=>{
-    if(t.status!=='Terminado') return false
-    if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
-    if(filterProject && t.project!==filterProject) return false
-    return true
-  }).sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1).slice(0,30)
 
   // Mis tareas: las asignadas a mi. Tareas que asigne: yo las cree para otros.
   const mias = base.filter(t=>t.who===me)
@@ -4017,35 +4011,20 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
     return g
   }
 
-  const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
-  const bsCard = due => { const d=daysLeft(due); if(d===null) return {bg:'#F1F1F1',col:'#888'}; if(d<0) return {bg:'#FCEBEB',col:'#A32D2D'}; if(d<=1) return {bg:'#FAEEDA',col:'#854F0B'}; if(d<=7) return {bg:'#FAEEDA',col:'#854F0B'}; return {bg:'#F1F1F1',col:'#888'} }
-  const Card = ({t,showWho,done}) => {
+  const Card = ({t,showWho}) => {
     const client=clients.find(c=>c.id===t.client_id)
-    const bs=bsCard(t.due)
     return (
-      <div style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${done?C.muted:urgencyColor(t.due,t.status)}`,overflow:'hidden',opacity:done?.7:1}}>
-        <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:done?C.muted:C.text,lineHeight:1.3,textDecoration:done?'line-through':'none'}}>{t.title}</div>
-            {(client||t.project||t.subproject)&&(
-              <div style={{fontSize:10,color:C.muted,marginTop:3}}>
-                {client&&<span><span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Cliente</span>{' '}{client.name}</span>}
-                {t.project&&<span>{client?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Proy.</span>{' '}{t.project}</span>}
-                {t.subproject&&<span>{(client||t.project)?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Sub.</span>{' '}{t.subproject}</span>}
-              </div>
-            )}
-            {showWho&&t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,marginTop:3,display:'inline-block'}}>{t.who}</span>}
-          </div>
-          {!done&&(
-            <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
-              <span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:8,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>{t.due?'Vence '+fmtVenceShort(t.due):'Sin fecha'}</span>
-              <div style={{display:'flex',gap:4}}>
-                {onComplete&&<button onClick={(e)=>{e.stopPropagation();onComplete(t)}} title='Terminada' style={{width:26,height:26,borderRadius:5,border:'1px solid #1D9E75',background:'#E1F5EE',color:'#0F6E56',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,padding:0}}>&#10003;</button>}
-                <button onClick={(e)=>{e.stopPropagation();onEdit&&onEdit(t)}} title='Editar' style={{width:26,height:26,borderRadius:5,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:13,padding:0}}>&#9998;</button>
-              </div>
-            </div>
-          )}
+      <div onClick={()=>onEdit&&onEdit(t)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,flex:1}}>{t.title}</div>
+          {showWho&&t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{t.who}</span>}
         </div>
+        <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
+          {client&&<span>{client.name}</span>}
+          {t.project&&<span>· {t.project}</span>}
+          {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+        </div>
+        {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
       </div>
     )
   }
@@ -4113,12 +4092,6 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
         <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
         {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
         {totalMias===0 && asignadas.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas{filterProject||filterClient?' con estos filtros':''}</div>}
-        {terminadas.length>0&&(
-          <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Terminadas · {terminadas.length}</div>
-            {terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
-          </div>
-        )}
       </div>
     </div>
   )
@@ -4535,7 +4508,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
-            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
+            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>

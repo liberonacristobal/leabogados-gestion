@@ -4113,12 +4113,6 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
         <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
         {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
         {totalMias===0 && asignadas.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas{filterProject||filterClient?' con estos filtros':''}</div>}
-        {terminadas.length>0&&(
-          <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Terminadas · {terminadas.length}</div>
-            {terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
-          </div>
-        )}
       </div>
     </div>
   )
