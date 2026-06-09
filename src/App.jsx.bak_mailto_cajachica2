@@ -360,7 +360,7 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
   const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
-  const handleLiquidar = async(abrirCorreo=false) => {
+  const handleLiquidar = async() => {
     if(!selected.size) return
     setSaving(true)
     try {
@@ -388,23 +388,7 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
       // Actualizar estado local
       setRendiciones(p=>[{id:renderId,user_name:me,periodo:new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}),total:totalSel,n_gastos:gastosSel.length,n_clientes:clientesIds.length,created_at:now},...p])
       setSelected(new Set())
-      if(abrirCorreo) {
-        generatePDF()
-        const gastosSel2 = pendientes.filter(e=>selected.has(e.id))
-        const cnames = [...new Set(gastosSel2.map(e=>clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'))].join(', ')
-        const periodo = new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'})
-        const asunto = encodeURIComponent('Liquidación caja chica — ' + me + ' — ' + periodo)
-        const cuerpo = encodeURIComponent(
-          'Estimados,\n\nAdjunto la liquidación de caja chica correspondiente.\n\n'
-          + 'Responsable: ' + me + '\n'
-          + 'Período: ' + periodo + '\n'
-          + 'Número de gastos: ' + gastosSel2.length + '\n'
-          + 'Clientes: ' + cnames + '\n'
-          + 'Total: $' + totalSel.toLocaleString('es-CL') + '\n\n'
-          + 'Quedo a disposición para cualquier consulta.'
-        )
-        window.location.href = 'mailto:ee@leabogados.cl,cl@leabogados.cl?subject=' + asunto + '&body=' + cuerpo
-      }
+      alert('Liquidación registrada correctamente')
     } catch(e) { alert('Error: '+e.message) }
     setSaving(false)
   }
@@ -580,8 +564,8 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
                   <div style={{fontSize:15,fontWeight:700,color:'#fff'}}>{fmtCLP(totalSel)}</div>
                 </div>
                 <button onClick={generatePDF} style={{padding:'8px 14px',borderRadius:8,border:'1px solid rgba(255,255,255,.3)',background:'transparent',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>PDF</button>
-                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={{padding:'8px 14px',borderRadius:8,border:'none',background:'#E1F5EE',color:'#0F6E56',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                  {saving?'Guardando...':'Liquidar y enviar'}
+                <button onClick={handleLiquidar} disabled={saving} style={{padding:'8px 14px',borderRadius:8,border:'none',background:'#E1F5EE',color:'#0F6E56',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                  {saving?'Guardando...':'Liquidar'}
                 </button>
               </div>
             </div>
@@ -599,14 +583,7 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
                   <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{r.periodo}</div>
                   <div style={{fontSize:11,color:'#888',marginTop:2}}>{r.n_gastos} gastos · {r.n_clientes} clientes</div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{fontSize:14,fontWeight:700,color:'#E24B4A'}}>-{fmtCLP(r.total)}</div>
-                  <button onClick={()=>{
-                    const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
-                    const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+r.n_gastos+'\nTotal: $'+r.total.toLocaleString('es-CL'))
-                    window.location.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2
-                  }} title='Enviar por correo' style={{width:28,height:28,borderRadius:6,border:'1px solid #E8E8E8',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14}}>✉️</button>
-                </div>
+                <div style={{fontSize:14,fontWeight:700,color:'#E24B4A'}}>-{fmtCLP(r.total)}</div>
               </div>
               <div style={{fontSize:10,color:'#aaa',marginTop:6}}>{new Date(r.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}</div>
             </div>
