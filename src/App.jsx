@@ -422,7 +422,7 @@ function VentasPorMes({sales,ufHoy}) {
   )
 }
 
-// === CALCULO DE VENTA: unica fuente de verdad (modulo) ===
+// === CALCULO DE VENTA: unica fuente de verdad (modulo) === v2
 // Recurrentes mensuales ACTIVAS se proyectan x12. No-recurrentes tal cual.
 // Lo usan Dashboard y SalesView para que los totales NUNCA difieran.
 const esRecurrente = s => s.cobro_type==='mensual' && s.status==='Activo'
