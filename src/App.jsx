@@ -3846,87 +3846,124 @@ function printTasks(tasks, clients, filterLabel) {
   w.document.close()
 }
 
-function TasksOnlyView({tasks,clients,sales,onAddTask,currentUserName}) {
-  const [filterWho,setFilterWho] = useState(currentUserName||'todos')
+function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,currentUserName}) {
   const [filterClient,setFilterClient] = useState('')
   const [filterProject,setFilterProject] = useState('')
-  const [filterDay,setFilterDay] = useState('')
-
-  const today = new Date().toISOString().slice(0,10)
-  const tomorrow = new Date(Date.now()+86400000).toISOString().slice(0,10)
-  const weekEnd = new Date(Date.now()+7*86400000).toISOString().slice(0,10)
-  const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const me = currentUserName || ''
   const allProjects = [...new Set(tasks.filter(t=>t.project).map(t=>t.project))].sort()
 
-  const filtered = tasks.filter(t=>{
+  // Solo tareas activas, aplicando filtros opcionales de cliente/proyecto
+  const base = tasks.filter(t=>{
     if(t.status!=='Activo') return false
-    if(filterWho!=='todos' && t.who!==filterWho) return false
     if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
     if(filterProject && t.project!==filterProject) return false
-    if(filterDay==='hoy' && t.due!==today) return false
-    if(filterDay==='mañana' && t.due!==tomorrow) return false
-    if(filterDay==='semana' && (t.due<today||t.due>weekEnd)) return false
-    if(filterDay==='sinFecha' && t.due) return false
     return true
-  }).sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
+  })
+
+  // Mis tareas: las asignadas a mi. Tareas que asigne: yo las cree para otros.
+  const mias = base.filter(t=>t.who===me)
+  const asignadas = base.filter(t=>t.assigned_by===me && t.who!==me)
+
+  // Agrupar por urgencia dentro de un set
+  const agrupar = (arr) => {
+    const g = {atrasadas:[],hoy:[],proximas:[],adelante:[],sinFecha:[]}
+    arr.forEach(t=>{
+      if(!t.due){ g.sinFecha.push(t); return }
+      const d = daysLeft(t.due)
+      if(d<0) g.atrasadas.push(t)
+      else if(d===0) g.hoy.push(t)
+      else if(d<=14) g.proximas.push(t)
+      else g.adelante.push(t)
+    })
+    Object.keys(g).forEach(k=>g[k].sort((a,b)=>(daysLeft(a.due)??999)-(daysLeft(b.due)??999)))
+    return g
+  }
+
+  const Card = ({t,showWho}) => {
+    const client=clients.find(c=>c.id===t.client_id)
+    return (
+      <div onClick={()=>onEdit&&onEdit(t)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,flex:1}}>{t.title}</div>
+          {showWho&&t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{t.who}</span>}
+        </div>
+        <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
+          {client&&<span>{client.name}</span>}
+          {t.project&&<span>· {t.project}</span>}
+          {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
+        </div>
+        {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
+      </div>
+    )
+  }
+
+  const SECCIONES = [
+    {key:'atrasadas',label:'Atrasadas',color:C.overdue},
+    {key:'hoy',label:'Hoy',color:C.urgent},
+    {key:'proximas',label:'Próximas',color:C.soon},
+    {key:'adelante',label:'Más adelante',color:C.normal},
+    {key:'sinFecha',label:'Sin fecha',color:C.muted},
+  ]
+
+  const Grupo = ({titulo,arr,showWho}) => {
+    const g = agrupar(arr)
+    const total = arr.length
+    return (
+      <div style={{marginBottom:22}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:10,display:'flex',alignItems:'center',gap:8}}>
+          {titulo}<span style={{fontSize:11,fontWeight:600,color:C.muted}}>{total}</span>
+        </div>
+        {total===0 && <div style={{fontSize:12,color:C.muted,padding:'4px 0 10px'}}>Nada por ahora.</div>}
+        {SECCIONES.map(sec=>{
+          const items = g[sec.key]
+          if(!items.length) return null
+          return (
+            <div key={sec.key} style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:sec.color,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{sec.label} · {items.length}</div>
+              {items.map(t=><Card key={t.id} t={t} showWho={showWho}/>)}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const totalMias = mias.length
+  const atrasadasMias = mias.filter(t=>t.due && daysLeft(t.due)<0).length
+  const hoyMias = mias.filter(t=>t.due && daysLeft(t.due)===0).length
 
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mis Tareas</div>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mis tareas</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={()=>printTasks(filtered,clients,filterWho!=='todos'?filterWho:'')} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
+            <button onClick={()=>printTasks(mias,clients,me)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
             <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
         </div>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
-          <select value={filterWho} onChange={e=>setFilterWho(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'#F7F7F7',color:C.text}}>
-            <option value='todos'>Todos</option>
-            {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
-          </select>
-          <select value={filterDay} onChange={e=>setFilterDay(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterDay?C.accent:C.border}`,fontSize:11,background:filterDay?'#E6EEF1':'#F7F7F7',color:filterDay?C.accent:C.text}}>
-            <option value=''>Cualquier fecha</option>
-            <option value='hoy'>Hoy</option>
-            <option value='mañana'>Mañana</option>
-            <option value='semana'>Esta semana</option>
-            <option value='sinFecha'>Sin fecha</option>
-          </select>
+        <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
+          {totalMias} activa{totalMias!==1?'s':''}{atrasadasMias>0?` · ${atrasadasMias} atrasada${atrasadasMias!==1?'s':''}`:''}{hoyMias>0?` · ${hoyMias} para hoy`:''}
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
           <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text}}>
             <option value=''>Todos los proyectos</option>
             {allProjects.map(p=><option key={p} value={p}>{p}</option>)}
           </select>
-          <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:110}}/>
-          {(filterWho!=='todos'||filterDay||filterProject||filterClient)&&
-            <button onClick={()=>{setFilterWho(currentUserName||'todos');setFilterDay('');setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
+          <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:130}}/>
+          {(filterProject||filterClient)&&
+            <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
           }
         </div>
-        <div style={{fontSize:11,color:C.muted}}>{filtered.length} tarea{filtered.length!==1?'s':''}</div>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
-        {filtered.map(t=>{
-          const client=clients.find(c=>c.id===t.client_id)
-          return (
-            <div key={t.id} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,flex:1}}>{t.title}</div>
-                {t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{t.who}</span>}
-              </div>
-              <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
-                {client&&<span>{client.name}</span>}
-                {t.project&&<span>· {t.project}</span>}
-                {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-              </div>
-              {t.note&&<div style={{fontSize:11,color:C.muted,fontStyle:'italic',marginTop:4}}>{t.note}</div>}
-            </div>
-          )
-        })}
-        {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas{filterDay||filterProject||filterClient?' con estos filtros':' activas'}</div>}
+        <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
+        {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
+        {totalMias===0 && asignadas.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas{filterProject||filterClient?' con estos filtros':''}</div>}
       </div>
     </div>
   )
 }
-
 // ─── USERS VIEW (gestión de usuarios para admin) ───────────────────────────────
 function UsersView({onClose}) {
   const [users,setUsers] = useState([])
@@ -4339,7 +4376,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
-            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} onAddTask={()=>setModal({type:'task',data:null})} currentUserName={user?.name}/>}
+            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={()=>setModal({type:'gastos',data:null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={()=>setModal({type:'fondo',data:null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
           </div>
