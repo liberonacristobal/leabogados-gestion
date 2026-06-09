@@ -553,34 +553,6 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
           </div>
         )
       })}
-      {(()=>{
-        const term = tasks.filter(t=>t.status==='Terminado').sort((a,b)=>(b.updated_at||b.created_at||'')>(a.updated_at||a.created_at||'')?1:-1).slice(0,30)
-        if(!term.length) return null
-        return (
-          <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Terminadas · {term.length}</div>
-            {term.map(t=>{
-              const client=clients.find(c=>c.id===t.client_id)
-              return (
-                <div key={t.id} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:'3px solid #ccc',overflow:'hidden',opacity:.7}}>
-                  <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:500,color:C.muted,lineHeight:1.3,textDecoration:'line-through'}}>{t.title}</div>
-                      {(client||t.project)&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>
-                        {client&&<span><span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase'}}>Cliente</span>{' '}{client.name}</span>}
-                        {t.project&&<span>{client?' · ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase'}}>Proy.</span>{' '}{t.project}</span>}
-                      </div>}
-                    </div>
-                    <div style={{flexShrink:0}}>
-                      <span style={{fontSize:10,color:C.muted}}>{t.who}</span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )
-      })()}
     </div>
   )
 }
