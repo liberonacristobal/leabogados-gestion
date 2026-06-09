@@ -423,8 +423,8 @@ function VentasPorMes({sales,ufHoy}) {
 }
 
 function DashboardTasks({tasks,clients,onEdit,onComplete}) {
+  const [openId,setOpenId] = useState(null)
   const [sortBy,setSortBy] = useState('encargo')
-  const [openPersonas,setOpenPersonas] = useState({})
   const activas = tasks.filter(t=>t.status==='Activo')
   const porPersona = {}
   activas.forEach(t=>{ const w=t.who||'Sin asignar'; (porPersona[w]=porPersona[w]||[]).push(t) })
@@ -442,48 +442,12 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
       const ta=(a.title||'').toLowerCase(), tb=(b.title||'').toLowerCase()
       return ta<tb?-1:ta>tb?1:0
     }
-    const ca=a.created_at||'', cb=b.created_at||''
+    const ca=a.created_at||'', cb=b.created_at||''  // 'encargo' (default)
     return ca<cb?-1:ca>cb?1:0
   }
   Object.keys(porPersona).forEach(w=>porPersona[w].sort(cmp))
   const personas = Object.keys(porPersona).sort()
-  const fmtInicio = iso => {
-    if(!iso) return ''
-    try {
-      const d = new Date(iso)
-      const dd = String(d.getDate()).padStart(2,'0')
-      const mm = String(d.getMonth()+1).padStart(2,'0')
-      return dd+'/'+mm+'/'+d.getFullYear()
-    } catch(e) { return '' }
-  }
-  const fmtVence = iso => {
-    if(!iso) return ''
-    try {
-      const d = new Date(iso)
-      const dd = String(d.getDate()).padStart(2,'0')
-      const mm = String(d.getMonth()+1).padStart(2,'0')
-      return dd+'/'+mm
-    } catch(e) { return '' }
-  }
-  const avatarColor = name => {
-    const map = {
-      'Crist\u00f3bal': ['#E6F1FB','#185FA5'],
-      'Erasmo':          ['#E1F5EE','#0F6E56'],
-      'Mart\u00edn':    ['#EAF3DE','#3B6D11'],
-      'Martina':         ['#EEEDFE','#534AB7'],
-      'Rodrigo':         ['#FAEEDA','#854F0B']
-    }
-    return map[name] || ['#F1EFE8','#5F5E5A']
-  }
-  const togglePersona = name => setOpenPersonas(prev=>({...prev,[name]:!prev[name]}))
-  const badgeStyle = due => {
-    const d = daysLeft(due)
-    if(d===null) return {bg:'#F1F1F1',col:'#888'}
-    if(d<0)  return {bg:'#FCEBEB',col:'#A32D2D'}
-    if(d<=1) return {bg:'#FAEEDA',col:'#854F0B'}
-    if(d<=7) return {bg:'#FAEEDA',col:'#854F0B'}
-    return {bg:'#F1F1F1',col:'#888'}
-  }
+  const fmtCreated = iso => { if(!iso) return ''; try{return new Date(iso).toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'2-digit'})}catch(e){return ''} }
   return (
     <div>
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
@@ -491,55 +455,44 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
           <option value='encargo'>Orden: fecha de encargo</option>
           <option value='vencimiento'>Orden: fecha de vencimiento</option>
           <option value='cliente'>Orden: cliente</option>
-          <option value='alfabetico'>Orden: alfab\u00e9tico</option>
+          <option value='alfabetico'>Orden: alfabético</option>
         </select>
       </div>
-      {personas.map(persona=>{
-        const [avBg,avColor]=avatarColor(persona)
-        const isOpen=!!openPersonas[persona]
-        return (
-          <div key={persona} style={{marginBottom:10}}>
-            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:8,background:'#F4F6F7',cursor:'pointer',userSelect:'none',marginBottom:5}}>
-              <div style={{width:24,height:24,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
-              <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1}}>{persona}</span>
-              <span style={{fontSize:12,color:C.muted}}>{porPersona[persona].length} tareas</span>
-              <span style={{fontSize:13,color:C.muted,display:'inline-block',transform:isOpen?'rotate(180deg)':'rotate(0deg)',transition:'transform .2s'}}>&#9660;</span>
-            </div>
-            {isOpen&&porPersona[persona].map(t=>{
-              const client=clients.find(c=>c.id===t.client_id)
-              const bs=badgeStyle(t.due)
-              return (
-                <div key={t.id} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,overflow:'hidden'}}>
-                  <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.3}}>{t.title}</div>
-                      {(client||t.project||t.subproject)&&(
-                        <div style={{fontSize:10,color:C.muted,marginTop:3}}>
-                          {client&&<span><span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Cliente</span>{' '}{client.name}</span>}
-                          {t.project&&<span>{client?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Proy.</span>{' '}{t.project}</span>}
-                          {t.subproject&&<span>{(client||t.project)?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Sub.</span>{' '}{t.subproject}</span>}
-                        </div>
-                      )}
-                      {t.created_at&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Inicio: {fmtInicio(t.created_at)}</div>}
+      {personas.map(persona=>(
+        <div key={persona} style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{persona} · {porPersona[persona].length}</div>
+          {porPersona[persona].map(t=>{
+            const client=clients.find(c=>c.id===t.client_id)
+            const isOpen=openId===t.id
+            return (
+              <div key={t.id} style={{background:C.card,borderRadius:10,marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,overflow:'hidden'}}>
+                <div onClick={()=>setOpenId(isOpen?null:t.id)} style={{padding:'11px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,flex:1}}>{t.title}</div>
+                  {t.due&&<DaysBadge due={t.due} status={t.status}/>}
+                </div>
+                {isOpen&&(
+                  <div style={{padding:'0 14px 12px',borderTop:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap',margin:'8px 0'}}>
+                      {client&&<span>{client.name}</span>}
+                      {t.project&&<span>· {t.project}</span>}
+                      {t.created_at&&<span>· encargada {fmtCreated(t.created_at)}</span>}
+                      {t.due&&<span>· plazo {fmtDate(t.due)}</span>}
                     </div>
-                    <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
-                      <span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:8,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>{t.due?'Vence '+fmtVence(t.due):'Sin vencimiento'}</span>
-                      <div style={{display:'flex',gap:4}}>
-                        <button onClick={()=>onComplete&&onComplete(t)} title='Terminada' style={{width:26,height:26,borderRadius:5,border:'1px solid #1D9E75',background:'#E1F5EE',color:'#0F6E56',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,padding:0}}>&#10003;</button>
-                        <button onClick={()=>onEdit&&onEdit(t)} title='Editar' style={{width:26,height:26,borderRadius:5,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:13,padding:0}}>&#9998;</button>
-                      </div>
+                    {t.note&&<div style={{fontSize:12,color:C.text,fontStyle:'italic',marginBottom:10}}>{t.note}</div>}
+                    <div style={{display:'flex',gap:8}}>
+                      <button onClick={(e)=>{e.stopPropagation();onComplete&&onComplete(t)}} style={{flex:1,padding:'8px 12px',borderRadius:8,border:`1px solid ${C.normal}`,background:'transparent',color:C.normal,fontSize:12,fontWeight:700,cursor:'pointer'}}>✓ Marcar terminada</button>
+                      <button onClick={(e)=>{e.stopPropagation();onEdit&&onEdit(t)}} style={{flex:1,padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
                     </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        )
-      })}
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }
-
 
 function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,onCompleteTask}) {
   const yr = currentYear
