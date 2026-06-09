@@ -645,11 +645,6 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
                       html+=`<div class='footer'><span>Liberona Escala Abogados</span><span>${r.user_name} · ${r.periodo}</span><span>CONFIDENCIAL</span></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / PDF</button></body></html>`
                       const w=window.open('','_blank'); w.document.write(html); w.document.close()
                     }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #003C50',background:'transparent',color:'#003C50',fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Descargar PDF</button>
-                    <button onClick={()=>{
-                      const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
-                      const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
-                      const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
-                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>✉ Enviar por correo</button>
                   </div>
                 </div>
               )}
