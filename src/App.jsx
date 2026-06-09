@@ -2481,7 +2481,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const clientSales = sales.filter(s=>s.client_id===client.id)
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
-  const clientTasks = tasks.filter(t=>t.client_id===client.id&&t.status!=='Completado')
+  const clientTasks = tasks.filter(t=>t.client_id===client.id&&t.status!=='Terminado')
 
   const vendidoUF = clientSales.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
   const facturado = clientBilling.reduce((a,b)=>a+(b.amount||0),0)
@@ -2955,19 +2955,22 @@ function TasksEditor({clientId,sales}) {
   }
 
   const toggle = async(t)=>{
-    const status=t.status==='Completado'?'Activo':'Completado'
-    await supabase.from('tasks').update({status}).eq('id',t.id)
+    const status=t.status==='Terminado'?'Activo':'Terminado'
+    const prev=t.status
     setTasks(p=>p.map(x=>x.id===t.id?{...x,status}:x))
+    const {error}=await supabase.from('tasks').update({status}).eq('id',t.id)
+    if(error){ alert('No se pudo actualizar la tarea: '+error.message); setTasks(p=>p.map(x=>x.id===t.id?{...x,status:prev}:x)) }
   }
 
   const del = async(id)=>{
     if(!confirm('Eliminar tarea?')) return
-    await supabase.from('tasks').delete().eq('id',id)
+    const {error}=await supabase.from('tasks').delete().eq('id',id)
+    if(error){ alert('No se pudo eliminar la tarea: '+error.message); return }
     setTasks(p=>p.filter(x=>x.id!==id))
   }
 
-  const active = tasks?.filter(t=>t.status!=='Completado')||[]
-  const done   = tasks?.filter(t=>t.status==='Completado')||[]
+  const active = tasks?.filter(t=>t.status!=='Terminado')||[]
+  const done   = tasks?.filter(t=>t.status==='Terminado')||[]
   const grouped = {}
   active.forEach(t=>{ const k=t.project||'__none__'; if(!grouped[k])grouped[k]=[]; grouped[k].push(t) })
 
