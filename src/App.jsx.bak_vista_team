@@ -4794,8 +4794,6 @@ export default function App() {
           <div style={{display:'flex',gap:6}}>
             {userRole==='admin'&&<button onClick={()=>setModal({type:'users'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>👥</button>}
             {userRole==='admin'&&<button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>}
-            {userRole==='admin'&&<button onClick={()=>{setUserRole('limited');setTab('tasks')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F4F6F7',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Vista Team</button>}
-            {userRole==='limited'&&<button onClick={()=>{setUserRole('admin');setTab('dashboard')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>← Vista Admin</button>}
           </div>
         </div>
         {loading?(
