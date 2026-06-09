@@ -4226,7 +4226,7 @@ export default function App() {
       const {cobros, cobroType, _actualizarPago, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
-      const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),updated_at:new Date().toISOString()}
+      const p={...saleData,entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
