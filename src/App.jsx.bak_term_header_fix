@@ -564,11 +564,12 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
           <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
             <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Terminadas · {termTasks.length}</div>
             {personasTerm.map(persona=>{
+              const [avBg,avColor]=avatarColor(persona)
               const isOpenT=!!openPersonas['__term__'+persona]
               return (
                 <div key={persona} style={{marginBottom:8}}>
                   <div onClick={()=>setOpenPersonas(prev=>({...prev,['__term__'+persona]:!prev['__term__'+persona]}))} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer',userSelect:'none',marginBottom:isOpenT?8:0}}>
-                    <div style={{width:24,height:24,borderRadius:'50%',background:'#E8E8E8',color:'#888',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
+                    <div style={{width:24,height:24,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0,opacity:.6}}>{persona[0]}</div>
                     <span style={{fontSize:13,fontWeight:500,color:C.muted,flex:1}}>{persona}</span>
                     <span style={{fontSize:12,color:C.muted}}>{' · '}{porPersonaTerm[persona].length}</span>
                     <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:isOpenT?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:isOpenT?-2:2,flexShrink:0,marginLeft:8}}></span>
