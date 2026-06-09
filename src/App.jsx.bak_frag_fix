@@ -4850,7 +4850,7 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
             <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
           }
         </div>
-      </>
+      </>)}
       <div style={{padding:'4px 20px 100px'}}>
         <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
         {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
@@ -4865,6 +4865,7 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
           </div>
         )}
       </div>
+      </>
       <div style={{padding:'4px 20px 100px'}}>
         <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginTop:16,marginBottom:10,paddingTop:14,borderTop:`1px solid ${C.border}`}}>Próximas dos semanas</div>
         {[0,1].map(semIdx=>{

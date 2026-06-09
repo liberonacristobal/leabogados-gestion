@@ -4831,12 +4831,48 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mis tareas</div>
           <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>setVistaCalendario(v=>!v)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:vistaCalendario?C.accent:'transparent',color:vistaCalendario?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{vistaCalendario?'Lista':'Semana'}</button>
             <button onClick={()=>printTasks(mias,clients,me)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
             <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
         </div>
+        {vistaCalendario&&(
+          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+            <button onClick={()=>setSemanaOffset(p=>p-1)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>←</button>
+            <div style={{flex:1,textAlign:'center',fontSize:12,fontWeight:600,color:C.text}}>{semanaLabel}</div>
+            <button onClick={()=>setSemanaOffset(p=>p+1)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>→</button>
+            <button onClick={()=>setSemanaOffset(0)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.accent,fontSize:11,cursor:'pointer'}}>Hoy</button>
+          </div>
+        )}
       </div>
-      <>
+      {vistaCalendario&&(
+        <div style={{padding:'8px 12px 100px',overflowX:'auto'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,minWidth:500}}>
+            {diasSemana.map((dia,i)=>{
+              const iso=fmtISO(dia)
+              const esHoy=iso===fmtISO(hoy)
+              const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado')
+              return (
+                <div key={i} style={{minHeight:120,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'6px 8px',border:`1px solid ${esHoy?C.accent:C.border}`}}>
+                  <div style={{fontSize:10,fontWeight:700,color:esHoy?C.accent:C.muted,marginBottom:2,textTransform:'uppercase'}}>{DIAS[i]}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:esHoy?C.accent:C.text,marginBottom:5}}>{fmtLabel(dia)}</div>
+                  {tareasDelDia.length===0&&<div style={{fontSize:9,color:C.muted,fontStyle:'italic'}}>Sin tareas</div>}
+                  {tareasDelDia.map(t=>{
+                    const cl=clients.find(x=>x.id===t.client_id)
+                    return (
+                      <div key={t.id} onClick={()=>onEdit(t)} style={{background:'#fff',borderRadius:5,padding:'4px 6px',marginBottom:3,cursor:'pointer',borderLeft:`3px solid ${C.accent}`,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                        <div style={{fontSize:10,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                        {cl&&<div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      {!vistaCalendario&&(<>
         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
           {totalMias} activa{totalMias!==1?'s':''}{atrasadasMias>0?` · ${atrasadasMias} atrasada${atrasadasMias!==1?'s':''}`:''}{hoyMias>0?` · ${hoyMias} para hoy`:''}
         </div>
@@ -4850,7 +4886,7 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
             <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
           }
         </div>
-      </>
+      </>)}
       <div style={{padding:'4px 20px 100px'}}>
         <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
         {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
@@ -4865,45 +4901,7 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
           </div>
         )}
       </div>
-      <div style={{padding:'4px 20px 100px'}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginTop:16,marginBottom:10,paddingTop:14,borderTop:`1px solid ${C.border}`}}>Próximas dos semanas</div>
-        {[0,1].map(semIdx=>{
-          const lunesSem = new Date(hoy)
-          lunesSem.setDate(hoy.getDate()-((hoy.getDay()+6)%7)+semIdx*7)
-          lunesSem.setHours(0,0,0,0)
-          const dias = Array.from({length:5},(_,i)=>{ const d=new Date(lunesSem); d.setDate(lunesSem.getDate()+i); return d })
-          const finSem = new Date(dias[4])
-          const tagLabel = String(dias[0].getDate()).padStart(2,'0')+'/'+String(dias[0].getMonth()+1).padStart(2,'0')+' — '+String(finSem.getDate()).padStart(2,'0')+'/'+String(finSem.getMonth()+1).padStart(2,'0')
-          return (
-            <div key={semIdx} style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontWeight:600,color:C.accent,marginBottom:5}}>{semIdx===0?'Esta semana':'Próxima semana'} · {tagLabel}</div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4}}>
-                {dias.map((dia,i)=>{
-                  const iso=fmtISO(dia)
-                  const esHoy=iso===fmtISO(hoy)
-                  const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado'&&(t.who===me||t.assigned_by===me))
-                  return (
-                    <div key={i} style={{minHeight:90,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`}}>
-                      <div style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.muted,textTransform:'uppercase'}}>{DIAS[i]}</div>
-                      <div style={{fontSize:10,fontWeight:600,color:esHoy?C.accent:C.text,marginBottom:4}}>{String(dia.getDate()).padStart(2,'0')}</div>
-                      {tareasDelDia.length===0&&<div style={{fontSize:8,color:'#bbb',fontStyle:'italic'}}>—</div>}
-                      {tareasDelDia.map(t=>{
-                        const cl=clients.find(x=>x.id===t.client_id)
-                        return (
-                          <div key={t.id} onClick={()=>onEdit(t)} style={{background:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
-                            <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
-                            {cl&&<div style={{fontSize:8,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      )}
     </div>
   )
 }
