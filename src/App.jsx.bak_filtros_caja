@@ -332,20 +332,11 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
   const [newMonto,setNewMonto] = useState('')
   const [newFecha,setNewFecha] = useState(new Date().toISOString().slice(0,10))
   const [newNota,setNewNota] = useState('')
-  const [fDesde,setFDesde] = useState('')
-  const [fHasta,setFHasta] = useState('')
-  const [fCliente,setFCliente] = useState('')
-  const [fCat,setFCat] = useState('')
 
   // Gastos pendientes de rendir (tipo gasto, no rendidos aun)
-  const pendientes = expenses.filter(e=>{
-    if(e.type!=='gasto' || e.rendered_at) return false
-    if(fDesde && e.date && e.date < fDesde) return false
-    if(fHasta && e.date && e.date > fHasta) return false
-    if(fCliente && e.client_id !== fCliente) return false
-    if(fCat && e.category !== fCat) return false
-    return true
-  }).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+  const pendientes = expenses.filter(e=>
+    e.type==='gasto' && !e.rendered_at
+  ).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
 
   // Caja actual del usuario
   const miCaja = pettyCash.filter(p=>p.user_name===me)
@@ -485,49 +476,8 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
 
       {tab==='liquidar'&&(
         <div style={{padding:'12px 20px 100px'}}>
-          <div style={{background:'#F4F6F7',borderRadius:8,padding:'10px 12px',marginBottom:10}}>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Período</div>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <input type='date' value={fDesde} onChange={e=>setFDesde(e.target.value)}
-                  style={{flex:1,padding:'5px 7px',borderRadius:6,border:'0.5px solid #D0D5DB',background:'#fff',fontSize:11,boxSizing:'border-box',outline:'none'}}/>
-                <span style={{fontSize:11,color:'#888'}}>→</span>
-                <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)}
-                  style={{flex:1,padding:'5px 7px',borderRadius:6,border:'0.5px solid #D0D5DB',background:'#fff',fontSize:11,boxSizing:'border-box',outline:'none'}}/>
-              </div>
-            </div>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Cliente</div>
-              <select value={fCliente} onChange={e=>setFCliente(e.target.value)}
-                style={{width:'100%',padding:'5px 7px',borderRadius:6,border:'0.5px solid #D0D5DB',background:'#fff',fontSize:11,boxSizing:'border-box'}}>
-                <option value=''>Todos los clientes</option>
-                {[...new Set(expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&e.client_id).map(e=>e.client_id))]
-                  .map(cid=>{ const cl=clients.find(c=>c.id===cid); return cl?<option key={cid} value={cid}>{cl.name}</option>:null })}
-              </select>
-            </div>
-            <div>
-              <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Tipo de gasto</div>
-              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                {['','Notaria','CBR','Diario Oficial','Otro'].map(cat=>(
-                  <button key={cat||'todos'} onClick={()=>setFCat(cat)}
-                    style={{padding:'3px 9px',borderRadius:10,fontSize:10,fontWeight:500,cursor:'pointer',
-                      border:'0.5px solid '+(fCat===cat?'#003C50':'#D0D5DB'),
-                      background:fCat===cat?'#003C50':'#fff',
-                      color:fCat===cat?'#fff':'#537281'}}>
-                    {cat||'Todos'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {(fDesde||fHasta||fCliente||fCat)&&(
-              <button onClick={()=>{setFDesde('');setFHasta('');setFCliente('');setFCat('')}}
-                style={{marginTop:8,fontSize:10,color:'#537281',background:'none',border:'none',cursor:'pointer',padding:0}}>
-                × Limpiar filtros
-              </button>
-            )}
-          </div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <div style={{fontSize:12,color:'#537281'}}>{pendientes.length} gastos · {fmtCLP(pendientes.reduce((a,e)=>a+e.amount,0))}</div>
+            <div style={{fontSize:12,color:'#537281'}}>{pendientes.length} gastos pendientes de rendir</div>
             {selected.size>0&&<div style={{fontSize:12,fontWeight:600,color:'#003C50'}}>{selected.size} sel. · {fmtCLP(totalSel)}</div>}
           </div>
           {pendientes.length===0&&<div style={{color:'#888',textAlign:'center',padding:40}}>No hay gastos pendientes de rendir</div>}
