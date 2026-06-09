@@ -599,10 +599,6 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
   )
 }
 
-    </div>
-  )
-}
-
 
 function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,onCompleteTask}) {
   const yr = currentYear
