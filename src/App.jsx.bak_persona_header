@@ -500,11 +500,11 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
         const isOpen=!!openPersonas[persona]
         return (
           <div key={persona} style={{marginBottom:10}}>
-            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer',userSelect:'none',marginBottom:8}}>
+            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:8,background:'#F4F6F7',cursor:'pointer',userSelect:'none',marginBottom:5}}>
               <div style={{width:24,height:24,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
-              <span style={{fontSize:13,fontWeight:500,color:C.text}}>{persona}</span>
-              <span style={{fontSize:12,color:C.muted,flex:1}}>{' · '}{porPersona[persona].length}</span>
-              <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:isOpen?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:isOpen?-2:2,flexShrink:0}}></span>
+              <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1}}>{persona}</span>
+              <span style={{fontSize:12,color:C.muted}}>{porPersona[persona].length} tareas</span>
+              <span style={{fontSize:13,color:C.muted,display:'inline-block',transform:isOpen?'rotate(180deg)':'rotate(0deg)',transition:'transform .2s'}}>&#9660;</span>
             </div>
             {isOpen&&porPersona[persona].map(t=>{
               const client=clients.find(c=>c.id===t.client_id)
