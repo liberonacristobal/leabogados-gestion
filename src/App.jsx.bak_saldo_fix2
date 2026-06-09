@@ -2085,7 +2085,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
   const allMovs = expenses.filter(e=>e.client_id===client.id)
   const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
   const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+e.amount,0)
-  const saldoActual = fondosDisp - gastosYaRend
+  const saldoActual = fondosDisp - allMovs.filter(e=>e.type==='gasto').reduce((a,e)=>a+e.amount,0)
 
   // Gastos disponibles para rendir (no rendidos aun)
   const disponibles = allMovs.filter(e=>{
