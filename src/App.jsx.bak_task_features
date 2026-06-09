@@ -650,6 +650,16 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
                       const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
                       const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
                     }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>✉ Enviar por correo</button>
+                    <button onClick={async()=>{
+                      if(!confirm('¿Anular esta liquidación? Los gastos volverán a estar disponibles.')) return
+                      try {
+                        await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
+                        await supabase.from('rendiciones').delete().eq('id',r.id)
+                        setRendiciones(p=>p.filter(x=>x.id!==r.id))
+                        if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
+                        setOpenRendicion(null)
+                      } catch(e){ alert('Error: '+e.message) }
+                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #E24B4A',background:'transparent',color:'#E24B4A',fontSize:11,fontWeight:600,cursor:'pointer'}}>Anular liquidación</button>
                   </div>
                 </div>
               )}
@@ -2944,49 +2954,6 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,user
   const [f,setF] = useState(task ? {id:task.id,title:task.title||'',who:task.who||'Cristóbal',due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by} : {title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
   const [showProjects,setShowProjects] = useState(false)
   const [showSubprojects,setShowSubprojects] = useState(false)
-  const [comments,setComments] = useState([])
-  const [links,setLinks] = useState([])
-  const [newComment,setNewComment] = useState('')
-  const [newLinkUrl,setNewLinkUrl] = useState('')
-  const [newLinkTitle,setNewLinkTitle] = useState('')
-  const [subtasks,setSubtasks] = useState(task?.subtasks||[])
-  const [newSubtask,setNewSubtask] = useState('')
-  const [loadingExtras,setLoadingExtras] = useState(false)
-
-  React.useEffect(()=>{
-    if(!task?.id) return
-    setLoadingExtras(true)
-    Promise.all([
-      supabase.from('task_comments').select('*').eq('task_id',task.id).order('created_at',{ascending:true}).then(({data})=>data||[]),
-      supabase.from('task_links').select('*').eq('task_id',task.id).order('created_at',{ascending:true}).then(({data})=>data||[])
-    ]).then(([cm,lk])=>{ setComments(cm); setLinks(lk) }).finally(()=>setLoadingExtras(false))
-  },[task?.id])
-
-  const addComment = async() => {
-    if(!newComment.trim()||!task?.id) return
-    const {data,error} = await supabase.from('task_comments').insert({task_id:task.id,user_name:user?.name||'Usuario',content:newComment.trim()}).select().single()
-    if(!error){ setComments(p=>[...p,data]); setNewComment('') }
-    else alert('Error: '+error.message)
-  }
-  const deleteComment = async(id) => {
-    await supabase.from('task_comments').delete().eq('id',id)
-    setComments(p=>p.filter(x=>x.id!==id))
-  }
-  const addLink = async() => {
-    if(!newLinkUrl.trim()||!task?.id) return
-    const url = newLinkUrl.startsWith('http')?newLinkUrl:'https://'+newLinkUrl
-    const {data,error} = await supabase.from('task_links').insert({task_id:task.id,user_name:user?.name||'Usuario',url,title:newLinkTitle.trim()||null}).select().single()
-    if(!error){ setLinks(p=>[...p,data]); setNewLinkUrl(''); setNewLinkTitle('') }
-    else alert('Error: '+error.message)
-  }
-  const deleteLink = async(id) => {
-    await supabase.from('task_links').delete().eq('id',id)
-    setLinks(p=>p.filter(x=>x.id!==id))
-  }
-  const toggleSubtask = (idx) => setSubtasks(p=>p.map((s,i)=>i===idx?{...s,done:!s.done}:s))
-  const addSubtask = () => { if(!newSubtask.trim()) return; setSubtasks(p=>[...p,{text:newSubtask.trim(),done:false}]); setNewSubtask('') }
-  const deleteSubtask = (idx) => setSubtasks(p=>p.filter((_,i)=>i!==idx))
-
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
 
@@ -3110,62 +3077,9 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,user
         </>
       )}
 
-      {task?.id&&(
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Subtareas {subtasks.length>0&&`(${subtasks.filter(s=>s.done).length}/${subtasks.length})`}</div>
-          {subtasks.map((s,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
-              <div onClick={()=>toggleSubtask(i)} style={{width:16,height:16,borderRadius:3,border:`2px solid ${s.done?'#1D9E75':'#ccc'}`,background:s.done?'#1D9E75':'#fff',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                {s.done&&<span style={{color:'#fff',fontSize:10}}>&#10003;</span>}
-              </div>
-              <span style={{flex:1,fontSize:12,color:C.text,textDecoration:s.done?'line-through':'none',opacity:s.done?.6:1}}>{s.text}</span>
-              <button onClick={()=>deleteSubtask(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14}}>×</button>
-            </div>
-          ))}
-          <div style={{display:'flex',gap:6,marginTop:6}}>
-            <input value={newSubtask} onChange={e=>setNewSubtask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addSubtask()} placeholder='Nueva subtarea...' style={{flex:1,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,outline:'none'}}/>
-            <button onClick={addSubtask} style={{padding:'7px 12px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+</button>
-          </div>
-        </div>
-      )}
-      {task?.id&&(
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Comentarios {comments.length>0&&`(${comments.length})`}</div>
-          {loadingExtras&&<div style={{fontSize:11,color:C.muted}}>Cargando...</div>}
-          {comments.map(cm=>(
-            <div key={cm.id} style={{background:'#F7F8F9',borderRadius:7,padding:'8px 10px',marginBottom:5}}>
-              <div style={{display:'flex',justifyContent:'space-between'}}>
-                <div style={{fontSize:10,fontWeight:600,color:C.accent,marginBottom:3}}>{cm.user_name} · {new Date(cm.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'short'})} {new Date(cm.created_at).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})}</div>
-                <button onClick={()=>deleteComment(cm.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13}}>×</button>
-              </div>
-              <div style={{fontSize:12,color:C.text,lineHeight:1.4}}>{cm.content}</div>
-            </div>
-          ))}
-          <div style={{display:'flex',gap:6}}>
-            <input value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addComment()} placeholder='Agregar comentario...' style={{flex:1,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,outline:'none'}}/>
-            <button onClick={addComment} style={{padding:'7px 12px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+</button>
-          </div>
-        </div>
-      )}
-      {task?.id&&(
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Links {links.length>0&&`(${links.length})`}</div>
-          {links.map(lk=>(
-            <div key={lk.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
-              <a href={lk.url} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>[link] {lk.title||lk.url}</a>
-              <button onClick={()=>deleteLink(lk.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13}}>×</button>
-            </div>
-          ))}
-          <div style={{display:'flex',gap:6,marginTop:6}}>
-            <input value={newLinkTitle} onChange={e=>setNewLinkTitle(e.target.value)} placeholder='Nombre (opcional)' style={{width:110,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,outline:'none',flexShrink:0}}/>
-            <input value={newLinkUrl} onChange={e=>setNewLinkUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addLink()} placeholder='https://...' style={{flex:1,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,outline:'none'}}/>
-            <button onClick={addLink} style={{padding:'7px 12px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+</button>
-          </div>
-        </div>
-      )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,project:f.project||null,subproject:f.subproject||null,subtasks})}
+        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,project:f.project||null,subproject:f.subproject||null})}
           style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!f.title.trim())?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar tarea'}
         </button>
@@ -4705,18 +4619,6 @@ function printTasks(tasks, clients, filterLabel) {
 }
 
 function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentUserName}) {
-  const [vistaCalendario,setVistaCalendario] = useState(false)
-  const [semanaOffset,setSemanaOffset] = useState(0)
-  const hoy = new Date()
-  const lunesSemana = new Date(hoy)
-  lunesSemana.setDate(hoy.getDate()-((hoy.getDay()+6)%7)+semanaOffset*7)
-  lunesSemana.setHours(0,0,0,0)
-  const diasSemana = Array.from({length:7},(_,i)=>{ const d=new Date(lunesSemana); d.setDate(lunesSemana.getDate()+i); return d })
-  const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
-  const fmtISO = d => d.toISOString().slice(0,10)
-  const fmtLabel = d => String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')
-  const semanaLabel = fmtLabel(diasSemana[0])+' — '+fmtLabel(diasSemana[6])+' '+diasSemana[6].getFullYear()
-
   const [filterClient,setFilterClient] = useState('')
   const [filterProject,setFilterProject] = useState('')
   const [openTerm,setOpenTerm] = useState(false)
@@ -4831,48 +4733,10 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mis tareas</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={()=>setVistaCalendario(v=>!v)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:vistaCalendario?C.accent:'transparent',color:vistaCalendario?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{vistaCalendario?'Lista':'Semana'}</button>
             <button onClick={()=>printTasks(mias,clients,me)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
             <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
         </div>
-        {vistaCalendario&&(
-          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
-            <button onClick={()=>setSemanaOffset(p=>p-1)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>←</button>
-            <div style={{flex:1,textAlign:'center',fontSize:12,fontWeight:600,color:C.text}}>{semanaLabel}</div>
-            <button onClick={()=>setSemanaOffset(p=>p+1)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>→</button>
-            <button onClick={()=>setSemanaOffset(0)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.accent,fontSize:11,cursor:'pointer'}}>Hoy</button>
-          </div>
-        )}
-      </div>
-      {vistaCalendario&&(
-        <div style={{padding:'8px 12px 100px',overflowX:'auto'}}>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,minWidth:500}}>
-            {diasSemana.map((dia,i)=>{
-              const iso=fmtISO(dia)
-              const esHoy=iso===fmtISO(hoy)
-              const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado')
-              return (
-                <div key={i} style={{minHeight:120,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'6px 8px',border:`1px solid ${esHoy?C.accent:C.border}`}}>
-                  <div style={{fontSize:10,fontWeight:700,color:esHoy?C.accent:C.muted,marginBottom:2,textTransform:'uppercase'}}>{DIAS[i]}</div>
-                  <div style={{fontSize:11,fontWeight:600,color:esHoy?C.accent:C.text,marginBottom:5}}>{fmtLabel(dia)}</div>
-                  {tareasDelDia.length===0&&<div style={{fontSize:9,color:C.muted,fontStyle:'italic'}}>Sin tareas</div>}
-                  {tareasDelDia.map(t=>{
-                    const cl=clients.find(x=>x.id===t.client_id)
-                    return (
-                      <div key={t.id} onClick={()=>onEdit(t)} style={{background:'#fff',borderRadius:5,padding:'4px 6px',marginBottom:3,cursor:'pointer',borderLeft:`3px solid ${C.accent}`,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
-                        <div style={{fontSize:10,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
-                        {cl&&<div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      {!vistaCalendario&&(
         <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
           {totalMias} activa{totalMias!==1?'s':''}{atrasadasMias>0?` · ${atrasadasMias} atrasada${atrasadasMias!==1?'s':''}`:''}{hoyMias>0?` · ${hoyMias} para hoy`:''}
         </div>
@@ -4901,7 +4765,6 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
           </div>
         )}
       </div>
-      )}
     </div>
   )
 }
