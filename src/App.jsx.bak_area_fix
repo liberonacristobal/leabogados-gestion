@@ -39,7 +39,6 @@ const DaysBadge = ({due,status}) => {
 }
 const AreaChip = ({area}) => {
   const bg={Corporativo:'#E3EEF3',Tributario:'#F2E9DE',Laboral:'#F2E9DE',Otro:'#ECECEC'}
-  if(!area) return null
   return <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:bg[area]||'#ECECEC',color:'#56616B',fontWeight:600,whiteSpace:'nowrap'}}>{area}</span>
 }
 const Pill = ({label,bg,color,small}) => <span style={{display:'inline-block',padding:small?'1px 7px':'2px 9px',borderRadius:20,fontSize:small?10:11,fontWeight:600,color:color||'#fff',background:bg||C.accent,whiteSpace:'nowrap'}}>{label}</span>
@@ -873,7 +872,7 @@ function MiniClientForm({onSave,onCancel}) {
 function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onDelete,saving}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
-  const [f,setF] = useState(sale ? {...sale, area: sale.area||'Corporativo'} : {client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas',entity_id:''})
+  const [f,setF] = useState(sale||{client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas',entity_id:''})
   const [clients,setClients] = useState(initialClients)
   const [clientQ,setClientQ] = useState('')
   const [showNewClient,setShowNewClient] = useState(false)
