@@ -790,7 +790,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,
 
       <PorFacturarMes billing={billing} clients={clients}/>
 
-      {tasks?.filter(t=>t.status==='Activo'||t.status==='Terminado').length>0&&(
+      {tasks?.filter(t=>t.status==='Activo').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
           <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask} onComplete={onCompleteTask}/>
         </div>
