@@ -738,6 +738,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,
 
       {tasks?.filter(t=>t.status==='Activo').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Tareas del estudio</div>
           <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask} onComplete={onCompleteTask}/>
         </div>
       )}
