@@ -2096,7 +2096,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
   }).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
 
   const totalSel = disponibles.filter(e=>selected.has(e.id)).reduce((a,e)=>a+e.amount,0)
-  const saldoTrasRendicion = saldoActual - totalSel
+  const saldoTrasRendicion = saldoActual + totalSel
 
   const toggleAll = () => {
     if(selected.size===disponibles.length) setSelected(new Set())
