@@ -2154,6 +2154,7 @@ function FondoForm({clients,expenses,clientEntities,onSave,onClose,saving,preCli
         </>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
+        {task && task.status!=='Terminado' && <button onClick={()=>onSave({...f,client_id:selectedClient?.id||task.client_id,status:'Terminado',project:f.project||null,subproject:f.subproject||null})} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.normal}`,background:'transparent',color:C.normal,fontSize:13,fontWeight:700,cursor:'pointer'}}>✓ Marcar terminada</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={saving||!selectedClient||!amount} onClick={()=>onSave({client_id:selectedClient.id,type:'fondo',amount:parseInt(amount),concept,date,category:'Fondo',entity_id:entityId||null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!amount)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar fondo'}
