@@ -250,78 +250,6 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,onEdit,onAdd,
   )
 }
 
-
-// ─── NUEVO CLIENTE LIMITED (con anti-duplicado) ───────────────────────────
-function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
-  const [name,setName] = useState('')
-  const [type,setType] = useState('Corporativo')
-  const [rut,setRut] = useState('')
-  const [showConfirm,setShowConfirm] = useState(false)
-
-  const similares = useMemo(()=>{
-    if(name.trim().length<3) return []
-    const q = name.trim().toLowerCase()
-    return clients.filter(c=>
-      c.name.toLowerCase().includes(q) ||
-      q.split(' ').some(w=>w.length>2&&c.name.toLowerCase().includes(w))
-    ).slice(0,5)
-  },[name,clients])
-
-  const handleGuardar = () => {
-    if(!name.trim()) return
-    if(similares.length>0 && !showConfirm) { setShowConfirm(true); return }
-    onSave({name:name.trim(),type,rut:rut.trim()||null,status:'Activo'})
-  }
-
-  return (
-    <div>
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:6}}>Nombre del cliente</div>
-        <input value={name} onChange={e=>{setName(e.target.value);setShowConfirm(false)}} placeholder='Nombre completo...' autoFocus
-          style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#F7F7F7',fontSize:14,boxSizing:'border-box',outline:'none'}}/>
-        {similares.length>0&&(
-          <div style={{marginTop:8,padding:'10px 12px',borderRadius:8,background:'#FAEEDA',border:'1px solid #EF9F27'}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#854F0B',marginBottom:6}}>{'\u26a0\ufe0f'} Clientes similares encontrados:</div>
-            {similares.map(s=>(
-              <div key={s.id} style={{fontSize:12,color:'#854F0B',padding:'2px 0'}}>{s.name}{s.type?` · ${s.type}`:''}</div>
-            ))}
-            <div style={{fontSize:11,color:'#854F0B',marginTop:6}}>Verifica que no sea un duplicado antes de continuar.</div>
-          </div>
-        )}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-        <div>
-          <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:6}}>Tipo</div>
-          <select value={type} onChange={e=>setType(e.target.value)}
-            style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#F7F7F7',fontSize:13,boxSizing:'border-box'}}>
-            {['Corporativo','Tributario','Laboral','Otro'].map(t=><option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:6}}>RUT (opcional)</div>
-          <input value={rut} onChange={e=>setRut(e.target.value)} placeholder='12.345.678-9'
-            style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#F7F7F7',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
-        </div>
-      </div>
-
-      {showConfirm&&(
-        <div style={{padding:'12px 14px',borderRadius:8,background:'#FCEBEB',border:'1px solid #E24B4A',marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:700,color:'#A32D2D',marginBottom:4}}>{'\u00bf'}Confirmas que este cliente NO es un duplicado?</div>
-          <div style={{fontSize:11,color:'#A32D2D'}}>Hay clientes con nombres similares. Si es un cliente nuevo, confirma para continuar.</div>
-        </div>
-      )}
-
-      <div style={{display:'flex',gap:8,marginTop:4}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #E8E8E8',background:'#fff',color:'#888',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!name.trim()} onClick={handleGuardar}
-          style={{flex:2,padding:11,borderRadius:10,border:'none',background:showConfirm?'#E24B4A':'#003C50',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(!name.trim())?.6:1}}>
-          {saving?'Guardando...':(showConfirm?'Sí, crear de todas formas':'Guardar cliente')}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function BottomNav({tab,setTab,overdueN,userRole}) {
   const tabs = userRole==='admin' ? TABS_ADMIN : TABS_LIMITED
   const icons = {house:'⌂',tag:'◈',dollar:'$',minus:'⊖',person:'⊙',check:'✓'}
@@ -4815,7 +4743,6 @@ export default function App() {
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
-        {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
