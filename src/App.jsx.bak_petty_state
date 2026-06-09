@@ -4748,8 +4748,6 @@ export default function App() {
   const [billing,setBilling]=useState([])
   const [expenses,setExpenses]=useState([])
   const [tasks,setTasks]=useState([])
-  const [pettyCash,setPettyCash]=useState([])
-  const [rendiciones,setRendiciones]=useState([])
   const [loading,setLoading]=useState(false)
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
@@ -4791,15 +4789,13 @@ export default function App() {
     if(!session) return
     setLoading(true)
     Promise.all([
-      supabase.from('petty_cash').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
-      supabase.from('rendiciones').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
       getClients(),
       supabase.from('sales').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
       getBilling(),
       supabase.from('expenses').select('*').order('date',{ascending:false}).then(({data})=>data||[]),
       supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}).then(({data})=>data||[]),
       supabase.from('client_entities').select('*').then(({data})=>data||[]),
-    ]).then(([pc,rd,c,s,b,e,t,ce])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce)})
+    ]).then(([c,s,b,e,t,ce])=>{setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
