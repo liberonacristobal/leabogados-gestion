@@ -3641,7 +3641,7 @@ function FichaTabs({tab,setTab,role}){
 // Tab "Contacto" de la ficha (reutilizado admin/limited): identificación + datos de
 // contacto (edición inline en clients) + personas de contacto (CRUD en tabla contacts)
 function ContactoTab({client, entities, onSaveFields}) {
-  const fields = ['name','rut','nombre_fantasia','giro','tipo_entidad','email','telefono','direccion','comuna','sitio_web']
+  const fields = ['rut','nombre_fantasia','giro','tipo_entidad','email','telefono','direccion','comuna','sitio_web']
   const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
   const [form,setForm] = useState(fromClient())
   const [savingF,setSavingF] = useState(false)
@@ -3651,7 +3651,7 @@ function ContactoTab({client, entities, onSaveFields}) {
   const set = (k,v)=>setForm(f=>({...f,[k]:v}))
   const guardar = async ()=>{
     setSavingF(true)
-    try{ await onSaveFields(client.id, {...form, name:(form.name||'').trim()||client.name}) }catch(e){/* avisado en handler */}
+    try{ await onSaveFields(client.id, form) }catch(e){/* avisado en handler */}
     setSavingF(false)
   }
 
@@ -3708,7 +3708,11 @@ function ContactoTab({client, entities, onSaveFields}) {
       <div style={card}>
         {sTitle('Identificación')}
         <div style={{display:'grid',gap:10}}>
-          {field('Razón social','name','Nombre legal')}
+          <div>
+            <label style={lbl}>Razón social</label>
+            <input value={client.name||'—'} disabled style={{...inp,background:'#F2F2F2',color:C.muted}}/>
+            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Para cambiarla, usa "✎ Editar".</div>
+          </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             {field('RUT','rut','12.345.678-9')}
             <div>
