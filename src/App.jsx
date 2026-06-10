@@ -4930,13 +4930,16 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     {key:'sinFecha',label:'Sin fecha',color:C.muted},
   ]
 
-  const Grupo = ({titulo,arr,showWho}) => {
+  const Grupo = ({titulo,arr,showWho,extra}) => {
     const g = agrupar(arr)
     const total = arr.length
     return (
       <div style={{marginBottom:22}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:10,display:'flex',alignItems:'center',gap:8}}>
-          {titulo}<span style={{fontSize:11,fontWeight:600,color:C.muted}}>{total}</span>
+        <div style={{marginBottom:10,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,display:'flex',alignItems:'center',gap:8}}>
+            {titulo}<span style={{fontSize:11,fontWeight:600,color:C.muted}}>{total}</span>
+          </div>
+          {extra}
         </div>
         {total===0 && <div style={{fontSize:12,color:C.muted,padding:'4px 0 10px'}}>Nada por ahora.</div>}
         {SECCIONES.map(sec=>{
@@ -4982,18 +4985,19 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           </div>
         </div>
       </div>
-      <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',padding:'0 20px 10px'}}>
-        <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text}}>
-          <option value=''>Todos los proyectos</option>
-          {allProjects.map(p=><option key={p} value={p}>{p}</option>)}
-        </select>
-        <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:130}}/>
-        {(filterProject||filterClient)&&
-          <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
-        }
-      </div>
-      <div style={{padding:'4px 20px 100px'}}>
-        <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
+      <div style={{padding:'4px 20px 8px'}}>
+        <Grupo titulo='Mis tareas' arr={mias} showWho={false} extra={
+          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end'}}>
+            <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text,maxWidth:140}}>
+              <option value=''>Todos los proyectos</option>
+              {allProjects.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+            <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:108}}/>
+            {(filterProject||filterClient)&&
+              <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕</button>
+            }
+          </div>
+        }/>
         {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
         {totalMias===0 && asignadas.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas{filterProject||filterClient?' con estos filtros':''}</div>}
         {terminadas.length>0&&(
