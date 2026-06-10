@@ -4851,6 +4851,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const [filterClient,setFilterClient] = useState('')
   const [filterProject,setFilterProject] = useState('')
   const [openTerm,setOpenTerm] = useState(false)
+  const [openActivas,setOpenActivas] = useState(true)
+  const [openAsignadas,setOpenAsignadas] = useState(true)
   const [preview,setPreview] = useState(null)
   const me = currentUserName || ''
   const allProjects = [...new Set(tasks.filter(t=>t.project).map(t=>t.project))].sort()
@@ -4874,20 +4876,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const mias = base.filter(t=>t.who===me)
   const asignadas = base.filter(t=>t.assigned_by===me && t.who!==me)
 
-  // Agrupar por urgencia dentro de un set
-  const agrupar = (arr) => {
-    const g = {atrasadas:[],hoy:[],proximas:[],adelante:[],sinFecha:[]}
-    arr.forEach(t=>{
-      if(!t.due){ g.sinFecha.push(t); return }
-      const d = daysLeft(t.due)
-      if(d<0) g.atrasadas.push(t)
-      else if(d===0) g.hoy.push(t)
-      else if(d<=14) g.proximas.push(t)
-      else g.adelante.push(t)
-    })
-    Object.keys(g).forEach(k=>g[k].sort((a,b)=>(daysLeft(a.due)??999)-(daysLeft(b.due)??999)))
-    return g
-  }
+  // Orden por urgencia: vencimiento más cercano primero, sin fecha al final
+  const porUrgencia = arr => [...arr].sort((a,b)=>(daysLeft(a.due)??99999)-(daysLeft(b.due)??99999))
 
   const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
   const bsCard = due => { const d=daysLeft(due); if(d===null) return {bg:'#F1F1F1',col:'#888'}; if(d<0) return {bg:'#FCEBEB',col:'#A32D2D'}; if(d<=1) return {bg:'#FAEEDA',col:'#854F0B'}; if(d<=7) return {bg:'#FAEEDA',col:'#854F0B'}; return {bg:'#F1F1F1',col:'#888'} }
@@ -4922,53 +4912,20 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     )
   }
 
-  const SECCIONES = [
-    {key:'atrasadas',label:'Atrasadas',color:C.overdue},
-    {key:'hoy',label:'Hoy',color:C.urgent},
-    {key:'proximas',label:'Próximas',color:C.soon},
-    {key:'adelante',label:'Más adelante',color:C.normal},
-    {key:'sinFecha',label:'Sin fecha',color:C.muted},
-  ]
-
-  const Grupo = ({titulo,arr,showWho,extra}) => {
-    const g = agrupar(arr)
-    const total = arr.length
-    return (
-      <div style={{marginBottom:22}}>
-        <div style={{marginBottom:10,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
-          <div style={{fontSize:13,fontWeight:700,color:C.text,display:'flex',alignItems:'center',gap:8}}>
-            {titulo}<span style={{fontSize:11,fontWeight:600,color:C.muted}}>{total}</span>
-          </div>
-          {extra}
-        </div>
-        {total===0 && <div style={{fontSize:12,color:C.muted,padding:'4px 0 10px'}}>Nada por ahora.</div>}
-        {SECCIONES.map(sec=>{
-          const items = g[sec.key]
-          if(!items.length) return null
-          return (
-            <div key={sec.key} style={{marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:sec.color,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{sec.label} · {items.length}</div>
-              {items.map(t=><Card key={t.id} t={t} showWho={showWho}/>)}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
+  // Título de bloque (Mis tareas / Próximas dos semanas / Mi caja chica): mismo estilo entre sí
+  const BloqueTitulo = ({children}) => <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-.2}}>{children}</div>
+  // Subtítulo colapsable (Activas / Terminadas / Tareas que asigné): mismo estilo, menor que el de bloque
+  const SubHeader = ({label,count,open,onToggle}) => (
+    <div onClick={onToggle} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',userSelect:'none',padding:'6px 0',marginBottom:open?6:0}}>
+      <span style={{fontSize:12,fontWeight:600,color:C.text,flex:1}}>{label} <span style={{color:C.muted}}>· {count}</span></span>
+      <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:open?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:open?-2:2}}></span>
+    </div>
+  )
 
   const totalMias = mias.length
-  const atrasadasMias = mias.filter(t=>t.due && daysLeft(t.due)<0).length
-  const hoyMias = mias.filter(t=>t.due && daysLeft(t.due)===0).length
-  const proximasMias = mias.filter(t=>t.due && daysLeft(t.due)>0 && daysLeft(t.due)<=14).length
   const primerNombre = (me||'').trim().split(' ')[0]
   const saludo = `¡Hola${primerNombre?`, ${primerNombre}`:''}!`
   const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())
-  const contadorTxt = [
-    `${totalMias} tarea${totalMias!==1?'s':''} activa${totalMias!==1?'s':''}`,
-    ...(atrasadasMias>0?[`${atrasadasMias} atrasada${atrasadasMias!==1?'s':''}`]:[]),
-    ...(hoyMias>0?[`${hoyMias} para hoy`]:[]),
-    ...(proximasMias>0?[`${proximasMias} próxima${proximasMias!==1?'s':''}`]:[]),
-  ].join(' · ')
 
   return (
     <div>
@@ -4976,8 +4933,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:11,color:C.muted,fontWeight:500,letterSpacing:.5,marginBottom:2}}>{fechaHoy}</div>
-            <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,marginBottom:2}}>{saludo}</div>
-            <div style={{fontSize:12,color:C.muted}}>{contadorTxt}</div>
+            <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1}}>{saludo}</div>
           </div>
           <div style={{display:'flex',gap:6,flexShrink:0}}>
             <button onClick={()=>printTasks(mias,clients,me)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
@@ -4985,8 +4941,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           </div>
         </div>
       </div>
-      <div style={{padding:'4px 20px 8px'}}>
-        <Grupo titulo='Mis tareas' arr={mias} showWho={false} extra={
+      <div style={{padding:'8px 20px 0'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:4}}>
+          <BloqueTitulo>Mis tareas</BloqueTitulo>
           <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end'}}>
             <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text,maxWidth:140}}>
               <option value=''>Todos los proyectos</option>
@@ -4997,21 +4954,26 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
               <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕</button>
             }
           </div>
-        }/>
-        {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
-        {totalMias===0 && asignadas.length===0 && <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin tareas activas{filterProject||filterClient?' con estos filtros':''}</div>}
+        </div>
+        <SubHeader label='Activas' count={mias.length} open={openActivas} onToggle={()=>setOpenActivas(o=>!o)}/>
+        {openActivas&&(mias.length>0
+          ? porUrgencia(mias).map(t=><Card key={t.id} t={t} showWho={false}/>)
+          : <div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>{filterProject||filterClient?'Sin tareas activas con estos filtros':'No tienes tareas activas'}</div>)}
+        {asignadas.length>0&&(
+          <>
+            <SubHeader label='Tareas que asigné' count={asignadas.length} open={openAsignadas} onToggle={()=>setOpenAsignadas(o=>!o)}/>
+            {openAsignadas&&porUrgencia(asignadas).map(t=><Card key={t.id} t={t} showWho={true}/>)}
+          </>
+        )}
         {terminadas.length>0&&(
-          <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-            <div onClick={()=>setOpenTerm(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',userSelect:'none',marginBottom:openTerm?8:0}}>
-              <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,flex:1}}>Terminadas · {terminadas.length}</span>
-              <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:openTerm?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:openTerm?-2:2}}></span>
-            </div>
+          <>
+            <SubHeader label='Terminadas' count={terminadas.length} open={openTerm} onToggle={()=>setOpenTerm(o=>!o)}/>
             {openTerm&&terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
-          </div>
+          </>
         )}
       </div>
-      <div style={{padding:'4px 20px 100px'}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginTop:16,marginBottom:10,paddingTop:14,borderTop:`1px solid ${C.border}`}}>Próximas dos semanas</div>
+      <div style={{padding:'24px 20px 0'}}>
+        <div style={{marginBottom:10}}><BloqueTitulo>Próximas dos semanas</BloqueTitulo></div>
         {[0,1].map(semIdx=>{
           const lunesSem = new Date(hoy)
           lunesSem.setDate(hoy.getDate()-((hoy.getDay()+6)%7)+semIdx*7)
@@ -5021,7 +4983,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const tagLabel = String(dias[0].getDate()).padStart(2,'0')+'/'+String(dias[0].getMonth()+1).padStart(2,'0')+' — '+String(finSem.getDate()).padStart(2,'0')+'/'+String(finSem.getMonth()+1).padStart(2,'0')
           return (
             <div key={semIdx} style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontWeight:600,color:C.accent,marginBottom:5}}>{semIdx===0?'Esta semana':'Próxima semana'} · {tagLabel}</div>
+              <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:6}}>{semIdx===0?'Esta semana':'Próxima semana'} <span style={{color:C.muted}}>· {tagLabel}</span></div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4}}>
                 {dias.map((dia,i)=>{
                   const iso=fmtISO(dia)
@@ -5048,6 +5010,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             </div>
           )
         })}
+      </div>
+      <div style={{padding:'24px 20px 100px'}}>
+        <div style={{marginBottom:10}}><BloqueTitulo>Mi caja chica</BloqueTitulo></div>
         {(()=>{
           const saldo = saldoCajaChica(pettyCash, expenses, me)
           const misGastos = (expenses||[]).filter(e=>e.type==='gasto' && e.created_by===me)
@@ -5061,24 +5026,28 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
           const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
-          const cajaSch = saldo<0 ? {num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5'} : {num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0'}
+          const GREEN={num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0',label:C.muted}
+          const ORANGE={num:'#E08A2B',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C2761F'}
+          const RED={num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5',label:C.muted}
+          const saldoSch = saldo<0 ? RED : saldo<=50000 ? ORANGE : GREEN
+          const sinLiqNoNotaria = porLiquidar.filter(e=>e.category!=='Notaria').length
+          const liqSch = sinLiqNoNotaria>10 ? RED : ORANGE
+          const KPI = ({sch,label,valor,sub}) => (
+            <div style={{background:sch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${sch.bd}`,borderLeft:`4px solid ${sch.num}`}}>
+              <div style={{fontSize:10,fontWeight:600,color:sch.label,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>{label}</div>
+              <div style={{fontSize:22,fontWeight:700,color:sch.num,lineHeight:1.1}}>{valor}</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:3}}>{sub}</div>
+            </div>
+          )
           return (
-            <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
+            <>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-                <div style={{background:cajaSch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${cajaSch.bd}`,borderLeft:`4px solid ${cajaSch.num}`}}>
-                  <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Mi caja chica</div>
-                  <div style={{fontSize:22,fontWeight:700,color:cajaSch.num,lineHeight:1.1}}>{saldo<0?'-':''}{fmtCLP(saldo)}</div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:3}}>{saldo<0?'sobregirada':'disponible'}</div>
-                </div>
-                <div style={{background:'#FEF6EE',borderRadius:10,padding:'12px 14px',border:'1px solid #F5E2CC',borderLeft:'4px solid #E08A2B'}}>
-                  <div style={{fontSize:10,fontWeight:600,color:'#C2761F',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Gastos por liquidar</div>
-                  <div style={{fontSize:22,fontWeight:700,color:'#E08A2B',lineHeight:1.1}}>{fmtCLP(totalPorLiquidar)}</div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:3}}>{porLiquidar.length} gasto{porLiquidar.length!==1?'s':''} sin liquidar</div>
-                </div>
+                <KPI sch={saldoSch} label='Saldo disponible' valor={`${saldo<0?'-':''}${fmtCLP(saldo)}`} sub='en tu caja'/>
+                <KPI sch={liqSch} label='Por liquidar' valor={fmtCLP(totalPorLiquidar)} sub={`${porLiquidar.length} gasto${porLiquidar.length!==1?'s':''}`}/>
               </div>
               {ultimos.length>0&&(
                 <>
-                  <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Últimos gastos ingresados</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:8,marginTop:4}}>Últimos gastos ingresados</div>
                   {ultimos.map(e=>{
                     const cl=clients.find(c=>c.id===e.client_id)
                     return (
@@ -5097,7 +5066,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                   })}
                 </>
               )}
-            </div>
+            </>
           )
         })()}
       </div>

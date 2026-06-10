@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-10
+- Rediseño jerárquico de la pestaña Tareas (limited): saludo sin la línea de contador redundante; sección "Mis tareas" con filtros a la derecha y dos/tres subsecciones colapsables (Activas abierta, Tareas que asigné, Terminadas cerrada) eliminando los subtítulos de urgencia repetidos; títulos de bloque unificados (15/700/#3D3D3D) y subtítulos unificados (12/600); bloques con espaciado parejo (~24px) sin hueco muerto antes del calendario. KPIs de caja chica con título de bloque y color escalonado: "Saldo disponible" verde >$50.000 / naranja $0–$50.000 / rojo negativo; "Por liquidar" naranja, rojo si los gastos sin liquidar (excl. Notaría) superan 10.
+
 ## 2026-06-09
 - Tareas (limited): filtros (proyecto + cliente) movidos a la misma línea del subtítulo "Mis tareas · N" (título izquierda, filtros derecha, space-between); reducido el espacio en blanco excesivo entre "Terminadas" y "Próximas dos semanas" (bottom padding 100px→8px).
 - Pestaña Tareas (limited): encabezado con saludo personalizado "¡Hola, [nombre]!" + fecha es-CL y contador (activas/atrasadas/hoy/próximas); filtros compactos alineados a 20px; click en una tarjeta abre vista previa de solo lectura (`TaskPreview`: contexto, responsable/asignó, plazo+estado, subtareas con progreso, comentarios y archivos si existen) con botones Editar / Marcar terminada / Cerrar; tarjetas KPI de caja chica con borde izquierdo de color + fondo tintado (verde/rojo según saldo, naranja para gastos por liquidar).
