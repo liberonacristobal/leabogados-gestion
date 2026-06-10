@@ -3020,6 +3020,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   const [cargando,setCargando] = useState(false)
   const [guardando,setGuardando] = useState(false)
   const [hechos,setHechos] = useState(0)
+  const [fallos,setFallos] = useState([])   // filas que fallaron al insertar (con motivo)
   const [genPlantilla,setGenPlantilla] = useState(false)
 
   const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
@@ -3138,19 +3139,32 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf,{type:'array',cellDates:true})
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const data = XLSX.utils.sheet_to_json(ws,{defval:''})
+      // Hoja según el tipo elegido (Gastos/Fondos); si no existe esa hoja, la primera
+      const target = tipo==='fondo' ? 'fondos' : 'gastos'
+      const sheetName = wb.SheetNames.find(n=>n.toLowerCase().trim()===target) || wb.SheetNames[0]
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:''})
       const parsed = data.map((r,i)=>{
         const get = (...keys)=>{ for(const k of Object.keys(r)){ if(keys.some(kk=>k.toLowerCase().trim()===kk)) return r[k] } return '' }
         const rut = get('rut','rut cliente')
         const nombre = get('nombre','nombre cliente','cliente')
         const fecha = parseFecha(get('fecha'))
-        const monto = parseInt((get('monto')||'').toString().replace(/[^0-9]/g,''))||0
-        const concepto = get('concepto','descripcion','descripción','glosa')
-        const categoria = get('categoria','categoría','tipo')||'Otro'
+        const rawMonto = (get('monto')??'').toString().trim()
+        const montoNum = parseInt(rawMonto.replace(/[^\d-]/g,''),10)  // conserva el signo: un negativo NO se vuelve positivo
+        const concepto = (get('concepto','descripcion','descripción','glosa')||'').toString()
+        const categoria = (get('categoria','categoría','tipo')||'Otro').toString()
         const cli = matchCliente(rut,nombre)
-        return {id:i, rut, nombre, fecha, monto, concepto, categoria, client_id:cli?.id||null, clientName:cli?.name||null}
-      }).filter(r=>r.monto>0)
+        // Validación de monto (no se descarta en silencio: la fila queda marcada como Error)
+        let error=null
+        if(rawMonto===''||isNaN(montoNum)) error='Monto inválido o vacío'
+        else if(montoNum<0) error='Monto negativo no permitido'
+        else if(montoNum===0) error='Monto debe ser mayor a 0'
+        return {id:i, rut, nombre, fecha, monto:isNaN(montoNum)?0:montoNum, concepto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, error, dup:false}
+      })
+      // Detección de duplicados (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
+      const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}`
+      const counts={}
+      parsed.forEach(r=>{ const k=keyOf(r); counts[k]=(counts[k]||0)+1 })
+      parsed.forEach(r=>{ if(counts[keyOf(r)]>1) r.dup=true })
       setRows(parsed)
     }catch(err){ alert('Error al leer el Excel: '+err.message) }
     setCargando(false)
@@ -3161,31 +3175,43 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
     setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null}:r))
   }
 
-  const conMatch = (rows||[]).filter(r=>r.client_id)
-  const sinMatch = (rows||[]).filter(r=>!r.client_id)
-  const totalMonto = (rows||[]).reduce((a,r)=>a+(r.monto||0),0)
+  const listas = (rows||[]).filter(r=>r.client_id && !r.error)
+  const porRevisar = (rows||[]).filter(r=>!r.client_id && !r.error)
+  const conError = (rows||[]).filter(r=>r.error)
+  const dups = (rows||[]).filter(r=>r.dup)
+  const totalMonto = (rows||[]).filter(r=>!r.error).reduce((a,r)=>a+(r.monto||0),0)
 
   const guardar = async() => {
-    if(conMatch.length===0){ alert('No hay filas con cliente para cargar.'); return }
-    setGuardando(true); let n=0
-    for(const r of conMatch){
+    if(listas.length===0){ alert('No hay filas listas para cargar (con cliente asignado y sin errores).'); return }
+    setGuardando(true); let n=0; const fail=[]
+    for(const r of listas){
       try{
         await onSave({client_id:r.client_id,type:tipo,amount:r.monto,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null})
         n++
-      }catch(e){ console.error(e) }
+      }catch(e){ fail.push({concepto:r.concepto||'(sin concepto)', cliente:r.clientName||'—', monto:r.monto, msg:e.message||'Error al insertar'}) }
     }
     setHechos(n)
+    setFallos(fail)
     if(onClientsUpdate) await onClientsUpdate()
     setGuardando(false)
   }
 
   const inS = {padding:'7px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7',color:C.text,boxSizing:'border-box',outline:'none',width:'100%'}
 
-  if(hechos>0) return (
+  if(hechos>0||fallos.length>0) return (
     <div style={{textAlign:'center',padding:'20px 0'}}>
       <div style={{fontSize:15,fontWeight:700,color:C.normal,marginBottom:6}}>{hechos} {tipo==='fondo'?'fondo(s)':'gasto(s)'} cargado(s)</div>
-      {sinMatch.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:12}}>Quedaron {sinMatch.length} fila(s) sin cliente, no se cargaron.</div>}
-      <button onClick={onClose} style={{padding:'10px 20px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Listo</button>
+      {porRevisar.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{porRevisar.length} fila(s) sin cliente quedaron sin cargar.</div>}
+      {conError.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{conError.length} fila(s) con error de validación no se cargaron.</div>}
+      {fallos.length>0&&(
+        <div style={{textAlign:'left',background:'#FCEBEB',border:'1px solid #F7C1C1',borderRadius:8,padding:'10px 12px',margin:'12px 0',maxHeight:170,overflowY:'auto'}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.overdue,marginBottom:6}}>{fallos.length} fila(s) fallaron al insertar:</div>
+          {fallos.map((f,i)=>(
+            <div key={i} style={{fontSize:11,color:C.text,padding:'3px 0',borderBottom:'1px solid #F1D4D4'}}>{f.cliente} · {f.concepto} · {fmt(f.monto)} — <span style={{color:C.overdue}}>{f.msg}</span></div>
+          ))}
+        </div>
+      )}
+      <button onClick={onClose} style={{padding:'10px 20px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginTop:8}}>Listo</button>
     </div>
   )
 
@@ -3219,8 +3245,9 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
         <>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
             <div style={{fontSize:13,fontWeight:700,color:C.text}}>{rows.length} fila(s) · {fmt(totalMonto)}</div>
-            <div style={{fontSize:11,color:C.muted}}>{conMatch.length} con cliente{sinMatch.length>0&&<span style={{color:C.overdue}}> · {sinMatch.length} sin asignar</span>}</div>
+            <div style={{fontSize:11,color:C.muted}}>{listas.length} listas{porRevisar.length>0&&<span style={{color:C.soon}}> · {porRevisar.length} por revisar</span>}{conError.length>0&&<span style={{color:C.overdue}}> · {conError.length} errores</span>}</div>
           </div>
+          {dups.length>0&&<div style={{fontSize:11,color:'#C2761F',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto). No se deduplican: si las cargas, se duplicarán.</div>}
           <div style={{maxHeight:320,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
             {rows.map(r=>(
               <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.border}`,background:r.client_id?'#fff':'#FFF8EC'}}>
@@ -3236,7 +3263,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
           </div>
           <div style={{display:'flex',gap:8}}>
             <button onClick={()=>setRows(null)} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver</button>
-            <button disabled={guardando||conMatch.length===0} onClick={guardar} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:conMatch.length===0?.5:1}}>{guardando?'Cargando...':`Cargar ${conMatch.length} ${tipo==='fondo'?'fondo(s)':'gasto(s)'}`}</button>
+            <button disabled={guardando||listas.length===0} onClick={guardar} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:listas.length===0?.5:1}}>{guardando?'Cargando...':`Cargar ${listas.length} fila${listas.length!==1?'s':''} listas`}</button>
           </div>
         </>
       )}
