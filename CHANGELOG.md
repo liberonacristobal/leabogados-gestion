@@ -1,6 +1,13 @@
 # Changelog
 
 ## 2026-06-10
+- Ficha de cliente rediseñada en tabs (admin y limited), PASO 2 (Documentos queda para una segunda etapa):
+  - **Resumen**: el contenido operativo actual de cada ficha (admin: KPIs/ventas/cobros/gastos+fondos/rendiciones/tareas; limited: fondos/gastos/saldo/rendiciones/tareas) queda bajo este tab. Barra de tabs compartida `FichaTabs` con bloqueo por rol (limited ve Financiero/Documentos con candado).
+  - **Contacto** (componente reutilizable `ContactoTab`, admin y limited): Identificación (razón social, RUT, tipo de entidad, nombre de fantasía, giro) + Datos de contacto (email, teléfono, dirección, comuna, sitio web) con edición inline (botón "Guardar cambios" solo si hay cambios) sobre nuevas columnas de `clients`; Personas de contacto con CRUD sobre la tabla `contacts` (avatar de iniciales, nombre, cargo, email, teléfono). La sugerencia inteligente desde facturas PDF queda para PASO 3.
+  - **Financiero** (`FinancieroTab`, solo admin; limited ve candado): 3 KPIs (facturado/cobrado/por cobrar), historial de facturación por año (emitidas, concepto/monto/estado), razones sociales asociadas, datos de facturación (condición de pago, moneda, banco, N° cuenta) y relación con el estudio (cliente desde, tipo de servicio, abogado responsable, notas internas) con edición inline.
+  - App: handler `handleUpdateClientFields(id,patch)` para UPDATE parcial de `clients` desde la ficha sin abrir el modal.
+
+## 2026-06-10
 - Modal de nueva tarea (admin y limited): se muestra directamente la sección de Archivos (igual que al editar), reemplazando el aviso "Podrás adjuntar...". Al adjuntar el primer archivo en una tarea nueva, la tarea se crea silenciosamente en Supabase (sin cerrar el modal ni avisar) para obtener su id y habilitar el uploader; "Guardar" hace UPDATE de ese borrador (o INSERT normal si no se adjuntó nada) y notifica como tarea nueva; cancelar/cerrar elimina el borrador para no dejar huérfanos. `Attachments` acepta `ensureEntityId` para crear el id de forma diferida.
 
 ## 2026-06-10
