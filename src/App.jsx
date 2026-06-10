@@ -4918,7 +4918,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   }
 
   // Título de bloque (Mis tareas / Próximas dos semanas / Mi caja chica): mismo estilo entre sí
-  const BloqueTitulo = ({children}) => <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-.2}}>{children}</div>
+  const BloqueTitulo = ({children}) => <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{children}</div>
   // Subtítulo colapsable (Activas / Terminadas / Tareas que asigné): mismo estilo, menor que el de bloque
   const SubHeader = ({label,count,open,onToggle}) => (
     <div onClick={onToggle} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',userSelect:'none',padding:'6px 0',marginBottom:open?6:0}}>
