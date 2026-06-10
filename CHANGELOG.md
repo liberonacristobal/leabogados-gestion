@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Facturación (vista Emitidas): selector de alcance del buscador a la izquierda del input — "Pendiente pago" / "Por facturar" / "Ambas" — que define a qué sección aplican el texto y los selectores de año/mes. POR FACTURAR ahora es filtrable por texto (cliente/razón social) y por año/mes contra la fecha de vencimiento (antes solo mostraba el mes en curso, sin filtrar); su encabezado pasa a "POR FACTURAR · N" (sin el nombre del mes). Checkboxes, "Desmarcar todo" y "Descargar Excel" sin cambios.
+
+## 2026-06-10
 - Modal de nueva tarea (admin y limited): se muestra directamente la sección de Archivos (igual que al editar), reemplazando el aviso "Podrás adjuntar...". Al adjuntar el primer archivo en una tarea nueva, la tarea se crea silenciosamente en Supabase (sin cerrar el modal ni avisar) para obtener su id y habilitar el uploader; "Guardar" hace UPDATE de ese borrador (o INSERT normal si no se adjuntó nada) y notifica como tarea nueva; cancelar/cerrar elimina el borrador para no dejar huérfanos. `Attachments` acepta `ensureEntityId` para crear el id de forma diferida.
 
 ## 2026-06-10
