@@ -11,7 +11,7 @@ export const signInWithGoogle = () =>
     provider: 'google',
     options: {
       queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent' },
-      scopes: 'https://www.googleapis.com/auth/drive.readonly',
+      scopes: 'https://www.googleapis.com/auth/drive',
       redirectTo: window.location.origin,
     },
   })
@@ -169,8 +169,8 @@ export const connectDrive = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      queryParams: { hd: 'leabogados.cl', access_type: 'offline' },
-      scopes: 'https://www.googleapis.com/auth/drive.readonly',
+      queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent' },
+      scopes: 'https://www.googleapis.com/auth/drive',
       redirectTo: window.location.origin,
     }
   })

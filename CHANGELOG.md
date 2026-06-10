@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Módulo de adjuntos a Google Drive: subir archivos reales en Tareas (QuickTaskForm, sección "Archivos") y en Gastos (ExpenseEditForm), guardados en la carpeta compartida "Respaldo Gastos APP" → subcarpetas "Tareas"/"Gastos" (find-or-create, cacheadas). Scope OAuth ampliado a `drive` (lectura+escritura, superset de readonly) con `prompt:consent` → los usuarios re-autorizan Drive una vez. Upload resumable (hasta 15 MB con aviso si se excede), link "Abrir en Drive", eliminar = papelera de Drive. Manejo de token vencido (401) → fuerza reconexión, sin fallo silencioso. Chip "📎 N" en la fila del gasto. Metadata en tablas `task_attachments`/`expense_attachments`.
+
+## 2026-06-10
 - Rediseño tab "Emitidas / Por cobrar" (Facturación, admin): dos acordeones maestros cerrados por defecto. Bloque 1 "PENDIENTE PAGO" envuelve los acordeones por cliente (total y N° de `filtered`, single source). Bloque 2 "POR FACTURAR · [mes]" lista las programadas que vencen el mes en curso con check por fila (todas marcadas por defecto, solo para elegir qué va al Excel) y botón "Descargar Excel" (Cliente, Razón social, RUT receptor, Concepto/glosa, Monto neto, Monto UF, Fecha vencimiento, N° cuota) reutilizando el patrón XLSX existente.
 - La carga de factura (PDF/Drive) ahora reconcilia la programada equivalente: si hay exactamente una del mismo cliente, mismo monto y vencimiento ≤ emisión, se elimina automáticamente (Bloque 2 se vacía solo). Botón "Ya emitida" por fila como respaldo manual para huérfanas, con asignación/confirmación de razón social.
 
