@@ -3920,7 +3920,8 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   const [saved,setSaved] = useState(0)
   const rsList = useMemo(()=>{ if(!selectedClient) return []; return (clientEntities||[]).filter(e=>e.client_id===selectedClient.id) },[clientEntities,selectedClient])
   const [entityId,setEntityId] = useState('')
-  useEffect(()=>{ setEntityId(rsList.length===1?rsList[0].id:'') },[rsList])
+  const [showRS,setShowRS] = useState(false)
+  useEffect(()=>{ setEntityId(rsList[0]?.id||'') },[rsList])   // pre-poblar con la primera RS del cliente
   // Proyecto del lote (autocomplete con los proyectos del cliente: tareas + ventas, igual que QuickTaskForm)
   const [project,setProject] = useState('')
   const [showProjects,setShowProjects] = useState(false)
@@ -3995,11 +3996,19 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         <>
           {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
 
-          {rsList.length>1&&(
-            <div style={{marginBottom:10}}>
-              <Fld label='Razón social'>
-                <select value={entityId} onChange={e=>setEntityId(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
-              </Fld>
+          {rsList.length>0&&(
+            <div style={{marginBottom:12,position:'relative'}}>
+              <button type='button' onClick={()=>setShowRS(s=>!s)} onBlur={()=>setTimeout(()=>setShowRS(false),150)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#f5f7f9',color:C.text,fontSize:14,cursor:'pointer',textAlign:'left'}}>
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsList.find(e=>e.id===entityId)?.name||'Sin asignar'}</span>
+                <span style={{color:C.muted,transform:showRS?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0,marginLeft:8}}>▾</span>
+              </button>
+              {showRS&&(
+                <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
+                  {rsList.map(e=>(
+                    <div key={e.id} onMouseDown={()=>{setEntityId(e.id);setShowRS(false)}} style={{padding:'9px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:e.id===entityId?'#E6EEF1':'#fff',color:e.id===entityId?C.accent:C.text,fontWeight:e.id===entityId?600:400}}>{e.name}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
