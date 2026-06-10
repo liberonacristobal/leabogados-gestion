@@ -1,6 +1,14 @@
 # Changelog
 
 ## 2026-06-10
+- Liquidación de caja chica con confirmación previa (reutiliza `expenses.rendered_at` como marca individual de liquidado, sin columna nueva):
+  - **Popup de confirmación** antes de ejecutar: encabezado "Resumen de liquidación — [usuario] · [período]", tabla detallada (Fecha / Concepto · Cliente · Categoría / Monto) con total al pie, sección de envío (campo "Enviar a" pre-rellenado con el email del usuario logueado + "CC" opcional), y botones "✉ Enviar y liquidar" / "Solo liquidar" / "Cancelar". Antes el botón ejecutaba directo sin confirmar y el correo iba hardcodeado a ee@/cl@.
+  - **Confirmación post-liquidación**: "✓ Liquidación registrada — N gastos liquidados por $XXX" (+ "✉ Correo preparado…" si se envió), auto-cierre 7s.
+  - **Saldo y KPIs** de caja chica ahora consideran solo gastos sin liquidar (helper único `saldoCajaChica` excluye `rendered_at`); al liquidar, el gasto deja de descontar del saldo disponible.
+  - **Historial "Gastos liquidados"** colapsado en la pestaña Liquidar, con la fecha en que cada gasto fue liquidado.
+  - Fix: `handleLiquidar` ahora actualiza el estado local de `expenses` (antes los liquidados seguían en la lista de pendientes hasta recargar). App pasa `currentUserEmail` y `setExpenses` a `CajaChicaView`.
+
+## 2026-06-10
 - Ficha de cliente rediseñada en tabs (admin y limited), PASO 2 (Documentos queda para una segunda etapa):
   - **Resumen**: el contenido operativo actual de cada ficha (admin: KPIs/ventas/cobros/gastos+fondos/rendiciones/tareas; limited: fondos/gastos/saldo/rendiciones/tareas) queda bajo este tab. Barra de tabs compartida `FichaTabs` con bloqueo por rol (limited ve Financiero/Documentos con candado).
   - **Contacto** (componente reutilizable `ContactoTab`, admin y limited): Identificación (razón social, RUT, tipo de entidad, nombre de fantasía, giro) + Datos de contacto (email, teléfono, dirección, comuna, sitio web) con edición inline (botón "Guardar cambios" solo si hay cambios) sobre nuevas columnas de `clients`; Personas de contacto con CRUD sobre la tabla `contacts` (avatar de iniciales, nombre, cargo, email, teléfono). La sugerencia inteligente desde facturas PDF queda para PASO 3.
