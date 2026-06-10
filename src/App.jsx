@@ -145,6 +145,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
   const [confirmEdit,setConfirmEdit] = useState(null)
   const [openRend,setOpenRend] = useState(null)
   const [sFilter,setSFilter] = useState('Activo')
+  const [ftab,setFtab] = useState('resumen')
 
   const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
   const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
@@ -158,7 +159,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
   const ClientRow = ({cl}) => {
     const saldo = (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===cl.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })()
     return (
-      <div onClick={()=>setSelected(cl)} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid #E8E8E8`,cursor:'pointer',borderLeft:`3px solid ${saldo<0?'#E24B4A':'#1D9E75'}`}}
+      <div onClick={()=>{setFtab('resumen');setSelected(cl)}} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid #E8E8E8`,cursor:'pointer',borderLeft:`3px solid ${saldo<0?'#E24B4A':'#1D9E75'}`}}
         onMouseEnter={e=>e.currentTarget.style.borderColor='#537281'}
         onMouseLeave={e=>e.currentTarget.style.borderColor='#E8E8E8'}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -190,9 +191,10 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
             </div>
             <button onClick={()=>setConfirmEdit(cl)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#fff',color:'#3D3D3D',fontSize:12,fontWeight:600,cursor:'pointer'}}>✎ Editar</button>
           </div>
+          <FichaTabs tab={ftab} setTab={setFtab} role="limited"/>
         </div>
 
-        <div style={{padding:'16px 20px 0'}}>
+        <div style={{padding:'16px 20px 0',display:ftab==='resumen'?'block':'none'}}>
 
           {entities.length>0&&(
             <div style={{marginBottom:16,padding:'10px 14px',borderRadius:10,background:'#F7F7F7',border:'1px solid #E8E8E8'}}>
@@ -302,6 +304,9 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
           </div>
 
         </div>
+        {ftab==='contacto'&&<div style={{padding:'16px 20px 40px'}}><div style={{fontSize:13,color:'#888'}}>Contacto — próximamente</div></div>}
+        {ftab==='financiero'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>🔒</div><div style={{fontSize:13,color:'#888'}}>Sección reservada para administración</div></div>}
+        {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>🔒</div><div style={{fontSize:13,color:'#888'}}>Sección reservada para administración</div></div>}
       </div>
     )
   }
@@ -3621,6 +3626,18 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
   )
 }
 
+// Barra de tabs de la ficha de cliente (reutilizada por admin y limited; bloquea según rol)
+function FichaTabs({tab,setTab,role}){
+  const tabs=[['resumen','Resumen',false],['contacto','Contacto',false],['financiero','Financiero',role!=='admin'],['documentos','Documentos',role!=='admin']]
+  return (
+    <div style={{display:'flex',gap:4,marginTop:10}}>
+      {tabs.map(([id,label,locked])=>(
+        <button key={id} onClick={()=>{ if(!locked) setTab(id) }} title={locked?'Solo admin':''} style={{flex:1,padding:'7px 4px',borderRadius:8,border:`1px solid ${tab===id?C.accent:C.border}`,background:tab===id?'#E6EEF1':'transparent',color:locked?C.muted:(tab===id?C.accent:C.muted),fontSize:11,fontWeight:600,cursor:locked?'not-allowed':'pointer',opacity:locked?.55:1,whiteSpace:'nowrap'}}>{locked?'🔒 ':''}{label}</button>
+      ))}
+    </div>
+  )
+}
+
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
 function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
@@ -3664,6 +3681,7 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
 
 function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent}) {
   const [emailRend,setEmailRend] = useState(null)
+  const [ftab,setFtab] = useState('resumen')
   const clientSales = sales.filter(s=>s.client_id===client.id)
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
@@ -3696,9 +3714,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           </div>
           <button onClick={()=>onEdit(client)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>✎ Editar</button>
         </div>
+        <FichaTabs tab={ftab} setTab={setFtab} role="admin"/>
       </div>
 
-      <div style={{padding:'16px 20px 0'}}>
+      <div style={{padding:'16px 20px 0',display:ftab==='resumen'?'block':'none'}}>
 
         {/* Razones sociales vinculadas */}
         {(()=>{
@@ -3929,6 +3948,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         </div>
 
       </div>
+      {ftab==='contacto'&&<div style={{padding:'16px 20px 40px'}}><div style={{fontSize:13,color:C.muted}}>Contacto — próximamente</div></div>}
+      {ftab==='financiero'&&<div style={{padding:'16px 20px 40px'}}><div style={{fontSize:13,color:C.muted}}>Financiero — próximamente</div></div>}
+      {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>📁</div><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
