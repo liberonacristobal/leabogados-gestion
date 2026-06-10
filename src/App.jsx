@@ -2988,10 +2988,11 @@ function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete
 
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,user,task}) {
+function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preDue,user,task}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient || (task ? clients.find(c=>c.id===task.client_id)||null : null))
-  const [f,setF] = useState(task ? {id:task.id,title:task.title||'',who:task.who||'Cristóbal',due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by} : {title:'',who:'Cristóbal',due:'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
+  // preDue: fecha precargada (string 'YYYY-MM-DD') al crear desde el calendario
+  const [f,setF] = useState(task ? {id:task.id,title:task.title||'',who:task.who||'Cristóbal',due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by} : {title:'',who:'Cristóbal',due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
   const [showProjects,setShowProjects] = useState(false)
   const [showSubprojects,setShowSubprojects] = useState(false)
   const [comments,setComments] = useState([])
@@ -4882,7 +4883,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mis tareas</div>
           <div style={{display:'flex',gap:6}}>
             <button onClick={()=>printTasks(mias,clients,me)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
-            <button onClick={onAddTask} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+            <button onClick={()=>onAddTask()} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
         </div>
       </div>
@@ -4933,14 +4934,14 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                   const esHoy=iso===fmtISO(hoy)
                   const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado'&&(t.who===me||t.assigned_by===me))
                   return (
-                    <div key={i} style={{minHeight:90,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`}}>
+                    <div key={i} onClick={()=>onAddTask(iso)} title='Nueva tarea este día' style={{minHeight:90,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`,cursor:'pointer'}}>
                       <div style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.muted,textTransform:'uppercase'}}>{DIAS[i]}</div>
                       <div style={{fontSize:10,fontWeight:600,color:esHoy?C.accent:C.text,marginBottom:4}}>{String(dia.getDate()).padStart(2,'0')}</div>
                       {tareasDelDia.length===0&&<div style={{fontSize:8,color:'#bbb',fontStyle:'italic'}}>—</div>}
                       {tareasDelDia.map(t=>{
                         const cl=clients.find(x=>x.id===t.client_id)
                         return (
-                          <div key={t.id} onClick={()=>onEdit(t)} style={{background:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+                          <div key={t.id} onClick={(e)=>{e.stopPropagation();onEdit(t)}} style={{background:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
                             <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
                             {cl&&<div style={{fontSize:8,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
                           </div>
@@ -5428,7 +5429,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
-            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
+            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} clients={clients||[]} currentUserName={user?.name} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})}/>}
@@ -5449,7 +5450,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal title={modal.data?.id?'Editar tarea':'Nueva tarea'} onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
+        {modal?.type==='task'&&<Modal title={modal.data?.id?'Editar tarea':'Nueva tarea'} onClose={()=>setModal(null)}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
     </>
