@@ -1,6 +1,11 @@
 # Changelog
 
 ## 2026-06-10
+- Cliente interno (gastos de oficina): checkbox "Cliente interno" en ClientForm (`clients.is_internal`). El cliente interno se excluye del contador de clientes y de "Fondos negativos" del Dashboard; las cifras de negocio ya lo excluyen solas (no tiene ventas/facturas). Sigue visible en la lista (chip "Interno") y disponible para imputar gastos y rendir.
+- Subcategoría libre cuando la categoría de gasto es "Otro": campo con autocomplete (subcategorías ya usadas) en GastosForm y ExpenseEditForm, guardado en `expenses.subcategory` y mostrado en la lista de gastos.
+- Bloque "Costos de oficina del mes" en el Dashboard admin: acordeón con total del mes, detalle por gasto y filtro de período (mes), leyendo los gastos del cliente interno.
+
+## 2026-06-10
 - Modal de tarea (QuickTaskForm, único en Inicio/Clientes/Tareas) simplificado: se quitaron de la UI las secciones Subtareas, Comentarios y Links. Queda Cliente, Tarea, Proyecto, Subproyecto, Responsable, Plazo, Archivos. Los datos en task_comments/task_links/subtasks NO se borran (solo se ocultó la UI; `subtasks` sale del payload y el upsert preserva la columna). En tarea nueva se avisa que se podrá adjuntar tras guardar.
 - Inicio (admin): click en una tarea abre la vista previa de solo lectura (mismo TaskPreview que limited) con Editar / Marcar terminada / Cerrar; ✓/✎ siguen como atajos directos (stopPropagation). Nuevo modal `taskPreview` a nivel App.
 
