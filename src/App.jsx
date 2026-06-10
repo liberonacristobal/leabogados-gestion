@@ -6237,7 +6237,8 @@ export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [user,setUser]=useState(null)
-  const [userRole,setUserRole]=useState(null) // 'admin' | 'limited' | null
+  const [userRole,setUserRole]=useState(null)   // vista actual: 'admin' | 'limited' | null (admin puede previsualizar 'limited')
+  const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
   const [clients,setClients]=useState([])
   const [sales,setSales]=useState([])
   const [billing,setBilling]=useState([])
@@ -6254,11 +6255,13 @@ export default function App() {
   const loadUserRole = async(email) => {
     const {data} = await supabase.from('user_roles').select('*').eq('email',email).maybeSingle()
     if(data) {
+      setActualRole(data.role)
       setUserRole(data.role)
       if(data.role==='limited') setTab('tasks')
       return data
     }
     await supabase.from('user_roles').insert({email,role:'limited',name:email.split('@')[0]})
+    setActualRole('limited')
     setUserRole('limited')
     setTab('tasks')
     return {role:'limited',name:email.split('@')[0]}
@@ -6276,10 +6279,16 @@ export default function App() {
         const u = await loadUserRole(session.user.email)
         setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})
         if(session.provider_token)saveDriveToken(session.provider_token)
-      } else { setUser(null); setUserRole(null) }
+      } else { setUser(null); setUserRole(null); setActualRole(null) }
     })
     return ()=>subscription.unsubscribe()
   },[])
+
+  // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
+  // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
+  useEffect(()=>{
+    if(userRole==='limited' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
+  },[userRole,tab])
 
   const [clientEntities,setClientEntities] = useState([])
 
@@ -6609,8 +6618,8 @@ export default function App() {
           <div style={{display:'flex',gap:6}}>
             {userRole==='admin'&&<button onClick={()=>setModal({type:'users'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>👥</button>}
             {userRole==='admin'&&<button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>}
-            {userRole==='admin'&&<button onClick={()=>{setUserRole('limited');setTab('tasks')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F4F6F7',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Vista Team</button>}
-            {userRole==='limited'&&<button onClick={()=>{setUserRole('admin');setTab('dashboard')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>← Vista Admin</button>}
+            {actualRole==='admin'&&userRole==='admin'&&<button onClick={()=>{setUserRole('limited');setTab('tasks')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F4F6F7',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Vista Team</button>}
+            {actualRole==='admin'&&userRole==='limited'&&<button onClick={()=>{setUserRole('admin');setTab('dashboard')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>← Vista Admin</button>}
           </div>
         </div>
         {loading?(
