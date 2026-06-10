@@ -1,6 +1,13 @@
 # Changelog
 
 ## 2026-06-10
+- Rediseño del flujo de rendición a clientes y de Gastos y Fondos (4 cambios):
+  - Lista Gastos y Fondos: bajo cada cliente, sus razones sociales con saldo individual (verde >0 / rojo <=0); el total grande sigue siendo la suma. Helper `rsBalances`.
+  - Detalle cliente con 1 RS: razón social + RUT una sola vez en el header (fuera de las filas); KPIs en rectángulos redondeados con labels grises (#99ABB4) y reglas de color (Fondos verde/amarillo/rojo, Gastos rojo, Saldo verde/rojo); cada gasto con ícono de adjunto (subida gris o clip azul con contador) que abre el uploader (Attachments); barra inferior "Total a rendir" + "Rendir al cliente" (#1D9E75), o "Sin gastos por rendir".
+  - Detalle cliente con 2+ RS: header solo con el nombre; KPIs totales; acordeón por RS con checkbox (incluir en la rendición) + chevron + nombre/RUT/saldo; al expandir, los movimientos de esa RS; barra inferior con la(s) RS seleccionada(s) y su monto; "Rendir al cliente" abre el modal con esas RS.
+  - RendicionModal: header con la razón social + RUT seleccionada; KPIs redondeados (Fondos verde/amarillo/rojo, Ya rendido neutro #F5F7F9/#537281, Saldo verde/rojo, labels grises); gastos y fondos filtrados por la RS seleccionada; campo "Dirigido a" (antes "Atención") precargado del valor guardado con hint "Guardado de rendición anterior", que se persiste en `contacts` al registrar para reutilizarlo. El documento usa la RS seleccionada y muestra "Dirigido a:".
+
+## 2026-06-10
 - Carga masiva: corrección de categorías y asignación de razón social.
   - El dropdown de Categoría de la plantilla y el selector de la vista previa usan solo las categorías válidas del sistema (Notaria, CBR, Diario Oficial, Otro); las filas con categorías fuera de la lista se normalizan a "Otro" (sin acentos/case). Filas de ejemplo de la plantilla corregidas.
   - Asignación de razón social en la carga: si el cliente tiene una sola razón social se asigna automáticamente (`entity_id`); si tiene más de una, la fila queda "por revisar" (amarillo) con un selector en la vista previa para elegirla antes de cargar. `guardar` envía el `entity_id`. `CargaMasivaModal` recibe `clientEntities`.

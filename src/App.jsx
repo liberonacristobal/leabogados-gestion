@@ -2867,15 +2867,22 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, expenses, clientEntities, onClose, onRendicionComplete, setExpenses, currentUserName}) {
+function RendicionModal({client, entityIds, expenses, clientEntities, onClose, onRendicionComplete, setExpenses, currentUserName}) {
   const [selected, setSelected] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
   const [fHasta, setFHasta] = useState('')
   const [contacts, setContacts] = useState([])
   const [atencion, setAtencion] = useState('')
+  const [prefilled, setPrefilled] = useState(false)   // "Dirigido a" precargado de rendición anterior
 
-  const allMovs = expenses.filter(e=>e.client_id===client.id)
+  // Movimientos del cliente, acotados a la(s) razón(es) social(es) seleccionada(s).
+  // Con 1 RS todo pertenece a esa RS (incl. sin entity_id); sin selección/sin RS, todos.
+  const entsCli = (clientEntities||[]).filter(e=>e.client_id===client.id)
+  const singleRS = entsCli.length===1
+  const headEnt = (entityIds&&entityIds.length===1) ? entsCli.find(e=>e.id===entityIds[0]) : (singleRS?entsCli[0]:null)
+  const inScope = e => (!entityIds||entityIds.length===0) ? true : (singleRS ? true : (!!e.entity_id && entityIds.includes(e.entity_id)))
+  const allMovs = expenses.filter(e=>e.client_id===client.id && inScope(e))
   const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
   const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+e.amount,0)
   const saldoActual = fondosDisp - gastosYaRend
@@ -2892,22 +2899,21 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
   const saldoTrasRendicion = saldoActual - totalSel
   const fondosList = allMovs.filter(e=>e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
 
-  // Contactos del cliente para el campo "Atención" del documento (tabla contacts)
+  // "Dirigido a": precargar del valor guardado de rendiciones anteriores del cliente (tabla contacts)
   useEffect(()=>{
     let alive=true
     supabase.from('contacts').select('*').eq('client_id',client.id).order('created_at').then(({data})=>{
       if(!alive||!data) return
       setContacts(data)
-      if(data[0]?.nombre) setAtencion(data[0].nombre)
+      if(data[0]?.nombre){ setAtencion(data[0].nombre); setPrefilled(true) }
     })
     return ()=>{alive=false}
   },[client.id])
-  // Si el cliente no tiene contactos, al escribir Atención y confirmar se crea un contacto nuevo
-  const guardarAtencion = async()=>{
-    const v=(atencion||'').trim()
-    if(!v || contacts.length>0) return
-    const {data}=await supabase.from('contacts').insert({client_id:client.id,nombre:v}).select().single()
-    if(data) setContacts([data])
+  // Guarda el "Dirigido a" para reutilizarlo (insert si no hay contacto, update si cambió)
+  const guardarDirigido = async()=>{
+    const v=(atencion||'').trim(); if(!v) return
+    if(contacts[0]){ if(contacts[0].nombre!==v){ await supabase.from('contacts').update({nombre:v}).eq('id',contacts[0].id); setContacts(p=>p.map((c,i)=>i===0?{...c,nombre:v}:c)) } }
+    else { const {data}=await supabase.from('contacts').insert({client_id:client.id,nombre:v}).select().single(); if(data) setContacts([data]) }
   }
 
   const toggleAll = () => {
@@ -2923,7 +2929,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
 
   const generatePDFContent = (atencionVal) => {
     const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4'
-    const ent = (clientEntities||[]).filter(e=>e.client_id===client.id)[0]
+    const ent = headEnt
     const razon = ent?.name || client.name || '\u2014'
     const rut = ent?.rut || client.rut || ''
     const fechaEmision = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
@@ -3001,7 +3007,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
           <span style='${sep}'>Emisi\u00f3n: ${fechaEmision}</span>
           <span style='${sep}'>${gastosSel.length} gasto${gastosSel.length!==1?'s':''}</span>
         </div>
-        ${atencionVal?`<div style='font-weight:600'>Atenci\u00f3n: ${atencionVal}</div>`:''}
+        ${atencionVal?`<div style='font-weight:600'>Dirigido a: ${atencionVal}</div>`:''}
       </div>
       <div style='padding:20px 26px 0'>
         <table>
@@ -3058,6 +3064,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
       if(onRendicionComplete) onRendicionComplete({id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente'})
+      await guardarDirigido()
       // Abrir el documento de rendici\u00f3n (HTML imprimible aislado) si se pide
       if(abrirPDF) { const w=window.open('','_blank'); if(w){ w.document.write(generatePDFContent(atencion)); w.document.close() } }
       setSelected(new Set())
@@ -3065,21 +3072,33 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
     setSaving(false)
   }
 
+  const lblG = {fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:2}
+  const fK = fondosDisp>0?{c:'#1D9E75',bg:'#E4F1EA'}:fondosDisp===0?{c:'#C77F18',bg:'#FEF6EE'}:{c:'#E24B4A',bg:'#FBE9E7'}
+  const sK = saldoActual>0?{c:'#1D9E75',bg:'#E4F1EA'}:{c:'#E24B4A',bg:'#FBE9E7'}
+
   return (
     <div>
-      {/* Resumen fondos */}
+      {/* Razón social seleccionada */}
+      {headEnt&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:14,fontWeight:700,color:C.text}}>{headEnt.name}</div>
+          {headEnt.rut&&<div style={{fontSize:11,color:'#99ABB4'}}>{headEnt.rut}</div>}
+        </div>
+      )}
+
+      {/* KPIs (rectángulos redondeados, labels grises) */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-        <div style={{background:'#E4F1EA',borderRadius:8,padding:'8px 10px'}}>
-          <div style={{fontSize:9,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Fondos</div>
-          <div style={{fontSize:13,fontWeight:700,color:'#1D9E75'}}>{fmtN(fondosDisp)}</div>
+        <div style={{background:fK.bg,borderRadius:10,padding:'10px 12px'}}>
+          <div style={lblG}>Fondos</div>
+          <div style={{fontSize:13,fontWeight:700,color:fK.c}}>{fmtN(fondosDisp)}</div>
         </div>
-        <div style={{background:'#FBE9E7',borderRadius:8,padding:'8px 10px'}}>
-          <div style={{fontSize:9,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Ya rendido</div>
-          <div style={{fontSize:13,fontWeight:700,color:'#E24B4A'}}>{fmtN(gastosYaRend)}</div>
+        <div style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
+          <div style={lblG}>Ya rendido</div>
+          <div style={{fontSize:13,fontWeight:700,color:'#537281'}}>{fmtN(gastosYaRend)}</div>
         </div>
-        <div style={{background:saldoActual>=0?'#E4F1EA':'#FBE9E7',borderRadius:8,padding:'8px 10px'}}>
-          <div style={{fontSize:9,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Saldo actual</div>
-          <div style={{fontSize:13,fontWeight:700,color:saldoActual>=0?'#1D9E75':'#E24B4A'}}>{fmtN(saldoActual)}</div>
+        <div style={{background:sK.bg,borderRadius:10,padding:'10px 12px'}}>
+          <div style={lblG}>Saldo actual</div>
+          <div style={{fontSize:13,fontWeight:700,color:sK.c}}>{fmtN(saldoActual)}</div>
         </div>
       </div>
 
@@ -3093,13 +3112,12 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
         {(fDesde||fHasta)&&<button onClick={()=>{setFDesde('');setFHasta('')}} style={{fontSize:10,color:'#888',background:'none',border:'none',cursor:'pointer'}}>×</button>}
       </div>
 
-      {/* Atención: se imprime en la rendición; si el cliente no tiene contactos, al confirmar se guarda como contacto */}
+      {/* Dirigido a: se imprime en la rendición y se guarda para reutilizar en próximas */}
       <div style={{marginBottom:10}}>
-        <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Atención</div>
-        {contacts.length>0
-          ? <div style={{fontSize:13,color:'#3D3D3D',padding:'6px 0'}}>{contacts[0].nombre}</div>
-          : <input value={atencion} onChange={e=>setAtencion(e.target.value)} onBlur={guardarAtencion} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); e.currentTarget.blur() } }} placeholder='Atención (opcional)'
-              style={{width:'100%',padding:'7px 9px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/>}
+        <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Dirigido a</div>
+        <input value={atencion} onChange={e=>{setAtencion(e.target.value);setPrefilled(false)}} placeholder='Nombre de la persona (opcional)'
+          style={{width:'100%',padding:'7px 9px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+        {prefilled&&atencion&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Guardado de rendición anterior — puedes editarlo</div>}
       </div>
 
       {/* Lista de gastos */}
