@@ -31,6 +31,15 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
 
+// Saldo real de caja chica del usuario = fondos entregados − todos sus gastos (liquidados y pendientes).
+// Fuente única: la usan CajaChicaView ("Mi caja") y el KPI en Tareas para que nunca diverjan.
+const saldoCajaChica = (pettyCash, expenses, userName) => {
+  if(!userName) return 0
+  const entregado = (pettyCash||[]).filter(p=>p.user_name===userName).reduce((a,p)=>a+(p.amount||0),0)
+  const gastado = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===userName).reduce((a,e)=>a+(e.amount||0),0)
+  return entregado - gastado
+}
+
 const DaysBadge = ({due,status}) => {
   const u=urgency(due,status); if(u==='done') return null
   const d=daysLeft(due); if(d===null) return null
@@ -350,7 +359,7 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
 
   // Caja actual del usuario
   const miCaja = pettyCash.filter(p=>p.user_name===me)
-  const saldoCaja = miCaja.reduce((a,p)=>a+(p.rendered_at?0:p.amount),0)
+  const saldoCaja = saldoCajaChica(pettyCash, expenses, me)
 
   const toggleSelect = id => setSelected(prev=>{
     const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n
@@ -4704,7 +4713,7 @@ function printTasks(tasks, clients, filterLabel) {
   w.document.close()
 }
 
-function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentUserName}) {
+function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName}) {
   const [vistaCalendario,setVistaCalendario] = useState(false)
   const [semanaOffset,setSemanaOffset] = useState(0)
   const hoy = new Date()
@@ -4903,6 +4912,57 @@ function TasksOnlyView({tasks,clients,sales,onAddTask,onEdit,onComplete,currentU
             </div>
           )
         })}
+        {(()=>{
+          const saldo = saldoCajaChica(pettyCash, expenses, me)
+          const misGastos = (expenses||[]).filter(e=>e.type==='gasto' && e.created_by===me)
+          const porLiquidar = misGastos.filter(e=>!e.rendered_at)
+          const totalPorLiquidar = porLiquidar.reduce((a,e)=>a+(e.amount||0),0)
+          const ultimos = [...misGastos].sort((a,b)=>{
+            const da=a.date||'', db=b.date||''
+            if(da!==db) return da<db?1:-1
+            return (b.created_at||'')<(a.created_at||'')?-1:1
+          }).slice(0,3)
+          const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+          const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
+          const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+          return (
+            <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+                <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px 14px',border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Mi caja chica</div>
+                  <div style={{fontSize:22,fontWeight:700,color:saldo<0?C.overdue:C.normal,lineHeight:1.1}}>{saldo<0?'-':''}{fmtCLP(saldo)}</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:3}}>{saldo<0?'sobregirada':'disponible'}</div>
+                </div>
+                <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px 14px',border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Gastos por liquidar</div>
+                  <div style={{fontSize:22,fontWeight:700,color:C.soon,lineHeight:1.1}}>{fmtCLP(totalPorLiquidar)}</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:3}}>{porLiquidar.length} gasto{porLiquidar.length!==1?'s':''} sin liquidar</div>
+                </div>
+              </div>
+              {ultimos.length>0&&(
+                <>
+                  <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Últimos gastos ingresados</div>
+                  {ultimos.map(e=>{
+                    const cl=clients.find(c=>c.id===e.client_id)
+                    return (
+                      <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,background:C.card,borderRadius:8,padding:'8px 11px',marginBottom:5,border:`0.5px solid ${C.border}`}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                          <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                            {cl&&<span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:130}}>{cl.name}</span>}
+                            {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:CAT_BG[e.category]||CAT_BG['Otro'],color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                            <span>{fmtFecha(e.date)}</span>
+                          </div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmtCLP(e.amount)}</div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
@@ -5142,13 +5202,15 @@ export default function App() {
     setSaving(true)
     try{
       const p={...f,amount:parseInt(f.amount)||0,sale_id:f.sale_id||null}
+      // Atribución automática: registra quién ingresó el gasto (solo al crear, nunca al editar)
+      if(f.type==='gasto' && !f.id && !p.created_by) p.created_by = user?.name || null
       const{data,error}=await supabase.from('expenses').upsert(p).select().single()
       if(error)throw error
       setExpenses(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[])
+  },[user])
 
   const handleDeleteExpense=useCallback(async(id)=>{
     if(!confirm('Eliminar este registro?')) return
@@ -5325,7 +5387,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
-            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
+            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} clients={clients||[]} currentUserName={user?.name} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})}/>}
