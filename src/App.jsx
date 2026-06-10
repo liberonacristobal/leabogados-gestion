@@ -128,15 +128,32 @@ const TABS_LIMITED = [
 
 
 // ─── CLIENTS VIEW LIMITED ──────────────────────────────────────────────────
+// Recuadros de filtro de estado de clientes (Activos / Terminados / Todos) — compartido admin/limited
+function ClientStatusTabs({value,onChange,activeN,endedN}){
+  return (
+    <div style={{display:'flex',gap:6,marginBottom:4}}>
+      {[['Activo',`Activos (${activeN})`],['Terminado',`Terminados (${endedN})`],['all','Todos']].map(([v,l])=>(
+        <button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${value===v?C.accent:C.border}`,background:value===v?'#E6EEF1':'transparent',color:value===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
+      ))}
+    </div>
+  )
+}
+
 function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const [confirmEdit,setConfirmEdit] = useState(null)
   const [openRend,setOpenRend] = useState(null)
+  const [sFilter,setSFilter] = useState('Activo')
 
-  const filtered = clients.filter(c=>
-    !q.trim() || c.name.toLowerCase().includes(q.toLowerCase())
-  ).sort((a,b)=>a.name.localeCompare(b.name))
+  const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
+  const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
+  const filtered = clients.filter(c=>{
+    if(sFilter==='Activo' && (c.status||'Activo')!=='Activo') return false
+    if(sFilter==='Terminado' && c.status!=='Terminado') return false
+    if(q.trim() && !c.name.toLowerCase().includes(q.toLowerCase())) return false
+    return true
+  }).sort((a,b)=>a.name.localeCompare(b.name))
 
   const ClientRow = ({cl}) => {
     const saldo = (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===cl.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })()
@@ -314,7 +331,8 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
           <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:'#003C50',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
         </div>
-        <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',marginBottom:8}}/>
+        <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN}/>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:'#888',textAlign:'center',padding:40}}>Sin clientes</div>}
@@ -3820,11 +3838,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         </div>
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
-        <div style={{display:'flex',gap:6,marginBottom:4}}>
-          {[['Activo',`Activos (${activeN})`],['Terminado',`Terminados (${endedN})`],['all','Todos']].map(([v,l])=>(
-            <button key={v} onClick={()=>setSFilter(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${sFilter===v?C.accent:C.border}`,background:sFilter===v?'#E6EEF1':'transparent',color:sFilter===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
-          ))}
-        </div>
+        <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN}/>
       </div>
       <div style={{padding:'10px 20px 100px'}}>
         {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}

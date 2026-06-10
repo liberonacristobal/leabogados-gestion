@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Vista Clientes limited: agregados los recuadros de filtro Activos / Terminados / Todos (mismo estilo y posición que admin), vía componente compartido `ClientStatusTabs` (extraído del markup inline de ClientsView, sin duplicar). La tarjeta limited se mantiene sin info financiera de admin (no muestra ventas activas, por cobrar ni fondos del admin); conserva solo nombre, tipo y su saldo operativo de fondos.
+
+## 2026-06-10
 - Cliente interno (gastos de oficina): checkbox "Cliente interno" en ClientForm (`clients.is_internal`). El cliente interno se excluye del contador de clientes y de "Fondos negativos" del Dashboard; las cifras de negocio ya lo excluyen solas (no tiene ventas/facturas). Sigue visible en la lista (chip "Interno") y disponible para imputar gastos y rendir.
 - Subcategoría libre cuando la categoría de gasto es "Otro": campo con autocomplete (subcategorías ya usadas) en GastosForm y ExpenseEditForm, guardado en `expenses.subcategory` y mostrado en la lista de gastos.
 - Bloque "Costos de oficina del mes" en el Dashboard admin: acordeón con total del mes, detalle por gasto y filtro de período (mes), leyendo los gastos del cliente interno.
