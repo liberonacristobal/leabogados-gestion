@@ -51,12 +51,13 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
 
-// Saldo real de caja chica del usuario = fondos entregados − todos sus gastos (liquidados y pendientes).
+// Saldo disponible de caja chica del usuario = fondos entregados − gastos AÚN NO liquidados.
+// Al liquidar (rendered_at), el gasto se rinde/reembolsa y deja de descontar del saldo disponible.
 // Fuente única: la usan CajaChicaView ("Mi caja") y el KPI en Tareas para que nunca diverjan.
 const saldoCajaChica = (pettyCash, expenses, userName) => {
   if(!userName) return 0
   const entregado = (pettyCash||[]).filter(p=>p.user_name===userName).reduce((a,p)=>a+(p.amount||0),0)
-  const gastado = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===userName).reduce((a,e)=>a+(e.amount||0),0)
+  const gastado = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===userName&&!e.rendered_at).reduce((a,e)=>a+(e.amount||0),0)
   return entregado - gastado
 }
 
@@ -449,6 +450,16 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
     return true
   }).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
 
+  // Gastos ya liquidados (con rendered_at) — para el historial colapsado; mismos filtros que pendientes
+  const liquidados = expenses.filter(e=>{
+    if(e.type!=='gasto' || !e.rendered_at) return false
+    if(fDesde && e.date && e.date < fDesde) return false
+    if(fHasta && e.date && e.date > fHasta) return false
+    if(fCliente && e.client_id !== fCliente) return false
+    if(fCat && e.category !== fCat) return false
+    return true
+  }).sort((a,b)=>(a.rendered_at||'')<(b.rendered_at||'')?1:-1)
+
   // Caja actual del usuario
   const miCaja = pettyCash.filter(p=>p.user_name===me)
   const saldoCaja = saldoCajaChica(pettyCash, expenses, me)
@@ -686,6 +697,36 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               </div>
             )
           })}
+
+          {/* Gastos liquidados — historial colapsado (PASO 4) */}
+          {liquidados.length>0&&(
+            <div style={{marginTop:18}}>
+              <div onClick={()=>setOpenLiquidados(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'9px 0',borderTop:'1px solid #E8E8E8'}}>
+                <div style={{fontSize:12,fontWeight:600,color:'#537281'}}>Gastos liquidados · {liquidados.length}</div>
+                <span style={{fontSize:12,color:'#888',transform:openLiquidados?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
+              </div>
+              {openLiquidados&&liquidados.map(e=>{
+                const client=clients.find(cl=>cl.id===e.client_id)
+                const catBg=CATS[e.category]||CATS['Otro']
+                const liqD=e.rendered_at?new Date(e.rendered_at).toLocaleDateString('es-CL'):'—'
+                return (
+                  <div key={e.id} style={{background:'#fff',borderRadius:8,padding:'9px 12px',marginBottom:6,border:'1px solid #EEE',display:'flex',alignItems:'center',gap:10,opacity:.9}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.concept||'—'}</div>
+                      <div style={{fontSize:10,color:'#888',marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                        {client&&<span>{client.name}</span>}
+                        {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                        {e.date&&<span>{e.date}</span>}
+                        <span style={{color:'#0F6E56',fontWeight:600}}>✓ Liquidado {liqD}</span>
+                      </div>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:700,color:'#888',flexShrink:0}}>{fmtCLP(e.amount)}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {selected.size>0&&(
             <div style={{position:'fixed',bottom:80,left:0,right:0,padding:'0 20px',zIndex:50}}>
               <div style={{background:'#003C50',borderRadius:12,padding:'12px 16px',display:'flex',gap:8,alignItems:'center',boxShadow:'0 4px 20px rgba(0,60,80,.4)'}}>
