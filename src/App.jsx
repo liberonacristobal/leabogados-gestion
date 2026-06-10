@@ -3465,9 +3465,13 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments}) {
+function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
+  const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
+  const [rendEntity,setRendEntity] = useState(null)         // razón social pre-seleccionada al rendir
+  const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
+  const [openRS,setOpenRS] = useState(()=>new Set())        // RS expandidas (acordeón 2+ RS)
   const [rendicionClient,setRendicionClient] = useState(null)
   const [showHistorial,setShowHistorial] = useState(false)
   const [emailRend,setEmailRend] = useState(null)
@@ -3522,6 +3526,62 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 
   const clientBalance = selectedClient ? (balances[selectedClient.id]||{}) : null
   const saldo = clientBalance ? clientBalance.fondos - clientBalance.gastos : 0
+  const selEnts = selectedClient ? (clientEntities||[]).filter(x=>x.client_id===selectedClient.id) : []
+  const rb = selectedClient ? rsBalances(selectedClient.id, expenses, selEnts) : null
+  const multiRS = selEnts.length>=2
+
+  // Colores de KPI según reglas (labels siempre gris #99ABB4)
+  const cFondos = v => v>0?{c:C.normal,bg:'#E4F1EA'} : v===0?{c:'#C77F18',bg:'#FEF6EE'} : {c:C.overdue,bg:'#FBE9E7'}
+  const cSaldo = v => v>0?{c:C.normal,bg:'#E4F1EA'} : {c:C.overdue,bg:'#FBE9E7'}
+  const KpiRect = ({label,value,c,bg}) => (
+    <div style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:10,color:'#99ABB4',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</div>
+      <div style={{fontSize:14,fontWeight:700,color:c}}>{value}</div>
+    </div>
+  )
+  const KpiRow = ({bal}) => { const f=cFondos(bal.fondos), s=cSaldo(bal.saldo); return (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+      <KpiRect label='Fondos' value={fmt(bal.fondos)} c={f.c} bg={f.bg}/>
+      <KpiRect label='Gastos' value={fmt(bal.gastos)} c={C.overdue} bg='#FBE9E7'/>
+      <KpiRect label='Saldo actual' value={fmt(bal.saldo)} c={s.c} bg={s.bg}/>
+    </div>
+  )}
+
+  // Ícono de adjuntos por gasto (CAMBIO 2): clip azul con contador o botón de subida gris
+  const AdjuntoIcon = ({e}) => {
+    const n=(expenseAttachments||[]).filter(a=>a.expense_id===e.id).length
+    return n>0
+      ? <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title={`${n} adjunto(s)`} style={{display:'flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,border:'1px solid #185FA5',background:'#E6F1FB',color:'#185FA5',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0}}>
+          <span style={{width:8,height:11,border:'1.5px solid #185FA5',borderRadius:3,display:'inline-block',transform:'rotate(35deg)'}}/>{n}
+        </button>
+      : <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title='Adjuntar comprobante' style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer',flexShrink:0,fontSize:13,lineHeight:1}}>↑</button>
+  }
+
+  // Fila de movimiento (sin línea de razón social): badge + concepto + fecha; ícono de adjunto solo en gastos
+  const renderMov = (e) => {
+    const isFondo=e.type==='fondo'
+    const catBg=CATS[e.category]||CATS['Otro']
+    return (
+      <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
+              {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
+              {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
+              {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>Rendido</span>}
+              {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
+            </div>
+            <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+            {!isFondo&&<AdjuntoIcon e={e}/>}
+            <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -3531,39 +3591,22 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
             {selectedClient&&(
               <button onClick={()=>setSelectedClient(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
             )}
-            <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-              {selectedClient?selectedClient.name:'Gastos y Fondos'}
+            <div>
+              <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
+                {selectedClient?selectedClient.name:'Gastos y Fondos'}
+              </div>
+              {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selEnts[0].name}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
             </div>
           </div>
           <div style={{display:'flex',gap:6}}>
-            {selectedClient&&(
-              <button onClick={()=>setRendicionClient(selectedClient)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>
-            )}
             {!selectedClient&&<button onClick={onBulk} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Carga masiva</button>}
             <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
             <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
           </div>
         </div>
 
-        {/* Vista cliente seleccionado: saldo */}
-        {selectedClient&&clientBalance&&(
-          <div style={{background:C.card,borderRadius:10,padding:'12px 14px',border:`1px solid ${saldo<0?C.overdue:C.border}`,marginBottom:8}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-              <div>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>FONDOS</div>
-                <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(clientBalance.fondos||0)}</div>
-              </div>
-              <div>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS</div>
-                <div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(clientBalance.gastos||0)}</div>
-              </div>
-              <div>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
-                <div style={{fontSize:13,fontWeight:700,color:saldo<0?C.overdue:C.normal}}>{fmt(saldo)}</div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Vista cliente seleccionado: KPIs (totales de todas las RS) */}
+        {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
 
         {/* Vista general: búsqueda */}
         {!selectedClient&&(
@@ -3629,40 +3672,42 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
         </div>
       )}
 
-      {/* Vista cliente: movimientos */}
-      {selectedClient&&(
-        <div style={{padding:'4px 20px 100px'}}>
+      {/* Vista cliente con 1 razón social (o sin RS): lista de movimientos */}
+      {selectedClient&&!multiRS&&(
+        <div style={{padding:'4px 20px 130px'}}>
           {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
-          {filtered.map(e=>{
-            const isFondo=e.type==='fondo'
-            const catBg=CATS[e.category]||CATS['Otro']
-            return (
-              <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isFondo?C.normal:C.overdue}`,cursor:'pointer'}}
-                onMouseEnter={x=>x.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.08)'}
-                onMouseLeave={x=>x.currentTarget.style.boxShadow='none'}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
-                      {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
-                      {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
-                      {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>Rendido</span>}
-                      {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
-                      {(()=>{ const n=(expenseAttachments||[]).filter(a=>a.expense_id===e.id).length; return n>0?<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#F0F0F0',color:C.muted,fontWeight:600}}>Adjunto {n}</span>:null })()}
-                    </div>
-                    <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
-                    {e.entity_id&&(()=>{ const rs=(clientEntities||[]).find(x=>x.id===e.entity_id); return rs?<div style={{fontSize:10,color:C.muted,marginTop:2,textTransform:'uppercase',letterSpacing:.3,opacity:.8}}>{rs.name}{rs.rut?` · ${rs.rut}`:''}</div>:null })()}
-                  </div>
-                  <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-                    <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          {filtered.map(renderMov)}
         </div>
       )}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])} currentUserName={currentUserName}/></Modal>}
+      {/* Vista cliente con 2+ razones sociales: lista plana provisional (acordeón en CAMBIO 3) */}
+      {selectedClient&&multiRS&&(
+        <div style={{padding:'4px 20px 130px'}}>
+          {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
+          {filtered.map(renderMov)}
+        </div>
+      )}
+
+      {/* Barra inferior: Total a rendir + Rendir al cliente (vista 1 RS) */}
+      {selectedClient&&!multiRS&&(()=>{
+        const gastosPend = filtered.filter(e=>e.type==='gasto'&&!e.client_rendered_at)
+        const total = gastosPend.reduce((a,e)=>a+(e.amount||0),0)
+        return (
+          <div style={{position:'fixed',bottom:64,left:0,right:0,padding:'0 20px',zIndex:40}}>
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,boxShadow:'0 4px 16px rgba(0,0,0,.12)'}}>
+              {gastosPend.length>0?<>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4}}>Total a rendir</div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.text}}>{fmt(total)}</div>
+                </div>
+                <button onClick={()=>{setRendEntity(selEnts[0]||null);setRendicionClient(selectedClient)}} style={{padding:'10px 16px',borderRadius:10,border:'none',background:'#1D9E75',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Rendir al cliente</button>
+              </>:<div style={{flex:1,fontSize:12,color:C.muted,textAlign:'center'}}>Sin gastos por rendir</div>}
+            </div>
+          </div>
+        )
+      })()}
+
+      {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntity(null)}}><RendicionModal client={rendicionClient} entity={rendEntity} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntity(null)}} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])} currentUserName={currentUserName}/></Modal>}
       {showHistorial&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'flex-end'}} onClick={e=>e.target===e.currentTarget&&setShowHistorial(false)}>
           <div style={{background:'#fff',borderRadius:'16px 16px 0 0',padding:20,width:'100%',maxHeight:'70vh',overflowY:'auto',boxSizing:'border-box'}}>
@@ -7047,7 +7092,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields}/>}
