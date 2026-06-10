@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Modal de nueva tarea (admin y limited): se muestra directamente la sección de Archivos (igual que al editar), reemplazando el aviso "Podrás adjuntar...". Al adjuntar el primer archivo en una tarea nueva, la tarea se crea silenciosamente en Supabase (sin cerrar el modal ni avisar) para obtener su id y habilitar el uploader; "Guardar" hace UPDATE de ese borrador (o INSERT normal si no se adjuntó nada) y notifica como tarea nueva; cancelar/cerrar elimina el borrador para no dejar huérfanos. `Attachments` acepta `ensureEntityId` para crear el id de forma diferida.
+
+## 2026-06-10
 - Vista Clientes limited: agregados los recuadros de filtro Activos / Terminados / Todos (mismo estilo y posición que admin), vía componente compartido `ClientStatusTabs` (extraído del markup inline de ClientsView, sin duplicar). La tarjeta limited se mantiene sin info financiera de admin (no muestra ventas activas, por cobrar ni fondos del admin); conserva solo nombre, tipo y su saldo operativo de fondos.
 
 ## 2026-06-10
