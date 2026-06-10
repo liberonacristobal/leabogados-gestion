@@ -2144,7 +2144,6 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
 
   // ── Bloque 2 (POR FACTURAR · mes en curso): programadas que vencen este mes ──
   const mesKey = `${currentYear}-${String(currentMonth).padStart(2,'0')}`
-  const mesNombre = new Date().toLocaleDateString('es-CL',{month:'long'}).replace(/^\w/,c=>c.toUpperCase())
   const progMes = useMemo(()=>{
     let r = bb.filter(b=>b.status==='Programada'&&b.due?.slice(0,7)===mesKey)
     if(q.trim()) r = r.filter(b=>{
@@ -2373,7 +2372,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
             <button onClick={()=>setOpenPorFacturar(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F7F8F9',cursor:'pointer',textAlign:'left',marginBottom:10}}>
               <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                 <span style={{fontSize:12,color:C.accent,transform:openPorFacturar?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
-                <span style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Por facturar · {mesNombre}</span>
+                <span style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Por facturar</span>
                 <span style={{fontSize:11,color:C.muted}}>· {progMes.length}</span>
               </div>
               <span style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,marginLeft:8}}>{fmt(progMesTotal)}</span>
