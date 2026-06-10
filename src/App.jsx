@@ -3925,12 +3925,15 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   // Proyecto del lote (autocomplete con los proyectos del cliente: tareas + ventas, igual que QuickTaskForm)
   const [project,setProject] = useState('')
   const [showProjects,setShowProjects] = useState(false)
+  const [newProject,setNewProject] = useState(false)
   const clientProjects = useMemo(()=>{
     if(!selectedClient) return []
-    const fromTasks = (tasks||[]).filter(t=>t.client_id===selectedClient.id&&t.project).map(t=>t.project)
-    const fromSales = (sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title).map(s=>s.title)
-    return [...new Set([...fromSales,...fromTasks])].sort()
+    const m={}
+    ;(tasks||[]).filter(t=>t.client_id===selectedClient.id&&t.project).forEach(t=>{ const d=t.created_at||t.due||''; if(!(t.project in m)||d>m[t.project]) m[t.project]=d })
+    ;(sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title).forEach(s=>{ const d=s.created_at||s.date||''; if(!(s.title in m)||d>m[s.title]) m[s.title]=d })
+    return Object.keys(m).sort((a,b)=>(m[b]||'').localeCompare(m[a]||''))   // más reciente primero
   },[tasks,sales,selectedClient])
+  useEffect(()=>{ setProject(clientProjects[0]||''); setNewProject(false) },[clientProjects])   // pre-poblar con el proyecto más reciente
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
   const balance = selectedClient ? (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===selectedClient.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })() : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
@@ -4012,19 +4015,26 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
             </div>
           )}
 
-          <div style={{marginBottom:10}}>
-            <Fld label='Proyecto (opcional)'>
+          <div style={{marginBottom:12}}>
+            <Lbl>Proyecto</Lbl>
+            {clientProjects.length===0||newProject?(
+              <Inp value={project} onChange={e=>setProject(e.target.value)} placeholder='Nombre del proyecto...' autoFocus={newProject}/>
+            ):(
               <div style={{position:'relative'}}>
-                <Inp value={project} onChange={e=>setProject(e.target.value)} onFocus={()=>setShowProjects(true)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} placeholder={clientProjects.length>0?'Selecciona o escribe un proyecto...':'Escribe el nombre del proyecto...'}/>
-                {showProjects&&clientProjects.length>0&&(
-                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
-                    {clientProjects.filter(p=>!project||p.toLowerCase().includes(project.toLowerCase())).map((p,i)=>(
-                      <div key={i} onMouseDown={()=>setProject(p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
+                <button type='button' onClick={()=>setShowProjects(s=>!s)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#f5f7f9',color:project?C.text:C.muted,fontSize:14,cursor:'pointer',textAlign:'left'}}>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{project||'Selecciona un proyecto'}</span>
+                  <span style={{color:C.muted,transform:showProjects?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0,marginLeft:8}}>▾</span>
+                </button>
+                {showProjects&&(
+                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
+                    {clientProjects.map((p,i)=>(
+                      <div key={i} onMouseDown={()=>{setProject(p);setShowProjects(false)}} style={{padding:'9px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,background:p===project?'#E6EEF1':'#fff',color:p===project?C.accent:C.text,fontWeight:p===project?600:400}}>{p}</div>
                     ))}
+                    <div onMouseDown={()=>{setNewProject(true);setProject('');setShowProjects(false)}} style={{padding:'9px 12px',cursor:'pointer',fontSize:13,fontWeight:600,color:C.normal}}>+ Nuevo proyecto...</div>
                   </div>
                 )}
               </div>
-            </Fld>
+            )}
           </div>
 
           {/* Tabla de filas */}
