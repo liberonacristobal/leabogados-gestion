@@ -5438,8 +5438,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                       {tareasDelDia.length===0&&<div style={{fontSize:8,color:'#bbb',fontStyle:'italic'}}>—</div>}
                       {tareasDelDia.map(t=>{
                         const cl=clients.find(x=>x.id===t.client_id)
+                        const asignadaPorMi = t.who!==me && t.assigned_by===me
                         return (
-                          <div key={t.id} onClick={(e)=>{e.stopPropagation();setPreview(t)}} style={{background:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+                          <div key={t.id} onClick={(e)=>{e.stopPropagation();setPreview(t)}} style={{background:asignadaPorMi?'#F0F9F5':'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${asignadaPorMi?'#1D9E75':C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
                             <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',lineHeight:1.2,wordBreak:'break-word'}}>{t.title}</div>
                             {cl&&<div style={{fontSize:8,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
                           </div>
@@ -5452,6 +5453,10 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             </div>
           )
         })}
+        <div style={{display:'flex',gap:14,alignItems:'center',marginTop:4,flexWrap:'wrap'}}>
+          <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:10,color:C.muted}}><span style={{width:9,height:9,borderRadius:2,background:'#fff',border:`2px solid ${C.accent}`,display:'inline-block',flexShrink:0}}/>Asignadas a mí</span>
+          <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:10,color:C.muted}}><span style={{width:9,height:9,borderRadius:2,background:'#F0F9F5',border:'2px solid #1D9E75',display:'inline-block',flexShrink:0}}/>Que yo asigné</span>
+        </div>
       </div>
       <div style={{padding:'24px 20px 100px'}}>
         <div style={{marginBottom:10}}><BloqueTitulo>Resumen financiero</BloqueTitulo></div>
