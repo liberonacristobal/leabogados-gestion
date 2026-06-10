@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-06-10
+- Títulos de bloque de Tareas (limited) ahora con el mismo estilo que los títulos de sección del Dashboard admin (11/600/muted, uppercase, letterSpacing .5) para consistencia visual entre vistas.
 - Ajustes Tareas (limited): filtros con orden invertido (cliente primero, proyecto después); el selector de proyectos depende del cliente buscado (deshabilitado "Selecciona un cliente" si no hay; solo proyectos de ese cliente; "Sin proyectos" si no tiene) y se resetea al cambiar el cliente; títulos de bloque "Próximas semanas" (sin "dos") y "Resumen financiero" (antes "Mi caja chica").
 - Rediseño jerárquico de la pestaña Tareas (limited): saludo sin la línea de contador redundante; sección "Mis tareas" con filtros a la derecha y dos/tres subsecciones colapsables (Activas abierta, Tareas que asigné, Terminadas cerrada) eliminando los subtítulos de urgencia repetidos; títulos de bloque unificados (15/700/#3D3D3D) y subtítulos unificados (12/600); bloques con espaciado parejo (~24px) sin hueco muerto antes del calendario. KPIs de caja chica con título de bloque y color escalonado: "Saldo disponible" verde >$50.000 / naranja $0–$50.000 / rojo negativo; "Por liquidar" naranja, rojo si los gastos sin liquidar (excl. Notaría) superan 10.
 
