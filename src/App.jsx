@@ -2870,11 +2870,12 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName,expenseAttachments}) {
+function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
   const [rendicionClient,setRendicionClient] = useState(null)
   const [showHistorial,setShowHistorial] = useState(false)
+  const [emailRend,setEmailRend] = useState(null)
   const [hFiltCliente,setHFiltCliente] = useState('')
   const [hFiltMes,setHFiltMes] = useState('')
   const handleAnularRendicion = async(r) => {
@@ -3078,15 +3079,25 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
               if(!rends.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin rendiciones</div>
               return rends.map(r=>{
                 const cl=clients.find(x=>x.id===r.client_id)
-                return (<div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{cl?.name||'Cliente'}</div><div style={{fontSize:11,color:C.muted,marginTop:2}}>{r.periodo} · {r.n_gastos} gastos · {new Date(r.created_at).toLocaleDateString('es-CL')}</div></div>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div><button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button></div>
+                return (<div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:C.text}}>{cl?.name||'Cliente'}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{r.periodo} · {r.n_gastos} gastos · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
+                      {r.sent_at
+                        ? <div style={{fontSize:10,fontWeight:600,color:'#0F6E56',marginTop:2}}>✓ Enviada {new Date(r.sent_at).toLocaleDateString('es-CL')}</div>
+                        : <div style={{fontSize:10,fontWeight:600,color:'#C2761F',marginTop:2}}>Pendiente de envío</div>}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div><button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button></div>
+                  </div>
+                  {cl&&<button onClick={()=>setEmailRend(r)} style={{marginTop:6,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'✉ Reenviar al cliente':'✉ Enviar al cliente'}</button>}
                 </div>)
               })
             })()}
           </div>
         </div>
       )}
+      {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} onSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
@@ -3536,7 +3547,49 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion}) {
+// Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
+function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
+  const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+  const [para,setPara] = useState(client?.email||'')
+  const [asunto,setAsunto] = useState(`Rendición de gastos ${client?.name||''} — ${r.periodo}`)
+  const [sending,setSending] = useState(false)
+  const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+  const buildHTML = () => {
+    const A='#003C50',A2='#537281',A4='#E4E8EB'
+    const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#C2382B">-${fmtN(e.amount)}</td></tr>`).join('')
+    return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:15px;font-weight:700">Liberona Escala Abogados</div><div style="font-size:11px;opacity:.85;margin-top:2px">Rendición de gastos · ${client?.name||''} · ${r.periodo}</div></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#C2382B">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
+  }
+  const enviar = async() => {
+    if(!para.trim()){ alert('Falta el email del cliente.'); return }
+    setSending(true)
+    try{
+      const texto = 'Estimado cliente,\n\nAdjunto la rendición de gastos.\n\n'+det.map(e=>`${e.date||'—'} · ${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')+`\n\nTOTAL RENDIDO: -${fmtN(r.total)}\n\nAtentamente,\n${user?.name||''}\nLiberona Escala Abogados`
+      const now = new Date().toISOString()
+      await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
+      onSent && onSent(r.id, now)
+      const link=document.createElement('a'); link.href=`mailto:${encodeURIComponent(para.trim())}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`; link.click()
+      onClose()
+    }catch(e){ alert('Error: '+e.message) }
+    setSending(false)
+  }
+  return (
+    <Modal title='Enviar rendición al cliente' onClose={onClose}>
+      {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:'#C2761F',fontSize:12,marginBottom:12}}>⚠ El cliente no tiene email en su ficha. Complétalo (botón Editar del cliente) o escríbelo abajo antes de enviar.</div>}
+      <Fld label='De'><Inp value={user?.email||''} disabled style={{opacity:.7}}/></Fld>
+      <Fld label='Para'><Inp type='email' value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl'/></Fld>
+      <Fld label='Asunto'><Inp value={asunto} onChange={e=>setAsunto(e.target.value)}/></Fld>
+      <Lbl>Resumen</Lbl>
+      <div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:10,maxHeight:240,overflowY:'auto',marginBottom:14}} dangerouslySetInnerHTML={{__html:buildHTML()}}/>
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={enviar} disabled={sending||!para.trim()} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':'Enviar'}</button>
+      </div>
+    </Modal>
+  )
+}
+
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent}) {
+  const [emailRend,setEmailRend] = useState(null)
   const clientSales = sales.filter(s=>s.client_id===client.id)
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
@@ -3720,12 +3773,21 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             return (<div style={{marginTop:12}}>
               <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Rendiciones</div>
               {rends.map(r=>(
-                <div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div><div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div></div>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
-                    {onAnularRendicion&&<button onClick={()=>onAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button>}
+                <div key={r.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
+                      {r.sent_at
+                        ? <div style={{fontSize:10,fontWeight:600,color:'#0F6E56',marginTop:2}}>✓ Enviada {new Date(r.sent_at).toLocaleDateString('es-CL')}</div>
+                        : <div style={{fontSize:10,fontWeight:600,color:'#C2761F',marginTop:2}}>Pendiente de envío</div>}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
+                      {onAnularRendicion&&<button onClick={()=>onAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button>}
+                    </div>
                   </div>
+                  <button onClick={()=>setEmailRend(r)} style={{marginTop:6,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'✉ Reenviar al cliente':'✉ Enviar al cliente'}</button>
                 </div>
               ))}
             </div>)
@@ -3793,11 +3855,12 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         </div>
 
       </div>
+      {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
 
-function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,setExpenses,setRendiciones,rendiciones}) {
+function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,setExpenses,setRendiciones,rendiciones,user}) {
 
   const handleAnularRendicion = async(r) => {
     if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
@@ -3849,6 +3912,8 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         onRendicion={c=>setRendicionClient(c)}
         rendiciones={rendiciones}
         onAnularRendicion={handleAnularRendicion}
+        user={user}
+        onRendicionSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))}
       />
       {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])}/></Modal>}
     </>
@@ -5999,10 +6064,10 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} expenseAttachments={expenseAttachments}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} clients={clients||[]} currentUserName={user?.name} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user}/>}
           </div>
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
