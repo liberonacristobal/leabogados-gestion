@@ -308,8 +308,6 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
 
         </div>
         {ftab==='contacto'&&<ContactoTab client={cl} entities={entities} onSaveFields={onSaveFields}/>}
-        {ftab==='financiero'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>🔒</div><div style={{fontSize:13,color:'#888'}}>Sección reservada para administración</div></div>}
-        {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>🔒</div><div style={{fontSize:13,color:'#888'}}>Sección reservada para administración</div></div>}
       </div>
     )
   }
@@ -3742,11 +3740,13 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
 
 // Barra de tabs de la ficha de cliente (reutilizada por admin y limited; bloquea según rol)
 function FichaTabs({tab,setTab,role}){
-  const tabs=[['resumen','Resumen',false],['contacto','Contacto',false],['financiero','Financiero',role!=='admin'],['documentos','Documentos',role!=='admin']]
+  const all=[['resumen','Resumen'],['contacto','Contacto'],['financiero','Financiero'],['documentos','Documentos']]
+  // El limited solo ve Resumen y Contacto (Financiero/Documentos no se renderizan)
+  const tabs = role==='admin' ? all : all.filter(([id])=>id==='resumen'||id==='contacto')
   return (
     <div style={{display:'flex',gap:4,marginTop:10}}>
-      {tabs.map(([id,label,locked])=>(
-        <button key={id} onClick={()=>{ if(!locked) setTab(id) }} title={locked?'Solo admin':''} style={{flex:1,padding:'7px 4px',borderRadius:8,border:`1px solid ${tab===id?C.accent:C.border}`,background:tab===id?'#E6EEF1':'transparent',color:locked?C.muted:(tab===id?C.accent:C.muted),fontSize:11,fontWeight:600,cursor:locked?'not-allowed':'pointer',opacity:locked?.55:1,whiteSpace:'nowrap'}}>{locked?'🔒 ':''}{label}</button>
+      {tabs.map(([id,label])=>(
+        <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'7px 4px',borderRadius:8,border:`1px solid ${tab===id?C.accent:C.border}`,background:tab===id?'#E6EEF1':'transparent',color:tab===id?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
       ))}
     </div>
   )
@@ -4367,7 +4367,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
-      {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>📁</div><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
+      {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
