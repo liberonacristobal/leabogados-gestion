@@ -1757,7 +1757,7 @@ function MiniClientForm({onSave,onCancel}) {
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onDelete,saving}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onSave,onClose,onDelete,saving}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   const [f,setF] = useState(sale ? {...sale, area: sale.area||'Corporativo'} : {client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas',entity_id:''})
@@ -1773,6 +1773,10 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
   const [cuotasCustom,setCuotasCustom] = useState(sale?.cobro_config?.cuotasCustom||[{id:1,monto:'',fecha:''}])
   const [mensualInicio,setMensualInicio] = useState(sale?.cobro_config?.mensualInicio||'')
   const [actualizarPago,setActualizarPago] = useState(false)
+  // Historial de honorarios (tramos)
+  const [tariffs,setTariffs] = useState([])
+  useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
+  const fmtMesAno = d => d ? d.slice(5,7)+'/'+d.slice(0,4) : '—'
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
@@ -1979,6 +1983,31 @@ function SaleForm({sale,clients:initialClients,clientEntities,onSave,onClose,onD
           <input type='checkbox' checked={actualizarPago} onChange={e=>setActualizarPago(e.target.checked)} style={{marginTop:2,flexShrink:0,cursor:'pointer'}}/>
           <span style={{fontSize:12,color:C.text}}>Actualizar forma de pago<br/><span style={{fontSize:11,color:C.muted}}>Reemplaza las cuotas programadas por las nuevas. Conserva las ya emitidas y pagadas.</span></span>
         </label>
+      )}
+      {sale?.id&&(
+        <div style={{marginTop:6,marginBottom:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+          <Lbl>Historial de honorarios</Lbl>
+          {tariffs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin historial registrado.</div>}
+          {tariffs.map((t,i)=>{
+            const vigente = i===tariffs.length-1
+            const cur = t.currency||'UF'
+            return (
+              <div key={t.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text}}>Desde {fmtMesAno(t.vigente_desde)}</div>
+                  {t.motivo&&<div style={{fontSize:10,color:C.muted}}>{t.motivo}</div>}
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{cur==='CLP'?fmt(t.honorario):fmtUF(t.honorario)}</div>
+                    {t.costo>0&&<div style={{fontSize:10,color:C.overdue}}>Costo {cur==='CLP'?fmt(t.costo):fmtUF(t.costo)}</div>}
+                  </div>
+                  <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,padding:'2px 7px',borderRadius:4,background:vigente?'#E1F5EE':'#F0F0F0',color:vigente?'#0F6E56':C.muted}}>{vigente?'Vigente':'Histórico'}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
@@ -5835,6 +5864,15 @@ export default function App() {
     setSaving(false)
   },[clients,clientEntities])
 
+  // Nuevo tramo de tarifa de una venta (PASO 3 agrega el recálculo de programadas)
+  const handleSaveTariff=useCallback(async(sale, t)=>{
+    try{
+      const {data,error}=await supabase.from('sale_tariff_history').insert({sale_id:sale.id, honorario:t.honorario, costo:(t.costo??null), currency:t.currency, vigente_desde:t.vigente_desde, motivo:t.motivo||null, created_by:user?.name||null}).select().single()
+      if(error)throw error
+      return data
+    }catch(e){ alert('Error: '+e.message); return null }
+  },[user])
+
   const handleDeleteSale=useCallback(async(id)=>{
     if(!confirm('Eliminar esta venta?')) return
     try{
@@ -6072,7 +6110,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
