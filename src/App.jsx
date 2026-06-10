@@ -420,12 +420,17 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
 }
 
 // ─── CAJA CHICA VIEW (limited) ─────────────────────────────────────────────
-function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,rendiciones,setRendiciones}) {
+function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUserEmail,pettyCash,setPettyCash,rendiciones,setRendiciones}) {
   const me = currentUserName || ''
   const [tab,setTab] = useState('liquidar') // liquidar | historial | caja
   const [selected,setSelected] = useState(new Set())
   const [saving,setSaving] = useState(false)
   const [openRendicion,setOpenRendicion] = useState(null)
+  const [confirmLiq,setConfirmLiq] = useState(false) // popup de confirmación de liquidación
+  const [enviarA,setEnviarA] = useState('')
+  const [cc,setCc] = useState('')
+  const [toast,setToast] = useState(null) // confirmación post-liquidación
+  const [openLiquidados,setOpenLiquidados] = useState(false) // historial "Gastos liquidados" (colapsado)
   const [newMonto,setNewMonto] = useState('')
   const [newFecha,setNewFecha] = useState(new Date().toISOString().slice(0,10))
   const [newNota,setNewNota] = useState('')
@@ -457,54 +462,47 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
   const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
+  const periodoActual = () => new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'})
+
   const handleLiquidar = async(abrirCorreo=false) => {
     if(!selected.size) return
     setSaving(true)
     try {
       const renderId = crypto.randomUUID()
       const now = new Date().toISOString()
+      const periodo = periodoActual()
       const gastosSel = pendientes.filter(e=>selected.has(e.id))
-      // Marcar gastos como rendidos
+      const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
+      const selIds = new Set(gastosSel.map(e=>e.id))
+      // Marcar CADA gasto como liquidado individualmente (no hay flag global)
       for(const e of gastosSel) {
-        await supabase.from('expenses').update({
-          rendered_at: now,
-          render_id: renderId,
-          rendered_by: me
-        }).eq('id',e.id)
+        await supabase.from('expenses').update({ rendered_at: now, render_id: renderId, rendered_by: me }).eq('id',e.id)
       }
-      // Registrar rendicion
+      // Registrar la liquidación en rendiciones
       const clientesIds = [...new Set(gastosSel.map(e=>e.client_id).filter(Boolean))]
-      await supabase.from('rendiciones').insert({
-        id: renderId,
-        user_name: me,
-        periodo: new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}),
-        total: totalSel,
-        n_gastos: gastosSel.length,
-        n_clientes: clientesIds.length
-      })
-      // Actualizar estado local
-      setRendiciones(p=>[{id:renderId,user_name:me,periodo:new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}),total:totalSel,n_gastos:gastosSel.length,n_clientes:clientesIds.length,created_at:now},...p])
+      await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length })
+      // Estado local: agregar rendición y marcar gastos (salen de pendientes y entran a liquidados sin recargar)
+      setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalLiq,n_gastos:gastosSel.length,n_clientes:clientesIds.length,created_at:now},...p])
+      if(setExpenses) setExpenses(p=>p.map(e=>selIds.has(e.id)?{...e,rendered_at:now,render_id:renderId,rendered_by:me}:e))
       setSelected(new Set())
+      setConfirmLiq(false)
+      let correoOk = false
       if(abrirCorreo) {
-        generatePDF()
-        const gastosSel2 = pendientes.filter(e=>selected.has(e.id))
-        const cnames = [...new Set(gastosSel2.map(e=>clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'))].join(', ')
-        const periodo = new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'})
+        const dest = (enviarA||'').trim() || 'ee@leabogados.cl,cl@leabogados.cl'
         const asunto = encodeURIComponent('Liquidación caja chica — ' + me + ' — ' + periodo)
+        const lineas = gastosSel.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+(e.date||'—')+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
         const cuerpo = encodeURIComponent(
-          'Estimados,\n\nAdjunto la liquidación de caja chica correspondiente.\n\n'
-          + 'Responsable: ' + me + '\n'
-          + 'Período: ' + periodo + '\n'
-          + 'Número de gastos: ' + gastosSel2.length + '\n'
-          + 'Clientes: ' + cnames + '\n'
-          + 'Total: $' + totalSel.toLocaleString('es-CL') + '\n\n'
-          + 'Quedo a disposición para cualquier consulta.'
+          'Estimados,\n\nAdjunto el detalle de la liquidación de caja chica.\n\n'
+          + 'Responsable: ' + me + '\nPeríodo: ' + periodo + '\nN° de gastos: ' + gastosSel.length + '\n\n'
+          + 'Detalle:\n' + lineas + '\n\nTOTAL: $' + totalLiq.toLocaleString('es-CL') + '\n\nQuedo a disposición para cualquier consulta.'
         )
+        const ccStr = (cc||'').trim() ? '&cc=' + encodeURIComponent(cc.trim()) : ''
         const mailLink = document.createElement('a')
-        mailLink.href = 'mailto:ee@leabogados.cl,cl@leabogados.cl?subject=' + asunto + '&body=' + cuerpo
+        mailLink.href = 'mailto:' + dest + '?subject=' + asunto + ccStr + '&body=' + cuerpo
         mailLink.click()
-        setTimeout(()=>generatePDF(), 500)
+        correoOk = true
       }
+      setToast({ n: gastosSel.length, total: totalLiq, correo: correoOk })
     } catch(e) { alert('Error: '+e.message) }
     setSaving(false)
   }
@@ -680,8 +678,8 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
                   <div style={{fontSize:15,fontWeight:700,color:'#fff'}}>{fmtCLP(totalSel)}</div>
                 </div>
                 <button onClick={generatePDF} style={{padding:'8px 14px',borderRadius:8,border:'1px solid rgba(255,255,255,.3)',background:'transparent',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>PDF</button>
-                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={{padding:'8px 14px',borderRadius:8,border:'none',background:'#E1F5EE',color:'#0F6E56',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                  {saving?'Guardando...':'Liquidar y enviar'}
+                <button onClick={()=>{ setEnviarA(currentUserEmail||''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{padding:'8px 14px',borderRadius:8,border:'none',background:'#E1F5EE',color:'#0F6E56',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                  Liquidar caja chica
                 </button>
               </div>
             </div>
@@ -798,6 +796,63 @@ function CajaChicaView({expenses,clients,currentUserName,pettyCash,setPettyCash,
           )}
         </div>
       )}
+
+      {/* Popup de confirmación de liquidación con detalle completo (PASO 2) */}
+      {confirmLiq&&(()=>{
+        const gastosSel = pendientes.filter(e=>selected.has(e.id))
+        const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
+        return (
+          <div onClick={()=>!saving&&setConfirmLiq(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:'16px 16px 0 0',width:'100%',maxWidth:560,maxHeight:'90vh',display:'flex',flexDirection:'column',boxSizing:'border-box'}}>
+              <div style={{padding:'18px 20px 12px',borderBottom:'1px solid #E8E8E8'}}>
+                <div style={{fontSize:15,fontWeight:700,color:'#003C50'}}>Resumen de liquidación</div>
+                <div style={{fontSize:12,color:'#537281',marginTop:2}}>{me} · {periodoActual()}</div>
+              </div>
+              <div style={{overflowY:'auto',padding:'12px 20px'}}>
+                <div style={{border:'1px solid #E8E8E8',borderRadius:8,overflow:'hidden'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'58px 1fr 74px',background:'#003C50',color:'#fff',fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,padding:'6px 10px'}}>
+                    <div>Fecha</div><div>Concepto · Cliente · Cat.</div><div style={{textAlign:'right'}}>Monto</div>
+                  </div>
+                  {gastosSel.map((e,i)=>{
+                    const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'
+                    return (
+                      <div key={e.id} style={{display:'grid',gridTemplateColumns:'58px 1fr 74px',padding:'7px 10px',fontSize:11,background:i%2?'#F7F8F9':'#fff',borderTop:'1px solid #EEE'}}>
+                        <div style={{color:'#888'}}>{e.date||'—'}</div>
+                        <div style={{minWidth:0}}>
+                          <div style={{color:'#3D3D3D',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                          <div style={{color:'#888',fontSize:10}}>{cn}{e.category?' · '+e.category:''}</div>
+                        </div>
+                        <div style={{textAlign:'right',fontWeight:600,color:'#E24B4A'}}>{fmtCLP(e.amount)}</div>
+                      </div>
+                    )
+                  })}
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'8px 10px',background:'#E4E8EB',fontWeight:700,fontSize:12,color:'#003C50'}}>
+                    <span>TOTAL · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span><span>{fmtCLP(totalLiq)}</span>
+                  </div>
+                </div>
+                <div style={{marginTop:14}}>
+                  <div style={{fontSize:10,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Envío por correo (opcional)</div>
+                  <div style={{marginBottom:8}}>
+                    <label style={{fontSize:11,color:'#537281',display:'block',marginBottom:3}}>Enviar a</label>
+                    <input value={enviarA} onChange={e=>setEnviarA(e.target.value)} placeholder='correo@...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,color:'#537281',display:'block',marginBottom:3}}>CC</label>
+                    <input value={cc} onChange={e=>setCc(e.target.value)} placeholder='(opcional)' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+                  </div>
+                </div>
+              </div>
+              <div style={{padding:'12px 20px 18px',borderTop:'1px solid #E8E8E8',display:'flex',flexDirection:'column',gap:8}}>
+                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={{padding:12,borderRadius:10,border:'none',background:'#003C50',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?.6:1}}>{saving?'Procesando...':'✉ Enviar y liquidar'}</button>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>setConfirmLiq(false)} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #E8E8E8',background:'#fff',color:'#888',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>handleLiquidar(false)} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #1D9E75',background:'transparent',color:'#0F6E56',fontSize:13,fontWeight:700,cursor:'pointer'}}>Solo liquidar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -6492,7 +6547,7 @@ export default function App() {
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments}/>}
-            {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} clients={clients||[]} currentUserName={user?.name} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
+            {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields}/>}
           </div>
