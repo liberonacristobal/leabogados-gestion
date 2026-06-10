@@ -2723,6 +2723,8 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
   const [fHasta, setFHasta] = useState('')
+  const [contacts, setContacts] = useState([])
+  const [atencion, setAtencion] = useState('')
 
   const allMovs = expenses.filter(e=>e.client_id===client.id)
   const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
@@ -2739,6 +2741,25 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
 
   const totalSel = disponibles.filter(e=>selected.has(e.id)).reduce((a,e)=>a+e.amount,0)
   const saldoTrasRendicion = saldoActual - totalSel
+  const fondosList = allMovs.filter(e=>e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+
+  // Contactos del cliente para el campo "Atención" del documento (tabla contacts)
+  useEffect(()=>{
+    let alive=true
+    supabase.from('contacts').select('*').eq('client_id',client.id).order('created_at').then(({data})=>{
+      if(!alive||!data) return
+      setContacts(data)
+      if(data[0]?.nombre) setAtencion(data[0].nombre)
+    })
+    return ()=>{alive=false}
+  },[client.id])
+  // Si el cliente no tiene contactos, al escribir Atención y confirmar se crea un contacto nuevo
+  const guardarAtencion = async()=>{
+    const v=(atencion||'').trim()
+    if(!v || contacts.length>0) return
+    const {data}=await supabase.from('contacts').insert({client_id:client.id,nombre:v}).select().single()
+    if(data) setContacts([data])
+  }
 
   const toggleAll = () => {
     if(selected.size===disponibles.length) setSelected(new Set())
@@ -2751,53 +2772,115 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
 
-  const generatePDFContent = () => {
-    const now = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
-    const A='#003C50', A2='#537281', A4='#E4E8EB'
-    let html = `<!DOCTYPE html><html><head><meta charset='UTF-8'>
-    <title>Rendici\u00f3n \u2014 ${client.name} \u2014 ${now}</title>
+  const generatePDFContent = (atencionVal) => {
+    const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4'
+    const ent = (clientEntities||[]).filter(e=>e.client_id===client.id)[0]
+    const razon = ent?.name || client.name || '\u2014'
+    const rut = ent?.rut || client.rut || ''
+    const fechaEmision = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
+    const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+    // Per\u00edodo: rango de fechas (gastos + fondos)
+    const fechas = [...gastosSel, ...fondosList].map(e=>e.date).filter(Boolean).sort()
+    const mesAno = d => new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'})
+    const dia = d => new Date(d+'T12:00').toLocaleDateString('es-CL')
+    let periodo='\u2014'
+    if(fechas.length){ const ini=fechas[0], fin=fechas[fechas.length-1]; periodo = mesAno(ini)===mesAno(fin) ? mesAno(ini) : `${dia(ini)} \u2013 ${dia(fin)}` }
+    const totGastos = totalSel
+    const totFondos = fondosDisp
+    // saldo = fondos - gastos. >0: a favor del cliente (devolver). <0: cliente debe reponer a Liberona.
+    const saldo = totFondos - totGastos
+    const badge = (cat) => {
+      const c=(cat||'').toLowerCase()
+      let bg='#E4E8EB', fg='#537281', label=cat||'Otro'
+      if(c.includes('notar')){ bg='#E6F1FB'; fg='#185FA5'; label='Notar\u00eda' }
+      else if(c.includes('transp')){ bg='#E1F5EE'; fg='#0F6E56' }
+      return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${label}</span>`
+    }
+    const filasGastos = gastosSel.map(e=>
+      `<tr><td>${e.date||'\u2014'}</td><td>${e.concept||'\u2014'}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600'>${fmtN(e.amount)}</td></tr>`
+    ).join('')
+    const filasFondos = fondosList.length
+      ? fondosList.map(e=>`<tr><td style='width:90px'>${e.date||'\u2014'}</td><td>${e.concept||'Fondo recibido'}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('')
+      : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>Sin fondos registrados en el per\u00edodo</td></tr>`
+    let saldoBox=''
+    if(saldo<0){
+      const row=(l,v)=>`<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F1D4D4'><span style='color:${MUTED}'>${l}</span><span style='font-weight:600;color:#3D3D3D'>${v}</span></div>`
+      saldoBox=`<div class='saldo-box' style='border:1px solid #F7C1C1;background:#FCEBEB;border-radius:8px;padding:16px 18px;margin-top:18px'>
+        <div style='font-size:13px;font-weight:700;color:${A};margin-bottom:12px'>Saldo pendiente \u2014 transferir a Liberona Escala</div>
+        ${row('Raz\u00f3n social','Liberona Escala Abogados Ltda.')}
+        ${row('RUT','77.700.387-9')}
+        ${row('Banco','Banco BICE')}
+        ${row('N\u00b0 cuenta corriente','138392-2')}
+        ${row('Email confirmaci\u00f3n','administracion@leabogados.cl')}
+      </div>`
+    } else if(saldo>0){
+      const mesP = fechas.length ? mesAno(fechas[fechas.length-1]) : periodo
+      saldoBox=`<div class='saldo-box' style='border:1px solid #E4E8EB;border-radius:8px;padding:16px 18px;margin-top:18px;font-size:12px;color:#3D3D3D;line-height:1.55'>
+        Le informamos que existe un saldo a su favor de <strong>${fmtN(saldo)}</strong> correspondiente al per\u00edodo ${mesP}. Para proceder con la devoluci\u00f3n, le agradecer\u00edamos indicarnos sus datos bancarios a <strong>administracion@leabogados.cl</strong>
+      </div>`
+    }
+    const sep = 'border-left:1px solid #B9C2C8;margin-left:12px;padding-left:12px'
+    return `<!DOCTYPE html><html><head><meta charset='UTF-8'>
+    <title>Rendici\u00f3n de gastos \u2014 ${razon} \u2014 ${fechaEmision}</title>
     <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'DM Sans',sans-serif;color:#3D3D3D;font-size:11px}
-    @page{size:letter portrait;margin:16mm 18mm}
-    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}
-    .header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
-    .firma{font-size:16px;font-weight:700}
-    .doc-title{text-align:right;font-size:13px;font-weight:600}
-    .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
-    .kpi{background:${A4};border-radius:6px;padding:10px 12px}
-    .kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600}
-    .kpi-value{font-size:15px;font-weight:700}
-    table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:16px}
-    thead tr{background:${A};color:#fff}
-    thead th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase}
-    tbody tr:nth-child(even){background:${A4}}
-    tbody td{padding:6px 10px;border-bottom:1px solid ${A4}}
-    tfoot tr{background:${A4};font-weight:700}
-    tfoot td{padding:7px 10px;border-top:2px solid ${A2}}
-    .footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}
+    body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:#3D3D3D;font-size:11px;background:#fff}
+    .page{max-width:816px;margin:0 auto;padding-bottom:40px}
+    @page{size:letter portrait;margin:14mm 14mm}
+    table{width:100%;border-collapse:collapse;font-size:10px}
+    thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}
+    tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}
     .print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
-    .pos{color:#2E7D55}.neg{color:#C2382B}
+    @media print{
+      body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .no-print{display:none}
+      .saldo-box{page-break-inside:avoid}
+      tr{page-break-inside:avoid}
+    }
     </style></head><body>
-    <div class='header'>
-      <div><div class='firma'>Liberona Escala Abogados</div><div style='font-size:9px;opacity:.7;margin-top:2px'>leabogados.cl</div></div>
-      <div class='doc-title'><div>Rendici\u00f3n de Fondos</div><div style='font-size:11px;opacity:.8;margin-top:2px'>${client.name} \u00b7 ${now}</div></div>
+    <div class='page'>
+      <div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:flex-start'>
+        <div style='font-size:18px;font-weight:700;letter-spacing:1px;line-height:1.15'>LIBERONA ESCALA<br/><span style='font-weight:400;letter-spacing:3px;font-size:13px'>ABOGADOS</span></div>
+        <div style='text-align:right'>
+          <div style='font-size:18px;font-weight:700;color:#fff'>${razon}</div>
+          ${rut?`<div style='font-size:12px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}
+        </div>
+      </div>
+      <div style='background:${GRAY};padding:9px 26px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#3D3D3D'>
+        <div style='display:flex;align-items:center'>
+          <span>Per\u00edodo: ${periodo}</span>
+          <span style='${sep}'>Emisi\u00f3n: ${fechaEmision}</span>
+          <span style='${sep}'>${gastosSel.length} gasto${gastosSel.length!==1?'s':''}</span>
+        </div>
+        ${atencionVal?`<div style='font-weight:600'>Atenci\u00f3n: ${atencionVal}</div>`:''}
+      </div>
+      <div style='padding:20px 26px 0'>
+        <table>
+          <thead><tr><th>Fecha</th><th>Concepto</th><th>Categor\u00eda</th><th style='text-align:right'>Monto</th></tr></thead>
+          <tbody>${filasGastos}</tbody>
+        </table>
+        <div style='display:flex;justify-content:space-between;padding:9px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:12px'>
+          <span>Total gastos</span><span>${fmtN(totGastos)}</span>
+        </div>
+
+        <div style='font-size:11px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div>
+        <table><tbody>${filasFondos}</tbody></table>
+
+        <div style='background:${A};border-radius:8px;padding:16px 18px;margin-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;color:#fff'>
+          <div><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:4px'>Fondos recibidos</div><div style='font-size:16px;font-weight:700'>${fmtN(totFondos)}</div></div>
+          <div><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:4px'>Gastos realizados</div><div style='font-size:16px;font-weight:700'>${fmtN(totGastos)}</div></div>
+          <div><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:4px'>Saldo</div><div style='font-size:16px;font-weight:700'>${saldo<0?'-':''}${fmtN(saldo)}</div></div>
+        </div>
+
+        ${saldoBox}
+      </div>
+      <div style='display:flex;justify-content:space-between;padding:16px 26px 0;margin-top:24px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'>
+        <span>Av. Kennedy 7900, Of. 905, Vitacura \u00b7 Santiago \u00b7 leabogados.cl</span>
+        <span>Rendici\u00f3n de gastos \u00b7 ${periodo}</span>
+      </div>
     </div>
-    <div class='kpi-row'>
-      <div class='kpi'><div class='kpi-label'>Fondos entregados</div><div class='kpi-value pos'>${fmtN(fondosDisp)}</div></div>
-      <div class='kpi'><div class='kpi-label'>Gastos rendidos</div><div class='kpi-value neg'>${fmtN(totalSel)}</div></div>
-      <div class='kpi'><div class='kpi-label'>Saldo tras rendici\u00f3n</div><div class='kpi-value ${saldoTrasRendicion>=0?'pos':'neg'}'>${fmtN(saldoTrasRendicion)}</div></div>
-    </div>`
-    html += `<table><thead><tr><th>Fecha</th><th>Categor\u00eda</th><th>Descripci\u00f3n</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`
-    gastosSel.forEach(e=>{
-      html += `<tr><td>${e.date||'\u2014'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'\u2014'}</td><td style='text-align:right;font-weight:600;color:#C2382B'>-${fmtN(e.amount)}</td></tr>`
-    })
-    html += `</tbody><tfoot><tr><td colspan='3'>TOTAL RENDIDO</td><td style='text-align:right;color:#C2382B'>-${fmtN(totalSel)}</td></tr></tfoot></table>`
-    if(saldoTrasRendicion!==0) html += `<div style='text-align:right;font-size:11px;font-weight:600;color:${saldoTrasRendicion>=0?'#2E7D55':'#C2382B'}'>${saldoTrasRendicion>=0?'Saldo a favor del cliente':'Saldo a favor del estudio'}: ${fmtN(Math.abs(saldoTrasRendicion))}</div>`
-    html += `<div class='footer'><span>Liberona Escala Abogados \u00b7 leabogados.cl</span><span>${client.name} \u00b7 ${now}</span><span>CONFIDENCIAL</span></div>
     <button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button>
     </body></html>`
-    return html
   }
 
   const handleGenerar = async(abrirPDF=false) => {
@@ -2826,12 +2909,8 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
       if(onRendicionComplete) onRendicionComplete({id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente'})
-      // Abrir PDF si se pide
-      if(abrirPDF) { const w=window.open('','_blank'); w.document.write(generatePDFContent()); w.document.close() }
-      // Mailto
-      const asunto = encodeURIComponent('Rendici\u00f3n de fondos \u2014 '+client.name+' \u2014 '+nowLabel)
-      const cuerpo = encodeURIComponent('Estimado cliente,\n\nAdjunto la rendici\u00f3n de fondos.\n\nCliente: '+client.name+'\nGastos rendidos: '+gastosSel.length+'\nTotal: $'+totalSel.toLocaleString('es-CL')+'\nSaldo: $'+saldoTrasRendicion.toLocaleString('es-CL')+(saldoTrasRendicion<0?'\n\nEl saldo queda a favor del estudio.':'\n\nEl saldo queda a su favor.')+'\n\nLiberona Escala Abogados')
-      window.location.href = 'mailto:?subject='+asunto+'&body='+cuerpo
+      // Abrir el documento de rendici\u00f3n (HTML imprimible aislado) si se pide
+      if(abrirPDF) { const w=window.open('','_blank'); if(w){ w.document.write(generatePDFContent(atencion)); w.document.close() } }
       setSelected(new Set())
     } catch(e) { alert('Error: '+e.message) }
     setSaving(false)
@@ -2863,6 +2942,15 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
         <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)}
           style={{flex:1,padding:'5px 8px',borderRadius:6,border:'0.5px solid #D0D5DB',fontSize:11,outline:'none'}}/>
         {(fDesde||fHasta)&&<button onClick={()=>{setFDesde('');setFHasta('')}} style={{fontSize:10,color:'#888',background:'none',border:'none',cursor:'pointer'}}>×</button>}
+      </div>
+
+      {/* Atención: se imprime en la rendición; si el cliente no tiene contactos, al confirmar se guarda como contacto */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Atención</div>
+        {contacts.length>0
+          ? <div style={{fontSize:13,color:'#3D3D3D',padding:'6px 0'}}>{contacts[0].nombre}</div>
+          : <input value={atencion} onChange={e=>setAtencion(e.target.value)} onBlur={guardarAtencion} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); e.currentTarget.blur() } }} placeholder='Atención (opcional)'
+              style={{width:'100%',padding:'7px 9px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/>}
       </div>
 
       {/* Lista de gastos */}
