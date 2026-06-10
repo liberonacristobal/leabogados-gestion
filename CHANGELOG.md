@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- UF en vivo unificada (#15): helper único `fetchUF()` + hook `useUF()` con caché diario en localStorage; reemplaza los 3 fetch duplicados (Dashboard, SalesView, reporte) — la API de mindicador.cl se toca máx. 1 vez al día. Fallback seguro: si la API falla usa el último valor cacheado (aunque sea de días previos) en vez de 40000 silencioso. Señal visible `UFStamp` junto a las cifras que dependen de UF (Dashboard tarjeta Meta, SalesView totales): gris "UF al DD/MM · $valor" si es de hoy, naranja con ⚠ "no actualizada" / "UF no disponible" si no. El `uf_value` manual por venta se mantiene para montos históricos.
+
+## 2026-06-10
 - Títulos de bloque de Tareas (limited) ahora con el mismo estilo que los títulos de sección del Dashboard admin (11/600/muted, uppercase, letterSpacing .5) para consistencia visual entre vistas.
 - Ajustes Tareas (limited): filtros con orden invertido (cliente primero, proyecto después); el selector de proyectos depende del cliente buscado (deshabilitado "Selecciona un cliente" si no hay; solo proyectos de ese cliente; "Sin proyectos" si no tiene) y se resetea al cambiar el cliente; títulos de bloque "Próximas semanas" (sin "dos") y "Resumen financiero" (antes "Mi caja chica").
 - Rediseño jerárquico de la pestaña Tareas (limited): saludo sin la línea de contador redundante; sección "Mis tareas" con filtros a la derecha y dos/tres subsecciones colapsables (Activas abierta, Tareas que asigné, Terminadas cerrada) eliminando los subtítulos de urgencia repetidos; títulos de bloque unificados (15/700/#3D3D3D) y subtítulos unificados (12/600); bloques con espaciado parejo (~24px) sin hueco muerto antes del calendario. KPIs de caja chica con título de bloque y color escalonado: "Saldo disponible" verde >$50.000 / naranja $0–$50.000 / rojo negativo; "Por liquidar" naranja, rojo si los gastos sin liquidar (excl. Notaría) superan 10.
