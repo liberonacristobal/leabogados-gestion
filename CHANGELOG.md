@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Checklist de facturación del mes (Facturación, admin): nuevo tab "Checklist" con sección "Facturar en [Mes] [Año]". Filtros en una fila (selector mes/año + Todos/Pendientes/Emitidos) y 3 KPIs en vivo (Por facturar #854F0B / Ya emitidas #0F6E56 / Total mes en UF). Lista tipo checklist de las facturas con vencimiento en el mes (programadas + emitidas): checkbox a la izquierda que marca/desmarca como emitida, nombre del cliente, concepto + vencimiento y monto a la derecha; los items emitidos quedan tachados y con opacidad reducida. Footer con "X de Y emitidas" y botón "Descargar Excel" (Cliente / Concepto / Monto / Estado / Vencimiento). Marcar emite la programada (status Pendiente + fecha de emisión) y desmarcar la vuelve a Programada, actualizando los KPIs en tiempo real. Las pagadas se excluyen del checklist (para no perder el pago al desmarcar). Sin emojis (checkbox dibujado en CSS).
+
+## 2026-06-10
 - Carga masiva de gastos/fondos (CargaMasivaModal) reforzada en 3 partes:
   - Plantilla Excel modelo descargable (ExcelJS por CDN): hojas Gastos / Fondos / Instrucciones, con encabezado en negrita + fondo gris, ejemplos, Fecha dd-mm-yyyy, Monto sin decimales, validación desplegable de Categoría y comentarios en RUT/Monto.
   - Parser robusto: lee la hoja según el tipo elegido (Gastos/Fondos); ya no descarta filas en silencio (monto vacío/negativo/0 quedan como error visible, el negativo ya no se vuelve positivo); detecta duplicados (RUT+fecha+monto+concepto) con aviso; al cargar solo sube las filas listas y muestra las que fallan al insertar con su motivo.
