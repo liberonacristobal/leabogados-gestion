@@ -2142,16 +2142,18 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
   // ── Bloque 1 (PENDIENTE PAGO): total y conteo desde el mismo `filtered` (single source) ──
   const emitidasTotal = useMemo(()=>filtered.reduce((a,b)=>a+(b.amount||0),0),[filtered])
 
-  // ── Bloque 2 (POR FACTURAR · mes en curso): programadas que vencen este mes ──
+  // ── Bloque 2 (POR FACTURAR): todas las programadas pendientes; acotables por año/mes (vencimiento) y texto ──
   const mesKey = `${currentYear}-${String(currentMonth).padStart(2,'0')}`
   const progMes = useMemo(()=>{
-    let r = bb.filter(b=>b.status==='Programada'&&b.due?.slice(0,7)===mesKey)
+    let r = bb.filter(b=>b.status==='Programada'&&b.due)
+    if(fYear) r = r.filter(b=>b.due?.startsWith(fYear))
+    if(fMonth) r = r.filter(b=>b.due?.slice(5,7)===fMonth)
     if(q.trim()) r = r.filter(b=>{
       const c=clients.find(x=>x.id===b.client_id)
       return (c?.name?.toLowerCase().includes(q.toLowerCase()))||(b.receptor_name?.toLowerCase().includes(q.toLowerCase()))
     })
     return r.sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
-  },[bb,mesKey,q,clients])
+  },[bb,fYear,fMonth,q,clients])
   const progMesTotal = useMemo(()=>progMes.reduce((a,b)=>a+(b.amount||0),0),[progMes])
   // Por defecto, todas marcadas; se re-sincroniza si cambia la membresía del mes
   const progIds = progMes.map(b=>b.id).join(',')
