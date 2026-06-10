@@ -87,6 +87,32 @@ function rsBalances(clientId, expenses, entities){
   return {porRS, sin, total:{...tot,saldo:tot.fondos-tot.gastos}}
 }
 
+// Documento imprimible (HTML) de una rendición YA registrada, para "Ver PDF" desde el historial.
+// Mismo formato que el de RendicionModal; deriva razón social de los gastos rendidos.
+function rendicionPdfHtml(r, client, expenses, clientEntities){
+  const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4'
+  const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+  const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+  const fondosList = (expenses||[]).filter(e=>e.client_id===(client&&client.id)&&e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+  const entId = (gastos.find(e=>e.entity_id)||{}).entity_id
+  const ent = entId ? (clientEntities||[]).find(x=>x.id===entId) : null
+  const razon = (ent&&ent.name) || (client&&client.name) || '—'
+  const rut = (ent&&ent.rut) || (client&&client.rut) || ''
+  const totGastos = gastos.reduce((a,e)=>a+(e.amount||0),0)
+  const totFondos = fondosList.reduce((a,e)=>a+(e.amount||0),0)
+  const saldo = totFondos - totGastos
+  const fechaEmision = r.created_at ? new Date(r.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'}) : ''
+  const periodo = r.periodo || ''
+  const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg='#537281',label=cat||'Otro'; if(c.includes('notar')){bg='#E6F1FB';fg='#185FA5';label='Notaría'} else if(c.includes('transp')){bg='#E1F5EE';fg='#0F6E56'} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${label}</span>` }
+  const filasGastos = gastos.map(e=>`<tr><td>${e.date||'—'}</td><td>${e.concept||'—'}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600'>${fmtN(e.amount)}</td></tr>`).join('')
+  const filasFondos = fondosList.length ? fondosList.map(e=>`<tr><td style='width:90px'>${e.date||'—'}</td><td>${e.concept||'Fondo recibido'}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>Sin fondos registrados</td></tr>`
+  let saldoBox=''
+  if(saldo<0){ const row=(l,v)=>`<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F1D4D4'><span style='color:${MUTED}'>${l}</span><span style='font-weight:600;color:#3D3D3D'>${v}</span></div>`; saldoBox=`<div class='saldo-box' style='border:1px solid #F7C1C1;background:#FCEBEB;border-radius:8px;padding:16px 18px;margin-top:18px'><div style='font-size:13px;font-weight:700;color:${A};margin-bottom:12px'>Saldo pendiente — transferir a Liberona Escala</div>${row('Razón social','Liberona Escala Abogados Ltda.')}${row('RUT','77.700.387-9')}${row('Banco','Banco BICE')}${row('N° cuenta corriente','138392-2')}${row('Email confirmación','administracion@leabogados.cl')}</div>` }
+  else if(saldo>0){ saldoBox=`<div class='saldo-box' style='border:1px solid #E4E8EB;border-radius:8px;padding:16px 18px;margin-top:18px;font-size:12px;color:#3D3D3D;line-height:1.55'>Le informamos que existe un saldo a su favor de <strong>${fmtN(saldo)}</strong> correspondiente al período ${periodo}. Para proceder con la devolución, le agradeceríamos indicarnos sus datos bancarios a <strong>administracion@leabogados.cl</strong></div>` }
+  const sep='border-left:1px solid #B9C2C8;margin-left:12px;padding-left:12px'
+  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:#3D3D3D;font-size:11px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:40px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:flex-start'><div style='font-size:18px;font-weight:700;letter-spacing:1px;line-height:1.15'>LIBERONA ESCALA<br/><span style='font-weight:400;letter-spacing:3px;font-size:13px'>ABOGADOS</span></div><div style='text-align:right'><div style='font-size:18px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:12px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:9px 26px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#3D3D3D'><div style='display:flex;align-items:center'><span>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div></div><div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:9px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:12px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div><div style='font-size:11px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table><div style='background:${A};border-radius:8px;padding:16px 18px;margin-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;color:#fff'><div><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:4px'>Fondos recibidos</div><div style='font-size:16px;font-weight:700'>${fmtN(totFondos)}</div></div><div><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:4px'>Gastos realizados</div><div style='font-size:16px;font-weight:700'>${fmtN(totGastos)}</div></div><div><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:4px'>Saldo</div><div style='font-size:16px;font-weight:700'>${saldo<0?'-':''}${fmtN(saldo)}</div></div></div>${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:16px 26px 0;margin-top:24px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+}
+
 const DaysBadge = ({due,status}) => {
   const u=urgency(due,status); if(u==='done') return null
   const d=daysLeft(due); if(d===null) return null
@@ -3504,6 +3530,10 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const [emailRend,setEmailRend] = useState(null)
   const [hFiltCliente,setHFiltCliente] = useState('')
   const [hFiltMes,setHFiltMes] = useState('')
+  const [hFiltText,setHFiltText] = useState('')
+  const [showHistorialFicha,setShowHistorialFicha] = useState(false)   // historial dentro de la ficha del cliente
+  const [hFichaText,setHFichaText] = useState('')
+  const [hFichaMes,setHFichaMes] = useState('')
   const handleAnularRendicion = async(r) => {
     if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
     try {
@@ -3617,6 +3647,48 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
     )
   }
 
+  // ── Historial de rendiciones (helpers compartidos lista + ficha) ──
+  const HH = {fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}
+  const estadoBadge = r => r.sent_at
+    ? <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#E1F5EE',color:'#0F6E56',whiteSpace:'nowrap'}}>Enviada</span>
+    : <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#FFF8E1',color:'#854F0B',whiteSpace:'nowrap'}}>Pendiente</span>
+  const rsOfRend = r => { const g=expenses.find(e=>e.client_render_id===r.id&&e.entity_id); const ent=g?(clientEntities||[]).find(x=>x.id===g.entity_id):null; return (ent&&ent.name)||'' }
+  const verPdfRend = r => { const cl=clients.find(c=>c.id===r.client_id); const w=window.open('','_blank'); if(w){ w.document.write(rendicionPdfHtml(r,cl,expenses,clientEntities)); w.document.close() } }
+  const renderRendRow = (r,showClient) => {
+    const cl=clients.find(x=>x.id===r.client_id)
+    const rs=showClient?'':rsOfRend(r)
+    return (
+      <div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start'}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?`${r.periodo} · `:''}{new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
+          </div>
+          <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
+          <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
+          <div style={{textAlign:'right'}}>{estadoBadge(r)}</div>
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center',flexWrap:'wrap'}}>
+          <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
+          {cl&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
+          <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>
+        </div>
+      </div>
+    )
+  }
+  const renderHistorialTable = (rends,showClient) => {
+    if(!rends.length) return <div style={{color:C.muted,textAlign:'center',padding:24,fontSize:12}}>Sin rendiciones</div>
+    return (<>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,padding:'0 0 6px',borderBottom:`1px solid ${C.border}`}}>
+        <div style={HH}>{showClient?'Cliente / Periodo':'Periodo'}</div>
+        <div style={{...HH,textAlign:'right'}}>Monto</div>
+        <div style={{...HH,textAlign:'center'}}>Gastos</div>
+        <div style={{...HH,textAlign:'right'}}>Estado</div>
+      </div>
+      {rends.map(r=>renderRendRow(r,showClient))}
+    </>)
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -3699,9 +3771,34 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
               </div>
             )
           })}
-          <div onClick={()=>setShowHistorial(true)} style={{marginTop:10,paddingTop:14,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
-            <span style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Historial de rendiciones</span>
-            <span style={{fontSize:14,color:'#99ABB4'}}>›</span>
+          <div style={{marginTop:10,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
+            <div onClick={()=>setShowHistorial(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
+              <span style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Historial de rendiciones</span>
+              <span style={{fontSize:13,color:'#99ABB4',transform:showHistorial?'rotate(180deg)':'none',transition:'transform .15s'}}>▾</span>
+            </div>
+            {showHistorial&&(
+              <div style={{marginTop:12}}>
+                <input value={hFiltText} onChange={e=>setHFiltText(e.target.value)} placeholder='Buscar cliente o periodo...' style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12,boxSizing:'border-box',outline:'none',marginBottom:8}}/>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+                  <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}>
+                    <option value=''>Todos los clientes</option>
+                    {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
+                  </select>
+                  <input type='month' value={hFiltMes} onChange={e=>setHFiltMes(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}/>
+                </div>
+                {(()=>{
+                  const q=hFiltText.trim().toLowerCase()
+                  const rends=(rendiciones||[]).filter(r=>{
+                    if(r.tipo!=='cliente') return false
+                    if(hFiltCliente&&r.client_id!==hFiltCliente) return false
+                    if(hFiltMes&&!r.created_at?.startsWith(hFiltMes)) return false
+                    if(q){ const cl=clients.find(x=>x.id===r.client_id); if(!((cl?.name||'').toLowerCase().includes(q)||(r.periodo||'').toLowerCase().includes(q))) return false }
+                    return true
+                  }).sort((a,b)=>b.created_at>a.created_at?1:-1)
+                  return renderHistorialTable(rends,true)
+                })()}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3792,64 +3889,6 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
       {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])} currentUserName={currentUserName}/></Modal>}
-      {showHistorial&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'flex-end'}} onClick={e=>e.target===e.currentTarget&&setShowHistorial(false)}>
-          <div style={{background:'#fff',borderRadius:'16px 16px 0 0',padding:20,width:'100%',maxHeight:'70vh',overflowY:'auto',boxSizing:'border-box'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-              <div style={{fontSize:16,fontWeight:700,color:C.text}}>Historial de rendiciones</div>
-              <button onClick={()=>setShowHistorial(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:C.muted}}>×</button>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-              <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}>
-                <option value=''>Todos los clientes</option>
-                {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
-              </select>
-              <input type='month' value={hFiltMes} onChange={e=>setHFiltMes(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}/>
-            </div>
-            {(()=>{
-              const rends=(rendiciones||[]).filter(r=>{
-                if(r.tipo!=='cliente') return false
-                if(hFiltCliente&&r.client_id!==hFiltCliente) return false
-                if(hFiltMes&&!r.created_at?.startsWith(hFiltMes)) return false
-                return true
-              }).sort((a,b)=>b.created_at>a.created_at?1:-1)
-              if(!rends.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin rendiciones</div>
-              const hHeader = {fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}
-              const hGrid = '1fr 78px 50px 66px'
-              return (<>
-                <div style={{display:'grid',gridTemplateColumns:hGrid,gap:6,padding:'0 0 6px',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={hHeader}>Cliente / Período</div>
-                  <div style={{...hHeader,textAlign:'right'}}>Monto</div>
-                  <div style={{...hHeader,textAlign:'center'}}>Gastos</div>
-                  <div style={{...hHeader,textAlign:'right'}}>Estado</div>
-                </div>
-                {rends.map(r=>{
-                const cl=clients.find(x=>x.id===r.client_id)
-                return (<div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{display:'grid',gridTemplateColumns:hGrid,gap:6,alignItems:'start'}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Cliente'}</div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{r.periodo} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
-                    </div>
-                    <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
-                    <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
-                    <div style={{textAlign:'right',fontSize:10,fontWeight:600,lineHeight:1.3}}>
-                      {r.sent_at
-                        ? <span style={{color:'#0F6E56'}}>Enviada<br/>{new Date(r.sent_at).toLocaleDateString('es-CL')}</span>
-                        : <span style={{color:'#C2761F'}}>Pendiente</span>}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center'}}>
-                    {cl&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>}
-                    <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>
-                  </div>
-                </div>)
-              })}
-              </>)
-            })()}
-          </div>
-        </div>
-      )}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} onSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
