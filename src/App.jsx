@@ -3469,7 +3469,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
-  const [rendEntity,setRendEntity] = useState(null)         // razón social pre-seleccionada al rendir
+  const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
   const [openRS,setOpenRS] = useState(()=>new Set())        // RS expandidas (acordeón 2+ RS)
   const [rendicionClient,setRendicionClient] = useState(null)
@@ -3523,6 +3523,13 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   },[expenses,selectedClient])
 
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+
+  // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
+  useEffect(()=>{
+    if(!selectedClient){ setSelRS(new Set()); setOpenRS(new Set()); return }
+    const ids=(clientEntities||[]).filter(x=>x.client_id===selectedClient.id).map(e=>e.id)
+    setSelRS(new Set(ids)); setOpenRS(new Set())
+  },[selectedClient])
 
   const clientBalance = selectedClient ? (balances[selectedClient.id]||{}) : null
   const saldo = clientBalance ? clientBalance.fondos - clientBalance.gastos : 0
@@ -3679,11 +3686,38 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
           {filtered.map(renderMov)}
         </div>
       )}
-      {/* Vista cliente con 2+ razones sociales: lista plana provisional (acordeón en CAMBIO 3) */}
-      {selectedClient&&multiRS&&(
+      {/* Vista cliente con 2+ razones sociales: acordeón por RS (checkbox + chevron + saldo) */}
+      {selectedClient&&multiRS&&rb&&(
         <div style={{padding:'4px 20px 130px'}}>
-          {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
-          {filtered.map(renderMov)}
+          {rb.porRS.concat(rb.sin?[{...rb.sin,entity:{id:'__sin__',name:'Sin razón social',rut:''}}]:[]).map(r=>{
+            const eid=r.entity.id, isSin=eid==='__sin__'
+            const checked=selRS.has(eid), open=openRS.has(eid)
+            const movs=filtered.filter(e=> isSin ? (!e.entity_id||!selEnts.find(x=>x.id===e.entity_id)) : e.entity_id===eid)
+            const toggleOpen=()=>setOpenRS(p=>{const n=new Set(p);n.has(eid)?n.delete(eid):n.add(eid);return n})
+            return (
+              <div key={eid} style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:8,overflow:'hidden',background:C.card}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px'}}>
+                  {isSin
+                    ? <div style={{width:22,flexShrink:0}}/>
+                    : <button onClick={()=>setSelRS(p=>{const n=new Set(p);n.has(eid)?n.delete(eid):n.add(eid);return n})} title={checked?'Quitar de la rendición':'Incluir en la rendición'}
+                        style={{width:22,height:22,borderRadius:5,border:`2px solid ${checked?'#1D9E75':C.border}`,background:checked?'#1D9E75':'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,padding:0}}>
+                        {checked&&<span style={{display:'inline-block',width:5,height:9,borderRight:'2px solid #fff',borderBottom:'2px solid #fff',transform:'rotate(45deg)',marginTop:-2}}/>}
+                      </button>}
+                  <div onClick={toggleOpen} style={{flex:1,minWidth:0,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:12,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.entity.name}</div>
+                      {r.entity.rut&&<div style={{fontSize:10,color:C.muted}}>{r.entity.rut}</div>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:13,fontWeight:700,color:r.saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(r.saldo)}</div>
+                </div>
+                {open&&<div style={{padding:'2px 12px 12px'}}>
+                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.map(renderMov)}
+                </div>}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -3699,15 +3733,38 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                   <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4}}>Total a rendir</div>
                   <div style={{fontSize:15,fontWeight:700,color:C.text}}>{fmt(total)}</div>
                 </div>
-                <button onClick={()=>{setRendEntity(selEnts[0]||null);setRendicionClient(selectedClient)}} style={{padding:'10px 16px',borderRadius:10,border:'none',background:'#1D9E75',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Rendir al cliente</button>
+                <button onClick={()=>{setRendEntityIds(selEnts[0]?[selEnts[0].id]:[]);setRendicionClient(selectedClient)}} style={{padding:'10px 16px',borderRadius:10,border:'none',background:'#1D9E75',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Rendir al cliente</button>
               </>:<div style={{flex:1,fontSize:12,color:C.muted,textAlign:'center'}}>Sin gastos por rendir</div>}
             </div>
           </div>
         )
       })()}
 
+      {/* Barra inferior 2+ RS: RS seleccionadas + monto + Rendir */}
+      {selectedClient&&multiRS&&(()=>{
+        const selIds=[...selRS]
+        const selNames=selEnts.filter(e=>selRS.has(e.id)).map(e=>e.name)
+        const gastosPend=filtered.filter(e=>e.type==='gasto'&&!e.client_rendered_at&&selRS.has(e.entity_id))
+        const total=gastosPend.reduce((a,e)=>a+(e.amount||0),0)
+        return (
+          <div style={{position:'fixed',bottom:64,left:0,right:0,padding:'0 20px',zIndex:40}}>
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,boxShadow:'0 4px 16px rgba(0,0,0,.12)'}}>
+              {selIds.length===0
+                ? <div style={{flex:1,fontSize:12,color:C.muted,textAlign:'center'}}>Selecciona una razón social para rendir</div>
+                : <>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selNames.length===1?selNames[0]:`${selNames.length} razones sociales`}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:C.text}}>{fmt(total)}</div>
+                    </div>
+                    <button disabled={gastosPend.length===0} onClick={()=>{setRendEntityIds(selIds);setRendicionClient(selectedClient)}} style={{padding:'10px 16px',borderRadius:10,border:'none',background:gastosPend.length?'#1D9E75':'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:gastosPend.length?'pointer':'not-allowed'}}>Rendir al cliente</button>
+                  </>}
+            </div>
+          </div>
+        )
+      })()}
+
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntity(null)}}><RendicionModal client={rendicionClient} entity={rendEntity} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntity(null)}} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])} currentUserName={currentUserName}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])} currentUserName={currentUserName}/></Modal>}
       {showHistorial&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'flex-end'}} onClick={e=>e.target===e.currentTarget&&setShowHistorial(false)}>
           <div style={{background:'#fff',borderRadius:'16px 16px 0 0',padding:20,width:'100%',maxHeight:'70vh',overflowY:'auto',boxSizing:'border-box'}}>
