@@ -1777,6 +1777,19 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [tariffs,setTariffs] = useState([])
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
   const fmtMesAno = d => d ? d.slice(5,7)+'/'+d.slice(0,4) : '—'
+  const [showTariffForm,setShowTariffForm] = useState(false)
+  const [newHon,setNewHon] = useState('')
+  const [newVig,setNewVig] = useState('')
+  const [newCosto,setNewCosto] = useState('')
+  const [newMotivo,setNewMotivo] = useState('')
+  const [savingTariff,setSavingTariff] = useState(false)
+  const confirmTariff = async() => {
+    if(!newHon || !newVig){ alert('Completá el nuevo honorario y la fecha de vigencia.'); return }
+    setSavingTariff(true)
+    const rec = await onSaveTariff(sale, {honorario:parseFloat(newHon)||0, costo:newCosto?(parseFloat(newCosto)||0):null, currency:(f.moneda||'UF'), vigente_desde:newVig+'-01', motivo:newMotivo||null})
+    if(rec){ setTariffs(p=>[...p,rec]); setShowTariffForm(false); setNewHon('');setNewVig('');setNewCosto('');setNewMotivo('') }
+    setSavingTariff(false)
+  }
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
@@ -2007,6 +2020,38 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
               </div>
             )
           })}
+          {!showTariffForm
+            ? <button onClick={()=>setShowTariffForm(true)} style={{marginTop:8,padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Modificar tarifa desde...</button>
+            : (()=>{
+                const mon = f.moneda||'UF'
+                const ant = tariffs.length ? tariffs[tariffs.length-1] : {honorario:(mon==='CLP'?parseFloat(f.amount_clp):parseFloat(f.amount_uf))||0, costo:parseFloat(f.cost_uf)||0}
+                const nuevo = parseFloat(newHon)||0
+                const diff = nuevo - (ant.honorario||0)
+                const vigDate = newVig ? newVig+'-01' : ''
+                const progN = vigDate ? (billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=vigDate).length : 0
+                const emitN = (billing||[]).filter(b=>b.sale_id===sale.id&&['Pendiente','Vencido','Propuesta','Pagado'].includes(b.status)).length
+                const fmtMon = n => mon==='CLP'?fmt(n):fmtUF(n)
+                return (
+                  <div style={{marginTop:10,padding:'12px 14px',borderRadius:10,background:'#F7F8F9',border:`1px solid ${C.border}`}}>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                      <Fld label={mon==='CLP'?'Nuevo honorario (CLP)':'Nuevo honorario (UF)'}><Inp type='number' step={mon==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder={mon==='CLP'?'0':'0.00'} autoFocus/></Fld>
+                      <Fld label='Vigente desde'><Inp type='month' value={newVig} onChange={e=>setNewVig(e.target.value)}/></Fld>
+                      <Fld label='Nuevo costo (opcional)'><Inp type='number' step={mon==='CLP'?'1':'0.01'} value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder={mon==='CLP'?'0':'0.00'}/></Fld>
+                      <Fld label='Motivo (opcional)'><Inp value={newMotivo} onChange={e=>setNewMotivo(e.target.value)} placeholder='Ej: reajuste anual'/></Fld>
+                    </div>
+                    <div style={{background:'#fff',borderRadius:8,padding:'10px 12px',border:`1px solid ${C.border}`,fontSize:12,marginBottom:10}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{color:C.muted}}>Tarifa anterior</span><strong style={{color:C.text}}>{fmtMon(ant.honorario||0)}</strong></div>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{color:C.muted}}>Nueva tarifa</span><strong style={{color:C.accent}}>{fmtMon(nuevo)}</strong></div>
+                      <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Diferencia</span><strong style={{color:diff>=0?C.normal:C.overdue}}>{diff>=0?'+':'−'}{fmtMon(Math.abs(diff))}</strong></div>
+                      {vigDate&&<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.soon,lineHeight:1.4}}>⚠ Se recalcularán <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} (vence ≥ {fmtMesAno(vigDate)}). <strong>{emitN}</strong> emitida{emitN!==1?'s':''}/pagada{emitN!==1?'s':''} NO se tocan.</div>}
+                    </div>
+                    <div style={{display:'flex',gap:8}}>
+                      <button onClick={()=>{setShowTariffForm(false);setNewHon('');setNewVig('');setNewCosto('');setNewMotivo('')}} style={{flex:1,padding:10,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                      <button onClick={confirmTariff} disabled={savingTariff||!newHon||!newVig} style={{flex:2,padding:10,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(savingTariff||!newHon||!newVig)?.6:1}}>{savingTariff?'Guardando...':'Confirmar cambio'}</button>
+                    </div>
+                  </div>
+                )
+              })()}
         </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
