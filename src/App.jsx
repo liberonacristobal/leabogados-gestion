@@ -3799,6 +3799,144 @@ function ContactoTab({client, entities, onSaveFields}) {
   )
 }
 
+// Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
+// razones sociales, datos de facturación y relación con el estudio (edición inline)
+function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
+  const real = (clientBilling||[]).filter(b=>b.billing_type!=='reembolso')
+  const facturado = real.filter(b=>b.issued_at).reduce((a,b)=>a+(b.amount||0),0)
+  const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+  const porCobrar = real.filter(b=>['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
+
+  // Historial de facturación por año (emitidas)
+  const emitidas = real.filter(b=>b.issued_at)
+  const porAnio = {}
+  emitidas.forEach(b=>{ const y=(b.issued_at||'').slice(0,4)||'—'; (porAnio[y]=porAnio[y]||[]).push(b) })
+  const anios = Object.keys(porAnio).sort((a,b)=>b.localeCompare(a))
+
+  const fields = ['condicion_pago','moneda_preferida','banco','numero_cuenta','abogado_responsable','notas_internas']
+  const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
+  const [form,setForm] = useState(fromClient())
+  const [savingF,setSavingF] = useState(false)
+  useEffect(()=>{ setForm(fromClient()) },[client.id])
+  const dirty = fields.some(k=>(form[k]||'')!==(client[k]||''))
+  const set = (k,v)=>setForm(f=>({...f,[k]:v}))
+  const guardar = async ()=>{ setSavingF(true); try{ await onSaveFields(client.id, form) }catch(e){} setSavingF(false) }
+
+  const inp = {width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',color:C.text}
+  const lbl = {fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:4,display:'block'}
+  const card = {marginBottom:16,padding:'14px 16px',borderRadius:12,background:C.card,border:`1px solid ${C.border}`}
+  const sTitle = (t)=>(<div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:10}}>{t}</div>)
+  const field = (label,k,placeholder)=>(
+    <div><label style={lbl}>{label}</label><input value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={placeholder||''} style={inp}/></div>
+  )
+  const STAT = {'Pagado':C.normal,'Pendiente':C.soon,'Vencido':C.overdue,'Programada':C.muted,'Propuesta':C.muted}
+
+  return (
+    <div style={{padding:'16px 20px 60px'}}>
+      {/* KPIs */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+        {[['Facturado',facturado,C.text],['Cobrado',cobrado,C.normal],['Por cobrar',porCobrar,porCobrar>0?C.soon:C.text]].map(([l,v,col])=>(
+          <div key={l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
+            <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
+            <div style={{fontSize:14,fontWeight:700,color:col}}>{fmt(v)}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Historial de facturación por año */}
+      <div style={card}>
+        {sTitle('Historial de facturación')}
+        {emitidas.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin facturas emitidas.</div>}
+        {anios.map(y=>{
+          const rows=porAnio[y].slice().sort((a,b)=>(b.issued_at||'').localeCompare(a.issued_at||''))
+          const tot=rows.reduce((a,b)=>a+(b.amount||0),0)
+          return (
+            <div key={y} style={{marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{y}</div>
+                <div style={{fontSize:11,color:C.muted}}>{fmt(tot)}</div>
+              </div>
+              {rows.map(b=>(
+                <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{b.issued_at}{b.invoice_no?` · N° ${b.invoice_no}`:''}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                    <div style={{fontSize:10,fontWeight:600,color:STAT[b.status]||C.muted}}>{b.status}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Razones sociales asociadas */}
+      {entities&&entities.length>0&&(
+        <div style={card}>
+          {sTitle('Razones sociales asociadas')}
+          {entities.map(e=>(
+            <div key={e.id} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:`1px solid ${C.border}`}}>
+              <span style={{fontSize:12,color:C.text}}>{e.name||'—'}</span>
+              <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Datos de facturación */}
+      <div style={card}>
+        {sTitle('Datos de facturación')}
+        <div style={{display:'grid',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {field('Condición de pago','condicion_pago','Contado, 30 días...')}
+            <div>
+              <label style={lbl}>Moneda preferida</label>
+              <input value={form.moneda_preferida} onChange={e=>set('moneda_preferida',e.target.value)} list="monedas" placeholder="CLP, UF, USD" style={inp}/>
+              <datalist id="monedas">{['CLP','UF','USD'].map(o=><option key={o} value={o}/>)}</datalist>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {field('Banco','banco')}
+            {field('N° de cuenta','numero_cuenta')}
+          </div>
+        </div>
+      </div>
+
+      {/* Relación con el estudio */}
+      <div style={card}>
+        {sTitle('Relación con el estudio')}
+        <div style={{display:'grid',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div>
+              <label style={lbl}>Cliente desde</label>
+              <input value={client.created_at?new Date(client.created_at).toLocaleDateString('es-CL'):'—'} disabled style={{...inp,background:'#F2F2F2',color:C.muted}}/>
+            </div>
+            <div>
+              <label style={lbl}>Tipo de servicio</label>
+              <input value={client.type||'—'} disabled style={{...inp,background:'#F2F2F2',color:C.muted}}/>
+            </div>
+          </div>
+          {field('Abogado responsable','abogado_responsable')}
+          <div>
+            <label style={lbl}>Notas internas</label>
+            <textarea value={form.notas_internas} onChange={e=>set('notas_internas',e.target.value)} rows={3} placeholder="Solo visibles para administración" style={{...inp,resize:'vertical',fontFamily:'inherit'}}/>
+          </div>
+        </div>
+      </div>
+
+      {dirty&&(
+        <div style={{display:'flex',gap:8,marginBottom:20}}>
+          <button onClick={()=>setForm(fromClient())} disabled={savingF} style={{flex:1,padding:'10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Descartar</button>
+          <button onClick={guardar} disabled={savingF} style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:savingF?.6:1}}>{savingF?'Guardando...':'Guardar cambios'}</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
 function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
@@ -4110,7 +4248,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
-      {ftab==='financiero'&&<div style={{padding:'16px 20px 40px'}}><div style={{fontSize:13,color:C.muted}}>Financiero — próximamente</div></div>}
+      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
       {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>📁</div><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
