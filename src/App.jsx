@@ -5909,11 +5909,21 @@ export default function App() {
     setSaving(false)
   },[clients,clientEntities])
 
-  // Nuevo tramo de tarifa de una venta (PASO 3 agrega el recálculo de programadas)
+  // Nuevo tramo de tarifa de una venta + recálculo de las programadas afectadas
   const handleSaveTariff=useCallback(async(sale, t)=>{
     try{
       const {data,error}=await supabase.from('sale_tariff_history').insert({sale_id:sale.id, honorario:t.honorario, costo:(t.costo??null), currency:t.currency, vigente_desde:t.vigente_desde, motivo:t.motivo||null, created_by:user?.name||null}).select().single()
       if(error)throw error
+      // Recalcular SOLO programadas (no emitidas, no pagadas) con vencimiento >= vigente_desde
+      const ufv = parseFloat(sale.uf_value)||0
+      if(t.currency!=='CLP' && !ufv){ alert('El tramo se guardó, pero la venta no tiene Valor UF; no se recalcularon las programadas.'); return data }
+      const nuevoCLP = t.currency==='CLP' ? Math.round(t.honorario||0) : Math.round((t.honorario||0)*ufv)
+      const {data:prog} = await supabase.from('billing').select('id').eq('sale_id',sale.id).eq('status','Programada').is('invoice_no',null).gte('due',t.vigente_desde)
+      const ids=(prog||[]).map(b=>b.id)
+      if(ids.length){
+        await supabase.from('billing').update({amount:nuevoCLP, updated_at:new Date().toISOString()}).in('id',ids)
+        const {data:nb}=await getBilling(); if(nb) setBilling(nb)
+      }
       return data
     }catch(e){ alert('Error: '+e.message); return null }
   },[user])
