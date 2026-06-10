@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Fix saldo caja chica: `saldoCajaChica` vuelve a restar TODOS los gastos del usuario (no solo los no liquidados). El cambio del PASO 4 que excluía los liquidados hacía subir el saldo artificialmente al liquidar (los fondos seguían sumando completos mientras los gastos liquidados salían de la resta). Ahora liquidar es neutro para el saldo: queda en $0 si fondos=gastos, o en el remanente si hubo diferencia, y solo sube cuando se ingresa un fondo nuevo. El historial "Gastos liquidados" y la marca individual `rendered_at` se mantienen; lo que cambia es solo el cálculo del saldo disponible.
+
+## 2026-06-10
 - Liquidación de caja chica con confirmación previa (reutiliza `expenses.rendered_at` como marca individual de liquidado, sin columna nueva):
   - **Popup de confirmación** antes de ejecutar: encabezado "Resumen de liquidación — [usuario] · [período]", tabla detallada (Fecha / Concepto · Cliente · Categoría / Monto) con total al pie, sección de envío (campo "Enviar a" pre-rellenado con el email del usuario logueado + "CC" opcional), y botones "✉ Enviar y liquidar" / "Solo liquidar" / "Cancelar". Antes el botón ejecutaba directo sin confirmar y el correo iba hardcodeado a ee@/cl@.
   - **Confirmación post-liquidación**: "✓ Liquidación registrada — N gastos liquidados por $XXX" (+ "✉ Correo preparado…" si se envió), auto-cierre 7s.

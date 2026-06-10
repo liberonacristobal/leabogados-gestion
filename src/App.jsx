@@ -51,13 +51,15 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
 
-// Saldo disponible de caja chica del usuario = fondos entregados − gastos AÚN NO liquidados.
-// Al liquidar (rendered_at), el gasto se rinde/reembolsa y deja de descontar del saldo disponible.
-// Fuente única: la usan CajaChicaView ("Mi caja") y el KPI en Tareas para que nunca diverjan.
+// Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
+// Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
+// Queda en $0 si fondos=gastos, o en el remanente si hubo diferencia. NO excluir los liquidados:
+// si se excluyen, el saldo sube artificialmente al liquidar (los fondos seguirían sumando completos).
+// Fuente única: la usan CajaChicaView ("Mi caja"), el panel Gestión del Dashboard y el KPI de Tareas.
 const saldoCajaChica = (pettyCash, expenses, userName) => {
   if(!userName) return 0
   const entregado = (pettyCash||[]).filter(p=>p.user_name===userName).reduce((a,p)=>a+(p.amount||0),0)
-  const gastado = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===userName&&!e.rendered_at).reduce((a,e)=>a+(e.amount||0),0)
+  const gastado = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===userName).reduce((a,e)=>a+(e.amount||0),0)
   return entregado - gastado
 }
 
