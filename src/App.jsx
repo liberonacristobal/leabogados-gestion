@@ -5440,7 +5440,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                         const cl=clients.find(x=>x.id===t.client_id)
                         return (
                           <div key={t.id} onClick={(e)=>{e.stopPropagation();setPreview(t)}} style={{background:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
-                            <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                            <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',lineHeight:1.2,wordBreak:'break-word'}}>{t.title}</div>
                             {cl&&<div style={{fontSize:8,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
                           </div>
                         )
