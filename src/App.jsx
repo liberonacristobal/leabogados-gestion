@@ -2800,7 +2800,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName}) {
+function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName,expenseAttachments}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
   const [rendicionClient,setRendicionClient] = useState(null)
@@ -2965,6 +2965,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                       {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
                       {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>✓ Rendido</span>}
                       {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
+                      {(()=>{ const n=(expenseAttachments||[]).filter(a=>a.expense_id===e.id).length; return n>0?<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#F0F0F0',color:C.muted,fontWeight:600}}>📎 {n}</span>:null })()}
                     </div>
                     <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                     <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
@@ -3234,7 +3235,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 }
 
 // ── EXPENSE EDIT FORM (editar/eliminar registro individual) ───────────────────
-function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete,saving}) {
+function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete,saving,user,onAttachChange}) {
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro'})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const client=clients.find(c=>c.id===f.client_id)
@@ -3263,6 +3264,10 @@ function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete
         <Fld label='Razón social'>
           <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
         </Fld>
+      )}
+      {!isFondo&&expense?.id&&(
+        <Attachments table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos'
+          namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
@@ -3502,6 +3507,10 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
             <button onClick={addLink} style={{padding:'7px 12px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+</button>
           </div>
         </div>
+      )}
+      {task?.id&&(
+        <Attachments table='task_attachments' idField='task_id' entityId={task.id} folderKind='tareas'
+          namePrefix={`${selectedClient?.name||clients.find(c=>c.id===task.client_id)?.name||'Sin cliente'} · ${f.title||task.title||'Tarea'}`} user={user}/>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -4199,8 +4208,128 @@ const CLIENTES_TERMINADOS_ROOT='1_wi0td0ib9QlBLjUvDkr6QzdLn1sPwGX'
 async function driveGet(token,url){
   const fullUrl=url+(url.includes('?')?'&':'?')+'supportsAllDrives=true&includeItemsFromAllDrives=true'
   const r=await fetch(fullUrl,{headers:{Authorization:'Bearer '+token}})
+  if(r.status===401) throw new DriveAuthError()
   if(!r.ok) throw new Error('Drive API error '+r.status)
   return r.json()
+}
+
+// ── DRIVE: escritura de adjuntos (carpeta compartida "Respaldo Gastos APP") ──────
+const ADJUNTOS_ROOT='1iuWqAB9UNZfDSqj5MSeTTngPaplzBTEH'
+// Error de token de Drive vencido/ausente → gatilla reconexión
+class DriveAuthError extends Error { constructor(){ super('drive_auth'); this.code=401 } }
+// Token de Drive: localStorage → sesión
+async function driveToken(){
+  let t=localStorage.getItem('drive_token')
+  if(!t){ try{ t=await getDriveToken() }catch(_){} }
+  return t||null
+}
+// Busca subcarpeta por nombre dentro de parentId; si no existe, la crea. Devuelve su id.
+async function driveFindOrCreateFolder(token, parentId, name){
+  const q=encodeURIComponent(`'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and name='${name.replace(/'/g,"\\'")}' and trashed=false`)
+  const res=await driveGet(token,`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`)
+  if(res.files&&res.files.length) return res.files[0].id
+  const r=await fetch('https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({name, mimeType:'application/vnd.google-apps.folder', parents:[parentId]})
+  })
+  if(r.status===401) throw new DriveAuthError()
+  if(!r.ok) throw new Error('Drive crear carpeta '+r.status)
+  return (await r.json()).id
+}
+// Devuelve {tareas,gastos} ids de subcarpetas, con caché en localStorage.
+async function driveAdjuntosFolders(token){
+  let tareas=localStorage.getItem('drive_folder_tareas')
+  let gastos=localStorage.getItem('drive_folder_gastos')
+  if(!tareas){ tareas=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Tareas'); localStorage.setItem('drive_folder_tareas',tareas) }
+  if(!gastos){ gastos=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Gastos'); localStorage.setItem('drive_folder_gastos',gastos) }
+  return {tareas,gastos}
+}
+// Sube un File con upload resumable (aguanta 15 MB). Devuelve {id,name,webViewLink}.
+async function driveUpload(token, folderId, file, name){
+  const init=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink&supportsAllDrives=true',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+token,'Content-Type':'application/json; charset=UTF-8','X-Upload-Content-Type':file.type||'application/octet-stream','X-Upload-Content-Length':String(file.size)},
+    body:JSON.stringify({name, parents:[folderId]})
+  })
+  if(init.status===401) throw new DriveAuthError()
+  if(!init.ok) throw new Error('Drive init subida '+init.status)
+  const uploadUrl=init.headers.get('Location')
+  if(!uploadUrl) throw new Error('No se pudo iniciar la subida a Drive')
+  const put=await fetch(uploadUrl,{method:'PUT',headers:{'Content-Type':file.type||'application/octet-stream'},body:file})
+  if(put.status===401) throw new DriveAuthError()
+  if(!put.ok) throw new Error('Drive subida '+put.status)
+  return put.json()
+}
+// Manda un archivo a la papelera de Drive.
+async function driveTrash(token, fileId){
+  const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,{
+    method:'PATCH',
+    headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({trashed:true})
+  })
+  if(r.status===401) throw new DriveAuthError()
+  if(!r.ok) throw new Error('Drive papelera '+r.status)
+}
+
+// Bloque "Archivos" reutilizable (tareas y gastos). Sube a Drive y registra en `table`.
+function Attachments({table, idField, entityId, folderKind, namePrefix, user, onChange}) {
+  const [items,setItems] = useState([])
+  const [busy,setBusy] = useState(false)
+  const inputRef = useRef(null)
+  useEffect(()=>{
+    if(!entityId) return
+    supabase.from(table).select('*').eq(idField,entityId).order('created_at',{ascending:true}).then(({data})=>setItems(data||[]))
+  },[entityId])
+  const reconnect = () => { alert('Tu acceso a Drive expiró. Te llevo a reconectar Drive; al volver, vuelve a adjuntar el archivo.'); connectDrive() }
+  const onPick = async(e) => {
+    const file = e.target.files?.[0]; if(!file) return
+    e.target.value=''
+    if(file.size > 15*1024*1024){ alert(`El archivo pesa ${(file.size/1048576).toFixed(1)} MB y supera el límite de 15 MB. Súbelo a Drive manualmente y pega el link como comentario.`); return }
+    setBusy(true)
+    try{
+      const token = await driveToken()
+      if(!token){ reconnect(); return }
+      const folders = await driveAdjuntosFolders(token)
+      const folderId = folderKind==='tareas'?folders.tareas:folders.gastos
+      const fname = `${namePrefix} · ${file.name}`.slice(0,250)
+      const up = await driveUpload(token, folderId, file, fname)
+      const {data,error} = await supabase.from(table).insert({[idField]:entityId, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null}).select().single()
+      if(error) throw error
+      setItems(p=>[...p,data]); onChange&&onChange(1, data)
+    }catch(err){
+      if(err instanceof DriveAuthError || err?.code===401){ reconnect() }
+      else alert('Error al subir: '+(err.message||err))
+    }
+    setBusy(false)
+  }
+  const del = async(a) => {
+    if(!confirm('¿Eliminar este archivo? Se enviará a la papelera de Drive.')) return
+    try{
+      const token = await driveToken()
+      if(token && a.drive_file_id){ try{ await driveTrash(token, a.drive_file_id) }catch(err){ if(err instanceof DriveAuthError){ reconnect(); return } } }
+      await supabase.from(table).delete().eq('id',a.id)
+      setItems(p=>p.filter(x=>x.id!==a.id)); onChange&&onChange(-1, a)
+    }catch(err){ alert('Error al eliminar: '+(err.message||err)) }
+  }
+  return (
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Archivos {items.length>0&&`(${items.length})`}</div>
+      {items.map(a=>(
+        <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
+          <span style={{flexShrink:0}}>📎</span>
+          <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
+          <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a>
+          <button onClick={()=>del(a)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,flexShrink:0}}>×</button>
+        </div>
+      ))}
+      <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
+      <button onClick={()=>inputRef.current?.click()} disabled={busy} style={{marginTop:8,padding:'7px 12px',borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',gap:6}}>
+        {busy?<Spin/>:null}{busy?'Subiendo...':'+ Adjuntar archivo'}
+      </button>
+      <div style={{fontSize:10,color:C.muted,marginTop:4}}>Máx. 15 MB · se guarda en Drive (Respaldo Gastos APP)</div>
+    </div>
+  )
 }
 function ClienteDriveImporter({clients,onImported,onClose}){
   const [step,setStep]=useState('loading')
@@ -5466,6 +5595,7 @@ export default function App() {
   const [tasks,setTasks]=useState([])
   const [pettyCash,setPettyCash]=useState([])
   const [rendiciones,setRendiciones]=useState([])
+  const [expenseAttachments,setExpenseAttachments]=useState([])
   const [loading,setLoading]=useState(false)
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
@@ -5515,7 +5645,8 @@ export default function App() {
       supabase.from('expenses').select('*').order('date',{ascending:false}).then(({data})=>data||[]),
       supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}).then(({data})=>data||[]),
       supabase.from('client_entities').select('*').then(({data})=>data||[]),
-    ]).then(([pc,rd,c,s,b,e,t,ce])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce)})
+      supabase.from('expense_attachments').select('id,expense_id').then(({data})=>data||[]),
+    ]).then(([pc,rd,c,s,b,e,t,ce,ea])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
@@ -5810,7 +5941,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} expenseAttachments={expenseAttachments}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} clients={clients||[]} currentUserName={user?.name} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones}/>}
@@ -5824,7 +5955,7 @@ export default function App() {
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving}/></Modal>}
+        {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
