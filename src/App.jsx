@@ -2145,7 +2145,14 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
   // ── Bloque 2 (POR FACTURAR · mes en curso): programadas que vencen este mes ──
   const mesKey = `${currentYear}-${String(currentMonth).padStart(2,'0')}`
   const mesNombre = new Date().toLocaleDateString('es-CL',{month:'long'}).replace(/^\w/,c=>c.toUpperCase())
-  const progMes = useMemo(()=>bb.filter(b=>b.status==='Programada'&&b.due?.slice(0,7)===mesKey).sort((a,b)=>(a.due||'')>(b.due||'')?1:-1),[bb,mesKey])
+  const progMes = useMemo(()=>{
+    let r = bb.filter(b=>b.status==='Programada'&&b.due?.slice(0,7)===mesKey)
+    if(q.trim()) r = r.filter(b=>{
+      const c=clients.find(x=>x.id===b.client_id)
+      return (c?.name?.toLowerCase().includes(q.toLowerCase()))||(b.receptor_name?.toLowerCase().includes(q.toLowerCase()))
+    })
+    return r.sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
+  },[bb,mesKey,q,clients])
   const progMesTotal = useMemo(()=>progMes.reduce((a,b)=>a+(b.amount||0),0),[progMes])
   // Por defecto, todas marcadas; se re-sincroniza si cambia la membresía del mes
   const progIds = progMes.map(b=>b.id).join(',')
