@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-06-09
+- Tareas (limited): filtros (proyecto + cliente) movidos a la misma línea del subtítulo "Mis tareas · N" (título izquierda, filtros derecha, space-between); reducido el espacio en blanco excesivo entre "Terminadas" y "Próximas dos semanas" (bottom padding 100px→8px).
 - Pestaña Tareas (limited): encabezado con saludo personalizado "¡Hola, [nombre]!" + fecha es-CL y contador (activas/atrasadas/hoy/próximas); filtros compactos alineados a 20px; click en una tarjeta abre vista previa de solo lectura (`TaskPreview`: contexto, responsable/asignó, plazo+estado, subtareas con progreso, comentarios y archivos si existen) con botones Editar / Marcar terminada / Cerrar; tarjetas KPI de caja chica con borde izquierdo de color + fondo tintado (verde/rojo según saldo, naranja para gastos por liquidar).
 - Fix crash (pantalla negra) al abrir el modal de tarea: `QuickTaskForm` usaba `React.useEffect` pero `App.jsx` nunca importa `React` (solo hooks nombrados) y el JSX runtime automático no lo inyecta → `ReferenceError: React is not defined` desmontaba el árbol. Cambiado a `useEffect`. Afectaba crear/editar tarea desde cualquier punto (calendario, tarjetas, botón "+ Tarea"); latente desde el commit de subtareas/comentarios.
 - Fix calendario "Próximas dos semanas" (Tareas): click en un día abre Nueva tarea con la fecha precargada en plazo; click en una tarjeta abre esa tarea para editar (stopPropagation). `onAddTask` ahora type-guardea la fecha (string) y `QuickTaskForm` acepta `preDue`, evitando el crash por pasar un MouseEvent como dato.
