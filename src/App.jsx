@@ -5291,6 +5291,16 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const [openActivas,setOpenActivas] = useState(true)
   const [openAsignadas,setOpenAsignadas] = useState(true)
   const [preview,setPreview] = useState(null)
+  // Popup flotante de detalle (hover en desktop / long-press en móvil) sobre las tareas del calendario
+  const [hoverTask,setHoverTask] = useState(null)
+  const [hoverPos,setHoverPos] = useState({x:0,y:0})
+  const hoverTimer = useRef(null)
+  const longPressFired = useRef(false)
+  const startPress = (t,e) => {
+    const p = e.touches?.[0] ? {x:e.touches[0].clientX,y:e.touches[0].clientY} : {x:e.clientX,y:e.clientY}
+    hoverTimer.current = setTimeout(()=>{ longPressFired.current=true; setHoverPos(p); setHoverTask(t) }, 380)
+  }
+  const endPress = () => { clearTimeout(hoverTimer.current); setHoverTask(null) }
   const me = currentUserName || ''
   // Proyectos dependientes del cliente filtrado: solo los del/los cliente(s) que matchean el texto buscado
   const clientIdsFiltro = new Set((filterClient ? clients.filter(c=>c.name?.toLowerCase().includes(filterClient.toLowerCase())) : []).map(c=>c.id))
@@ -5440,7 +5450,12 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                         const cl=clients.find(x=>x.id===t.client_id)
                         const asignadaPorMi = t.who!==me && t.assigned_by===me
                         return (
-                          <div key={t.id} onClick={(e)=>{e.stopPropagation();setPreview(t)}} style={{background:asignadaPorMi?'#F0F9F5':'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${asignadaPorMi?'#1D9E75':C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+                          <div key={t.id}
+                            onClick={(e)=>{e.stopPropagation(); if(longPressFired.current){longPressFired.current=false;return} setPreview(t)}}
+                            onMouseEnter={(e)=>{setHoverPos({x:e.clientX,y:e.clientY});setHoverTask(t)}}
+                            onMouseLeave={()=>setHoverTask(null)}
+                            onTouchStart={(e)=>startPress(t,e)} onTouchEnd={endPress} onTouchMove={endPress}
+                            style={{background:asignadaPorMi?'#F0F9F5':'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${asignadaPorMi?'#1D9E75':C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
                             <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',lineHeight:1.2,wordBreak:'break-word'}}>{t.title}</div>
                             {cl&&<div style={{fontSize:8,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
                           </div>
@@ -5517,6 +5532,23 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           )
         })()}
       </div>
+      {hoverTask&&(()=>{
+        const cl=clients.find(c=>c.id===hoverTask.client_id)
+        const left=Math.max(8,Math.min(hoverPos.x+12, (typeof window!=='undefined'?window.innerWidth:360)-238))
+        const top=Math.max(8,Math.min(hoverPos.y+12, (typeof window!=='undefined'?window.innerHeight:640)-200))
+        const Row=({l,v})=><div style={{display:'flex',gap:6,marginTop:3}}><span style={{fontSize:10,color:C.muted,minWidth:74,flexShrink:0,textTransform:'uppercase',letterSpacing:.3}}>{l}</span><span style={{fontSize:11,color:C.text,minWidth:0,wordBreak:'break-word'}}>{v}</span></div>
+        return (
+          <div style={{position:'fixed',left,top,zIndex:300,width:230,background:'#fff',border:'1px solid #E4E8EB',borderRadius:10,boxShadow:'0 8px 28px rgba(0,0,0,.14)',padding:'10px 12px',pointerEvents:'none'}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.25,marginBottom:6}}>{hoverTask.title}</div>
+            {cl&&<Row l='Cliente' v={cl.name}/>}
+            {hoverTask.project&&<Row l='Proyecto' v={hoverTask.project}/>}
+            {hoverTask.subproject&&<Row l='Subproyecto' v={hoverTask.subproject}/>}
+            <Row l='Responsable' v={hoverTask.who||'—'}/>
+            <Row l='Vence' v={hoverTask.due?fmtDate(hoverTask.due):'Sin fecha'}/>
+            <Row l='Estado' v={hoverTask.status||'—'}/>
+          </div>
+        )
+      })()}
       {preview&&(
         <Modal title='Detalle de tarea' onClose={()=>setPreview(null)}>
           <TaskPreview task={preview} clients={clients} onClose={()=>setPreview(null)}
