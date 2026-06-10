@@ -1,6 +1,15 @@
 # Changelog
 
 ## 2026-06-10
+- Rediseño del modal "Registrar gastos" (GastosForm), igual desde la ficha de cliente y desde "+ Gastos" global:
+  - Flujo: desde la ficha entra directo al formulario; desde el botón global muestra primero el buscador de cliente y luego el mismo formulario. Wrapper de modal propio (sin el header del Modal compartido).
+  - Header de 2 líneas: nombre del cliente en gris (#99ABB4, 11px, uppercase) + cierre a la derecha; "Registrar gastos" en #003C50 16px bold. Sin pill del cliente.
+  - Razón social: pre-poblada con la primera RS, dropdown propio con chevron integrado sobre #f5f7f9, sin label ni RUT; la RS elegida queda marcada.
+  - Proyecto: label "PROYECTO", pre-poblado con el más reciente, dropdown con proyectos existentes + "+ Nuevo proyecto..." (verde) o texto libre si no hay.
+  - Filas en 2 líneas: Tipo + Fecha + "Pago Cliente" (switch) + eliminar (papelera discreta, sin x); Descripción (ancho completo) + Monto.
+  - Switch "Pago Cliente" (`expenses.paid_by_client`): el gasto se rinde al cliente pero NO descuenta la caja chica del usuario; `saldoCajaChica` excluye los gastos con `paid_by_client=true`.
+
+## 2026-06-10
 - Rediseño del flujo de rendición a clientes y de Gastos y Fondos (4 cambios):
   - Lista Gastos y Fondos: bajo cada cliente, sus razones sociales con saldo individual (verde >0 / rojo <=0); el total grande sigue siendo la suma. Helper `rsBalances`.
   - Detalle cliente con 1 RS: razón social + RUT una sola vez en el header (fuera de las filas); KPIs en rectángulos redondeados con labels grises (#99ABB4) y reglas de color (Fondos verde/amarillo/rojo, Gastos rojo, Saldo verde/rojo); cada gasto con ícono de adjunto (subida gris o clip azul con contador) que abre el uploader (Attachments); barra inferior "Total a rendir" + "Rendir al cliente" (#1D9E75), o "Sin gastos por rendir".
