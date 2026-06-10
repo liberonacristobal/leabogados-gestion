@@ -1365,9 +1365,11 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
 
   const balances = {}
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) })
-  const negatives = clients.filter(c=>balances[c.id]<0)
+  const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [openCaja,setOpenCaja] = useState(false)
+  const [openOficina,setOpenOficina] = useState(false)
+  const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
   return (
     <div>
@@ -1566,6 +1568,48 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
                 </div>
               ))}
             </div>
+          </div>
+        )
+      })()}
+
+      {/* Costos de oficina del mes (cliente interno) */}
+      {(()=>{
+        const internalIds = new Set((clients||[]).filter(c=>c.is_internal).map(c=>c.id))
+        if(internalIds.size===0) return null
+        const gastosOf = (expenses||[]).filter(e=>e.type==='gasto'&&internalIds.has(e.client_id))
+        const delMes = gastosOf.filter(e=>e.date?.slice(0,7)===mesOficina).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
+        const totalMes = delMes.reduce((a,e)=>a+(e.amount||0),0)
+        const mesLbl = (()=>{ try{ return new Date(mesOficina+'-01T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase()) }catch(_){ return mesOficina } })()
+        return (
+          <div style={{padding:'16px 20px 0'}}>
+            <button onClick={()=>setOpenOficina(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openOficina?8:0}}>
+              <span style={{fontSize:10,color:C.muted,transform:openOficina?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
+              <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Costos de oficina del mes</span>
+              <span style={{fontSize:12,fontWeight:700,color:C.text,marginLeft:'auto'}}>{fmt(totalMes)}</span>
+            </button>
+            {openOficina&&(
+              <div style={{marginTop:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
+                  <input type='month' value={mesOficina} onChange={e=>setMesOficina(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}/>
+                  <span style={{fontSize:12,color:C.muted}}>{delMes.length} gasto{delMes.length!==1?'s':''}</span>
+                </div>
+                {delMes.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>Sin costos de oficina en {mesLbl}</div>}
+                {delMes.map(e=>(
+                  <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`,gap:8}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>{e.category||'—'}{e.subcategory?`: ${e.subcategory}`:''} · {fmtDate(e.date)}</div>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmt(e.amount)}</div>
+                  </div>
+                ))}
+                {delMes.length>0&&(
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:13,fontWeight:700,color:C.text}}>
+                    <span>Total {mesLbl}</span><span>{fmt(totalMes)}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )
       })()}
@@ -2961,7 +3005,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
-                      {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}</span>}
+                      {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
                       {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
                       {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>✓ Rendido</span>}
                       {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
@@ -3124,7 +3168,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     let count=0
     for(const r of valid) {
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null})
+        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null})
         count++
       } catch(e){ console.error(e) }
     }
@@ -3201,16 +3245,24 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
               <div/>
             </div>
             {rows.map((row,idx)=>(
-              <div key={row.id} style={{display:'grid',gridTemplateColumns:'78px 110px 1fr 80px 24px',gap:4,marginBottom:5}}>
-                <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12}}>
-                  {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
-                </select>
-                <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11}}/>
-                <input value={row.concept} onChange={e=>updateRow(row.id,'concept',e.target.value)} placeholder='Descripción...' style={inS} onKeyDown={e=>handleKeyDown(e,row.id,'concept')}/>
-                <input type='number' value={row.amount} onChange={e=>updateRow(row.id,'amount',e.target.value)} placeholder='0' style={{...inS,textAlign:'right'}} onKeyDown={e=>handleKeyDown(e,row.id,'amount')} autoFocus={idx===rows.length-1&&idx>0}/>
-                <button onClick={()=>removeRow(row.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+              <div key={row.id}>
+                <div style={{display:'grid',gridTemplateColumns:'78px 110px 1fr 80px 24px',gap:4,marginBottom:row.category==='Otro'?2:5}}>
+                  <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12}}>
+                    {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11}}/>
+                  <input value={row.concept} onChange={e=>updateRow(row.id,'concept',e.target.value)} placeholder='Descripción...' style={inS} onKeyDown={e=>handleKeyDown(e,row.id,'concept')}/>
+                  <input type='number' value={row.amount} onChange={e=>updateRow(row.id,'amount',e.target.value)} placeholder='0' style={{...inS,textAlign:'right'}} onKeyDown={e=>handleKeyDown(e,row.id,'amount')} autoFocus={idx===rows.length-1&&idx>0}/>
+                  <button onClick={()=>removeRow(row.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+                </div>
+                {row.category==='Otro'&&(
+                  <input list='gasto-subcats' value={row.subcategory||''} onChange={e=>updateRow(row.id,'subcategory',e.target.value)} placeholder='Subcategoría (Otro)...' style={{...inS,fontSize:12,marginBottom:5}}/>
+                )}
               </div>
             ))}
+            <datalist id='gasto-subcats'>
+              {[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}
+            </datalist>
           </div>
 
           <button onClick={addRow} style={{width:'100%',padding:'8px',borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:12}}>+ Agregar fila</button>
@@ -3235,7 +3287,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 }
 
 // ── EXPENSE EDIT FORM (editar/eliminar registro individual) ───────────────────
-function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete,saving,user,onAttachChange}) {
+function ExpenseEditForm({expense,clients,clientEntities,expenses,onSave,onClose,onDelete,saving,user,onAttachChange}) {
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro'})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const client=clients.find(c=>c.id===f.client_id)
@@ -3255,6 +3307,12 @@ function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete
           </div>
         </Fld>
       )}
+      {!isFondo&&f.category==='Otro'&&(
+        <Fld label='Subcategoría (Otro)'>
+          <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Aseo, Cafetería, Suscripción...' style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
+          <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
+        </Fld>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='Monto (CLP)'><Inp type='number' value={f.amount} onChange={e=>up('amount',e.target.value)}/></Fld>
         <Fld label='Fecha'><Inp type='date' value={f.date||''} onChange={e=>up('date',e.target.value)}/></Fld>
@@ -3272,7 +3330,7 @@ function ExpenseEditForm({expense,clients,clientEntities,onSave,onClose,onDelete
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.amount} onClick={()=>onSave({...f,amount:parseInt(f.amount)||0})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!f.amount} onClick={()=>onSave({...f,amount:parseInt(f.amount)||0,subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -3711,8 +3769,8 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
   // Actualizar selected cuando cambian los datos
   useEffect(()=>{ if(selected) setSelected(clients.find(c=>c.id===selected.id)||null) },[clients])
 
-  const activeN=clients.filter(c=>(c.status||'Activo')==='Activo').length
-  const endedN=clients.filter(c=>c.status==='Terminado').length
+  const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
+  const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
   const cl = useMemo(()=>{
     let base = clients
     if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
@@ -3782,7 +3840,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
               onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{c.name}</div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>{c.name}{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:'#F0F0F0',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4}}>Interno</span>}</div>
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
                 </div>
                 <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`1px solid ${ended?C.border:C.normal}`,background:ended?'#ECECEC':'transparent',color:ended?C.muted:C.normal,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminar'}</button>
@@ -4054,6 +4112,11 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
       <Fld label='Cartera'>
         <button type='button' onClick={()=>up('erasmo',!f.erasmo)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.erasmo?C.accent:C.border}`,background:f.erasmo?'#E6EEF1':'transparent',color:f.erasmo?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
           {f.erasmo?'Cliente de Erasmo':'Marcar como Erasmo'}
+        </button>
+      </Fld>
+      <Fld label='Interno (gastos de oficina)'>
+        <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.is_internal?C.accent:C.border}`,background:f.is_internal?'#E6EEF1':'transparent',color:f.is_internal?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+          {f.is_internal?'✓ Cliente interno (no cuenta como cliente de negocio)':'Marcar como interno'}
         </button>
       </Fld>
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
@@ -5863,7 +5926,7 @@ export default function App() {
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
