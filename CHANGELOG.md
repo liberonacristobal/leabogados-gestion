@@ -1,6 +1,12 @@
 # Changelog
 
 ## 2026-06-10
+- Carga masiva de gastos/fondos (CargaMasivaModal) reforzada en 3 partes:
+  - Plantilla Excel modelo descargable (ExcelJS por CDN): hojas Gastos / Fondos / Instrucciones, con encabezado en negrita + fondo gris, ejemplos, Fecha dd-mm-yyyy, Monto sin decimales, validación desplegable de Categoría y comentarios en RUT/Monto.
+  - Parser robusto: lee la hoja según el tipo elegido (Gastos/Fondos); ya no descarta filas en silencio (monto vacío/negativo/0 quedan como error visible, el negativo ya no se vuelve positivo); detecta duplicados (RUT+fecha+monto+concepto) con aviso; al cargar solo sube las filas listas y muestra las que fallan al insertar con su motivo.
+  - Vista previa por estado: filas Lista (blanco), Revisar (amarillo #FFF8EC con selector de cliente) y Error (rojo #FCEBEB con motivo); Concepto y Categoría editables inline; contador "X listas · Y por revisar · Z errores"; botón "Cargar X filas listas" que sube solo las que tienen cliente y sin errores.
+
+## 2026-06-10
 - Rediseño del documento de rendición de gastos (RendicionModal, `generatePDFContent`): formato carta (máx. 816px), encabezado #003C50 con wordmark de texto "LIBERONA ESCALA / ABOGADOS" (no existe logo png) a la izquierda y razón social del cliente (blanco) + RUT (#99ABB4) a la derecha; barra gris #E4E8EB con Período · Emisión · N° gastos (separados por línea vertical) y "Atención: [contacto]" a la derecha; tabla Fecha/Concepto/Categoría/Monto con badges (Notaría #E6F1FB/#185FA5, Transporte #E1F5EE/#0F6E56, resto gris) y fila Total con borde superior 1.5px #003C50; sección "Fondos recibidos"; caja resumen oscura #003C50 con Fondos/Gastos/Saldo. Caja de saldo condicional: si gastamos más que lo recibido (cliente debe reponer) → caja #FCEBEB/#F7C1C1 "transferir a Liberona Escala" con datos bancarios; si hay saldo a favor del cliente → caja #E4E8EB con texto de devolución a administracion@leabogados.cl; si saldo 0 → sin caja. Pie con dirección/leabogados.cl y "Rendición de gastos · Período". @media print: oculta botones, color-adjust exact, page-break-inside avoid en la caja de saldo y corte natural entre filas.
 - Campo "Atención" en el modal: precargado con el primer contacto de la tabla `contacts`; si el cliente no tiene contactos, input editable que al confirmar (blur/Enter) crea un contacto nuevo para ese `client_id`. Se quitó el mailto automático que navegaba fuera de la app al generar (el envío por correo sigue disponible en el flujo de rendiciones existente). Sin emojis.
 

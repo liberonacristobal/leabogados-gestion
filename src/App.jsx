@@ -3180,6 +3180,8 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   const conError = (rows||[]).filter(r=>r.error)
   const dups = (rows||[]).filter(r=>r.dup)
   const totalMonto = (rows||[]).filter(r=>!r.error).reduce((a,r)=>a+(r.monto||0),0)
+  const CAT_OPCIONES = ['Notaría','Transporte','CBR','Alimentación','Otro']
+  const editarCampo = (rowId,campo,valor) => setRows(p=>p.map(r=>r.id===rowId?{...r,[campo]:valor}:r))
 
   const guardar = async() => {
     if(listas.length===0){ alert('No hay filas listas para cargar (con cliente asignado y sin errores).'); return }
@@ -3245,21 +3247,39 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
         <>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
             <div style={{fontSize:13,fontWeight:700,color:C.text}}>{rows.length} fila(s) · {fmt(totalMonto)}</div>
-            <div style={{fontSize:11,color:C.muted}}>{listas.length} listas{porRevisar.length>0&&<span style={{color:C.soon}}> · {porRevisar.length} por revisar</span>}{conError.length>0&&<span style={{color:C.overdue}}> · {conError.length} errores</span>}</div>
+            <div style={{fontSize:11,color:C.muted}}><span style={{color:C.normal,fontWeight:600}}>{listas.length} listas</span> · <span style={{color:C.soon}}>{porRevisar.length} por revisar</span> · <span style={{color:C.overdue}}>{conError.length} errores</span></div>
           </div>
           {dups.length>0&&<div style={{fontSize:11,color:'#C2761F',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto). No se deduplican: si las cargas, se duplicarán.</div>}
-          <div style={{maxHeight:320,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
-            {rows.map(r=>(
-              <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.border}`,background:r.client_id?'#fff':'#FFF8EC'}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'(sin concepto)'} · {fmt(r.monto)}</div>
-                  <div style={{fontSize:10,color:C.muted}}>{r.fecha||'sin fecha'}{tipo==='gasto'?` · ${r.categoria}`:''} · {r.rut||r.nombre||'—'}</div>
+          <div style={{maxHeight:360,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
+            {rows.map(r=>{
+              const estado = r.error ? 'Error' : (r.client_id ? 'Lista' : 'Revisar')
+              const bg = r.error ? '#FCEBEB' : (r.client_id ? '#fff' : '#FFF8EC')
+              const chip = r.error ? C.overdue : (r.client_id ? C.normal : C.soon)
+              return (
+                <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:chip,border:`1px solid ${chip}`,borderRadius:4,padding:'1px 6px',flexShrink:0}}>{estado}</span>
+                    <span style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.fecha||'sin fecha'} · {r.rut||r.nombre||'sin RUT'}</span>
+                    {r.dup&&<span style={{fontSize:9,fontWeight:600,color:'#C2761F',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:4,padding:'1px 6px',flexShrink:0}}>Duplicada</span>}
+                    <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:r.error?C.overdue:C.text,flexShrink:0}}>{fmt(r.monto)}</span>
+                  </div>
+                  {r.error&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginBottom:6}}>{r.error}</div>}
+                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                    <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} placeholder='Concepto'
+                      style={{flex:'1 1 140px',minWidth:120,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}/>
+                    {tipo==='gasto'&&(
+                      <select value={CAT_OPCIONES.includes(r.categoria)?r.categoria:'Otro'} onChange={e=>editarCampo(r.id,'categoria',e.target.value)}
+                        style={{flex:'0 0 auto',padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}>
+                        {CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}
+                      </select>
+                    )}
+                    {r.client_id
+                      ? <span style={{fontSize:11,color:C.normal,fontWeight:600,flexShrink:0}}>{r.clientName}</span>
+                      : <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)}/>}
+                  </div>
                 </div>
-                {r.client_id
-                  ? <span style={{fontSize:11,color:C.normal,fontWeight:600,flexShrink:0}}>{r.clientName}</span>
-                  : <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)}/>}
-              </div>
-            ))}
+              )
+            })}
           </div>
           <div style={{display:'flex',gap:8}}>
             <button onClick={()=>setRows(null)} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver</button>
