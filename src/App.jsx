@@ -63,6 +63,29 @@ const saldoCajaChica = (pettyCash, expenses, userName) => {
   return entregado - gastado
 }
 
+// Saldos por razón social (entity) de un cliente. Con 1 RS, todo (incl. sin entity_id) va a esa RS.
+// Con 2+ RS, los movimientos sin entity_id quedan en un grupo "Sin razón social". total = suma de todo.
+function rsBalances(clientId, expenses, entities){
+  const ents = entities||[]
+  const single = ents.length===1
+  const buckets = ents.map(e=>({entity:e,fondos:0,gastos:0}))
+  const byId={}; buckets.forEach(b=>byId[b.entity.id]=b)
+  const sinRS={entity:null,fondos:0,gastos:0,n:0}
+  ;(expenses||[]).filter(e=>e.client_id===clientId).forEach(e=>{
+    let b
+    if(e.entity_id&&byId[e.entity_id]) b=byId[e.entity_id]
+    else if(single&&buckets.length) b=buckets[0]
+    else { b=sinRS; sinRS.n++ }
+    if(e.type==='fondo') b.fondos+=(e.amount||0); else b.gastos+=(e.amount||0)
+  })
+  const ws = b=>({...b,saldo:b.fondos-b.gastos})
+  const porRS = buckets.map(ws)
+  const sin = sinRS.n>0 ? ws(sinRS) : null
+  const all = porRS.concat(sin?[sin]:[])
+  const tot = all.reduce((a,b)=>({fondos:a.fondos+b.fondos,gastos:a.gastos+b.gastos}),{fondos:0,gastos:0})
+  return {porRS, sin, total:{...tot,saldo:tot.fondos-tot.gastos}}
+}
+
 const DaysBadge = ({due,status}) => {
   const u=urgency(due,status); if(u==='done') return null
   const d=daysLeft(due); if(d===null) return null
@@ -3563,10 +3586,23 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                   <div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:4}}>{c.name}</div>
                   <div style={{fontSize:15,fontWeight:700,color:sal<0?C.overdue:C.normal}}>{fmt(sal)}</div>
                 </div>
-                <div style={{display:'flex',gap:16,fontSize:11,color:C.muted}}>
-                  <span>Fondos: {fmt(b.fondos)}</span>
-                  <span>Gastos: {fmt(b.gastos)}</span>
-                </div>
+                {(()=>{
+                  const ents=(clientEntities||[]).filter(x=>x.client_id===c.id)
+                  const rb=rsBalances(c.id, expenses, ents)
+                  if(rb.porRS.length===0 && !rb.sin) return (
+                    <div style={{display:'flex',gap:16,fontSize:11,color:C.muted}}><span>Fondos: {fmt(b.fondos)}</span><span>Gastos: {fmt(b.gastos)}</span></div>
+                  )
+                  const linea=(label,saldo,it)=>(
+                    <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'2px 0'}}>
+                      <span style={{color:C.muted,fontStyle:it?'italic':'normal',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
+                      <span style={{fontWeight:600,color:saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(saldo)}</span>
+                    </div>
+                  )
+                  return (<div style={{marginTop:2}}>
+                    {rb.porRS.map(r=>linea(`${r.entity.name}${r.entity.rut?` · ${r.entity.rut}`:''}`, r.saldo, false))}
+                    {rb.sin&&linea('Sin razón social', rb.sin.saldo, true)}
+                  </div>)
+                })()}
                 {(()=>{ const rs=(clientEntities||[]).filter(x=>x.client_id===c.id); if(!b.sinAsignar||rs.length===0) return null; return (
                   <div onClick={ev=>ev.stopPropagation()} style={{marginTop:8}}>
                     {asignandoRS===c.id?(

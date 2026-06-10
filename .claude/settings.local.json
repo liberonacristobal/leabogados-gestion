@@ -27,7 +27,9 @@
       "Bash(git commit -m 'feat: proyecto en gastos + rendir limited + rendiciones en ficha limited *)",
       "Bash(git commit *)",
       "Bash(cd *)",
-      "Bash(xargs -I{} sed -n '{}p' src/App.jsx)"
+      "Bash(xargs -I{} sed -n '{}p' src/App.jsx)",
+      "Bash(vercel --prod --yes)",
+      "Read(//private/tmp/**)"
     ]
   }
 }
