@@ -3004,7 +3004,7 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
   const [newSubtask,setNewSubtask] = useState('')
   const [loadingExtras,setLoadingExtras] = useState(false)
 
-  React.useEffect(()=>{
+  useEffect(()=>{
     if(!task?.id) return
     setLoadingExtras(true)
     Promise.all([
