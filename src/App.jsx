@@ -462,6 +462,9 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
+  // Auto-cierre del mensaje de confirmación post-liquidación
+  useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),7000); return ()=>clearTimeout(t) } },[toast])
+
   const periodoActual = () => new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'})
 
   const handleLiquidar = async(abrirCorreo=false) => {
@@ -586,6 +589,19 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
 
   return (
     <div>
+      {/* Confirmación post-liquidación (PASO 3) */}
+      {toast&&(
+        <div style={{position:'fixed',top:12,left:0,right:0,zIndex:400,display:'flex',justifyContent:'center',padding:'0 16px',pointerEvents:'none'}}>
+          <div style={{background:'#fff',border:'1px solid #1D9E75',borderLeft:'4px solid #1D9E75',borderRadius:10,padding:'12px 16px',maxWidth:520,width:'100%',boxShadow:'0 6px 24px rgba(0,0,0,.15)',pointerEvents:'auto',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:'#0F6E56'}}>✓ Liquidación registrada</div>
+              <div style={{fontSize:12,color:'#3D3D3D',marginTop:2}}>{toast.n} gasto{toast.n!==1?'s':''} liquidado{toast.n!==1?'s':''} por {fmtCLP(toast.total)}</div>
+              {toast.correo&&<div style={{fontSize:11,color:'#C2761F',marginTop:5,fontWeight:600}}>✉ Correo preparado — recuerda enviarlo desde tu cliente de correo</div>}
+            </div>
+            <button onClick={()=>setToast(null)} style={{background:'none',border:'none',color:'#888',cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
+          </div>
+        </div>
+      )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F7F8F9',zIndex:10}}>
         <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja Chica</div>
         <div style={{display:'flex',gap:6,background:'#E4E8EB',borderRadius:8,padding:3}}>
