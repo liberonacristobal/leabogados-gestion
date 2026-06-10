@@ -3365,6 +3365,27 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
   const [f,setF] = useState(task ? {id:task.id,title:task.title||'',who:task.who||'Cristóbal',due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by} : {title:'',who:'Cristóbal',due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
   const [showProjects,setShowProjects] = useState(false)
   const [showSubprojects,setShowSubprojects] = useState(false)
+  const [draftId,setDraftId] = useState(null)
+  const draftRef = useRef(null)       // id de la tarea borrador (creada al adjuntar en tarea nueva)
+  const committedRef = useRef(false)  // true si se guardó vía "Guardar" (no borrar al cerrar)
+
+  // Si el modal se cierra sin guardar y existe un borrador, se elimina (sin huérfanos)
+  useEffect(()=>()=>{ if(draftRef.current && !committedRef.current){ supabase.from('tasks').delete().eq('id',draftRef.current) } },[])
+
+  // Crea la tarea silenciosamente (sin cerrar el modal ni avisar) para habilitar el uploader
+  const ensureTaskId = async() => {
+    if(task?.id) return task.id
+    if(draftRef.current) return draftRef.current
+    const payload = {title:f.title||'',who:f.who||'Cristóbal',due:f.due||null,status:f.status||'Activo',note:f.note||'',sale_id:f.sale_id||null,project:f.project||null,subproject:f.subproject||null,client_id:selectedClient?.id||null,assigned_by:f.assigned_by||user?.name||null}
+    const {data,error} = await supabase.from('tasks').insert(payload).select().single()
+    if(error) throw error
+    draftRef.current = data.id; setDraftId(data.id)
+    return data.id
+  }
+  const handleGuardar = () => {
+    committedRef.current = true
+    onSave({...f, id: task?.id||draftRef.current||undefined, client_id:selectedClient.id, project:f.project||null, subproject:f.subproject||null, _isNew: !task?.id})
+  }
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
@@ -3489,16 +3510,13 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
         </>
       )}
 
-      {!task?.id&&selectedClient&&(
-        <div style={{fontSize:11,color:C.muted,marginBottom:12,padding:'8px 10px',borderRadius:8,background:'#F7F8F9',border:`1px solid ${C.border}`}}>Podrás adjuntar archivos después de guardar la tarea.</div>
-      )}
-      {task?.id&&(
-        <Attachments table='task_attachments' idField='task_id' entityId={task.id} folderKind='tareas'
-          namePrefix={`${selectedClient?.name||clients.find(c=>c.id===task.client_id)?.name||'Sin cliente'} · ${f.title||task.title||'Tarea'}`} user={user}/>
+      {(task?.id||selectedClient)&&(
+        <Attachments table='task_attachments' idField='task_id' entityId={task?.id||draftId} ensureEntityId={ensureTaskId} folderKind='tareas'
+          namePrefix={`${selectedClient?.name||clients.find(c=>c.id===task?.client_id)?.name||'Sin cliente'} · ${f.title||task?.title||'Tarea'}`} user={user}/>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={()=>onSave({...f,client_id:selectedClient.id,project:f.project||null,subproject:f.subproject||null})}
+        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={handleGuardar}
           style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!f.title.trim())?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar tarea'}
         </button>
@@ -4258,7 +4276,7 @@ async function driveTrash(token, fileId){
 }
 
 // Bloque "Archivos" reutilizable (tareas y gastos). Sube a Drive y registra en `table`.
-function Attachments({table, idField, entityId, folderKind, namePrefix, user, onChange}) {
+function Attachments({table, idField, entityId, ensureEntityId, folderKind, namePrefix, user, onChange}) {
   const [items,setItems] = useState([])
   const [busy,setBusy] = useState(false)
   const inputRef = useRef(null)
@@ -4273,13 +4291,17 @@ function Attachments({table, idField, entityId, folderKind, namePrefix, user, on
     if(file.size > 15*1024*1024){ alert(`El archivo pesa ${(file.size/1048576).toFixed(1)} MB y supera el límite de 15 MB. Súbelo a Drive manualmente y pega el link como comentario.`); return }
     setBusy(true)
     try{
+      // Si no hay id todavía (tarea nueva), se crea silenciosamente antes de subir
+      let eid = entityId
+      if(!eid && ensureEntityId) eid = await ensureEntityId()
+      if(!eid) throw new Error('No se pudo preparar el registro')
       const token = await driveToken()
       if(!token){ reconnect(); return }
       const folders = await driveAdjuntosFolders(token)
       const folderId = folderKind==='tareas'?folders.tareas:folders.gastos
       const fname = `${namePrefix} · ${file.name}`.slice(0,250)
       const up = await driveUpload(token, folderId, file, fname)
-      const {data,error} = await supabase.from(table).insert({[idField]:entityId, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null}).select().single()
+      const {data,error} = await supabase.from(table).insert({[idField]:eid, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null}).select().single()
       if(error) throw error
       setItems(p=>[...p,data]); onChange&&onChange(1, data)
     }catch(err){
@@ -5748,13 +5770,16 @@ export default function App() {
   const handleSaveTask=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const taskPayload={...f,sale_id:f.sale_id||null,client_id:f.client_id||null}
-      if(!f.id && !taskPayload.assigned_by) taskPayload.assigned_by = user?.name || null
+      // _isNew: marca "tarea nueva" aunque traiga id (caso borrador finalizado al adjuntar archivos)
+      const {_isNew, ...rest} = f
+      const esNueva = _isNew || !rest.id
+      const taskPayload={...rest,sale_id:rest.sale_id||null,client_id:rest.client_id||null}
+      if(esNueva && !taskPayload.assigned_by) taskPayload.assigned_by = user?.name || null
       const{data,error}=await supabase.from('tasks').upsert(taskPayload).select().single()
       if(error)throw error
-      setTasks(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
-      // Alerta email solo en tarea NUEVA con quien asignado
-      if(!f.id && data.who){
+      setTasks(p=>p.some(x=>x.id===data.id)?p.map(x=>x.id===data.id?data:x):[data,...p])
+      // Alerta email solo en tarea NUEVA con quien asignado (incluye borrador finalizado)
+      if(esNueva && data.who){
         const client=clients.find(c=>c.id===data.client_id)
         fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
           method:'POST',
