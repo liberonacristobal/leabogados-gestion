@@ -3020,8 +3020,97 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   const [cargando,setCargando] = useState(false)
   const [guardando,setGuardando] = useState(false)
   const [hechos,setHechos] = useState(0)
+  const [genPlantilla,setGenPlantilla] = useState(false)
 
   const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
+
+  // ExcelJS (escritura con estilos/validación/comentarios — SheetJS community no los soporta) cargado por CDN al descargar
+  const loadExcelJS = () => new Promise((resolve,reject)=>{
+    if(window.ExcelJS) return resolve(window.ExcelJS)
+    const s=document.createElement('script')
+    s.src='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'
+    s.onload=()=>window.ExcelJS?resolve(window.ExcelJS):reject(new Error('ExcelJS no disponible'))
+    s.onerror=()=>reject(new Error('No se pudo cargar la librería de Excel'))
+    document.head.appendChild(s)
+  })
+
+  const descargarPlantilla = async() => {
+    setGenPlantilla(true)
+    try{
+      const ExcelJS = await loadExcelJS()
+      const wb = new ExcelJS.Workbook()
+      const headFill = {type:'pattern',pattern:'solid',fgColor:{argb:'FFE4E8EB'}}
+      const headFont = {bold:true}
+      const cats = '"Notaría,Transporte,CBR,Alimentación,Otro"'
+      const estilarHeader = ws => ws.getRow(1).eachCell(c=>{ c.font=headFont; c.fill=headFill })
+
+      // Hoja Gastos
+      const g = wb.addWorksheet('Gastos')
+      g.columns=[
+        {header:'RUT',key:'rut',width:16},
+        {header:'Nombre',key:'nombre',width:28},
+        {header:'Fecha',key:'fecha',width:13},
+        {header:'Monto',key:'monto',width:13},
+        {header:'Concepto',key:'concepto',width:32},
+        {header:'Categoría',key:'categoria',width:16},
+      ]
+      g.addRow({rut:'76.123.456-7',nombre:'Inmobiliaria Andes SpA',fecha:new Date(2026,5,3),monto:45000,concepto:'Inscripción en Conservador de Bienes Raíces',categoria:'CBR'})
+      g.addRow({rut:'12.345.678-9',nombre:'Juan Pérez Soto',fecha:new Date(2026,5,5),monto:18000,concepto:'Transporte a notaría',categoria:'Transporte'})
+      g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura notarial',categoria:'Notaría'})
+      g.getColumn('fecha').numFmt='dd-mm-yyyy'
+      g.getColumn('monto').numFmt='#,##0'
+      estilarHeader(g)
+      g.getCell('A1').note='Acepta RUT con o sin puntos/guión (ej: 76.123.456-7 o 761234567)'
+      g.getCell('D1').note='Monto en pesos, mayor a 0 y sin decimales'
+      for(let r=2;r<=200;r++) g.getCell('F'+r).dataValidation={type:'list',allowBlank:true,formulae:[cats]}
+
+      // Hoja Fondos
+      const f = wb.addWorksheet('Fondos')
+      f.columns=[
+        {header:'RUT',key:'rut',width:16},
+        {header:'Nombre',key:'nombre',width:28},
+        {header:'Fecha',key:'fecha',width:13},
+        {header:'Monto',key:'monto',width:13},
+        {header:'Concepto',key:'concepto',width:32},
+      ]
+      f.addRow({rut:'76.123.456-7',nombre:'Inmobiliaria Andes SpA',fecha:new Date(2026,5,1),monto:200000,concepto:'Provisión de fondos para gastos notariales'})
+      f.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,2),monto:150000,concepto:'Fondo inicial'})
+      f.getColumn('fecha').numFmt='dd-mm-yyyy'
+      f.getColumn('monto').numFmt='#,##0'
+      estilarHeader(f)
+      f.getCell('A1').note='Acepta RUT con o sin puntos/guión'
+      f.getCell('D1').note='Monto en pesos, mayor a 0 y sin decimales'
+
+      // Hoja Instrucciones
+      const ins = wb.addWorksheet('Instrucciones')
+      ins.getColumn(1).width=120
+      const txt=[
+        ['INSTRUCCIONES — CARGA MASIVA DE GASTOS Y FONDOS',true],
+        ['',false],
+        ['Columnas obligatorias: RUT (o Nombre) y Monto. Recomendado incluir Fecha.',false],
+        ['Columnas opcionales: Concepto y, solo en Gastos, Categoría (si no se indica, se usa "Otro").',false],
+        ['',false],
+        ['Formato de RUT: con o sin puntos y guión. Ejemplos válidos: 76.123.456-7, 761234567, 76123456-7.',false],
+        ['Formato de fecha: dd-mm-yyyy, dd/mm/yyyy o yyyy-mm-dd. Ejemplos: 03-06-2026, 03/06/2026, 2026-06-03. Si se omite, se usa la fecha de carga.',false],
+        ['',false],
+        ['Cliente: se busca por RUT y, si no hay coincidencia, por Nombre exacto. Las filas sin cliente quedan en AMARILLO en la vista previa para asignarlas a mano antes de cargar.',false],
+        ['',false],
+        ['Monto: número mayor a 0, sin decimales. Las filas con monto menor o igual a 0 (incluidos negativos) se marcan como ERROR (rojo) y NO se cargan.',false],
+        ['',false],
+        ['Duplicados: el sistema NO deduplica. Si subes el mismo archivo dos veces, los movimientos se cargan dos veces. La vista previa avisa si detecta filas duplicadas (mismo RUT, fecha, monto y concepto), pero igual puedes cargarlas.',false],
+        ['',false],
+        ['Hoja "Gastos": RUT | Nombre | Fecha | Monto | Concepto | Categoría.',false],
+        ['Hoja "Fondos": RUT | Nombre | Fecha | Monto | Concepto.',false],
+        ['Al cargar en la app eliges si subes Gastos o Fondos; se lee la hoja correspondiente.',false],
+      ]
+      txt.forEach((t,i)=>{ const cell=ins.getRow(i+1).getCell(1); cell.value=t[0]; if(t[1]) cell.font={bold:true} })
+
+      const buf=await wb.xlsx.writeBuffer()
+      const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Plantilla_carga_masiva.xlsx'; a.click(); URL.revokeObjectURL(a.href)
+    }catch(e){ alert('Error al generar la plantilla: '+e.message) }
+    setGenPlantilla(false)
+  }
 
   const matchCliente = (rut,nombre) => {
     const nr = normRut(rut)
@@ -3116,6 +3205,12 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
             <div style={{fontSize:13,color:C.accent,fontWeight:600}}>{cargando?'Leyendo...':'Seleccionar archivo Excel'}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:4}}>.xlsx o .xls</div>
           </label>
+          <div style={{textAlign:'center',marginTop:12}}>
+            <button type='button' onClick={descargarPlantilla} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>
+              {genPlantilla?'Generando plantilla...':'Descargar plantilla modelo (.xlsx)'}
+            </button>
+            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Incluye hojas Gastos, Fondos e Instrucciones con ejemplos</div>
+          </div>
         </>
       )}
 
