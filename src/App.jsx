@@ -1220,7 +1220,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete}) {
 }
 
 
-function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,onCompleteTask}) {
+function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,onEditTask,onCompleteTask}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr)
@@ -1419,6 +1419,47 @@ function Dashboard({sales,billing,clients,expenses,tasks,setTab,user,onEditTask,
         </button>
       </div>
       {openCaja&&<CashflowProjection billing={billing}/>}
+
+      {/* Gestión · Gastos y Caja Chica — control del equipo (el Dashboard ya es admin-only) */}
+      {(()=>{
+        const cajaUsers = [...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))
+        if(cajaUsers.length===0) return null
+        const money = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+        const filas = cajaUsers.map(u=>{
+          const saldo = saldoCajaChica(pettyCash, expenses, u)
+          const misGastos = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===u)
+          const sinLiq = misGastos.filter(e=>!e.rendered_at)
+          const sinLiqMonto = sinLiq.reduce((a,e)=>a+(e.amount||0),0)
+          const sinLiqNoNotaria = sinLiq.filter(e=>e.category!=='Notaria').length
+          const fechas = misGastos.map(e=>e.date).filter(Boolean).sort()
+          const ult = fechas.length?fechas[fechas.length-1]:null
+          const dl = ult?daysLeft(ult):null
+          return {u,saldo,sinLiqMonto,sinLiqN:sinLiq.length,alertaSinLiq:sinLiqNoNotaria>10,ult,alertaUlt:dl!==null&&dl<-7}
+        })
+        const cols = '1fr 0.85fr 1.1fr 0.78fr'
+        const th = {fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}
+        return (
+          <div style={{padding:'16px 20px 0'}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Gestión · Gastos y Caja Chica</div>
+            <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+              <div style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'8px 12px',borderBottom:`1px solid ${C.border}`,background:'#F7F8F9'}}>
+                <div style={th}>Usuario</div>
+                <div style={{...th,textAlign:'right'}}>Saldo caja</div>
+                <div style={{...th,textAlign:'right'}}>Sin liquidar</div>
+                <div style={{...th,textAlign:'right'}}>Últ. gasto</div>
+              </div>
+              {filas.map((f,i)=>(
+                <div key={f.u} style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'9px 12px',borderBottom:i<filas.length-1?`1px solid ${C.border}`:'none',alignItems:'center'}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.u}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:f.saldo<0?C.overdue:C.normal,textAlign:'right',whiteSpace:'nowrap'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaSinLiq&&<span title='Más de 10 gastos sin liquidar (excl. Notaría)'>⚠ </span>}{money(f.sinLiqMonto)} / {f.sinLiqN}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaUlt&&<span title='Más de 7 días sin ingresar un gasto'>⚠ </span>}{f.ult?fmtDate(f.ult):'—'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       <div style={{height:20}}/>
     </div>
@@ -5384,7 +5425,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={()=>setModal({type:'task',data:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
