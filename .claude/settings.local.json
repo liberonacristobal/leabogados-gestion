@@ -14,7 +14,8 @@
       "Bash(node *)",
       "Bash(git add *)",
       "Bash(git commit -m 'feat: KPIs de caja chica en pestaña Tareas \\(vista limited\\) *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(grep *)"
     ]
   }
 }

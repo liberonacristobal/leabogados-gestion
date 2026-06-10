@@ -1058,6 +1058,50 @@ const ventaCLP = (s, ufRef) => {
   return (clp||0)*factor
 }
 
+// ─── UF EN VIVO (fuente única) ────────────────────────────────────────────────
+// Valor UF del día desde mindicador.cl, con caché diario en localStorage.
+// fetchUF() es el ÚNICO punto que llama a la API; nadie más debe hacerlo directo.
+const UF_CACHE_KEY = 'uf_cache_v1'
+const ufTodayISO = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+const readUFCache = () => { try{ const c=JSON.parse(localStorage.getItem(UF_CACHE_KEY)||'null'); if(c&&typeof c.value==='number'&&c.date) return c }catch(_){} return null }
+const writeUFCache = (date,value) => { try{ localStorage.setItem(UF_CACHE_KEY, JSON.stringify({date,value})) }catch(_){} }
+// Devuelve {value,date,isToday}. Usa caché si es de hoy; si no, llama a la API y cachea;
+// si la API falla, cae al último valor cacheado (aunque sea viejo); si no hay, {value:null}.
+async function fetchUF(){
+  const today = ufTodayISO()
+  const cache = readUFCache()
+  if(cache && cache.date===today) return {value:cache.value, date:today, isToday:true}
+  try{
+    const r = await fetch('https://mindicador.cl/api/uf')
+    const j = await r.json()
+    const v = j?.serie?.[0]?.valor
+    if(typeof v==='number' && v>0){ writeUFCache(today, v); return {value:v, date:today, isToday:true} }
+  }catch(_){}
+  if(cache) return {value:cache.value, date:cache.date, isToday:false}
+  return {value:null, date:null, isToday:false}
+}
+// Hook: devuelve {uf, asOf, isToday, loading}. Inicializa con el caché (muestra valor previo
+// al instante) y refresca con fetchUF() una vez por montaje (la API se toca máx. 1 vez al día).
+function useUF(){
+  const [state,setState] = useState(()=>{
+    const c = readUFCache(); const today = ufTodayISO()
+    if(c) return {uf:c.value, asOf:c.date, isToday:c.date===today, loading:c.date!==today}
+    return {uf:null, asOf:null, isToday:false, loading:true}
+  })
+  useEffect(()=>{ let ok=true; fetchUF().then(r=>{ if(ok) setState({uf:r.value, asOf:r.date, isToday:r.isToday, loading:false}) }); return ()=>{ok=false} },[])
+  return state
+}
+// Señal visible y auditable del valor UF usado. Discreta (gris) si es de hoy; naranja con ⚠ si no.
+function UFStamp({uf,isToday,asOf,loading}){
+  if(loading && uf==null) return null
+  const fmtN = n => '$'+Math.round(n).toLocaleString('es-CL')
+  const f = asOf ? new Date(asOf+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}) : null
+  const base = {display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:600,whiteSpace:'nowrap',borderRadius:6,padding:'2px 7px'}
+  if(isToday && uf!=null) return <span style={{...base,color:C.muted,background:'#F2F2F2'}}>UF al {f} · {fmtN(uf)}</span>
+  if(uf!=null) return <span style={{...base,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC'}}>⚠ UF al {f} · no actualizada</span>
+  return <span style={{...base,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC'}}>⚠ UF no disponible</span>
+}
+
 function DashboardTasks({tasks,clients,onEdit,onComplete}) {
   const [sortBy,setSortBy] = useState('encargo')
   const [openPersonas,setOpenPersonas] = useState({})
@@ -1224,8 +1268,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr)
-  const [ufHoy,setUfHoy] = useState(null)
-  useEffect(()=>{ let ok=true; (async()=>{ try{ const r=await fetch('https://mindicador.cl/api/uf'); const j=await r.json(); if(ok) setUfHoy(j?.serie?.[0]?.valor||null) }catch(_){} })(); return ()=>{ok=false} },[])
+  const ufState = useUF()
+  const ufHoy = ufState.uf
 
   const ufRef = ufHoy || salesYr.find(s=>s.uf_value)?.uf_value || 40000
   // Calculo centralizado: delega a funciones de modulo (single source of truth)
@@ -1298,6 +1342,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
               </div>
             ))}
           </div>
+          <div style={{marginTop:10,display:'flex',justifyContent:'flex-end'}}><UFStamp {...ufState}/></div>
         </div>
       </div>
 
@@ -1472,8 +1517,8 @@ function SalesView({sales,clients,onEdit,onAdd}) {
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
   const [fStatus,setFStatus] = useState('Activo')
-  const [ufHoy,setUfHoy] = useState(null)
-  useEffect(()=>{ let ok=true; (async()=>{ try{ const r=await fetch('https://mindicador.cl/api/uf'); const j=await r.json(); if(ok) setUfHoy(j?.serie?.[0]?.valor||null) }catch(_){} })(); return ()=>{ok=false} },[])
+  const ufState = useUF()
+  const ufHoy = ufState.uf
   const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
   const filtered = useMemo(()=>{
     let r = sales
@@ -1508,6 +1553,7 @@ function SalesView({sales,clients,onEdit,onAdd}) {
           </select>
         </div>
         {filtered.length>0&&(
+          <>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:4}}>
             <div style={{background:'#E3EEF3',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL UF</div>
@@ -1518,6 +1564,8 @@ function SalesView({sales,clients,onEdit,onAdd}) {
               <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(totalCLP)}</div>
             </div>
           </div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:4}}><UFStamp {...ufState}/></div>
+          </>
         )}
       </div>
       <div style={{padding:'4px 20px 100px'}}>
@@ -1911,15 +1959,12 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
     if(filtered.length===0){ alert('No hay programadas en el filtro actual.'); return }
     setDescargando(true)
     try{
-      // UF del día (mindicador.cl). Si falla, seguimos sin "Monto hoy".
-      let ufHoy = null
-      try{
-        const r = await fetch('https://mindicador.cl/api/uf')
-        const j = await r.json()
-        ufHoy = j?.serie?.[0]?.valor || null
-      }catch(_){}
+      // UF del día vía el helper único (caché diario). Si falla, cae al último cacheado o sin "Monto hoy".
+      const ufInfo = await fetchUF()
+      const ufHoy = ufInfo.value
+      const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}${ufInfo.isToday?'':' (no actualizada)'}` : 'Monto hoy ($)'
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const header = ['Cliente','Razón social','RUT','Proyecto','UF','Monto guardado ($)', ufHoy?`Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}`:'Monto hoy ($)','Vencimiento']
+      const header = ['Cliente','Razón social','RUT','Proyecto','UF','Monto guardado ($)', ufNota,'Vencimiento']
       const rows = filtered.map(b=>{
         const c = clients.find(x=>x.id===b.client_id)
         const venta = (sales||[]).find(v=>v.id===b.sale_id)
