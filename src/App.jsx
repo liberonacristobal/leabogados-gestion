@@ -109,6 +109,14 @@ const Txt = (p) => <textarea {...p} rows={2} style={{width:'100%',padding:'10px 
 const Lbl = ({children}) => <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.7,marginBottom:5}}>{children}</div>
 const Fld = ({label,children}) => <div style={{marginBottom:14}}><Lbl>{label}</Lbl>{children}</div>
 const Spin = () => <div style={{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
+const Switch = ({on,onToggle}) => (
+  <button type='button' onClick={onToggle} style={{width:34,height:20,borderRadius:10,border:'none',background:on?'#1D9E75':'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0,transition:'background .15s'}}>
+    <span style={{position:'absolute',top:2,left:on?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
+  </button>
+)
+const TrashIcon = ({color}) => (
+  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={color||'#8A8A8A'} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/></svg>
+)
 const Modal = ({title,onClose,children}) => (
   <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,paddingBottom:24}}>
@@ -4037,28 +4045,29 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
             )}
           </div>
 
-          {/* Tabla de filas */}
+          {/* Filas de gasto: layout en 2 líneas */}
           <div style={{marginBottom:8}}>
-            <div style={{display:'grid',gridTemplateColumns:'78px 110px 1fr 80px 24px',gap:4,marginBottom:4}}>
-              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Tipo</div>
-              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Fecha</div>
-              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Descripción</div>
-              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5}}>Monto</div>
-              <div/>
-            </div>
             {rows.map((row,idx)=>(
-              <div key={row.id}>
-                <div style={{display:'grid',gridTemplateColumns:'78px 110px 1fr 80px 24px',gap:4,marginBottom:row.category==='Otro'?2:5}}>
-                  <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12}}>
+              <div key={row.id} style={{marginBottom:12,paddingBottom:12,borderBottom:idx<rows.length-1?`1px solid ${C.border}`:'none'}}>
+                {/* Línea 1: Tipo | Fecha | Pago Cliente | eliminar */}
+                <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+                  <select value={row.category} onChange={e=>updateRow(row.id,'category',e.target.value)} style={{...inS,fontSize:12,flex:'0 0 100px',width:'auto'}}>
                     {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
-                  <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11}}/>
-                  <input value={row.concept} onChange={e=>updateRow(row.id,'concept',e.target.value)} placeholder='Descripción...' style={inS} onKeyDown={e=>handleKeyDown(e,row.id,'concept')}/>
-                  <input type='number' value={row.amount} onChange={e=>updateRow(row.id,'amount',e.target.value)} placeholder='0' style={{...inS,textAlign:'right'}} onKeyDown={e=>handleKeyDown(e,row.id,'amount')} autoFocus={idx===rows.length-1&&idx>0}/>
-                  <button onClick={()=>removeRow(row.id)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+                  <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11,flex:'0 0 130px',width:'auto'}}/>
+                  <label style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto',cursor:'pointer',flexShrink:0}}>
+                    <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>Pago Cliente</span>
+                    <Switch on={!!row.paid_by_client} onToggle={()=>updateRow(row.id,'paid_by_client',!row.paid_by_client)}/>
+                  </label>
+                  <button onClick={()=>removeRow(row.id)} title='Eliminar fila' style={{background:'none',border:'none',cursor:'pointer',padding:4,flexShrink:0,display:'flex',alignItems:'center'}}><TrashIcon/></button>
+                </div>
+                {/* Línea 2: Descripción | Monto */}
+                <div style={{display:'flex',gap:6}}>
+                  <input value={row.concept} onChange={e=>updateRow(row.id,'concept',e.target.value)} placeholder='Descripción...' style={{...inS,flex:1}} onKeyDown={e=>handleKeyDown(e,row.id,'concept')}/>
+                  <input type='number' value={row.amount} onChange={e=>updateRow(row.id,'amount',e.target.value)} placeholder='0' style={{...inS,flex:'0 0 92px',textAlign:'right'}} onKeyDown={e=>handleKeyDown(e,row.id,'amount')} autoFocus={idx===rows.length-1&&idx>0}/>
                 </div>
                 {row.category==='Otro'&&(
-                  <input list='gasto-subcats' value={row.subcategory||''} onChange={e=>updateRow(row.id,'subcategory',e.target.value)} placeholder='Subcategoría (Otro)...' style={{...inS,fontSize:12,marginBottom:5}}/>
+                  <input list='gasto-subcats' value={row.subcategory||''} onChange={e=>updateRow(row.id,'subcategory',e.target.value)} placeholder='Subcategoría (Otro)...' style={{...inS,fontSize:12,marginTop:6}}/>
                 )}
               </div>
             ))}
