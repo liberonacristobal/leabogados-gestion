@@ -26,7 +26,8 @@
       "Bash(awk *)",
       "Bash(git commit -m 'feat: proyecto en gastos + rendir limited + rendiciones en ficha limited *)",
       "Bash(git commit *)",
-      "Bash(cd *)"
+      "Bash(cd *)",
+      "Bash(xargs -I{} sed -n '{}p' src/App.jsx)"
     ]
   }
 }

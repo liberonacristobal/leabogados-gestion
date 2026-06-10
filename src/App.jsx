@@ -3140,7 +3140,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
   )
 }
 
-function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
+function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [cargando,setCargando] = useState(false)
@@ -3150,6 +3150,14 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   const [genPlantilla,setGenPlantilla] = useState(false)
 
   const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
+  // Categorías válidas del sistema (mismas que GastosForm). No se crean nuevas desde el Excel.
+  const CAT_OPCIONES = ['Notaria','CBR','Diario Oficial','Otro']
+  const catNorm = s => (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
+  const canonCat = raw => CAT_OPCIONES.find(c=>catNorm(c)===catNorm(raw)) || 'Otro'
+  // Razones sociales (entidades) del cliente
+  const entsOf = cid => (clientEntities||[]).filter(e=>e.client_id===cid)
+  // Fila lista para cargar: con cliente, sin error y con razón social resuelta (auto si 1, elegida si varias)
+  const rowReady = r => !!r.client_id && !r.error && (entsOf(r.client_id).length<=1 || !!r.entity_id)
 
   // ExcelJS (escritura con estilos/validación/comentarios — SheetJS community no los soporta) cargado por CDN al descargar
   const loadExcelJS = () => new Promise((resolve,reject)=>{
@@ -3168,7 +3176,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
       const wb = new ExcelJS.Workbook()
       const headFill = {type:'pattern',pattern:'solid',fgColor:{argb:'FFE4E8EB'}}
       const headFont = {bold:true}
-      const cats = '"Notaría,Transporte,CBR,Alimentación,Otro"'
+      const cats = '"'+CAT_OPCIONES.join(',')+'"'  // solo categorías válidas del sistema
       const estilarHeader = ws => ws.getRow(1).eachCell(c=>{ c.font=headFont; c.fill=headFill })
 
       // Hoja Gastos
@@ -3182,8 +3190,8 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
         {header:'Categoría',key:'categoria',width:16},
       ]
       g.addRow({rut:'76.123.456-7',nombre:'Inmobiliaria Andes SpA',fecha:new Date(2026,5,3),monto:45000,concepto:'Inscripción en Conservador de Bienes Raíces',categoria:'CBR'})
-      g.addRow({rut:'12.345.678-9',nombre:'Juan Pérez Soto',fecha:new Date(2026,5,5),monto:18000,concepto:'Transporte a notaría',categoria:'Transporte'})
-      g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura notarial',categoria:'Notaría'})
+      g.addRow({rut:'12.345.678-9',nombre:'Juan Pérez Soto',fecha:new Date(2026,5,5),monto:18000,concepto:'Transporte a notaría',categoria:'Otro'})
+      g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura notarial',categoria:'Notaria'})
       g.getColumn('fecha').numFmt='dd-mm-yyyy'
       g.getColumn('monto').numFmt='#,##0'
       estilarHeader(g)
@@ -3221,6 +3229,10 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
         ['Formato de fecha: dd-mm-yyyy, dd/mm/yyyy o yyyy-mm-dd. Ejemplos: 03-06-2026, 03/06/2026, 2026-06-03. Si se omite, se usa la fecha de carga.',false],
         ['',false],
         ['Cliente: se busca por RUT y, si no hay coincidencia, por Nombre exacto. Las filas sin cliente quedan en AMARILLO en la vista previa para asignarlas a mano antes de cargar.',false],
+        ['',false],
+        ['Razón social: si el cliente tiene una sola razón social, se asigna automáticamente. Si tiene más de una, deberás elegirla en la vista previa antes de cargar (la fila queda en AMARILLO hasta que la elijas).',false],
+        ['',false],
+        ['Categoría: solo se pueden usar las categorías del sistema (Notaria, CBR, Diario Oficial, Otro). No se pueden crear categorías nuevas desde el Excel; si no encaja ninguna, usa "Otro" y detalla en Concepto.',false],
         ['',false],
         ['Monto: número mayor a 0, sin decimales. Las filas con monto menor o igual a 0 (incluidos negativos) se marcan como ERROR (rojo) y NO se cargan.',false],
         ['',false],
@@ -3277,14 +3289,15 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
         const rawMonto = (get('monto')??'').toString().trim()
         const montoNum = parseInt(rawMonto.replace(/[^\d-]/g,''),10)  // conserva el signo: un negativo NO se vuelve positivo
         const concepto = (get('concepto','descripcion','descripción','glosa')||'').toString()
-        const categoria = (get('categoria','categoría','tipo')||'Otro').toString()
+        const categoria = canonCat(get('categoria','categoría','tipo'))  // solo categorías válidas; el resto cae a "Otro"
         const cli = matchCliente(rut,nombre)
+        const ents = cli ? entsOf(cli.id) : []
         // Validación de monto (no se descarta en silencio: la fila queda marcada como Error)
         let error=null
         if(rawMonto===''||isNaN(montoNum)) error='Monto inválido o vacío'
         else if(montoNum<0) error='Monto negativo no permitido'
         else if(montoNum===0) error='Monto debe ser mayor a 0'
-        return {id:i, rut, nombre, fecha, monto:isNaN(montoNum)?0:montoNum, concepto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, error, dup:false}
+        return {id:i, rut, nombre, fecha, monto:isNaN(montoNum)?0:montoNum, concepto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ents.length===1?ents[0].id:null, error, dup:false}
       })
       // Detección de duplicados (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
       const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}`
@@ -3298,23 +3311,23 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
 
   const asignar = (rowId,clientId) => {
     const c = clients.find(x=>x.id===clientId)
-    setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null}:r))
+    const ents = entsOf(clientId)
+    setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null}:r))
   }
 
-  const listas = (rows||[]).filter(r=>r.client_id && !r.error)
-  const porRevisar = (rows||[]).filter(r=>!r.client_id && !r.error)
+  const listas = (rows||[]).filter(rowReady)
+  const porRevisar = (rows||[]).filter(r=>!r.error && !rowReady(r))   // sin cliente, o con varias razones sociales sin elegir
   const conError = (rows||[]).filter(r=>r.error)
   const dups = (rows||[]).filter(r=>r.dup)
   const totalMonto = (rows||[]).filter(r=>!r.error).reduce((a,r)=>a+(r.monto||0),0)
-  const CAT_OPCIONES = ['Notaría','Transporte','CBR','Alimentación','Otro']
   const editarCampo = (rowId,campo,valor) => setRows(p=>p.map(r=>r.id===rowId?{...r,[campo]:valor}:r))
 
   const guardar = async() => {
-    if(listas.length===0){ alert('No hay filas listas para cargar (con cliente asignado y sin errores).'); return }
+    if(listas.length===0){ alert('No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
     setGuardando(true); let n=0; const fail=[]
     for(const r of listas){
       try{
-        await onSave({client_id:r.client_id,type:tipo,amount:r.monto,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null})
+        await onSave({client_id:r.client_id,entity_id:r.entity_id||null,type:tipo,amount:r.monto,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null})
         n++
       }catch(e){ fail.push({concepto:r.concepto||'(sin concepto)', cliente:r.clientName||'—', monto:r.monto, msg:e.message||'Error al insertar'}) }
     }
@@ -3329,7 +3342,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   if(hechos>0||fallos.length>0) return (
     <div style={{textAlign:'center',padding:'20px 0'}}>
       <div style={{fontSize:15,fontWeight:700,color:C.normal,marginBottom:6}}>{hechos} {tipo==='fondo'?'fondo(s)':'gasto(s)'} cargado(s)</div>
-      {porRevisar.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{porRevisar.length} fila(s) sin cliente quedaron sin cargar.</div>}
+      {porRevisar.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{porRevisar.length} fila(s) por revisar (sin cliente o sin razón social) no se cargaron.</div>}
       {conError.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{conError.length} fila(s) con error de validación no se cargaron.</div>}
       {fallos.length>0&&(
         <div style={{textAlign:'left',background:'#FCEBEB',border:'1px solid #F7C1C1',borderRadius:8,padding:'10px 12px',margin:'12px 0',maxHeight:170,overflowY:'auto'}}>
@@ -3378,9 +3391,11 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
           {dups.length>0&&<div style={{fontSize:11,color:'#C2761F',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto). No se deduplican: si las cargas, se duplicarán.</div>}
           <div style={{maxHeight:360,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
             {rows.map(r=>{
-              const estado = r.error ? 'Error' : (r.client_id ? 'Lista' : 'Revisar')
-              const bg = r.error ? '#FCEBEB' : (r.client_id ? '#fff' : '#FFF8EC')
-              const chip = r.error ? C.overdue : (r.client_id ? C.normal : C.soon)
+              const ready = rowReady(r)
+              const ents = r.client_id ? entsOf(r.client_id) : []
+              const estado = r.error ? 'Error' : (ready ? 'Lista' : 'Revisar')
+              const bg = r.error ? '#FCEBEB' : (ready ? '#fff' : '#FFF8EC')
+              const chip = r.error ? C.overdue : (ready ? C.normal : C.soon)
               return (
                 <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
@@ -3400,7 +3415,17 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
                       </select>
                     )}
                     {r.client_id
-                      ? <span style={{fontSize:11,color:C.normal,fontWeight:600,flexShrink:0}}>{r.clientName}</span>
+                      ? <div style={{display:'flex',flexDirection:'column',gap:3,alignItems:'flex-end',flexShrink:0}}>
+                          <span style={{fontSize:11,color:C.normal,fontWeight:600}}>{r.clientName}</span>
+                          {ents.length===1&&<span style={{fontSize:10,color:C.muted}}>{ents[0].name}</span>}
+                          {ents.length>1&&(
+                            <select value={r.entity_id||''} onChange={e=>editarCampo(r.id,'entity_id',e.target.value||null)}
+                              style={{padding:'5px 7px',borderRadius:6,border:`1px solid ${r.entity_id?C.border:C.soon}`,fontSize:11,background:'#fff',color:C.text,outline:'none',maxWidth:170}}>
+                              <option value=''>Elegir razón social...</option>
+                              {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
+                            </select>
+                          )}
+                        </div>
                       : <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)}/>}
                   </div>
                 </div>
@@ -6997,7 +7022,7 @@ export default function App() {
         {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
-        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}

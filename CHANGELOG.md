@@ -1,6 +1,12 @@
 # Changelog
 
 ## 2026-06-10
+- Carga masiva: corrección de categorías y asignación de razón social.
+  - El dropdown de Categoría de la plantilla y el selector de la vista previa usan solo las categorías válidas del sistema (Notaria, CBR, Diario Oficial, Otro); las filas con categorías fuera de la lista se normalizan a "Otro" (sin acentos/case). Filas de ejemplo de la plantilla corregidas.
+  - Asignación de razón social en la carga: si el cliente tiene una sola razón social se asigna automáticamente (`entity_id`); si tiene más de una, la fila queda "por revisar" (amarillo) con un selector en la vista previa para elegirla antes de cargar. `guardar` envía el `entity_id`. `CargaMasivaModal` recibe `clientEntities`.
+  - Hoja Instrucciones: notas sobre asignación de razón social (1 → automática, varias → elegir en preview) y que no se pueden crear categorías nuevas desde el Excel.
+
+## 2026-06-10
 - Checklist de facturación del mes (Facturación, admin): nuevo tab "Checklist" con sección "Facturar en [Mes] [Año]". Filtros en una fila (selector mes/año + Todos/Pendientes/Emitidos) y 3 KPIs en vivo (Por facturar #854F0B / Ya emitidas #0F6E56 / Total mes en UF). Lista tipo checklist de las facturas con vencimiento en el mes (programadas + emitidas): checkbox a la izquierda que marca/desmarca como emitida, nombre del cliente, concepto + vencimiento y monto a la derecha; los items emitidos quedan tachados y con opacidad reducida. Footer con "X de Y emitidas" y botón "Descargar Excel" (Cliente / Concepto / Monto / Estado / Vencimiento). Marcar emite la programada (status Pendiente + fecha de emisión) y desmarcar la vuelve a Programada, actualizando los KPIs en tiempo real. Las pagadas se excluyen del checklist (para no perder el pago al desmarcar). Sin emojis (checkbox dibujado en CSS).
 
 ## 2026-06-10
