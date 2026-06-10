@@ -3965,11 +3965,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
   return (
     <>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-        <span style={{fontSize:16,fontWeight:700,color:'#003C50'}}>Registrar gastos</span>
-        <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+        <div style={{minWidth:0}}>
+          {selectedClient&&<div style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>}
+          <div style={{fontSize:16,fontWeight:700,color:'#003C50'}}>Registrar gastos</div>
+        </div>
+        <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:12}}>x</button>
       </div>
-      {!selectedClient?(
+      {!selectedClient&&(
         <Fld label='Cliente'>
           <div style={{position:'relative'}}>
             <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' autoFocus/>
@@ -3986,14 +3989,6 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
             )}
           </div>
         </Fld>
-      ):(
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.border}`}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
-            {balance!==null&&<div style={{fontSize:11,color:balance<0?C.overdue:C.normal}}>Saldo: {fmt(balance)}</div>}
-          </div>
-          <button onClick={()=>setSelectedClient(null)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
-        </div>
       )}
 
       {selectedClient&&(
