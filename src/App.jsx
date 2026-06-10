@@ -4755,6 +4755,86 @@ function printTasks(tasks, clients, filterLabel) {
   w.document.close()
 }
 
+// Vista previa de solo lectura de una tarea (se abre al click en una tarjeta)
+function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
+  const [comments,setComments] = useState([])
+  const [links,setLinks] = useState([])
+  useEffect(()=>{
+    if(!task?.id) return
+    Promise.all([
+      supabase.from('task_comments').select('id,content,user_name,created_at').eq('task_id',task.id).order('created_at',{ascending:false}).then(({data})=>data||[]),
+      supabase.from('task_links').select('id,title,url').eq('task_id',task.id).then(({data})=>data||[]),
+    ]).then(([c,l])=>{setComments(c);setLinks(l)})
+  },[task?.id])
+
+  const client = clients.find(c=>c.id===task.client_id)
+  const subs = Array.isArray(task.subtasks)?task.subtasks:[]
+  const subsDone = subs.filter(s=>s&&s.done).length
+  const d = task.due?daysLeft(task.due):null
+  const plazoCol = task.due?urgencyColor(task.due,task.status):C.muted
+  const plazoTxt = !task.due ? 'Sin fecha'
+    : d<0 ? `${fmtDate(task.due)} · ${Math.abs(d)}d atrasada`
+    : d===0 ? `${fmtDate(task.due)} · hoy`
+    : `${fmtDate(task.due)} · ${d}d`
+  const terminada = task.status==='Terminado'
+  const contexto = [client?.name,task.project,task.subproject].filter(Boolean).join(' · ')
+
+  const Row = ({label,children}) => (
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:3}}>{label}</div>
+      <div style={{fontSize:13,color:C.text}}>{children}</div>
+    </div>
+  )
+
+  return (
+    <>
+      <div style={{fontSize:16,fontWeight:600,color:C.text,lineHeight:1.3,marginBottom:14}}>{task.title}</div>
+      {contexto&&<Row label='Cliente · Proyecto'>{contexto}</Row>}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Row label='Responsable'>{task.who||'—'}</Row>
+        {task.assigned_by&&<Row label='Asignó'>{task.assigned_by}</Row>}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <Row label='Plazo'><span style={{fontWeight:600,color:plazoCol}}>{plazoTxt}</span></Row>
+        <Row label='Estado'>{task.status||'—'}</Row>
+      </div>
+      {subs.length>0&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Subtareas · {subsDone}/{subs.length}</div>
+          {subs.map((s,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0'}}>
+              <span style={{width:14,height:14,borderRadius:3,border:`2px solid ${s.done?'#1D9E75':'#ccc'}`,background:s.done?'#1D9E75':'#fff',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{s.done&&<span style={{color:'#fff',fontSize:9}}>&#10003;</span>}</span>
+              <span style={{fontSize:12,color:C.text,textDecoration:s.done?'line-through':'none',opacity:s.done?.6:1}}>{s.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {comments.length>0&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Comentarios · {comments.length}</div>
+          <div style={{background:'#F7F8F9',borderRadius:7,padding:'8px 10px'}}>
+            <div style={{fontSize:10,fontWeight:600,color:C.accent,marginBottom:2}}>{comments[0].user_name}</div>
+            <div style={{fontSize:12,color:C.text,lineHeight:1.4}}>{comments[0].content}</div>
+          </div>
+        </div>
+      )}
+      {links.length>0&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Archivos · {links.length}</div>
+          {links.slice(0,3).map(lk=>(
+            <a key={lk.id} href={lk.url} target='_blank' rel='noreferrer' style={{display:'block',fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:2}}>{lk.title||lk.url}</a>
+          ))}
+        </div>
+      )}
+      <div style={{display:'flex',gap:8,marginTop:6}}>
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+        {!terminada&&<button onClick={()=>onComplete(task)} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #1D9E75',background:'#E1F5EE',color:'#0F6E56',fontSize:13,fontWeight:700,cursor:'pointer'}}>Marcar terminada</button>}
+        <button onClick={()=>onEdit(task)} style={{flex:1,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Editar</button>
+      </div>
+    </>
+  )
+}
+
 function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName}) {
   const [vistaCalendario,setVistaCalendario] = useState(false)
   const [semanaOffset,setSemanaOffset] = useState(0)
@@ -4771,6 +4851,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const [filterClient,setFilterClient] = useState('')
   const [filterProject,setFilterProject] = useState('')
   const [openTerm,setOpenTerm] = useState(false)
+  const [preview,setPreview] = useState(null)
   const me = currentUserName || ''
   const allProjects = [...new Set(tasks.filter(t=>t.project).map(t=>t.project))].sort()
 
@@ -4814,7 +4895,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     const client=clients.find(c=>c.id===t.client_id)
     const bs=bsCard(t.due)
     return (
-      <div style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${done?C.muted:urgencyColor(t.due,t.status)}`,overflow:'hidden',opacity:done?.7:1}}>
+      <div onClick={()=>setPreview(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${done?C.muted:urgencyColor(t.due,t.status)}`,overflow:'hidden',opacity:done?.7:1,cursor:'pointer'}}>
         <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:done?C.muted:C.text,lineHeight:1.3,textDecoration:done?'line-through':'none'}}>{t.title}</div>
@@ -4875,33 +4956,42 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const totalMias = mias.length
   const atrasadasMias = mias.filter(t=>t.due && daysLeft(t.due)<0).length
   const hoyMias = mias.filter(t=>t.due && daysLeft(t.due)===0).length
+  const proximasMias = mias.filter(t=>t.due && daysLeft(t.due)>0 && daysLeft(t.due)<=14).length
+  const primerNombre = (me||'').trim().split(' ')[0]
+  const saludo = `¡Hola${primerNombre?`, ${primerNombre}`:''}!`
+  const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(',','').replace(/^\w/,c=>c.toUpperCase())
+  const contadorTxt = [
+    `${totalMias} tarea${totalMias!==1?'s':''} activa${totalMias!==1?'s':''}`,
+    ...(atrasadasMias>0?[`${atrasadasMias} atrasada${atrasadasMias!==1?'s':''}`]:[]),
+    ...(hoyMias>0?[`${hoyMias} para hoy`]:[]),
+    ...(proximasMias>0?[`${proximasMias} próxima${proximasMias!==1?'s':''}`]:[]),
+  ].join(' · ')
 
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Mis tareas</div>
-          <div style={{display:'flex',gap:6}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>{saludo}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:2}}>{fechaHoy}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:1}}>{contadorTxt}</div>
+          </div>
+          <div style={{display:'flex',gap:6,flexShrink:0}}>
             <button onClick={()=>printTasks(mias,clients,me)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
             <button onClick={()=>onAddTask()} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
         </div>
       </div>
-      <>
-        <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
-          {totalMias} activa{totalMias!==1?'s':''}{atrasadasMias>0?` · ${atrasadasMias} atrasada${atrasadasMias!==1?'s':''}`:''}{hoyMias>0?` · ${hoyMias} para hoy`:''}
-        </div>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text}}>
-            <option value=''>Todos los proyectos</option>
-            {allProjects.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-          <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:130}}/>
-          {(filterProject||filterClient)&&
-            <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
-          }
-        </div>
-      </>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',padding:'0 20px 10px'}}>
+        <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text}}>
+          <option value=''>Todos los proyectos</option>
+          {allProjects.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
+        <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:130}}/>
+        {(filterProject||filterClient)&&
+          <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕ Limpiar</button>
+        }
+      </div>
       <div style={{padding:'4px 20px 100px'}}>
         <Grupo titulo='Mis tareas' arr={mias} showWho={false}/>
         {asignadas.length>0 && <Grupo titulo='Tareas que asigné' arr={asignadas} showWho={true}/>}
@@ -4941,7 +5031,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                       {tareasDelDia.map(t=>{
                         const cl=clients.find(x=>x.id===t.client_id)
                         return (
-                          <div key={t.id} onClick={(e)=>{e.stopPropagation();onEdit(t)}} style={{background:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
+                          <div key={t.id} onClick={(e)=>{e.stopPropagation();setPreview(t)}} style={{background:'#fff',borderRadius:4,padding:'3px 5px',marginBottom:3,cursor:'pointer',borderLeft:`2px solid ${C.accent}`,boxShadow:'0 1px 2px rgba(0,0,0,.05)'}}>
                             <div style={{fontSize:9,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
                             {cl&&<div style={{fontSize:8,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</div>}
                           </div>
@@ -4967,17 +5057,18 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
           const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+          const cajaSch = saldo<0 ? {num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5'} : {num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0'}
           return (
             <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-                <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px 14px',border:`1px solid ${C.border}`}}>
+                <div style={{background:cajaSch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${cajaSch.bd}`,borderLeft:`4px solid ${cajaSch.num}`}}>
                   <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Mi caja chica</div>
-                  <div style={{fontSize:22,fontWeight:700,color:saldo<0?C.overdue:C.normal,lineHeight:1.1}}>{saldo<0?'-':''}{fmtCLP(saldo)}</div>
+                  <div style={{fontSize:22,fontWeight:700,color:cajaSch.num,lineHeight:1.1}}>{saldo<0?'-':''}{fmtCLP(saldo)}</div>
                   <div style={{fontSize:10,color:C.muted,marginTop:3}}>{saldo<0?'sobregirada':'disponible'}</div>
                 </div>
-                <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px 14px',border:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Gastos por liquidar</div>
-                  <div style={{fontSize:22,fontWeight:700,color:C.soon,lineHeight:1.1}}>{fmtCLP(totalPorLiquidar)}</div>
+                <div style={{background:'#FEF6EE',borderRadius:10,padding:'12px 14px',border:'1px solid #F5E2CC',borderLeft:'4px solid #E08A2B'}}>
+                  <div style={{fontSize:10,fontWeight:600,color:'#C2761F',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Gastos por liquidar</div>
+                  <div style={{fontSize:22,fontWeight:700,color:'#E08A2B',lineHeight:1.1}}>{fmtCLP(totalPorLiquidar)}</div>
                   <div style={{fontSize:10,color:C.muted,marginTop:3}}>{porLiquidar.length} gasto{porLiquidar.length!==1?'s':''} sin liquidar</div>
                 </div>
               </div>
@@ -5006,6 +5097,13 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           )
         })()}
       </div>
+      {preview&&(
+        <Modal title='Detalle de tarea' onClose={()=>setPreview(null)}>
+          <TaskPreview task={preview} clients={clients} onClose={()=>setPreview(null)}
+            onEdit={t=>{setPreview(null);onEdit(t)}}
+            onComplete={t=>{onComplete(t);setPreview(null)}}/>
+        </Modal>
+      )}
     </div>
   )
 }
