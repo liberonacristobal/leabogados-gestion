@@ -56,10 +56,11 @@ const currentMonth = new Date().getMonth()+1
 // Queda en $0 si fondos=gastos, o en el remanente si hubo diferencia. NO excluir los liquidados:
 // si se excluyen, el saldo sube artificialmente al liquidar (los fondos seguirían sumando completos).
 // Fuente única: la usan CajaChicaView ("Mi caja"), el panel Gestión del Dashboard y el KPI de Tareas.
+// Excluye los gastos con paid_by_client=true (los pagó el cliente directo: se rinden pero no salen de la caja chica del usuario).
 const saldoCajaChica = (pettyCash, expenses, userName) => {
   if(!userName) return 0
   const entregado = (pettyCash||[]).filter(p=>p.user_name===userName).reduce((a,p)=>a+(p.amount||0),0)
-  const gastado = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===userName).reduce((a,e)=>a+(e.amount||0),0)
+  const gastado = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===userName&&!e.paid_by_client).reduce((a,e)=>a+(e.amount||0),0)
   return entregado - gastado
 }
 
@@ -3964,7 +3965,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     let count=0
     for(const r of valid) {
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null})
+        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:!!r.paid_by_client})
         count++
       } catch(e){ console.error(e) }
     }
