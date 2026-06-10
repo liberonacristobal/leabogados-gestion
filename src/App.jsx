@@ -139,7 +139,7 @@ function ClientStatusTabs({value,onChange,activeN,endedN}){
   )
 }
 
-function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo}) {
+function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onSaveFields}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const [confirmEdit,setConfirmEdit] = useState(null)
@@ -304,7 +304,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
           </div>
 
         </div>
-        {ftab==='contacto'&&<div style={{padding:'16px 20px 40px'}}><div style={{fontSize:13,color:'#888'}}>Contacto — próximamente</div></div>}
+        {ftab==='contacto'&&<ContactoTab client={cl} entities={entities} onSaveFields={onSaveFields}/>}
         {ftab==='financiero'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>🔒</div><div style={{fontSize:13,color:'#888'}}>Sección reservada para administración</div></div>}
         {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>🔒</div><div style={{fontSize:13,color:'#888'}}>Sección reservada para administración</div></div>}
       </div>
@@ -3638,6 +3638,167 @@ function FichaTabs({tab,setTab,role}){
   )
 }
 
+// Tab "Contacto" de la ficha (reutilizado admin/limited): identificación + datos de
+// contacto (edición inline en clients) + personas de contacto (CRUD en tabla contacts)
+function ContactoTab({client, entities, onSaveFields}) {
+  const fields = ['name','rut','nombre_fantasia','giro','tipo_entidad','email','telefono','direccion','comuna','sitio_web']
+  const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
+  const [form,setForm] = useState(fromClient())
+  const [savingF,setSavingF] = useState(false)
+  useEffect(()=>{ setForm(fromClient()) },[client.id]) // recargar al cambiar de cliente
+
+  const dirty = fields.some(k=>(form[k]||'')!==(client[k]||''))
+  const set = (k,v)=>setForm(f=>({...f,[k]:v}))
+  const guardar = async ()=>{
+    setSavingF(true)
+    try{ await onSaveFields(client.id, {...form, name:(form.name||'').trim()||client.name}) }catch(e){/* avisado en handler */}
+    setSavingF(false)
+  }
+
+  // ── Personas de contacto ──
+  const [contacts,setContacts] = useState([])
+  const [loadingC,setLoadingC] = useState(true)
+  const [showAdd,setShowAdd] = useState(false)
+  const [edit,setEdit] = useState(null)
+  const [cForm,setCForm] = useState({nombre:'',cargo:'',email:'',telefono:''})
+  const [savingC,setSavingC] = useState(false)
+  useEffect(()=>{
+    let alive=true; setLoadingC(true)
+    supabase.from('contacts').select('*').eq('client_id',client.id).order('created_at')
+      .then(({data,error})=>{ if(alive){ if(!error) setContacts(data||[]); setLoadingC(false) } })
+    return ()=>{alive=false}
+  },[client.id])
+  const resetC = ()=>{ setCForm({nombre:'',cargo:'',email:'',telefono:''}); setShowAdd(false); setEdit(null) }
+  const startEdit = (c)=>{ setEdit(c); setCForm({nombre:c.nombre||'',cargo:c.cargo||'',email:c.email||'',telefono:c.telefono||''}); setShowAdd(true) }
+  const guardarContacto = async ()=>{
+    if(!cForm.nombre.trim()) return
+    setSavingC(true)
+    try{
+      if(edit){
+        const {data,error}=await supabase.from('contacts').update({...cForm,nombre:cForm.nombre.trim()}).eq('id',edit.id).select().single()
+        if(error)throw error; setContacts(p=>p.map(x=>x.id===data.id?data:x))
+      }else{
+        const {data,error}=await supabase.from('contacts').insert({client_id:client.id,...cForm,nombre:cForm.nombre.trim()}).select().single()
+        if(error)throw error; setContacts(p=>[...p,data])
+      }
+      resetC()
+    }catch(e){alert('Error: '+e.message)}
+    setSavingC(false)
+  }
+  const eliminarContacto = async (c)=>{
+    if(!confirm(`¿Eliminar a ${c.nombre}?`)) return
+    const {error}=await supabase.from('contacts').delete().eq('id',c.id)
+    if(error){alert('Error: '+error.message);return}
+    setContacts(p=>p.filter(x=>x.id!==c.id))
+  }
+  const initials = (n)=> (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+
+  const inp = {width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',color:C.text}
+  const lbl = {fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:4,display:'block'}
+  const card = {marginBottom:16,padding:'14px 16px',borderRadius:12,background:C.card,border:`1px solid ${C.border}`}
+  const sTitle = (t)=>(<div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:10}}>{t}</div>)
+  // función (no componente) para no remontar el input y perder el foco al tipear
+  const field = (label,k,placeholder)=>(
+    <div><label style={lbl}>{label}</label><input value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={placeholder||''} style={inp}/></div>
+  )
+
+  return (
+    <div style={{padding:'16px 20px 60px'}}>
+      {/* Identificación */}
+      <div style={card}>
+        {sTitle('Identificación')}
+        <div style={{display:'grid',gap:10}}>
+          {field('Razón social','name','Nombre legal')}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {field('RUT','rut','12.345.678-9')}
+            <div>
+              <label style={lbl}>Tipo de entidad</label>
+              <input value={form.tipo_entidad} onChange={e=>set('tipo_entidad',e.target.value)} list="tipos-entidad" placeholder="SpA, Ltda., ..." style={inp}/>
+              <datalist id="tipos-entidad">{['Persona natural','SpA','Ltda.','S.A.','EIRL','Cooperativa','Fundación/Corporación','Otra'].map(o=><option key={o} value={o}/>)}</datalist>
+            </div>
+          </div>
+          {field('Nombre de fantasía','nombre_fantasia','Nombre comercial')}
+          {field('Giro','giro','Actividad económica')}
+        </div>
+        {entities&&entities.length>0&&(
+          <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+            <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Razones sociales facturadas</div>
+            {entities.map(e=>(
+              <div key={e.id} style={{display:'flex',justifyContent:'space-between',padding:'3px 0'}}>
+                <span style={{fontSize:12,color:C.text}}>{e.name||'—'}</span>
+                <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Datos de contacto */}
+      <div style={card}>
+        {sTitle('Datos de contacto')}
+        <div style={{display:'grid',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {field('Email','email','correo@...')}
+            {field('Teléfono','telefono','+56 9 ...')}
+          </div>
+          {field('Dirección','direccion')}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {field('Comuna','comuna')}
+            {field('Sitio web','sitio_web','https://')}
+          </div>
+        </div>
+      </div>
+
+      {dirty&&(
+        <div style={{display:'flex',gap:8,marginBottom:20}}>
+          <button onClick={()=>setForm(fromClient())} disabled={savingF} style={{flex:1,padding:'10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Descartar</button>
+          <button onClick={guardar} disabled={savingF} style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:savingF?.6:1}}>{savingF?'Guardando...':'Guardar cambios'}</button>
+        </div>
+      )}
+
+      {/* Personas de contacto */}
+      <div style={card}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600}}>Personas de contacto</div>
+          {!showAdd&&<button onClick={()=>{setEdit(null);setCForm({nombre:'',cargo:'',email:'',telefono:''});setShowAdd(true)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Agregar</button>}
+        </div>
+        {loadingC&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Cargando...</div>}
+        {!loadingC&&contacts.length===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin personas de contacto registradas.</div>}
+        {contacts.map(c=>(
+          <div key={c.id} style={{display:'flex',gap:10,alignItems:'center',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
+            <div style={{width:34,height:34,borderRadius:'50%',background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nombre}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
+              <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap'}}>
+                {c.email&&<a href={`mailto:${c.email}`} style={{color:C.accent,textDecoration:'none'}}>{c.email}</a>}
+                {c.telefono&&<span>{c.telefono}</span>}
+              </div>
+            </div>
+            <button onClick={()=>startEdit(c)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,padding:4}}>✎</button>
+            <button onClick={()=>eliminarContacto(c)} style={{background:'none',border:'none',color:C.overdue,cursor:'pointer',fontSize:13,padding:4}}>🗑</button>
+          </div>
+        ))}
+        {showAdd&&(
+          <div style={{marginTop:10,padding:'12px',borderRadius:10,background:'#F7F8F9',border:`1px solid ${C.border}`}}>
+            <div style={{display:'grid',gap:8}}>
+              <input autoFocus value={cForm.nombre} onChange={e=>setCForm(f=>({...f,nombre:e.target.value}))} placeholder="Nombre *" style={inp}/>
+              <input value={cForm.cargo} onChange={e=>setCForm(f=>({...f,cargo:e.target.value}))} placeholder="Cargo" style={inp}/>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <input value={cForm.email} onChange={e=>setCForm(f=>({...f,email:e.target.value}))} placeholder="Email" style={inp}/>
+                <input value={cForm.telefono} onChange={e=>setCForm(f=>({...f,telefono:e.target.value}))} placeholder="Teléfono" style={inp}/>
+              </div>
+              <div style={{display:'flex',gap:8,marginTop:2}}>
+                <button onClick={resetC} disabled={savingC} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button onClick={guardarContacto} disabled={savingC||!cForm.nombre.trim()} style={{flex:2,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(savingC||!cForm.nombre.trim())?.6:1}}>{savingC?'Guardando...':(edit?'Guardar':'Agregar')}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
 function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
@@ -3679,7 +3840,7 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState('resumen')
   const clientSales = sales.filter(s=>s.client_id===client.id)
@@ -3948,7 +4109,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         </div>
 
       </div>
-      {ftab==='contacto'&&<div style={{padding:'16px 20px 40px'}}><div style={{fontSize:13,color:C.muted}}>Contacto — próximamente</div></div>}
+      {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
       {ftab==='financiero'&&<div style={{padding:'16px 20px 40px'}}><div style={{fontSize:13,color:C.muted}}>Financiero — próximamente</div></div>}
       {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>📁</div><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
@@ -3956,7 +4117,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   )
 }
 
-function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,setExpenses,setRendiciones,rendiciones,user}) {
+function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,setExpenses,setRendiciones,rendiciones,user,onSaveFields}) {
 
   const handleAnularRendicion = async(r) => {
     if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
@@ -3992,6 +4153,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
     <>
       <ClientFicha
         client={selected}
+        onSaveFields={onSaveFields}
         clients={clients}
         sales={sales}
         billing={billing}
@@ -6033,6 +6195,14 @@ export default function App() {
     setSaving(false)
   },[])
 
+  // Actualiza solo algunos campos del cliente (edición inline desde la ficha, sin abrir el modal)
+  const handleUpdateClientFields=useCallback(async(id,patch)=>{
+    const { data, error } = await supabase.from('clients').update({...patch,updated_at:new Date().toISOString()}).eq('id',id).select().single()
+    if(error){ alert('Error al guardar: '+error.message); throw error }
+    setClients(p=>{const next=p.map(x=>x.id===id?data:x);return next.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))})
+    return data
+  },[])
+
   const handleDeleteClient=useCallback(async(id)=>{
     if(!confirm('Eliminar este cliente y todos sus datos?')) return
     try{
@@ -6181,8 +6351,8 @@ export default function App() {
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} clients={clients||[]} currentUserName={user?.name} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields}/>}
           </div>
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
