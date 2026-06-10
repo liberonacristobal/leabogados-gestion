@@ -1,6 +1,10 @@
 # Changelog
 
 ## 2026-06-10
+- Rediseño tab "Emitidas / Por cobrar" (Facturación, admin): dos acordeones maestros cerrados por defecto. Bloque 1 "PENDIENTE PAGO" envuelve los acordeones por cliente (total y N° de `filtered`, single source). Bloque 2 "POR FACTURAR · [mes]" lista las programadas que vencen el mes en curso con check por fila (todas marcadas por defecto, solo para elegir qué va al Excel) y botón "Descargar Excel" (Cliente, Razón social, RUT receptor, Concepto/glosa, Monto neto, Monto UF, Fecha vencimiento, N° cuota) reutilizando el patrón XLSX existente.
+- La carga de factura (PDF/Drive) ahora reconcilia la programada equivalente: si hay exactamente una del mismo cliente, mismo monto y vencimiento ≤ emisión, se elimina automáticamente (Bloque 2 se vacía solo). Botón "Ya emitida" por fila como respaldo manual para huérfanas, con asignación/confirmación de razón social.
+
+## 2026-06-10
 - Favicon + PWA: enlazados favicon (.ico + 16/32 png), apple-touch-icon 180 y `manifest.webmanifest` (íconos 192/512, theme/colores corporativos) en index.html — corrige el 404 de favicon y el ícono genérico al "Agregar a pantalla de inicio" en iPhone.
 - GastosForm: campo "Proyecto (opcional)" con autocomplete de los proyectos del cliente seleccionado (tareas + ventas, igual que tareas); se guarda en `expenses.project` (nueva columna) y se muestra como chip en la lista de gastos.
 - Rendición al cliente desde Gastos para limited: la rendición ahora se atribuye al usuario logueado (antes `user_name:'admin'` hardcodeado); `ExpensesView` pasa `currentUserName` a `RendicionModal`.
