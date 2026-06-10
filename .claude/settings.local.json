@@ -25,7 +25,8 @@
       "Bash(awk 'NR>=111 && NR<=256 && /ClientFicha|selectedClient|setSel|ficha|Historial|tasks\\\\.|expenses\\\\./{print NR\": \"$0}' src/App.jsx)",
       "Bash(awk *)",
       "Bash(git commit -m 'feat: proyecto en gastos + rendir limited + rendiciones en ficha limited *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(cd *)"
     ]
   }
 }

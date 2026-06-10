@@ -2205,6 +2205,128 @@ function AsignarClienteInline({bill,clients,onAssign}) {
   )
 }
 
+// Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
+// Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
+function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
+  const now = new Date()
+  const [year,setYear] = useState(String(now.getFullYear()))
+  const [month,setMonth] = useState(String(now.getMonth()+1).padStart(2,'0'))
+  const [estado,setEstado] = useState('todos') // todos | pendientes | emitidos
+  const [busy,setBusy] = useState(null)
+  const [desc,setDesc] = useState(false)
+  const ufState = useUF()
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const EMIT = ['Pendiente','Vencido','Propuesta']
+  const esEmitida = b => b.status!=='Programada'
+  const mesKey = `${year}-${month}`
+
+  const items = useMemo(()=> billing
+    .filter(b=> b.due && b.due.startsWith(mesKey) && (b.status==='Programada'||EMIT.includes(b.status)))
+    .sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
+  ,[billing,mesKey])
+  const visibles = items.filter(b=> estado==='todos' ? true : estado==='pendientes' ? !esEmitida(b) : esEmitida(b))
+
+  const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+(b.amount||0),0)
+  const emitidasCLP = items.filter(esEmitida).reduce((a,b)=>a+(b.amount||0),0)
+  const totalCLP = porFacturarCLP + emitidasCLP
+  const totalUF = ufState.uf ? totalCLP/ufState.uf : null
+  const nEmit = items.filter(esEmitida).length
+  const nTotal = items.length
+
+  const toggle = async(b) => {
+    setBusy(b.id)
+    try{ if(esEmitida(b)) await onStatusChange(b.id,'Programada'); else await onEmitir(b) }
+    catch(e){ alert('Error: '+(e.message||e)) }
+    setBusy(null)
+  }
+
+  const descargarExcel = async() => {
+    if(items.length===0){ alert('No hay facturas en el mes seleccionado.'); return }
+    setDesc(true)
+    try{
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const header=['Cliente','Concepto','Monto','Estado','Vencimiento']
+      const rows=items.map(b=>{ const c=clients.find(x=>x.id===b.client_id); return [c?.name||'Sin cliente', b.concept||'', b.amount||0, esEmitida(b)?'Emitida':'Por facturar', b.due||''] })
+      const ws=XLSX.utils.aoa_to_sheet([header,...rows])
+      ws['!cols']=[{wch:26},{wch:34},{wch:14},{wch:14},{wch:14}]
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturar')
+      XLSX.writeFile(wb,`Facturar_${mesKey}.xlsx`)
+    }catch(e){ alert('Error al generar Excel: '+e.message) }
+    setDesc(false)
+  }
+
+  const years=[...new Set(billing.map(b=>b.due?.slice(0,4)).filter(Boolean))]
+  if(!years.includes(String(now.getFullYear()))) years.push(String(now.getFullYear()))
+  years.sort((a,b)=>b-a)
+  const selStyle = {padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12,outline:'none'}
+
+  return (
+    <div>
+      <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:10}}>Facturar en {MESES[parseInt(month,10)-1]} {year}</div>
+
+      {/* Filtros: mes/año + estado */}
+      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
+        <select value={month} onChange={e=>setMonth(e.target.value)} style={selStyle}>
+          {MESES.map((m,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{m}</option>)}
+        </select>
+        <select value={year} onChange={e=>setYear(e.target.value)} style={selStyle}>
+          {years.map(y=><option key={y} value={y}>{y}</option>)}
+        </select>
+        <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
+          {[['todos','Todos'],['pendientes','Pendientes'],['emitidos','Emitidos']].map(([v,l])=>(
+            <button key={v} onClick={()=>setEstado(v)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${estado===v?C.accent:C.border}`,background:estado===v?'#E6EEF1':'transparent',color:estado===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
+        <div style={{background:'#FEF6EE',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Por facturar</div>
+          <div style={{fontSize:13,fontWeight:700,color:'#854F0B'}}>{fmt(porFacturarCLP)}</div>
+        </div>
+        <div style={{background:'#E4F1EA',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Ya emitidas</div>
+          <div style={{fontSize:13,fontWeight:700,color:'#0F6E56'}}>{fmt(emitidasCLP)}</div>
+        </div>
+        <div style={{background:'#E6EEF1',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Total mes (UF)</div>
+          <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{totalUF!=null?fmtUF(totalUF):'—'}</div>
+          <div style={{marginTop:4}}><UFStamp {...ufState}/></div>
+        </div>
+      </div>
+
+      {/* Checklist */}
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
+        {visibles.length===0&&<div style={{color:C.muted,textAlign:'center',padding:28,fontSize:12}}>Sin facturas para este filtro</div>}
+        {visibles.map(b=>{
+          const c=clients.find(x=>x.id===b.client_id)
+          const emitida=esEmitida(b)
+          return (
+            <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff',opacity:emitida?.55:1}}>
+              <button onClick={()=>toggle(b)} disabled={busy===b.id} title={emitida?'Marcar como no emitida':'Marcar como emitida'}
+                style={{width:22,height:22,borderRadius:5,border:`2px solid ${emitida?C.normal:C.border}`,background:emitida?C.normal:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,padding:0}}>
+                {emitida&&<span style={{display:'inline-block',width:5,height:9,borderRight:'2px solid #fff',borderBottom:'2px solid #fff',transform:'rotate(45deg)',marginTop:-2}}/>}
+              </button>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,textDecoration:emitida?'line-through':'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'}</div>
+                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'} · Vence {b.due?fmtDate(b.due):'—'}</div>
+              </div>
+              <div style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,textDecoration:emitida?'line-through':'none'}}>{fmt(b.amount)}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Footer */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{fontSize:12,color:C.muted}}>{nEmit} de {nTotal} emitidas</div>
+        <button onClick={descargarExcel} disabled={desc} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:desc?'default':'pointer',opacity:desc?.6:1}}>{desc?'Generando...':'Descargar Excel'}</button>
+      </div>
+    </div>
+  )
+}
+
 function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir}) {
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
@@ -2498,10 +2620,11 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
           ))}
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>
-          {[['emitidas',`Emitidas (${nEmitidas})`],['programadas',`Programadas (${nProgramadas})`],['pagado',`Pagadas (${nPagadas})`],['all','Todas']].map(([v,l])=>(
+          {[['emitidas',`Emitidas (${nEmitidas})`],['programadas',`Programadas (${nProgramadas})`],['pagado',`Pagadas (${nPagadas})`],['all','Todas'],['checklist','Checklist']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
+        {filter!=='checklist'&&<>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:4}}>
           <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
@@ -2513,6 +2636,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
             {MONTHS.map((m,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{m}</option>)}
           </select>
         </div>
+        </>}
         {(openClients.size>0||(isProg&&selected.size>0))&&(
           <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
             {isProg&&selected.size>0&&(
@@ -2543,7 +2667,9 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
       )}
 
       <div style={{padding:'10px 20px 100px'}}>
-        {filter==='emitidas' ? (
+        {filter==='checklist' ? (
+          <ChecklistFacturacion billing={billing} clients={clients} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
+        ) : filter==='emitidas' ? (
           <>
             {/* BLOQUE 1 — PENDIENTE PAGO (acordeón maestro) */}
             <button onClick={()=>setOpenPendiente(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F7F8F9',cursor:'pointer',textAlign:'left',marginBottom:10}}>
