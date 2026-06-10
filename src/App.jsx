@@ -2019,7 +2019,6 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
   const [q,setQ] = useState('')
-  const [searchScope,setSearchScope] = useState('ambas') // ambas | pendiente | porfacturar — a qué sección aplican texto y año/mes
   const [payingId,setPayingId] = useState(null)
   const [payDate,setPayDate] = useState('')
   const [openClients,setOpenClients] = useState(()=>new Set())
@@ -2046,20 +2045,16 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
     if(filter==='emitidas') r = r.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status))
     else if(filter==='programadas') r = r.filter(b=>b.status==='Programada')
     else if(filter==='pagado') r = r.filter(b=>b.status==='Pagado')
-    // En la vista Emitidas, si el alcance es solo "Por facturar", PENDIENTE PAGO no se filtra
-    const aplicar = !(filter==='emitidas' && searchScope==='porfacturar')
-    if(aplicar){
-      if(fYear) r = r.filter(b=>dateField(b)?.startsWith(fYear))
-      if(fMonth) r = r.filter(b=>dateField(b)?.slice(5,7)===fMonth)
-      if(q.trim()) r = r.filter(b=>{
-        const c=clients.find(x=>x.id===b.client_id)
-        return c?.name.toLowerCase().includes(q.toLowerCase())||b.concept?.toLowerCase().includes(q.toLowerCase())||b.invoice_no?.toLowerCase().includes(q.toLowerCase())||b.receptor_name?.toLowerCase().includes(q.toLowerCase())
-      })
-    }
+    if(fYear) r = r.filter(b=>dateField(b)?.startsWith(fYear))
+    if(fMonth) r = r.filter(b=>dateField(b)?.slice(5,7)===fMonth)
+    if(q.trim()) r = r.filter(b=>{
+      const c=clients.find(x=>x.id===b.client_id)
+      return c?.name.toLowerCase().includes(q.toLowerCase())||b.concept?.toLowerCase().includes(q.toLowerCase())||b.invoice_no?.toLowerCase().includes(q.toLowerCase())||b.receptor_name?.toLowerCase().includes(q.toLowerCase())
+    })
     return r.sort((a,b)=> isProg
       ? new Date(a.due||0)-new Date(b.due||0)
       : new Date(b.issued_at||0)-new Date(a.issued_at||0))
-  },[bb,filter,fYear,fMonth,q,clients,isProg,searchScope])
+  },[bb,filter,fYear,fMonth,q,clients,isProg])
 
   // Agrupar por cliente → razón social
   const grouped = useMemo(()=>{
@@ -2147,22 +2142,12 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
   // ── Bloque 1 (PENDIENTE PAGO): total y conteo desde el mismo `filtered` (single source) ──
   const emitidasTotal = useMemo(()=>filtered.reduce((a,b)=>a+(b.amount||0),0),[filtered])
 
-  // ── Bloque 2 (POR FACTURAR): programadas con vencimiento, filtrables por texto/año/mes (contra due) ──
+  // ── Bloque 2 (POR FACTURAR · mes en curso): programadas que vencen este mes ──
   const mesKey = `${currentYear}-${String(currentMonth).padStart(2,'0')}`
-  const progMes = useMemo(()=>{
-    let r = bb.filter(b=>b.status==='Programada' && b.due)
-    if(searchScope!=='pendiente'){
-      if(fYear) r = r.filter(b=>b.due?.startsWith(fYear))
-      if(fMonth) r = r.filter(b=>b.due?.slice(5,7)===fMonth)
-      if(q.trim()) r = r.filter(b=>{
-        const c=clients.find(x=>x.id===b.client_id)
-        return (c?.name?.toLowerCase().includes(q.toLowerCase()))||(b.receptor_name?.toLowerCase().includes(q.toLowerCase()))
-      })
-    }
-    return r.sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
-  },[bb,searchScope,fYear,fMonth,q,clients])
+  const mesNombre = new Date().toLocaleDateString('es-CL',{month:'long'}).replace(/^\w/,c=>c.toUpperCase())
+  const progMes = useMemo(()=>bb.filter(b=>b.status==='Programada'&&b.due?.slice(0,7)===mesKey).sort((a,b)=>(a.due||'')>(b.due||'')?1:-1),[bb,mesKey])
   const progMesTotal = useMemo(()=>progMes.reduce((a,b)=>a+(b.amount||0),0),[progMes])
-  // Por defecto, todas marcadas; se re-sincroniza si cambia la membresía visible
+  // Por defecto, todas marcadas; se re-sincroniza si cambia la membresía del mes
   const progIds = progMes.map(b=>b.id).join(',')
   useEffect(()=>{ setSelExcel(new Set(progMes.map(b=>b.id))) },[progIds])
   const toggleExcel = id => setSelExcel(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
@@ -2318,16 +2303,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
-        <div style={{display:'flex',gap:6,marginBottom:6}}>
-          {filter==='emitidas'&&(
-            <select value={searchScope} onChange={e=>setSearchScope(e.target.value)} style={{padding:'7px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12,flexShrink:0}}>
-              <option value='pendiente'>Pendiente pago</option>
-              <option value='porfacturar'>Por facturar</option>
-              <option value='ambas'>Ambas</option>
-            </select>
-          )}
-          <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{flex:1,marginBottom:0}}/>
-        </div>
+        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:4}}>
           <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
             <option value=''>Todos los años</option>
@@ -2390,7 +2366,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
             <button onClick={()=>setOpenPorFacturar(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F7F8F9',cursor:'pointer',textAlign:'left',marginBottom:10}}>
               <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                 <span style={{fontSize:12,color:C.accent,transform:openPorFacturar?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
-                <span style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Por facturar</span>
+                <span style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Por facturar · {mesNombre}</span>
                 <span style={{fontSize:11,color:C.muted}}>· {progMes.length}</span>
               </div>
               <span style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,marginLeft:8}}>{fmt(progMesTotal)}</span>
