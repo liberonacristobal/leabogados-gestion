@@ -3718,10 +3718,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             const rends=(rendiciones||[]).filter(r=>r.client_id===client.id&&r.tipo==='cliente').sort((a,b)=>b.created_at>a.created_at?1:-1)
             if(!rends.length) return null
             return (<div style={{marginTop:12}}>
-              <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Historial de rendiciones</div>
+              <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Rendiciones</div>
               {rends.map(r=>(
                 <div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div><div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gastos · {new Date(r.created_at).toLocaleDateString('es-CL')}</div></div>
+                  <div><div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div></div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
                     {onAnularRendicion&&<button onClick={()=>onAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button>}
