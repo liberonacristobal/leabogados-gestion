@@ -4855,7 +4855,12 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const [openAsignadas,setOpenAsignadas] = useState(true)
   const [preview,setPreview] = useState(null)
   const me = currentUserName || ''
-  const allProjects = [...new Set(tasks.filter(t=>t.project).map(t=>t.project))].sort()
+  // Proyectos dependientes del cliente filtrado: solo los del/los cliente(s) que matchean el texto buscado
+  const clientIdsFiltro = new Set((filterClient ? clients.filter(c=>c.name?.toLowerCase().includes(filterClient.toLowerCase())) : []).map(c=>c.id))
+  const proyectosCliente = filterClient
+    ? [...new Set(tasks.filter(t=>clientIdsFiltro.has(t.client_id)&&t.project&&(t.who===me||t.assigned_by===me)).map(t=>t.project))].sort()
+    : []
+  const projDisabled = !filterClient || proyectosCliente.length===0
 
   // Tareas activas (filtradas) y terminadas recientes
   const base = tasks.filter(t=>{
@@ -4945,11 +4950,11 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:4}}>
           <BloqueTitulo>Mis tareas</BloqueTitulo>
           <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end'}}>
-            <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,background:filterProject?'#E6EEF1':'#F7F7F7',color:filterProject?C.accent:C.text,maxWidth:140}}>
-              <option value=''>Todos los proyectos</option>
-              {allProjects.map(p=><option key={p} value={p}>{p}</option>)}
+            <input value={filterClient} onChange={e=>{setFilterClient(e.target.value);setFilterProject('')}} placeholder='Buscar cliente...' style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:120}}/>
+            <select value={filterProject} disabled={projDisabled} onChange={e=>setFilterProject(e.target.value)} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,maxWidth:160,background:projDisabled?'#F0F0F0':(filterProject?'#E6EEF1':'#F7F7F7'),color:projDisabled?C.muted:(filterProject?C.accent:C.text),cursor:projDisabled?'not-allowed':'pointer',opacity:projDisabled?.7:1}}>
+              <option value=''>{!filterClient?'Selecciona un cliente':proyectosCliente.length===0?'Sin proyectos':'Todos los proyectos'}</option>
+              {proyectosCliente.map(p=><option key={p} value={p}>{p}</option>)}
             </select>
-            <input value={filterClient} onChange={e=>setFilterClient(e.target.value)} placeholder='Buscar cliente...' style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F7F7F7',color:C.text,width:108}}/>
             {(filterProject||filterClient)&&
               <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕</button>
             }
@@ -4973,7 +4978,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
         )}
       </div>
       <div style={{padding:'24px 20px 0'}}>
-        <div style={{marginBottom:10}}><BloqueTitulo>Próximas dos semanas</BloqueTitulo></div>
+        <div style={{marginBottom:10}}><BloqueTitulo>Próximas semanas</BloqueTitulo></div>
         {[0,1].map(semIdx=>{
           const lunesSem = new Date(hoy)
           lunesSem.setDate(hoy.getDate()-((hoy.getDay()+6)%7)+semIdx*7)
@@ -5012,7 +5017,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
         })}
       </div>
       <div style={{padding:'24px 20px 100px'}}>
-        <div style={{marginBottom:10}}><BloqueTitulo>Mi caja chica</BloqueTitulo></div>
+        <div style={{marginBottom:10}}><BloqueTitulo>Resumen financiero</BloqueTitulo></div>
         {(()=>{
           const saldo = saldoCajaChica(pettyCash, expenses, me)
           const misGastos = (expenses||[]).filter(e=>e.type==='gasto' && e.created_by===me)
