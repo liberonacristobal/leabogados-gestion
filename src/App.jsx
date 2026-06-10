@@ -3206,8 +3206,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
             )
           })}
           <div onClick={()=>setShowHistorial(true)} style={{marginTop:10,paddingTop:14,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
-            <span style={{fontSize:13,fontWeight:600,color:C.accent}}>📋 Historial de rendiciones</span>
-            <span style={{fontSize:15,color:C.accent}}>→</span>
+            <span style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Historial de rendiciones</span>
+            <span style={{fontSize:14,color:'#99ABB4'}}>›</span>
           </div>
         </div>
       )}
@@ -3268,22 +3268,38 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                 return true
               }).sort((a,b)=>b.created_at>a.created_at?1:-1)
               if(!rends.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin rendiciones</div>
-              return rends.map(r=>{
+              const hHeader = {fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}
+              const hGrid = '1fr 78px 50px 66px'
+              return (<>
+                <div style={{display:'grid',gridTemplateColumns:hGrid,gap:6,padding:'0 0 6px',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={hHeader}>Cliente / Período</div>
+                  <div style={{...hHeader,textAlign:'right'}}>Monto</div>
+                  <div style={{...hHeader,textAlign:'center'}}>Gastos</div>
+                  <div style={{...hHeader,textAlign:'right'}}>Estado</div>
+                </div>
+                {rends.map(r=>{
                 const cl=clients.find(x=>x.id===r.client_id)
                 return (<div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div style={{display:'grid',gridTemplateColumns:hGrid,gap:6,alignItems:'start'}}>
                     <div style={{minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,color:C.text}}>{cl?.name||'Cliente'}</div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{r.periodo} · {r.n_gastos} gastos · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
-                      {r.sent_at
-                        ? <div style={{fontSize:10,fontWeight:600,color:'#0F6E56',marginTop:2}}>✓ Enviada {new Date(r.sent_at).toLocaleDateString('es-CL')}</div>
-                        : <div style={{fontSize:10,fontWeight:600,color:'#C2761F',marginTop:2}}>Pendiente de envío</div>}
+                      <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Cliente'}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2}}>{r.periodo} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
                     </div>
-                    <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div><button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button></div>
+                    <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
+                    <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
+                    <div style={{textAlign:'right',fontSize:10,fontWeight:600,lineHeight:1.3}}>
+                      {r.sent_at
+                        ? <span style={{color:'#0F6E56'}}>Enviada<br/>{new Date(r.sent_at).toLocaleDateString('es-CL')}</span>
+                        : <span style={{color:'#C2761F'}}>Pendiente</span>}
+                    </div>
                   </div>
-                  {cl&&<button onClick={()=>setEmailRend(r)} style={{marginTop:6,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'✉ Reenviar al cliente':'✉ Enviar al cliente'}</button>}
+                  <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center'}}>
+                    {cl&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>}
+                    <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>
+                  </div>
                 </div>)
-              })
+              })}
+              </>)
             })()}
           </div>
         </div>
