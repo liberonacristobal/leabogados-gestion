@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-06-10
+- Favicon + PWA: enlazados favicon (.ico + 16/32 png), apple-touch-icon 180 y `manifest.webmanifest` (íconos 192/512, theme/colores corporativos) en index.html — corrige el 404 de favicon y el ícono genérico al "Agregar a pantalla de inicio" en iPhone.
 - GastosForm: campo "Proyecto (opcional)" con autocomplete de los proyectos del cliente seleccionado (tareas + ventas, igual que tareas); se guarda en `expenses.project` (nueva columna) y se muestra como chip en la lista de gastos.
 - Rendición al cliente desde Gastos para limited: la rendición ahora se atribuye al usuario logueado (antes `user_name:'admin'` hardcodeado); `ExpensesView` pasa `currentUserName` a `RendicionModal`.
 - Ficha de cliente (vista limited): nueva sección "Rendiciones realizadas" en solo lectura, con fecha/período/total y detalle de gastos expandible (sin Anular).
