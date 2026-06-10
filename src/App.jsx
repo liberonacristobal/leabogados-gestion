@@ -4962,7 +4962,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const proximasMias = mias.filter(t=>t.due && daysLeft(t.due)>0 && daysLeft(t.due)<=14).length
   const primerNombre = (me||'').trim().split(' ')[0]
   const saludo = `¡Hola${primerNombre?`, ${primerNombre}`:''}!`
-  const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(',','').replace(/^\w/,c=>c.toUpperCase())
+  const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())
   const contadorTxt = [
     `${totalMias} tarea${totalMias!==1?'s':''} activa${totalMias!==1?'s':''}`,
     ...(atrasadasMias>0?[`${atrasadasMias} atrasada${atrasadasMias!==1?'s':''}`]:[]),
@@ -4975,9 +4975,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>{saludo}</div>
-            <div style={{fontSize:12,color:C.muted,marginTop:2}}>{fechaHoy}</div>
-            <div style={{fontSize:12,color:C.muted,marginTop:1}}>{contadorTxt}</div>
+            <div style={{fontSize:11,color:C.muted,fontWeight:500,letterSpacing:.5,marginBottom:2}}>{fechaHoy}</div>
+            <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,marginBottom:2}}>{saludo}</div>
+            <div style={{fontSize:12,color:C.muted}}>{contadorTxt}</div>
           </div>
           <div style={{display:'flex',gap:6,flexShrink:0}}>
             <button onClick={()=>printTasks(mias,clients,me)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Imprimir</button>
