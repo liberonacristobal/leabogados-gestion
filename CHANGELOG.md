@@ -1,6 +1,10 @@
 # Changelog
 
 ## 2026-06-10
+- Modal de tarea (QuickTaskForm, único en Inicio/Clientes/Tareas) simplificado: se quitaron de la UI las secciones Subtareas, Comentarios y Links. Queda Cliente, Tarea, Proyecto, Subproyecto, Responsable, Plazo, Archivos. Los datos en task_comments/task_links/subtasks NO se borran (solo se ocultó la UI; `subtasks` sale del payload y el upsert preserva la columna). En tarea nueva se avisa que se podrá adjuntar tras guardar.
+- Inicio (admin): click en una tarea abre la vista previa de solo lectura (mismo TaskPreview que limited) con Editar / Marcar terminada / Cerrar; ✓/✎ siguen como atajos directos (stopPropagation). Nuevo modal `taskPreview` a nivel App.
+
+## 2026-06-10
 - Módulo de adjuntos a Google Drive: subir archivos reales en Tareas (QuickTaskForm, sección "Archivos") y en Gastos (ExpenseEditForm), guardados en la carpeta compartida "Respaldo Gastos APP" → subcarpetas "Tareas"/"Gastos" (find-or-create, cacheadas). Scope OAuth ampliado a `drive` (lectura+escritura, superset de readonly) con `prompt:consent` → los usuarios re-autorizan Drive una vez. Upload resumable (hasta 15 MB con aviso si se excede), link "Abrir en Drive", eliminar = papelera de Drive. Manejo de token vencido (401) → fuerza reconexión, sin fallo silencioso. Chip "📎 N" en la fila del gasto. Metadata en tablas `task_attachments`/`expense_attachments`.
 
 ## 2026-06-10
