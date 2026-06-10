@@ -1,6 +1,10 @@
 # Changelog
 
 ## 2026-06-10
+- Limpieza global de emojis: se reemplazaron todos los emojis pictográficos y dingbats decorativos de la app por texto descriptivo corto o se eliminaron (📎→"Adjunto", ✓ Rendido→"Rendido", ✎→"Editar", 🗑→"Eliminar", 👥→"Usuarios", 📅→"Agendar", 📄/📋 eliminados, ✉ eliminado de botones, ⚠ → texto o "(!)", logs de import con ✓/✗/⚠/⏭/✅/❌ → "Error:"/"Aviso:"/"Omitido:"/sin símbolo). Se conserva la tipografía funcional que no es emoji: flechas (←→↑↓↔), chevrons/expanders (▾▸▶), íconos del BottomNav y los ticks internos de checkboxes. Sin cambios de lógica ni estilos.
+- Seguridad: los usuarios limited ya no pueden acceder a la vista admin. Se separó el rol real inmutable (`actualRole`, de user_roles) de la vista actual (`userRole`); los botones "Vista Team"/"← Vista Admin" solo se renderizan para admin real, y un guard de navegación redirige a Tareas si una sesión limited queda en un tab admin (dashboard/ventas/facturación).
+
+## 2026-06-10
 - Fix saldo caja chica: `saldoCajaChica` vuelve a restar TODOS los gastos del usuario (no solo los no liquidados). El cambio del PASO 4 que excluía los liquidados hacía subir el saldo artificialmente al liquidar (los fondos seguían sumando completos mientras los gastos liquidados salían de la resta). Ahora liquidar es neutro para el saldo: queda en $0 si fondos=gastos, o en el remanente si hubo diferencia, y solo sube cuando se ingresa un fondo nuevo. El historial "Gastos liquidados" y la marca individual `rendered_at` se mantienen; lo que cambia es solo el cálculo del saldo disponible.
 
 ## 2026-06-10

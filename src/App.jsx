@@ -192,7 +192,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
               <div style={{fontSize:18,fontWeight:700,color:'#3D3D3D'}}>{cl.name}</div>
               {cl.type&&<div style={{fontSize:11,color:'#888'}}>{cl.type}</div>}
             </div>
-            <button onClick={()=>setConfirmEdit(cl)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#fff',color:'#3D3D3D',fontSize:12,fontWeight:600,cursor:'pointer'}}>✎ Editar</button>
+            <button onClick={()=>setConfirmEdit(cl)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#fff',color:'#3D3D3D',fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
           </div>
           <FichaTabs tab={ftab} setTab={setFtab} role="limited"/>
         </div>
@@ -605,9 +605,9 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{position:'fixed',top:12,left:0,right:0,zIndex:400,display:'flex',justifyContent:'center',padding:'0 16px',pointerEvents:'none'}}>
           <div style={{background:'#fff',border:'1px solid #1D9E75',borderLeft:'4px solid #1D9E75',borderRadius:10,padding:'12px 16px',maxWidth:520,width:'100%',boxShadow:'0 6px 24px rgba(0,0,0,.15)',pointerEvents:'auto',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:'#0F6E56'}}>✓ Liquidación registrada</div>
+              <div style={{fontSize:13,fontWeight:700,color:'#0F6E56'}}>Liquidación registrada</div>
               <div style={{fontSize:12,color:'#3D3D3D',marginTop:2}}>{toast.n} gasto{toast.n!==1?'s':''} liquidado{toast.n!==1?'s':''} por {fmtCLP(toast.total)}</div>
-              {toast.correo&&<div style={{fontSize:11,color:'#C2761F',marginTop:5,fontWeight:600}}>✉ Correo preparado — recuerda enviarlo desde tu cliente de correo</div>}
+              {toast.correo&&<div style={{fontSize:11,color:'#C2761F',marginTop:5,fontWeight:600}}>Correo preparado — recuerda enviarlo desde tu cliente de correo</div>}
             </div>
             <button onClick={()=>setToast(null)} style={{background:'none',border:'none',color:'#888',cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
           </div>
@@ -717,7 +717,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                         {client&&<span>{client.name}</span>}
                         {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
                         {e.date&&<span>{e.date}</span>}
-                        <span style={{color:'#0F6E56',fontWeight:600}}>✓ Liquidado {liqD}</span>
+                        <span style={{color:'#0F6E56',fontWeight:600}}>Liquidado {liqD}</span>
                       </div>
                     </div>
                     <div style={{fontSize:13,fontWeight:700,color:'#888',flexShrink:0}}>{fmtCLP(e.amount)}</div>
@@ -800,7 +800,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                       const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
                       const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
                       const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
-                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>✉ Enviar por correo</button>
+                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>Enviar por correo</button>
                   </div>
                 </div>
               )}
@@ -900,7 +900,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 </div>
               </div>
               <div style={{padding:'12px 20px 18px',borderTop:'1px solid #E8E8E8',display:'flex',flexDirection:'column',gap:8}}>
-                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={{padding:12,borderRadius:10,border:'none',background:'#003C50',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?.6:1}}>{saving?'Procesando...':'✉ Enviar y liquidar'}</button>
+                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={{padding:12,borderRadius:10,border:'none',background:'#003C50',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?.6:1}}>{saving?'Procesando...':'Enviar y liquidar'}</button>
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>setConfirmLiq(false)} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #E8E8E8',background:'#fff',color:'#888',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button onClick={()=>handleLiquidar(false)} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #1D9E75',background:'transparent',color:'#0F6E56',fontSize:13,fontWeight:700,cursor:'pointer'}}>Solo liquidar</button>
@@ -993,7 +993,7 @@ function TasksByPerson({tasks,clients}) {
                         {t.note&&<div style={{fontSize:11,color:C.muted,opacity:.75,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</div>}
                       </div>
                       {u==='overdue'&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>VENCIDA</span>}
-                      {t.due&&(()=>{ const dd=t.due.replace(/-/g,''); const cal=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Vence: '+(t.title||'Tarea')+(client?.name?' · '+client.name.split('/')[0].trim():''))}&dates=${dd}T090000/${dd}T091500&ctz=America/Santiago`; return <a href={cal} target='_blank' rel='noopener noreferrer' title='Agregar a Google Calendar' style={{flexShrink:0,fontSize:13,textDecoration:'none',opacity:.6,marginLeft:2}}>📅</a> })()}
+                      {t.due&&(()=>{ const dd=t.due.replace(/-/g,''); const cal=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Vence: '+(t.title||'Tarea')+(client?.name?' · '+client.name.split('/')[0].trim():''))}&dates=${dd}T090000/${dd}T091500&ctz=America/Santiago`; return <a href={cal} target='_blank' rel='noopener noreferrer' title='Agregar a Google Calendar' style={{flexShrink:0,fontSize:13,textDecoration:'none',opacity:.6,marginLeft:2}}>Agendar</a> })()}
                     </div>
                   )
                 })}
@@ -1064,7 +1064,7 @@ function CashflowProjection({billing}) {
           ))}
         </div>
       </div>
-      {months[0]?.overdue>0&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginTop:4}}>⚠ Incluye {fmt(months[0].overdue)} vencido en este mes</div>}
+      {months[0]?.overdue>0&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginTop:4}}>Incluye {fmt(months[0].overdue)} vencido en este mes</div>}
     </div>
   )
 }
@@ -1290,15 +1290,15 @@ function useUF(){
   useEffect(()=>{ let ok=true; fetchUF().then(r=>{ if(ok) setState({uf:r.value, asOf:r.date, isToday:r.isToday, loading:false}) }); return ()=>{ok=false} },[])
   return state
 }
-// Señal visible y auditable del valor UF usado. Discreta (gris) si es de hoy; naranja con ⚠ si no.
+// Señal visible y auditable del valor UF usado. Discreta (gris) si es de hoy; naranja con alerta si no.
 function UFStamp({uf,isToday,asOf,loading}){
   if(loading && uf==null) return null
   const fmtN = n => '$'+Math.round(n).toLocaleString('es-CL')
   const f = asOf ? new Date(asOf+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}) : null
   const base = {display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:600,whiteSpace:'nowrap',borderRadius:6,padding:'2px 7px'}
   if(isToday && uf!=null) return <span style={{...base,color:C.muted,background:'#F2F2F2'}}>UF al {f} · {fmtN(uf)}</span>
-  if(uf!=null) return <span style={{...base,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC'}}>⚠ UF al {f} · no actualizada</span>
-  return <span style={{...base,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC'}}>⚠ UF no disponible</span>
+  if(uf!=null) return <span style={{...base,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC'}}>UF al {f} · no actualizada</span>
+  return <span style={{...base,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC'}}>UF no disponible</span>
 }
 
 function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
@@ -1698,8 +1698,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
                 <div key={f.u} style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'9px 12px',borderBottom:i<filas.length-1?`1px solid ${C.border}`:'none',alignItems:'center'}}>
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.u}</div>
                   <div style={{fontSize:12,fontWeight:700,color:f.saldo<0?C.overdue:C.normal,textAlign:'right',whiteSpace:'nowrap'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div>
-                  <div style={{fontSize:11,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaSinLiq&&<span title='Más de 10 gastos sin liquidar (excl. Notaría)'>⚠ </span>}{money(f.sinLiqMonto)} / {f.sinLiqN}</div>
-                  <div style={{fontSize:11,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaUlt&&<span title='Más de 7 días sin ingresar un gasto'>⚠ </span>}{f.ult?fmtDate(f.ult):'—'}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaSinLiq&&<span title='Más de 10 gastos sin liquidar (excl. Notaría)'>(!) </span>}{money(f.sinLiqMonto)} / {f.sinLiqN}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaUlt&&<span title='Más de 7 días sin ingresar un gasto'>(!) </span>}{f.ult?fmtDate(f.ult):'—'}</div>
                 </div>
               ))}
             </div>
@@ -2160,7 +2160,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
                       <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{color:C.muted}}>Tarifa anterior</span><strong style={{color:C.text}}>{fmtMon(ant.honorario||0)}</strong></div>
                       <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{color:C.muted}}>Nueva tarifa</span><strong style={{color:C.accent}}>{fmtMon(nuevo)}</strong></div>
                       <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:C.muted}}>Diferencia</span><strong style={{color:diff>=0?C.normal:C.overdue}}>{diff>=0?'+':'−'}{fmtMon(Math.abs(diff))}</strong></div>
-                      {vigDate&&<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.soon,lineHeight:1.4}}>⚠ Se recalcularán <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} (vence ≥ {fmtMesAno(vigDate)}). <strong>{emitN}</strong> emitida{emitN!==1?'s':''}/pagada{emitN!==1?'s':''} NO se tocan.</div>}
+                      {vigDate&&<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.soon,lineHeight:1.4}}>Se recalcularán <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} (vence ≥ {fmtMesAno(vigDate)}). <strong>{emitN}</strong> emitida{emitN!==1?'s':''}/pagada{emitN!==1?'s':''} NO se tocan.</div>}
                     </div>
                     <div style={{display:'flex',gap:8}}>
                       <button onClick={()=>{setShowTariffForm(false);setNewHon('');setNewVig('');setNewCosto('');setNewMotivo('')}} style={{flex:1,padding:10,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -2301,7 +2301,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
         let rs = null
         if(b.entity_id) rs = ents.find(e=>e.id===b.entity_id) || null
         else if(ents.length===1) rs = ents[0]
-        const rsName = rs ? rs.name : (ents.length>1 ? '⚠ definir razón social' : (b.receptor_name||''))
+        const rsName = rs ? rs.name : (ents.length>1 ? 'definir razón social' : (b.receptor_name||''))
         const rsRut = rs ? (rs.rut||'') : (b.entity_id?'':(ents.length>1?'':(b.receptor_rut||'')))
         return [
           c?.name || 'Sin cliente',
@@ -2358,7 +2358,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
     let rs=null
     if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null
     else if(ents.length===1) rs=ents[0]
-    const name=rs?rs.name:(ents.length>1?'⚠ definir razón social':(b.receptor_name||''))
+    const name=rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||''))
     const rut=rs?(rs.rut||''):(b.receptor_rut||'')
     return {name,rut}
   }
@@ -2439,7 +2439,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,marginLeft:8}}>
                     <div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
-                    <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',fontSize:11,color:C.muted,cursor:'pointer'}}>✎</button>
+                    <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',fontSize:11,color:C.muted,cursor:'pointer'}}>Editar</button>
                   </div>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -2463,7 +2463,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
                     <div style={{display:'flex',alignItems:'center',gap:6}}>
                     {client.id==='__none__'&&onAssignClient&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
                     <button onClick={()=>handleTogglePagado(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',color:b.status==='Pagado'?C.normal:C.muted,fontSize:11,fontWeight:700}}>
-                      <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}>{b.status==='Pagado'?'✓':''}</span>
+                      <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}></span>
                       {b.status==='Pagado'?'Pagado':'Marcar pagado'}
                     </button>
                     </div>
@@ -3006,7 +3006,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
 
   if(hechos>0) return (
     <div style={{textAlign:'center',padding:'20px 0'}}>
-      <div style={{fontSize:15,fontWeight:700,color:C.normal,marginBottom:6}}>✓ {hechos} {tipo==='fondo'?'fondo(s)':'gasto(s)'} cargado(s)</div>
+      <div style={{fontSize:15,fontWeight:700,color:C.normal,marginBottom:6}}>{hechos} {tipo==='fondo'?'fondo(s)':'gasto(s)'} cargado(s)</div>
       {sinMatch.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:12}}>Quedaron {sinMatch.length} fila(s) sin cliente, no se cargaron.</div>}
       <button onClick={onClose} style={{padding:'10px 20px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Listo</button>
     </div>
@@ -3025,7 +3025,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
           </div>
           <label style={{display:'block',padding:'24px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#FAFBFC'}}>
             <input type='file' accept='.xlsx,.xls' onChange={onFile} style={{display:'none'}}/>
-            <div style={{fontSize:13,color:C.accent,fontWeight:600}}>{cargando?'Leyendo...':'📄 Seleccionar archivo Excel'}</div>
+            <div style={{fontSize:13,color:C.accent,fontWeight:600}}>{cargando?'Leyendo...':'Seleccionar archivo Excel'}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:4}}>.xlsx o .xls</div>
           </label>
         </>
@@ -3046,7 +3046,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
                   <div style={{fontSize:10,color:C.muted}}>{r.fecha||'sin fecha'}{tipo==='gasto'?` · ${r.categoria}`:''} · {r.rut||r.nombre||'—'}</div>
                 </div>
                 {r.client_id
-                  ? <span style={{fontSize:11,color:C.normal,fontWeight:600,flexShrink:0}}>✓ {r.clientName}</span>
+                  ? <span style={{fontSize:11,color:C.normal,fontWeight:600,flexShrink:0}}>{r.clientName}</span>
                   : <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)}/>}
               </div>
             ))}
@@ -3228,9 +3228,9 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                     <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
                       {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
                       {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
-                      {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>✓ Rendido</span>}
+                      {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>Rendido</span>}
                       {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
-                      {(()=>{ const n=(expenseAttachments||[]).filter(a=>a.expense_id===e.id).length; return n>0?<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#F0F0F0',color:C.muted,fontWeight:600}}>📎 {n}</span>:null })()}
+                      {(()=>{ const n=(expenseAttachments||[]).filter(a=>a.expense_id===e.id).length; return n>0?<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#F0F0F0',color:C.muted,fontWeight:600}}>Adjunto {n}</span>:null })()}
                     </div>
                     <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                     <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
@@ -3457,7 +3457,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
       {selectedClient&&(
         <>
-          {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>✓ {saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
+          {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
 
           {rsList.length>1&&(
             <div style={{marginBottom:10}}>
@@ -3841,7 +3841,7 @@ function ContactoTab({client, entities, onSaveFields}) {
           <div>
             <label style={lbl}>Razón social</label>
             <input value={client.name||'—'} disabled style={{...inp,background:'#F2F2F2',color:C.muted}}/>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Para cambiarla, usa "✎ Editar".</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Para cambiarla, usa "Editar".</div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             {field('RUT','rut','12.345.678-9')}
@@ -3908,8 +3908,8 @@ function ContactoTab({client, entities, onSaveFields}) {
                 {c.telefono&&<span>{c.telefono}</span>}
               </div>
             </div>
-            <button onClick={()=>startEdit(c)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,padding:4}}>✎</button>
-            <button onClick={()=>eliminarContacto(c)} style={{background:'none',border:'none',color:C.overdue,cursor:'pointer',fontSize:13,padding:4}}>🗑</button>
+            <button onClick={()=>startEdit(c)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,padding:4}}>Editar</button>
+            <button onClick={()=>eliminarContacto(c)} style={{background:'none',border:'none',color:C.overdue,cursor:'pointer',fontSize:13,padding:4}}>Eliminar</button>
           </div>
         ))}
         {showAdd&&(
@@ -4098,7 +4098,7 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   }
   return (
     <Modal title='Enviar rendición al cliente' onClose={onClose}>
-      {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:'#C2761F',fontSize:12,marginBottom:12}}>⚠ El cliente no tiene email en su ficha. Complétalo (botón Editar del cliente) o escríbelo abajo antes de enviar.</div>}
+      {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:'#C2761F',fontSize:12,marginBottom:12}}>El cliente no tiene email en su ficha. Complétalo (botón Editar del cliente) o escríbelo abajo antes de enviar.</div>}
       <Fld label='De'><Inp value={user?.email||''} disabled style={{opacity:.7}}/></Fld>
       <Fld label='Para'><Inp type='email' value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl'/></Fld>
       <Fld label='Asunto'><Inp value={asunto} onChange={e=>setAsunto(e.target.value)}/></Fld>
@@ -4145,7 +4145,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             <div style={{fontSize:18,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
             <div style={{fontSize:11,color:C.muted}}>{client.type}{client.status==='Terminado'?' · Terminado':''}</div>
           </div>
-          <button onClick={()=>onEdit(client)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>✎ Editar</button>
+          <button onClick={()=>onEdit(client)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
         </div>
         <FichaTabs tab={ftab} setTab={setFtab} role="admin"/>
       </div>
@@ -4282,7 +4282,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                 <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
                   {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                   {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600,flexShrink:0}}>Fondo</span>}
-                  {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600,flexShrink:0}}>✓ Rendido</span>}
+                  {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600,flexShrink:0}}>Rendido</span>}
                   <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                 </div>
                 <div style={{fontSize:12,fontWeight:600,color:isFondo?C.normal:C.overdue,flexShrink:0,marginLeft:8}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
@@ -4305,7 +4305,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                       <div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div>
                       <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
                       {r.sent_at
-                        ? <div style={{fontSize:10,fontWeight:600,color:'#0F6E56',marginTop:2}}>✓ Enviada {new Date(r.sent_at).toLocaleDateString('es-CL')}</div>
+                        ? <div style={{fontSize:10,fontWeight:600,color:'#0F6E56',marginTop:2}}>Enviada {new Date(r.sent_at).toLocaleDateString('es-CL')}</div>
                         : <div style={{fontSize:10,fontWeight:600,color:'#C2761F',marginTop:2}}>Pendiente de envío</div>}
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
@@ -4313,7 +4313,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                       {onAnularRendicion&&<button onClick={()=>onAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button>}
                     </div>
                   </div>
-                  <button onClick={()=>setEmailRend(r)} style={{marginTop:6,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'✉ Reenviar al cliente':'✉ Enviar al cliente'}</button>
+                  <button onClick={()=>setEmailRend(r)} style={{marginTop:6,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>
                 </div>
               ))}
             </div>)
@@ -4754,7 +4754,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
       </Fld>
       <Fld label='Interno (gastos de oficina)'>
         <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.is_internal?C.accent:C.border}`,background:f.is_internal?'#E6EEF1':'transparent',color:f.is_internal?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-          {f.is_internal?'✓ Cliente interno (no cuenta como cliente de negocio)':'Marcar como interno'}
+          {f.is_internal?'Cliente interno (no cuenta como cliente de negocio)':'Marcar como interno'}
         </button>
       </Fld>
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
@@ -4930,7 +4930,7 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
       <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Archivos {items.length>0&&`(${items.length})`}</div>
       {items.map(a=>(
         <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
-          <span style={{flexShrink:0}}>📎</span>
+          <span style={{flexShrink:0}}>Adjunto</span>
           <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
           <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a>
           <button onClick={()=>del(a)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,flexShrink:0}}>×</button>
@@ -5002,8 +5002,8 @@ function ClienteDriveImporter({clients,onImported,onClose}){
       const isTerminado=terminados2024.find(x=>x.id===f.id)||terminados2025.find(x=>x.id===f.id)
       const payload={name:f.name,area:isTerminado?'Terminado':''}
       const {error}=await supabase.from('clients').insert(payload)
-      if(!error){imported++;addLog(`✓ ${f.name}`)}
-      else addLog(`✗ ${f.name}: ${error.message}`)
+      if(!error){imported++;addLog(`${f.name}`)}
+      else addLog(`Error: ${f.name}: ${error.message}`)
     }
     addLog(`─────────────────`)
     addLog(`${imported} clientes importados`)
@@ -5076,7 +5076,7 @@ function ClienteDriveImporter({clients,onImported,onClose}){
             </div>
           )}
           {newClients.length===0&&terminados2024.length===0&&terminados2025.length===0&&(
-            <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todos los clientes de Drive ya están en la app ✓</div>
+            <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todos los clientes de Drive ya están en la app</div>
           )}
           <div style={{display:'flex',gap:8,marginTop:8,position:'sticky',bottom:0,background:C.bg,paddingBottom:8}}>
             <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -5171,7 +5171,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
             }
             results.unmatched = results.unmatched||[]
             results.unmatched.push({id:parsed.folio,folio:parsed.folio,rut:parsed.rut,cliente:parsed.cliente,amount:parsed.total,issued_at:parsed.issued_at,concepto:parsed.concepto})
-            addLog(`⚠ ${pdf.name} — sin cliente (${parsed.cliente||'?'})`)
+            addLog(`Aviso: ${pdf.name} — sin cliente (${parsed.cliente||'?'})`)
           } else {
             // Con cliente: guardar con client_id y aprendizaje
             try{
@@ -5348,7 +5348,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
         const parsed = parseInvoice(raw)
         // Verificar duplicado en DB directamente (más confiable que el estado en memoria)
         const {data:existing} = await supabase.from('billing').select('id').eq('invoice_no',parsed.folio).maybeSingle()
-        if(existing){ results.skipped++; addLog(`⏭ ${file.name} — ya existe (N° ${parsed.folio})`); setProgress(p=>({...p,done:p.done+1})); continue }
+        if(existing){ results.skipped++; addLog(`Omitido: ${file.name} — ya existe (N° ${parsed.folio})`); setProgress(p=>({...p,done:p.done+1})); continue }
 
         // Match por RUT: primero en client_entities (aprendizaje previo), luego en clients.rut, luego por nombre
         let matchedClient = null
@@ -5377,9 +5377,9 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
             if(matchedClient) await reconcileProgramada(matchedClient.id, parsed.total, parsed.issued_at)
             results.imported++
             if(matchedClient){
-              addLog(`✓ ${file.name} — ${matchedClient.name}${parsed.concepto?' · '+parsed.concepto:''} · ${fmt(parsed.total)}`)
+              addLog(`${file.name} — ${matchedClient.name}${parsed.concepto?' · '+parsed.concepto:''} · ${fmt(parsed.total)}`)
             } else {
-              addLog(`⚠ ${file.name} — ${parsed.cliente||'sin cliente'} · ${fmt(parsed.total)}`)
+              addLog(`Aviso: ${file.name} — ${parsed.cliente||'sin cliente'} · ${fmt(parsed.total)}`)
               if(parsed.folio) pendingReview.push({
                 id: parsed.folio,
                 folio: parsed.folio,
@@ -5391,19 +5391,19 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
                 fileName: file.name
               })
             }
-          } catch(e){ addLog(`✗ ${file.name} — ${e.message}`) }
+          } catch(e){ addLog(`Error: ${file.name} — ${e.message}`) }
         } else {
-          addLog(`⚠ ${file.name} — no se pudo leer (folio: ${parsed.folio||'?'}, monto: ${parsed.total||'?'})`)
+          addLog(`Aviso: ${file.name} — no se pudo leer (folio: ${parsed.folio||'?'}, monto: ${parsed.total||'?'})`)
         }
       } catch(e){
         results.errors++
-        addLog(`✗ ${file.name} — ${e.message}`)
+        addLog(`Error: ${file.name} — ${e.message}`)
       }
       setProgress(p=>({...p,done:p.done+1}))
     }
 
     addLog('─────────────────────────')
-    addLog(`✅ ${results.imported} importadas · ⏭ ${results.skipped} ya existían · ❌ ${results.errors} errores`)
+    addLog(`${results.imported} importadas · ${results.skipped} ya existían · ${results.errors} errores`)
 
     if(pendingReview.length>0){
       setUnmatched(pendingReview)
@@ -6001,7 +6001,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
               {proyectosCliente.map(p=><option key={p} value={p}>{p}</option>)}
             </select>
             {(filterProject||filterClient)&&
-              <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>✕</button>
+              <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>×</button>
             }
           </div>
         </div>
@@ -6616,7 +6616,7 @@ export default function App() {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 4px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <button onClick={signOut} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',fontWeight:500}}>{user?.name} · Salir</button>
           <div style={{display:'flex',gap:6}}>
-            {userRole==='admin'&&<button onClick={()=>setModal({type:'users'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>👥</button>}
+            {userRole==='admin'&&<button onClick={()=>setModal({type:'users'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Usuarios</button>}
             {userRole==='admin'&&<button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>}
             {actualRole==='admin'&&userRole==='admin'&&<button onClick={()=>{setUserRole('limited');setTab('tasks')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F4F6F7',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Vista Team</button>}
             {actualRole==='admin'&&userRole==='limited'&&<button onClick={()=>{setUserRole('admin');setTab('dashboard')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>← Vista Admin</button>}
