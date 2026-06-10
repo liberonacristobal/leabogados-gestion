@@ -2944,7 +2944,6 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
               <button onClick={()=>setRendicionClient(selectedClient)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>
             )}
             {!selectedClient&&<button onClick={onBulk} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Carga masiva</button>}
-            <button onClick={()=>setShowHistorial(true)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>☰ Rendiciones</button>
             <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
             <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
           </div>
@@ -3014,6 +3013,10 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
               </div>
             )
           })}
+          <div onClick={()=>setShowHistorial(true)} style={{marginTop:10,paddingTop:14,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
+            <span style={{fontSize:13,fontWeight:600,color:C.accent}}>📋 Historial de rendiciones</span>
+            <span style={{fontSize:15,color:C.accent}}>→</span>
+          </div>
         </div>
       )}
 
