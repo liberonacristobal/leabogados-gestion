@@ -1,6 +1,11 @@
 # Changelog
 
 ## 2026-06-10
+- GastosForm: campo "Proyecto (opcional)" con autocomplete de los proyectos del cliente seleccionado (tareas + ventas, igual que tareas); se guarda en `expenses.project` (nueva columna) y se muestra como chip en la lista de gastos.
+- Rendición al cliente desde Gastos para limited: la rendición ahora se atribuye al usuario logueado (antes `user_name:'admin'` hardcodeado); `ExpensesView` pasa `currentUserName` a `RendicionModal`.
+- Ficha de cliente (vista limited): nueva sección "Rendiciones realizadas" en solo lectura, con fecha/período/total y detalle de gastos expandible (sin Anular).
+
+## 2026-06-10
 - UF en vivo unificada (#15): helper único `fetchUF()` + hook `useUF()` con caché diario en localStorage; reemplaza los 3 fetch duplicados (Dashboard, SalesView, reporte) — la API de mindicador.cl se toca máx. 1 vez al día. Fallback seguro: si la API falla usa el último valor cacheado (aunque sea de días previos) en vez de 40000 silencioso. Señal visible `UFStamp` junto a las cifras que dependen de UF (Dashboard tarjeta Meta, SalesView totales): gris "UF al DD/MM · $valor" si es de hoy, naranja con ⚠ "no actualizada" / "UF no disponible" si no. El `uf_value` manual por venta se mantiene para montos históricos.
 
 ## 2026-06-10

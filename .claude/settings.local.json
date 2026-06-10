@@ -15,7 +15,16 @@
       "Bash(git add *)",
       "Bash(git commit -m 'feat: KPIs de caja chica en pestaña Tareas \\(vista limited\\) *)",
       "Bash(git push *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(sed -n '1,12p')",
+      "Bash(sed -n '2620,2665p' src/App.jsx)",
+      "Bash(awk 'NR>=3273 && NR<=3470 && /rendicion|Rendicion|rendiciones/{print NR\": \"$0}' src/App.jsx)",
+      "Bash(awk 'NR>=111 && NR<=260 && /rendicion|Rendicion|RendicionModal|onRendicion/{print NR\": \"$0}' src/App.jsx)",
+      "Bash(sed -n '2330,2352p' src/App.jsx)",
+      "Bash(sed -n '111,118p' src/App.jsx)",
+      "Bash(awk 'NR>=111 && NR<=256 && /ClientFicha|selectedClient|setSel|ficha|Historial|tasks\\\\.|expenses\\\\./{print NR\": \"$0}' src/App.jsx)",
+      "Bash(awk *)",
+      "Bash(git commit -m 'feat: proyecto en gastos + rendir limited + rendiciones en ficha limited *)"
     ]
   }
 }

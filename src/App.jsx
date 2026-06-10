@@ -108,10 +108,11 @@ const TABS_LIMITED = [
 
 
 // ─── CLIENTS VIEW LIMITED ──────────────────────────────────────────────────
-function ClientsViewLimited({clients,expenses,tasks,clientEntities,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo}) {
+function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const [confirmEdit,setConfirmEdit] = useState(null)
+  const [openRend,setOpenRend] = useState(null)
 
   const filtered = clients.filter(c=>
     !q.trim() || c.name.toLowerCase().includes(q.toLowerCase())
@@ -205,6 +206,49 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,onEdit,onAdd,
               )
             })}
           </div>
+
+          {(()=>{
+            const rends=(rendiciones||[]).filter(r=>r.client_id===cl.id&&r.tipo==='cliente').sort((a,b)=>b.created_at>a.created_at?1:-1)
+            if(!rends.length) return null
+            return (
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D',marginBottom:8}}>Rendiciones realizadas</div>
+                {rends.map(r=>{
+                  const isOpen=openRend===r.id
+                  const det=expenses.filter(e=>e.client_render_id===r.id).sort((a,b)=>b.date>a.date?1:-1)
+                  return (
+                    <div key={r.id} style={{borderBottom:'1px solid #E8E8E8'}}>
+                      <div onClick={()=>setOpenRend(isOpen?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',cursor:'pointer'}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:12,fontWeight:600,color:'#3D3D3D'}}>{r.periodo}</div>
+                          <div style={{fontSize:10,color:'#888'}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                          <div style={{fontSize:12,fontWeight:700,color:'#E24B4A'}}>-${(r.total||0).toLocaleString('es-CL')}</div>
+                          <span style={{fontSize:11,color:'#888',transform:isOpen?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
+                        </div>
+                      </div>
+                      {isOpen&&(
+                        <div style={{padding:'2px 0 10px 4px'}}>
+                          {det.length===0&&<div style={{fontSize:11,color:'#888',padding:'4px 0'}}>Sin detalle disponible</div>}
+                          {det.map(e=>(
+                            <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #F0F0F0'}}>
+                              <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
+                                {e.category&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:CATS[e.category]||CATS['Otro'],color:'#56616B',fontWeight:600,flexShrink:0}}>{e.category}</span>}
+                                <span style={{fontSize:12,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
+                              </div>
+                              <div style={{fontSize:11,color:'#888',flexShrink:0,marginLeft:8}}>{e.date}</div>
+                              <div style={{fontSize:12,fontWeight:600,color:'#E24B4A',flexShrink:0,marginLeft:8}}>-${(e.amount||0).toLocaleString('es-CL')}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           <div style={{marginBottom:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -2239,7 +2283,7 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, expenses, clientEntities, onClose, onRendicionComplete, setExpenses}) {
+function RendicionModal({client, expenses, clientEntities, onClose, onRendicionComplete, setExpenses, currentUserName}) {
   const [selected, setSelected] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
@@ -2332,10 +2376,11 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
       for(const e of gastosSel) {
         await supabase.from('expenses').update({client_rendered_at:now,client_render_id:renderId}).eq('id',e.id)
       }
-      // Registrar rendicion
+      // Registrar rendicion (atribuida al usuario logueado, no hardcodeada)
+      const rendUser = currentUserName || 'admin'
       await supabase.from('rendiciones').insert({
         id: renderId,
-        user_name: 'admin',
+        user_name: rendUser,
         client_id: client.id,
         periodo: nowLabel,
         total: totalSel,
@@ -2345,7 +2390,7 @@ function RendicionModal({client, expenses, clientEntities, onClose, onRendicionC
       })
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
-      if(onRendicionComplete) onRendicionComplete({id:renderId,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente'})
+      if(onRendicionComplete) onRendicionComplete({id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente'})
       // Abrir PDF si se pide
       if(abrirPDF) { const w=window.open('','_blank'); w.document.write(generatePDFContent()); w.document.close() }
       // Mailto
@@ -2581,7 +2626,7 @@ function CargaMasivaModal({clients,onSave,onClose,onClientsUpdate}) {
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones}) {
+function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [q,setQ] = useState('')
   const [rendicionClient,setRendicionClient] = useState(null)
@@ -2745,6 +2790,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                       {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}</span>}
                       {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
                       {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>✓ Rendido</span>}
+                      {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
                     </div>
                     <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                     <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
@@ -2759,7 +2805,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
           })}
         </div>
       )}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={r=>setRendiciones(p=>[r,...p])} currentUserName={currentUserName}/></Modal>}
       {showHistorial&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'flex-end'}} onClick={e=>e.target===e.currentTarget&&setShowHistorial(false)}>
           <div style={{background:'#fff',borderRadius:'16px 16px 0 0',padding:20,width:'100%',maxHeight:'70vh',overflowY:'auto',boxSizing:'border-box'}}>
@@ -2862,7 +2908,7 @@ function FondoForm({clients,expenses,clientEntities,onSave,onClose,saving,preCli
 
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
 const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Otro']
-function GastosForm({clients,expenses,clientEntities,onSave,onClose,preClient}) {
+function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const hoy = new Date().toISOString().slice(0,10)
@@ -2872,6 +2918,15 @@ function GastosForm({clients,expenses,clientEntities,onSave,onClose,preClient}) 
   const rsList = useMemo(()=>{ if(!selectedClient) return []; return (clientEntities||[]).filter(e=>e.client_id===selectedClient.id) },[clientEntities,selectedClient])
   const [entityId,setEntityId] = useState('')
   useEffect(()=>{ setEntityId(rsList.length===1?rsList[0].id:'') },[rsList])
+  // Proyecto del lote (autocomplete con los proyectos del cliente: tareas + ventas, igual que QuickTaskForm)
+  const [project,setProject] = useState('')
+  const [showProjects,setShowProjects] = useState(false)
+  const clientProjects = useMemo(()=>{
+    if(!selectedClient) return []
+    const fromTasks = (tasks||[]).filter(t=>t.client_id===selectedClient.id&&t.project).map(t=>t.project)
+    const fromSales = (sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title).map(s=>s.title)
+    return [...new Set([...fromSales,...fromTasks])].sort()
+  },[tasks,sales,selectedClient])
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
   const balance = selectedClient ? (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===selectedClient.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })() : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
@@ -2894,7 +2949,7 @@ function GastosForm({clients,expenses,clientEntities,onSave,onClose,preClient}) 
     let count=0
     for(const r of valid) {
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null})
+        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null})
         count++
       } catch(e){ console.error(e) }
     }
@@ -2945,6 +3000,21 @@ function GastosForm({clients,expenses,clientEntities,onSave,onClose,preClient}) 
               </Fld>
             </div>
           )}
+
+          <div style={{marginBottom:10}}>
+            <Fld label='Proyecto (opcional)'>
+              <div style={{position:'relative'}}>
+                <Inp value={project} onChange={e=>setProject(e.target.value)} onFocus={()=>setShowProjects(true)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} placeholder={clientProjects.length>0?'Selecciona o escribe un proyecto...':'Escribe el nombre del proyecto...'}/>
+                {showProjects&&clientProjects.length>0&&(
+                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
+                    {clientProjects.filter(p=>!project||p.toLowerCase().includes(project.toLowerCase())).map((p,i)=>(
+                      <div key={i} onMouseDown={()=>setProject(p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Fld>
+          </div>
 
           {/* Tabla de filas */}
           <div style={{marginBottom:8}}>
@@ -5551,9 +5621,9 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} clients={clients||[]} currentUserName={user?.name} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones}/>}
           </div>
         )}
@@ -5561,7 +5631,7 @@ export default function App() {
 
         {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
-        {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='gastos'&&<Modal title='Registrar gastos' onClose={()=>setModal(null)}><GastosForm clients={clients} expenses={expenses} clientEntities={clientEntities} tasks={tasks} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} preClient={modal.data||null}/></Modal>}
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
