@@ -136,8 +136,8 @@ const Txt = (p) => <textarea {...p} rows={2} style={{width:'100%',padding:'10px 
 const Lbl = ({children}) => <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.7,marginBottom:5}}>{children}</div>
 const Fld = ({label,children}) => <div style={{marginBottom:14}}><Lbl>{label}</Lbl>{children}</div>
 const Spin = () => <div style={{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
-const Switch = ({on,onToggle}) => (
-  <button type='button' onClick={onToggle} style={{width:34,height:20,borderRadius:10,border:'none',background:on?'#1D9E75':'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0,transition:'background .15s'}}>
+const Switch = ({on,onToggle,disabled}) => (
+  <button type='button' disabled={disabled} onClick={disabled?undefined:onToggle} style={{width:34,height:20,borderRadius:10,border:'none',background:on?'#1D9E75':'#CBD5DB',position:'relative',cursor:disabled?'not-allowed':'pointer',padding:0,flexShrink:0,transition:'background .15s',opacity:disabled?.7:1}}>
     <span style={{position:'absolute',top:2,left:on?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
   </button>
 )
@@ -3404,7 +3404,7 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
     setGuardando(true); let n=0; const fail=[]
     for(const r of listas){
       try{
-        await onSave({client_id:r.client_id,entity_id:r.entity_id||null,type:tipo,amount:r.monto,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null})
+        await onSave({client_id:r.client_id,entity_id:r.entity_id||null,type:tipo,amount:r.monto,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null,paid_by_client:tipo!=='fondo'&&r.categoria==='Notaria'})
         n++
       }catch(e){ fail.push({concepto:r.concepto||'(sin concepto)', cliente:r.clientName||'—', monto:r.monto, msg:e.message||'Error al insertar'}) }
     }
@@ -4030,7 +4030,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     let count=0
     for(const r of valid) {
       try {
-        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:!!r.paid_by_client})
+        await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:r.category==='Notaria'?true:!!r.paid_by_client})
         count++
       } catch(e){ console.error(e) }
     }
@@ -4121,9 +4121,9 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
                     {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
                   <input type='date' value={row.date||hoy} onChange={e=>updateRow(row.id,'date',e.target.value)} style={{...inS,fontSize:11,flex:'0 0 130px',width:'auto'}}/>
-                  <label style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto',cursor:'pointer',flexShrink:0}}>
+                  <label title={row.category==='Notaria'?'Notaría siempre se rinde al cliente y no descuenta tu caja chica':undefined} style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto',cursor:row.category==='Notaria'?'default':'pointer',flexShrink:0}}>
                     <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>Pago Cliente</span>
-                    <Switch on={!!row.paid_by_client} onToggle={()=>updateRow(row.id,'paid_by_client',!row.paid_by_client)}/>
+                    <Switch on={row.category==='Notaria'||!!row.paid_by_client} disabled={row.category==='Notaria'} onToggle={()=>updateRow(row.id,'paid_by_client',!row.paid_by_client)}/>
                   </label>
                   <button onClick={()=>removeRow(row.id)} title='Eliminar fila' style={{background:'none',border:'none',cursor:'pointer',padding:4,flexShrink:0,display:'flex',alignItems:'center'}}><TrashIcon/></button>
                 </div>

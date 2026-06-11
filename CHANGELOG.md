@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Categoría Notaría = pago cliente automático: al guardar un gasto con categoría Notaría se setea `paid_by_client=true` siempre, en el formulario manual (GastosForm) y en la carga masiva por Excel (CargaMasivaModal). Así Notaría se rinde al cliente pero nunca descuenta la caja chica del usuario (`saldoCajaChica` ya excluía `paid_by_client`). En el formulario, al elegir Notaría el switch "Pago Cliente" se enciende y se bloquea con un hint explicativo. Se agregó soporte `disabled` al componente `Switch` (retrocompatible).
+
+## 2026-06-10
 - Ficha de cliente, KPI "Vendido UF": ahora usa el helper único `ventaUF()` (recurrentes ×12 + ventas en CLP convertidas a UF con el valor del día), igual que el Dashboard y la vista Ventas. Antes hacía una suma cruda de `amount_uf` que no anualizaba los recurrentes ni contaba las ventas en CLP, por lo que el "Vendido" de la ficha quedaba por debajo de lo que el Dashboard contaba para ese cliente. Se sumó `useUF()` a `ClientFicha`. Nota: el par Dashboard↔vista Ventas ya estaba unificado; el PDF del Dashboard (sección Ventas) NO se tocó porque está filtrado por período y ahí el ×12 sería incorrecto.
 
 ## 2026-06-10
