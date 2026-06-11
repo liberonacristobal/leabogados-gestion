@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-11
+- Rediseño SaleForm: (1) NUEVA VENTA ahora muestra headers de sección uppercase — "Contexto", "Estado y período", "Honorarios", "Costos de terceros", "Forma de cobro" — para orientar rápido al usuario; (2) campo Honorarios unificado en una sola fila: input ancho para 8 dígitos + selector UF/CLP (ancho justo para "CLP") + valor UF del día inline auto-rellenado desde `useUF()`; (3) VENTA GUARDADA reemplaza los campos de honorarios/costos/cobro/notas por bloque "CONDICIONES REGISTRADAS" con 4 filas colapsadas que muestran los valores actuales — la fila Notas es expandible con click para editar directo; el panel "Modificar cobro" permanece para cambios con historial.
+
+## 2026-06-11
 - Fix "modificar tarifa/propuesta" (recálculo de programadas): antes `handleSaveTariff` le ponía el honorario completo a TODAS las facturas programadas, ignorando la forma de pago — solo era correcto para "mensual recurrente"; en cuotas iguales inflaba el total ×N, en porcentaje ignoraba los %, en personalizada perdía los montos. Además, en ventas UF sin Valor UF el recálculo se saltaba (no en CLP). Ahora se ESCALA cada cuota programada por la razón (nuevo honorario / honorario anterior): respeta la distribución de cuotas / % / personalizada / mensual, y queda igual en UF y CLP (la razón no tiene unidades, ya no requiere Valor UF). El honorario anterior se toma de la última tarifa registrada o, si no hay, del monto base de la venta; si no se puede determinar, avisa y no toca las programadas.
 
 ## 2026-06-11
