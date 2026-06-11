@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Ficha de cliente, KPI "Vendido UF": ahora usa el helper único `ventaUF()` (recurrentes ×12 + ventas en CLP convertidas a UF con el valor del día), igual que el Dashboard y la vista Ventas. Antes hacía una suma cruda de `amount_uf` que no anualizaba los recurrentes ni contaba las ventas en CLP, por lo que el "Vendido" de la ficha quedaba por debajo de lo que el Dashboard contaba para ese cliente. Se sumó `useUF()` a `ClientFicha`. Nota: el par Dashboard↔vista Ventas ya estaba unificado; el PDF del Dashboard (sección Ventas) NO se tocó porque está filtrado por período y ahí el ×12 sería incorrecto.
+
+## 2026-06-10
 - Fix timezone en `fmtD` (CajaChicaView, lista de liquidados): parseaba `e.date` (`YYYY-MM-DD`) con `new Date(iso)`, que se interpreta como medianoche UTC y en Chile (UTC-4) mostraba el día anterior. Ahora usa `new Date(iso+'T12:00')`, igual que `fmtDate` y `fmtFecha`. El resto de los displays de fecha ya estaban correctos (timestamps completos, `new Date()` actual o `T12:00`/`T00:00:00`).
 
 ## 2026-06-10
