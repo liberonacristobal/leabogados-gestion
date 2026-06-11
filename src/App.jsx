@@ -219,7 +219,7 @@ function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
   )
 }
 
-function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onSaveFields}) {
+function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onSaveFields,onImportDrive}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const [confirmEdit,setConfirmEdit] = useState(null)
@@ -260,7 +260,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
     const saldo = fondos - gastos
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
-    const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+    const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
     return (
       <div style={{paddingBottom:100}}>
@@ -414,7 +414,10 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F7F8F9',zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
-          <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:'#003C50',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid #003C50`,background:'transparent',color:'#003C50',fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Drive</button>
+            <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:'#003C50',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
+          </div>
         </div>
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',marginBottom:8}}/>
         <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN} prospectoN={prospectoN}/>
@@ -550,7 +553,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const totalSel = pendientes.filter(e=>selected.has(e.id)).reduce((a,e)=>a+e.amount,0)
 
   const fmtCLP = fmtN
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
   // Auto-cierre del mensaje de confirmación post-liquidación
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),7000); return ()=>clearTimeout(t) } },[toast])
@@ -727,7 +730,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             <div>
               <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Tipo de gasto</div>
               <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                {['','Notaria','CBR','Diario Oficial','Otro'].map(cat=>(
+                {['','Notaria','CBR','Diario Oficial','Registro Civil','Otro'].map(cat=>(
                   <button key={cat||'todos'} onClick={()=>setFCat(cat)}
                     style={{padding:'3px 9px',borderRadius:10,fontSize:10,fontWeight:500,cursor:'pointer',
                       border:'0.5px solid '+(fCat===cat?'#003C50':'#D0D5DB'),
@@ -847,7 +850,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                   {gastosR.length===0&&<div style={{fontSize:12,color:'#888',textAlign:'center',padding:'8px 0'}}>Sin detalle disponible</div>}
                   {gastosR.map(e=>{
                     const cl=clients.find(x=>x.id===e.client_id)
-                    const catBg={'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Otro':'#ECECEC'}[e.category]||'#ECECEC'
+                    const catBg={'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Otro':'#ECECEC'}[e.category]||'#ECECEC'
                     return (
                       <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid #F4F4F4'}}>
                         <div style={{flex:1,minWidth:0}}>
@@ -3713,7 +3716,7 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
 
   const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
   // Categorías válidas del sistema (mismas que GastosForm). No se crean nuevas desde el Excel.
-  const CAT_OPCIONES = ['Notaria','CBR','Diario Oficial','Otro']
+  const CAT_OPCIONES = ['Notaria','CBR','Diario Oficial','Registro Civil','Otro']
   const catNorm = s => (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
   const canonCat = raw => CAT_OPCIONES.find(c=>catNorm(c)===catNorm(raw)) || 'Otro'
   // Razones sociales (entidades) del cliente
@@ -3794,7 +3797,7 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
         ['',false],
         ['Razón social: si el cliente tiene una sola razón social, se asigna automáticamente. Si tiene más de una, deberás elegirla en la vista previa antes de cargar (la fila queda en AMARILLO hasta que la elijas).',false],
         ['',false],
-        ['Categoría: solo se pueden usar las categorías del sistema (Notaria, CBR, Diario Oficial, Otro). No se pueden crear categorías nuevas desde el Excel; si no encaja ninguna, usa "Otro" y detalla en Concepto.',false],
+        ['Categoría: solo se pueden usar las categorías del sistema (Notaria, CBR, Diario Oficial, Registro Civil, Otro). No se pueden crear categorías nuevas desde el Excel; si no encaja ninguna, usa "Otro" y detalla en Concepto.',false],
         ['',false],
         ['Monto: número mayor a 0, sin decimales. Las filas con monto menor o igual a 0 (incluidos negativos) se marcan como ERROR (rojo) y NO se cargan.',false],
         ['',false],
@@ -4065,7 +4068,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
     return expenses.filter(e=>e.client_id===selectedClient.id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
   },[expenses,selectedClient])
 
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
@@ -4469,7 +4472,7 @@ function FondoForm({clients,expenses,clientEntities,onSave,onClose,saving,preCli
 }
 
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
-const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Otro']
+const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Otro']
 function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
@@ -5250,7 +5253,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const taskGroups = {}
   clientTasks.forEach(t=>{ const k=t.project||'__none__'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
 
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
   return (
     <div style={{paddingBottom:100}}>
@@ -7226,7 +7229,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           }).slice(0,3)
           const fmtCLP = fmtN
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
-          const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+          const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
           const GREEN={num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:'#E08A2B',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C2761F'}
           const RED={num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5',label:C.muted}
@@ -7818,7 +7821,7 @@ export default function App() {
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields}/>}
           </div>
         )}
