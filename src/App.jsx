@@ -2023,14 +2023,14 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
                 <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
                 <Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/>
                 {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C06A00':C.muted}}>{diasPendiente}d pendiente</span>}
+                {isPropuesta&&(
+                  <span onClick={e=>{e.stopPropagation();onRechazar(s)}} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FDEAEA',color:C.overdue,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Rechazar</span>
+                )}
+                {isPropuesta&&(
+                  <span onClick={e=>{e.stopPropagation();onActivar(s)}} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#DCF5EC',color:'#0F6E56',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
+                )}
               </div>
               {s.notes&&<div style={{fontSize:11,color:C.muted,marginTop:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.notes}</div>}
-              {isPropuesta&&(
-                <div style={{display:'flex',gap:8,marginTop:10}} onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>onRechazar(s)} style={{flex:1,padding:'6px 0',borderRadius:20,border:'none',background:'#FDEAEA',color:C.overdue,fontSize:12,fontWeight:700,cursor:'pointer'}}>Rechazar</button>
-                  <button onClick={()=>onActivar(s)} style={{flex:2,padding:'6px 0',borderRadius:20,border:'none',background:'#E0F5ED',color:'#0F6E56',fontSize:12,fontWeight:700,cursor:'pointer'}}>Activar</button>
-                </div>
-              )}
             </div>
           )
         })}
