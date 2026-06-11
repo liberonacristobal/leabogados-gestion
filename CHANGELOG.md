@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Proyección flujo de caja: los puntos del gráfico ahora son interactivos. Al pasar por encima (desktop) o tocar (mobile) un punto se muestra un tooltip con el monto total de ese mes; el punto se agranda y el mes queda resaltado. Área de toque ampliada para mobile.
+
+## 2026-06-10
 - Deuda técnica (#4): se eliminó el azul `#185FA5` (fuera de paleta) y se reemplazó por el azul corporativo `#003C50` en todos sus usos: badge "Notaría" (texto sobre fondo #E6F1FB), checkboxes seleccionados (borde/fondo) en caja chica y ficha de cliente, color del usuario Cristóbal y botón de adjunto. Solo cambia el tono de azul; layout y contraste se mantienen.
 
 ## 2026-06-10
