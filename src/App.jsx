@@ -1939,7 +1939,11 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
             <button onClick={onAddPropuesta} style={{padding:'6px 14px',borderRadius:20,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva propuesta</button>
           </div>
         </div>
-        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:6,marginBottom:8,marginTop:10,flexWrap:'wrap'}}>
+          <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
+            <option value=''>Todos</option>
+            {['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado'].map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
           <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{flex:1,minWidth:70,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
             <option value=''>Todos</option>
             {years.map(y=><option key={y} value={y}>{y}</option>)}
@@ -1947,10 +1951,6 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
           <select value={fArea} onChange={e=>setFArea(e.target.value)} style={{flex:1,minWidth:100,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
             <option value=''>Todas las areas</option>
             {['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
-            <option value=''>Todos</option>
-            {['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado'].map(s=><option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         {fStatus==='Propuesta'?(
@@ -2027,12 +2027,14 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
                       <span onClick={()=>onActivar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#DCF5EC',color:'#0F6E56',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
                     </div>
                   )}
+                  <div style={{display:'flex',justifyContent:'flex-end',marginTop:3}}>
+                    <Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/>
+                  </div>
                 </div>
               </div>
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                 <AreaChip area={s.area}/>
                 <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
-                <Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/>
                 {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C06A00':C.muted}}>{diasPendiente}d pendiente</span>}
               </div>
             </div>
