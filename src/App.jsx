@@ -1553,7 +1553,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const top5 = [...porCobrar].sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,5)
 
   const byArea = {}
-  salesYr.forEach(s=>{ byArea[s.area]=(byArea[s.area]||0)+(parseFloat(s.amount_uf)||0) })
+  salesYr.forEach(s=>{ byArea[s.area]=(byArea[s.area]||0)+ufDeVenta(s) })
   const topAreas = Object.entries(byArea).sort((a,b)=>b[1]-a[1]).slice(0,3)
 
   const balances = {}
