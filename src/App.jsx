@@ -1272,7 +1272,7 @@ function VentasPorMes({sales,ufHoy}) {
   const data = useMemo(()=>{
     const arr = Array.from({length:12},(_,i)=>({mes:MESES[i], uf:0, clp:0}))
     const ufConv = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
-    sales.filter(s=>s.year===yr&&s.status!=='Borrador').forEach(s=>{
+    sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada').forEach(s=>{
       const esRec = s.cobro_type==='mensual' && s.status==='Activo'
       // Monto mensual de esta venta en UF y CLP
       const uf = s.moneda==='CLP'
@@ -1586,7 +1586,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
 function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,onEditTask,onCompleteTask,onPreviewTask}) {
   const yr = currentYear
   const bb = billing
-  const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador')
+  const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
   const ufState = useUF()
   const ufHoy = ufState.uf
 
@@ -1876,7 +1876,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
 
 
 // ─── SALES VIEW ───────────────────────────────────────────────────────────────
-function SalesView({sales,clients,onEdit,onAdd}) {
+function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActivar}) {
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
   const [fStatus,setFStatus] = useState('Activo')
@@ -1894,12 +1894,45 @@ function SalesView({sales,clients,onEdit,onAdd}) {
   const totalCLP = Math.round(filtered.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
   const years = [...new Set(sales.map(s=>s.year).filter(Boolean))].sort((a,b)=>b-a)
   if(!years.includes(currentYear)) years.unshift(currentYear)
+
+  // Pipeline KPIs (solo cuando fStatus === 'Propuesta')
+  const propuestasFiltradas = useMemo(()=>{
+    let r = sales.filter(s=>s.status==='Propuesta')
+    if(fYear) r = r.filter(s=>String(s.year)===fYear)
+    if(fArea) r = r.filter(s=>s.area===fArea)
+    return r
+  },[sales,fYear,fArea])
+  const rechazadasFiltradas = useMemo(()=>{
+    let r = sales.filter(s=>s.status==='Rechazada')
+    if(fYear) r = r.filter(s=>String(s.year)===fYear)
+    if(fArea) r = r.filter(s=>s.area===fArea)
+    return r
+  },[sales,fYear,fArea])
+  const activadasFiltradas = useMemo(()=>{
+    let r = sales.filter(s=>s.activated_at)
+    if(fYear) r = r.filter(s=>String(s.year)===fYear)
+    if(fArea) r = r.filter(s=>s.area===fArea)
+    return r
+  },[sales,fYear,fArea])
+  const pipelineUF = propuestasFiltradas.reduce((a,s)=>a+ventaUF(s,ufRef),0)
+  const totalCerradas = activadasFiltradas.length + rechazadasFiltradas.length
+  const conversionPct = totalCerradas>0 ? (activadasFiltradas.length/totalCerradas*100) : 0
+  const conDesc = activadasFiltradas.filter(s=>s.proposal_amount_uf&&s.amount_uf&&parseFloat(s.proposal_amount_uf)>parseFloat(s.amount_uf))
+  const descuentoProm = conDesc.length>0 ? conDesc.reduce((a,s)=>a+(parseFloat(s.proposal_amount_uf)-parseFloat(s.amount_uf))/parseFloat(s.proposal_amount_uf),0)/conDesc.length*100 : 0
+  const valorRechazadoUF = rechazadasFiltradas.reduce((a,s)=>a+(parseFloat(s.proposal_amount_uf||s.amount_uf)||0),0)
+
+  const statusPillBg = st => st==='Activo'?C.accent:st==='Propuesta'?'#537281':st==='Borrador'?'#E8CC6A':st==='Rechazada'?C.overdue:st==='Terminado'?C.done:'#C77F18'
+  const statusPillColor = st => st==='Borrador'?'#4A3800':undefined
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
-          <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nueva</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:20,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva venta</button>
+            <button onClick={onAddPropuesta} style={{padding:'6px 14px',borderRadius:20,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva propuesta</button>
+          </div>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
           <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{flex:1,minWidth:70,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
@@ -1912,23 +1945,53 @@ function SalesView({sales,clients,onEdit,onAdd}) {
           </select>
           <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
             <option value=''>Todos</option>
-            {['Activo','Terminado','Pausado','Borrador'].map(s=><option key={s} value={s}>{s}</option>)}
+            {['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado'].map(s=><option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        {filtered.length>0&&(
-          <>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:4}}>
-            <div style={{background:'#E3EEF3',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL UF</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(totalUF)}</div>
+        {fStatus==='Propuesta'?(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:4}}>
+            <div style={{background:'#E3EEF3',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Pipeline</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(pipelineUF)}</div>
             </div>
-            <div style={{background:'#EEF3E3',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL CLP</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(totalCLP)}</div>
+            <div style={{background:'#F7F7F7',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Pendientes</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{propuestasFiltradas.length}</div>
+            </div>
+            <div style={{background:'#F7F7F7',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Conversion</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{totalCerradas>0?conversionPct.toFixed(0)+'%':'—'}</div>
+              {totalCerradas>0&&<div style={{fontSize:9,color:C.muted}}>{activadasFiltradas.length} act. / {totalCerradas} cerr.</div>}
+            </div>
+            <div style={{background:'#F7F7F7',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Desc. prom.</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{conDesc.length>0?descuentoProm.toFixed(1)+'%':'—'}</div>
+            </div>
+            <div style={{background:'#FEF0F0',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Rechazadas</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{rechazadasFiltradas.length}</div>
+            </div>
+            <div style={{background:'#FEF0F0',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Val. rechazado</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmtUF(valorRechazadoUF)}</div>
             </div>
           </div>
-          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:4}}><UFStamp {...ufState}/></div>
-          </>
+        ):(
+          filtered.length>0&&(
+            <>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:4}}>
+              <div style={{background:'#E3EEF3',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL UF</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(totalUF)}</div>
+              </div>
+              <div style={{background:'#EEF3E3',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL CLP</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(totalCLP)}</div>
+              </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:4}}><UFStamp {...ufState}/></div>
+            </>
+          )
         )}
       </div>
       <div style={{padding:'4px 20px 100px'}}>
@@ -1936,10 +1999,15 @@ function SalesView({sales,clients,onEdit,onAdd}) {
         {filtered.map(s=>{
           const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
           const client=clients.find(c=>c.id===s.client_id)
+          const isPropuesta = s.status==='Propuesta'
+          const diasPendiente = s.created_at ? Math.floor((Date.now()-new Date(s.created_at))/86400000) : 0
+          const tardio = isPropuesta && diasPendiente>14
           return (
-            <div key={s.id} onClick={()=>onEdit(s)} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`,cursor:'pointer'}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+            <div key={s.id}
+              onClick={isPropuesta?undefined:()=>onEdit(s)}
+              style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?'#E8A640':C.border}`,borderLeft:tardio?`4px solid #E8A640`:undefined,cursor:isPropuesta?'default':'pointer'}}
+              onMouseEnter={e=>{if(!isPropuesta)e.currentTarget.style.borderColor=C.accent}}
+              onMouseLeave={e=>{if(!isPropuesta)e.currentTarget.style.borderColor=tardio?'#E8A640':C.border}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:5}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
@@ -1953,9 +2021,16 @@ function SalesView({sales,clients,onEdit,onAdd}) {
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                 <AreaChip area={s.area}/>
                 <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
-                <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Borrador'?'#E8CC6A':s.status==='Terminado'?C.done:'#C77F18'} color={s.status==='Borrador'?'#4A3800':undefined} small/>
+                <Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/>
+                {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C06A00':C.muted}}>{diasPendiente}d pendiente</span>}
               </div>
               {s.notes&&<div style={{fontSize:11,color:C.muted,marginTop:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.notes}</div>}
+              {isPropuesta&&(
+                <div style={{display:'flex',gap:8,marginTop:10}} onClick={e=>e.stopPropagation()}>
+                  <button onClick={()=>onRechazar(s)} style={{flex:1,padding:'6px 0',borderRadius:20,border:'none',background:'#FDEAEA',color:C.overdue,fontSize:12,fontWeight:700,cursor:'pointer'}}>Rechazar</button>
+                  <button onClick={()=>onActivar(s)} style={{flex:2,padding:'6px 0',borderRadius:20,border:'none',background:'#E0F5ED',color:'#0F6E56',fontSize:12,fontWeight:700,cursor:'pointer'}}>Activar</button>
+                </div>
+              )}
             </div>
           )
         })}
@@ -1997,7 +2072,11 @@ function MiniClientForm({onSave,onCancel}) {
 function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
-  const [f,setF] = useState(sale ? {...sale, area: sale.area||'Corporativo'} : {client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas',entity_id:''})
+  // Si estamos activando una propuesta, guardar el honorario original antes de que el usuario lo edite
+  const _activandoPropuesta = !!(sale?._activandoPropuesta)
+  const _propAmountUF = sale?._propAmountUF ?? null
+  const _propAmountCLP = sale?._propAmountCLP ?? null
+  const [f,setF] = useState(sale ? {...sale, area: sale.area||'Corporativo', status: _activandoPropuesta?'Activo':sale.status} : {client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas',entity_id:''})
   const [clients,setClients] = useState(initialClients)
   const [clientQ,setClientQ] = useState('')
   const [showNewClient,setShowNewClient] = useState(false)
@@ -2199,6 +2278,12 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
     else if(costMode==='pct') {
       if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
       else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
+    }
+    if(_activandoPropuesta) {
+      saveF.proposal_amount_uf = _propAmountUF
+      saveF.proposal_amount_clp = _propAmountCLP
+      saveF.activated_at = new Date().toISOString()
+      saveF.status = 'Activo'
     }
     clearDraft()
     onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
@@ -2732,8 +2817,8 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
           Borrador
         </button>}
         <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:handleSave}
-          style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
-          {(saving||savingTariff)?<Spin/>:null}{(saving||savingTariff)?'Guardando...':(modCobro?'Confirmar y guardar':'Guardar')}
+          style={{flex:2,padding:11,borderRadius:10,border:'none',background:_activandoPropuesta?'#1D9E75':C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
+          {(saving||savingTariff)?<Spin/>:null}{(saving||savingTariff)?'Guardando...':modCobro?'Confirmar y guardar':_activandoPropuesta?'Activar propuesta':'Guardar'}
         </button>
       </div>
     </>
@@ -5146,7 +5231,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [ftab,setFtab] = useState('resumen')
   const ufState = useUF()
   const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || 40000
-  const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador')
+  const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
   const clientTasks = tasks.filter(t=>t.client_id===client.id&&t.status!=='Terminado')
@@ -5232,7 +5317,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                 <div style={{display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
                   <AreaChip area={s.area}/>
                   <span style={{fontSize:10,color:C.muted}}>{s.year}</span>
-                  <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Borrador'?'#E8CC6A':s.status==='Terminado'?C.done:'#C77F18'} color={s.status==='Borrador'?'#4A3800':undefined} small/>
+                  <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Propuesta'?'#537281':s.status==='Borrador'?'#E8CC6A':s.status==='Rechazada'?C.overdue:s.status==='Terminado'?C.done:'#C77F18'} color={s.status==='Borrador'?'#4A3800':undefined} small/>
                   {saleTasks.length>0&&<span style={{fontSize:10,color:C.muted}}>{saleTasks.length} tarea{saleTasks.length!==1?'s':''}</span>}
                 </div>
               </div>
@@ -6614,7 +6699,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
 
     // ── VENTAS
     if(sections.ventas){
-      const ss=filterByPeriod(sales.filter(s=>s.status!=='Borrador').map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})),'date')
+      const ss=filterByPeriod(sales.filter(s=>s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada').map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})),'date')
       const brutoUF=ss.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
       const costoUF=ss.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
       const netoUF=brutoUF-costoUF
@@ -7362,7 +7447,7 @@ export default function App() {
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const {cobros, cobroType, _actualizarPago, ...saleData} = f
+      const {cobros, cobroType, _actualizarPago, _activandoPropuesta, _propAmountUF, _propAmountCLP, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
       const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
@@ -7423,6 +7508,17 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
   },[clients,clientEntities])
+
+  const handleRechazarPropuesta=useCallback(async(s)=>{
+    if(!confirm(`¿Marcar como rechazada la propuesta "${s.title}"?`)) return
+    const {error}=await supabase.from('sales').update({status:'Rechazada',updated_at:new Date().toISOString()}).eq('id',s.id)
+    if(error){alert('Error: '+error.message);return}
+    setSales(p=>p.map(x=>x.id===s.id?{...x,status:'Rechazada'}:x))
+  },[])
+
+  const handleActivarPropuesta=useCallback((s)=>{
+    setModal({type:'sale',data:{...s,_activandoPropuesta:true,_propAmountUF:s.amount_uf??null,_propAmountCLP:s.amount_clp??null}})
+  },[])
 
   // Nuevo tramo de tarifa de una venta + recálculo de las programadas afectadas.
   // Se ESCALA cada cuota programada por la razón (nuevo honorario / honorario anterior). Eso respeta
@@ -7702,7 +7798,7 @@ export default function App() {
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
-            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})}/>}
+            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments}/>}
@@ -7713,7 +7809,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?'Editar venta':modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
