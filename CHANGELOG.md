@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Dashboard, Top de áreas (`byArea`): se corrige la cifra por área para que use el helper único `ventaUF()` (`ufDeVenta`) en vez de `amount_uf` crudo. Antes ignoraba el ×12 de las ventas recurrentes y las ventas en CLP, por lo que las áreas se mostraban hasta ~12x más bajas y no cuadraban con el total vendido del Dashboard. Ahora los subtotales por área reconcilian con `vendidoBrutoUF`. Sin cambios de UI.
+
+## 2026-06-10
 - Rediseño del modal "Registrar gastos" (GastosForm), igual desde la ficha de cliente y desde "+ Gastos" global:
   - Flujo: desde la ficha entra directo al formulario; desde el botón global muestra primero el buscador de cliente y luego el mismo formulario. Wrapper de modal propio (sin el header del Modal compartido).
   - Header de 2 líneas: nombre del cliente en gris (#99ABB4, 11px, uppercase) + cierre a la derecha; "Registrar gastos" en #003C50 16px bold. Sin pill del cliente.
