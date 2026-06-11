@@ -4263,13 +4263,20 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                   if(rb.porRS.length===0 && !rb.sin) return (
                     <div style={{display:'flex',gap:16,fontSize:11,color:C.muted}}><span>Fondos: {fmt(b.fondos)}</span><span>Gastos: {fmt(b.gastos)}</span></div>
                   )
+                  const totalRS=rb.porRS.length+(rb.sin?1:0)
+                  if(totalRS===1){
+                    const ent=rb.porRS[0]?rb.porRS[0].entity:null
+                    return (<div style={{marginTop:3}}>
+                      <span style={{fontSize:12,color:C.muted}}>{ent?ent.name:'Sin razón social'}{ent?.rut?` · ${ent.rut}`:''}</span>
+                    </div>)
+                  }
                   const linea=(label,saldo,it)=>(
                     <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'2px 0'}}>
                       <span style={{color:C.muted,fontStyle:it?'italic':'normal',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
                       <span style={{fontWeight:600,color:saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(saldo)}</span>
                     </div>
                   )
-                  return (<div style={{marginTop:2}}>
+                  return (<div style={{marginTop:6,paddingTop:6,borderTop:`0.5px solid ${C.border}`}}>
                     {rb.porRS.map(r=>linea(`${r.entity.name}${r.entity.rut?` · ${r.entity.rut}`:''}`, r.saldo, false))}
                     {rb.sin&&linea('Sin razón social', rb.sin.saldo, true)}
                   </div>)
