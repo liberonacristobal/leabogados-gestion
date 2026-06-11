@@ -2196,8 +2196,8 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
           />
           <div style={{width:1,background:'#EBEBEB',margin:'10px 0',flexShrink:0}}/>
           <div style={{display:'flex',alignItems:'center',padding:'0 8px',gap:4,flexShrink:0}}>
-            <button type='button' onClick={()=>up('moneda','UF')} style={{padding:'2px 6px',border:'none',background:moneda==='UF'?C.accent:'transparent',color:moneda==='UF'?'#fff':C.muted,fontSize:9,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>UF</button>
-            <button type='button' onClick={()=>up('moneda','CLP')} style={{padding:'2px 6px',border:'none',background:moneda==='CLP'?C.accent:'transparent',color:moneda==='CLP'?'#fff':C.muted,fontSize:9,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>CLP</button>
+            <button type='button' onClick={()=>up('moneda','UF')} style={{padding:'2px 6px',border:'none',background:moneda==='UF'?C.accent:'transparent',color:moneda==='UF'?'#fff':C.muted,fontSize:10,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>UF</button>
+            <button type='button' onClick={()=>up('moneda','CLP')} style={{padding:'2px 6px',border:'none',background:moneda==='CLP'?C.accent:'transparent',color:moneda==='CLP'?'#fff':C.muted,fontSize:10,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>CLP</button>
           </div>
           {moneda==='UF'&&<>
             <div style={{width:1,background:'#EBEBEB',margin:'10px 0',flexShrink:0}}/>
@@ -2229,8 +2229,8 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
               />
               <div style={{width:1,background:'#EBEBEB',margin:'10px 0',flexShrink:0}}/>
               <div style={{display:'flex',alignItems:'center',padding:'0 8px',gap:4,flexShrink:0}}>
-                <button type='button' onClick={()=>setCostMode('fijo')} style={{padding:'2px 6px',border:'none',background:costMode==='fijo'?C.accent:'transparent',color:costMode==='fijo'?'#fff':C.muted,fontSize:9,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>{moneda}</button>
-                <button type='button' onClick={()=>setCostMode('pct')} style={{padding:'2px 6px',border:'none',background:costMode==='pct'?C.accent:'transparent',color:costMode==='pct'?'#fff':C.muted,fontSize:9,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>%</button>
+                <button type='button' onClick={()=>setCostMode('fijo')} style={{padding:'2px 6px',border:'none',background:costMode==='fijo'?C.accent:'transparent',color:costMode==='fijo'?'#fff':C.muted,fontSize:10,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>{moneda}</button>
+                <button type='button' onClick={()=>setCostMode('pct')} style={{padding:'2px 6px',border:'none',background:costMode==='pct'?C.accent:'transparent',color:costMode==='pct'?'#fff':C.muted,fontSize:10,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>%</button>
               </div>
             </div>
           </div>
