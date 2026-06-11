@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Archivo automático de tareas (PASO 1): nueva columna `tasks.completed_at` (SQL aparte). Al marcar una tarea como Terminada se sella `completed_at`; al reabrirla se limpia (en `handleSaveTask` y en el toggle de la vista de tareas de cliente). Constante `DAYS_TO_ARCHIVE = 15` y helper `isTaskArchived`: una tarea Terminada hace más de 15 días (o sin `completed_at`, las históricas) se considera archivada. La sección "Terminadas" de la vista Tareas ahora muestra solo las terminadas recientes (no archivadas). No se borra nada.
+
+## 2026-06-10
 - Caja chica, Historial: botón "Anular" por liquidación (antes la liquidación del usuario era irreversible). Con confirmación, revierte los gastos de esa liquidación (`rendered_at`/`render_id`/`rendered_by` a null) devolviéndolos a la pestaña Liquidar como pendientes, y borra la fila en `rendiciones` (hard delete, mismo criterio que el anular de rendiciones de cliente ya existente). No afecta el saldo (`saldoCajaChica` resta todos los gastos por igual): solo deshace la agrupación. Actualiza el estado local sin recargar.
 
 ## 2026-06-10
