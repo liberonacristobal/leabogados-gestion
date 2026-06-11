@@ -51,7 +51,8 @@
       "Bash(python3 -c \"import PIL,sys;print\\('PIL ok'\\)\")",
       "Bash(python3 -m pip --version)",
       "Bash(python3 -m pip install --quiet --user pillow)",
-      "Bash(cp /tmp/le_logo_white.png \"/Users/cristobal.liberona/Downloads/leabogados-gestion/src/le-logo-blanco.png\" *)"
+      "Bash(cp /tmp/le_logo_white.png \"/Users/cristobal.liberona/Downloads/leabogados-gestion/src/le-logo-blanco.png\" *)",
+      "Bash(npm list *)"
     ]
   }
 }

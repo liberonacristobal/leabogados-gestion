@@ -1993,7 +1993,7 @@ function MiniClientForm({onSave,onCancel}) {
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   const [f,setF] = useState(sale ? {...sale, area: sale.area||'Corporativo'} : {client_id:'',title:'',area:'Corporativo',amount_uf:'',cost_uf:'',uf_value:'',year:currentYear,month:currentMonth,status:'Activo',notes:'',responsible:'',cobro_type:'cuotas',entity_id:''})
@@ -2025,6 +2025,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [newCobroInicio,setNewCobroInicio] = useState('')
   const [newCuotasCustom,setNewCuotasCustom] = useState([{id:1,monto:'',fecha:''}])
   const [savingTariff,setSavingTariff] = useState(false)
+  const [propuestaStep,setPropuestaStep] = useState(null)
   const {uf: ufHoy} = useUF()
   const [openCondicion,setOpenCondicion] = useState(null)
   useEffect(()=>{ if(ufHoy && !f.uf_value) up('uf_value', Math.round(ufHoy)) },[ufHoy])
@@ -2110,6 +2111,17 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
 
   return (
     <>
+      {/* Botón cargar desde propuesta — solo nueva venta */}
+      {!sale?.id&&propuestaStep===null&&(
+        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
+          <button type='button' onClick={()=>setPropuestaStep('upload')}
+            style={{display:'flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
+            Cargar desde propuesta
+          </button>
+        </div>
+      )}
+
       {/* 1. Cliente */}
       {!selectedClient ? (
         <Fld label='Cliente'>
@@ -7464,7 +7476,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?.id?'Editar venta':'Nueva venta'} onClose={()=>setModal(null)}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
