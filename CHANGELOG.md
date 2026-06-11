@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-11
+- SaleForm "Cargar desde propuesta" [2-4/4]: zona de arrastre PDF/Word (máx 10 MB) con spinner "Leyendo propuesta con IA...", extracción de texto (pdfjs para PDF, mammoth para docx), llamada a Claude API (`claude-sonnet-4-20250514`) para extraer JSON con cliente, proyecto, área, honorario, forma de cobro y notas; modal de asociación de cliente (CASO A: cliente encontrado por nombre/RUT con opción de asociar o crear nuevo; CASO B: crear nuevo pre-rellenado); pre-llenado automático del formulario con badge "IA" (#E4E8EB/#537281) en los campos llenados por IA.
+
+## 2026-06-11
 - Rediseño SaleForm: (1) NUEVA VENTA ahora muestra headers de sección uppercase — "Contexto", "Estado y período", "Honorarios", "Costos de terceros", "Forma de cobro" — para orientar rápido al usuario; (2) campo Honorarios unificado en una sola fila: input ancho para 8 dígitos + selector UF/CLP (ancho justo para "CLP") + valor UF del día inline auto-rellenado desde `useUF()`; (3) VENTA GUARDADA reemplaza los campos de honorarios/costos/cobro/notas por bloque "CONDICIONES REGISTRADAS" con 4 filas colapsadas que muestran los valores actuales — la fila Notas es expandible con click para editar directo; el panel "Modificar cobro" permanece para cambios con historial.
 
 ## 2026-06-11
