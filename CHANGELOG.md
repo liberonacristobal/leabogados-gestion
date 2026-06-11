@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Dashboard, "Proyección flujo de caja" (P3): rediseño del componente `CashflowProjection`. Header con título + toggles 3M/6M/12M; fila de totales en 3 celdas (Total / Emitido azul #003C50 / Programado); gráfico de línea del total mensual con área de relleno en gradiente #003C50 semitransparente, puntos coloreados (emitido #003C50 / programado #99ABB4) y línea punteada vertical marcando "Hoy"; tabla Mes/Estado/Monto con badges (Vencido #FCEBEB/#A32D2D, Emitido #E4E8EB/#003C50, Programado gris) dentro de un acordeón "Detalle" colapsado por defecto. El toggle actualiza gráfico y tabla. Se quitó el gráfico de barras anterior y el mensaje rojo de vencidos (los vencidos siguen visibles como badge en el Detalle). Mismos cálculos de emitido/programado/vencido que la versión previa. Paleta corporativa, sin emojis, layout mobile-safe.
+
+## 2026-06-10
 - Dashboard, "Por facturar este mes" (P7): se reemplazó el acordeón (mes → cliente → razón social) por 3 KPIs en una fila, con título dinámico del mes ("JUNIO 2026"). Emitidas (#F5F7F9, N de facturas + monto CLP), Por facturar (#FFF8E1, N en ámbar #B8860B + monto CLP) y Total mes (#E6F1FB, total en UF azul corporativo #003C50 + N de facturas). Labels #99ABB4. La contabilidad usa la MISMA fórmula que el checklist de Facturación (single source of truth): universo = facturas con vencimiento (due) en el mes; emitida = status != Programada; "por facturar" = Programada; Emitidas + Por facturar = Total. Las pagadas quedan fuera del universo, igual que en el checklist. Sin botón ni lista de clientes. Layout mobile-safe (grid minmax(0,1fr), sin wrap).
 
 ## 2026-06-10
