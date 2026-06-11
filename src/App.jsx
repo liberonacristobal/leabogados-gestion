@@ -3583,6 +3583,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
+    setShowHistorialFicha(false); setHFichaText(''); setHFichaMes('')
     if(!selectedClient){ setSelRS(new Set()); setOpenRS(new Set()); return }
     const ids=(clientEntities||[]).filter(x=>x.client_id===selectedClient.id).map(e=>e.id)
     setSelRS(new Set(ids)); setOpenRS(new Set())
@@ -3688,6 +3689,28 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
       {rends.map(r=>renderRendRow(r,showClient))}
     </>)
   }
+
+  // Sección de historial dentro de la ficha del cliente (solo rendiciones del cliente actual)
+  const selStyle = {padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12,boxSizing:'border-box',outline:'none',width:'100%'}
+  const fichaHistorial = selectedClient ? (
+    <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
+      <div onClick={()=>setShowHistorialFicha(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
+        <span style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Historial de rendiciones</span>
+        <span style={{fontSize:13,color:'#99ABB4',transform:showHistorialFicha?'rotate(180deg)':'none',transition:'transform .15s'}}>▾</span>
+      </div>
+      {showHistorialFicha&&(
+        <div style={{marginTop:12}}>
+          <input value={hFichaText} onChange={e=>setHFichaText(e.target.value)} placeholder='Buscar periodo...' style={{...selStyle,marginBottom:8}}/>
+          <input type='month' value={hFichaMes} onChange={e=>setHFichaMes(e.target.value)} style={{...selStyle,marginBottom:12}}/>
+          {(()=>{
+            const q=hFichaText.trim().toLowerCase()
+            const rends=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&r.client_id===selectedClient.id&&(!hFichaMes||r.created_at?.startsWith(hFichaMes))&&(!q||(r.periodo||'').toLowerCase().includes(q))).sort((a,b)=>b.created_at>a.created_at?1:-1)
+            return renderHistorialTable(rends,false)
+          })()}
+        </div>
+      )}
+    </div>
+  ) : null
 
   return (
     <div>
@@ -3808,6 +3831,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
         <div style={{padding:'4px 20px 130px'}}>
           {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
           {filtered.map(renderMov)}
+          {fichaHistorial}
         </div>
       )}
       {/* Vista cliente con 2+ razones sociales: acordeón por RS (checkbox + chevron + saldo) */}
@@ -3842,6 +3866,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
               </div>
             )
           })}
+          {fichaHistorial}
         </div>
       )}
 
