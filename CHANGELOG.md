@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Dashboard, "Por facturar este mes" (P7): se reemplazó el acordeón (mes → cliente → razón social) por 3 KPIs en una fila, con título dinámico del mes ("JUNIO 2026"). Emitidas (#F5F7F9, N de facturas + monto CLP), Por facturar (#FFF8E1, N en ámbar #B8860B + monto CLP) y Total mes (#E6F1FB, total en UF azul corporativo #003C50 + N de facturas). Labels #99ABB4. La contabilidad usa la MISMA fórmula que el checklist de Facturación (single source of truth): universo = facturas con vencimiento (due) en el mes; emitida = status != Programada; "por facturar" = Programada; Emitidas + Por facturar = Total. Las pagadas quedan fuera del universo, igual que en el checklist. Sin botón ni lista de clientes. Layout mobile-safe (grid minmax(0,1fr), sin wrap).
+
+## 2026-06-10
 - Archivo automático de tareas (PASO 2): pill "Archivadas (N)" al final de la fila de filtros de la vista Tareas (borde punteado #99ABB4 inactiva, sólida #003C50 activa). Al activarla se muestran solo las tareas archivadas (con opacidad reducida y sin borde de urgencia, vía `done`), ocultando Activas/Asignadas/Terminadas; al desactivarla vuelve la vista normal. La pill solo aparece si hay archivadas (o si está activa).
 
 ## 2026-06-10

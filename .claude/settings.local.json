@@ -32,7 +32,10 @@
       "Read(//private/tmp/**)",
       "Skill(update-config)",
       "Skill(update-config:*)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(open p7-render.html)"
     ]
   }
 }

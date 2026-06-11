@@ -1141,77 +1141,46 @@ function CashflowProjection({billing}) {
   )
 }
 
-function PorFacturarMes({billing,clients}) {
-  const [abierto,setAbierto] = useState(false)
-  const [openClient,setOpenClient] = useState(null)
+function PorFacturarMes({billing}) {
+  const ufState = useUF()
   const now = new Date()
   const key = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
-  const mesLabel = now.toLocaleDateString('es-CL',{month:'long'})
-  const delMes = billing.filter(b=>b.status==='Programada'&&b.due?.startsWith(key))
-  const total = delMes.reduce((a,b)=>a+(b.amount||0),0)
-
-  // Agrupar por cliente
-  const porCliente = useMemo(()=>{
-    const g = {}
-    delMes.forEach(b=>{
-      const c = clients.find(x=>x.id===b.client_id)
-      const cid = b.client_id||'__none__'
-      const cname = c?.name||'Sin cliente'
-      if(!g[cid]) g[cid] = {name:cname, items:[], total:0}
-      g[cid].items.push(b); g[cid].total += (b.amount||0)
-    })
-    return Object.entries(g).map(([id,v])=>({id,...v})).sort((a,b)=>b.total-a.total)
-  },[billing])
-
+  const mesLabel = `${now.toLocaleDateString('es-CL',{month:'long'})} ${now.getFullYear()}`.toUpperCase()
+  // Mismo universo y criterio que el checklist de Facturacion (single source of truth):
+  // anclaje por vencimiento (due) del mes; emitida = status != Programada. Pagadas quedan fuera del universo.
+  const EMIT = ['Pendiente','Vencido','Propuesta']
+  const delMes = billing.filter(b=> b.due && b.due.startsWith(key) && (b.status==='Programada'||EMIT.includes(b.status)))
   if(delMes.length===0) return null
-
-  // Sub-agrupar las cuotas de un cliente por razón social
-  const porRazon = (items) => {
-    const g = {}
-    items.forEach(b=>{
-      const rkey = b.receptor_name||'Sin razón social'
-      if(!g[rkey]) g[rkey] = {name:rkey, rut:b.receptor_rut||null, total:0, n:0}
-      g[rkey].total += (b.amount||0); g[rkey].n += 1
-    })
-    return Object.values(g)
-  }
-
+  const esEmitida = b => b.status!=='Programada'
+  const emitidas = delMes.filter(esEmitida)
+  const porFacturar = delMes.filter(b=>!esEmitida(b))
+  const emitidasCLP = emitidas.reduce((a,b)=>a+(b.amount||0),0)
+  const porFacturarCLP = porFacturar.reduce((a,b)=>a+(b.amount||0),0)
+  const totalUF = ufState.uf ? (emitidasCLP+porFacturarCLP)/ufState.uf : null
+  const lbl = {fontSize:11,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}
+  const big = {fontSize:22,fontWeight:700,lineHeight:1,whiteSpace:'nowrap'}
+  const unidad = {fontSize:11,color:'#99ABB4'}
+  const sub = {fontSize:12,color:C.muted,marginTop:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+  const kpi = {minWidth:0,borderRadius:10,padding:'13px 12px'}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Por facturar este mes</div>
-      <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-        {/* Fila resumen */}
-        <div onClick={()=>setAbierto(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',cursor:'pointer'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <span style={{fontSize:11,color:C.muted,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
-            <span style={{fontSize:13,color:C.text,fontWeight:600,textTransform:'capitalize'}}>{mesLabel}</span>
-            <span style={{fontSize:11,color:C.muted}}>· {delMes.length} factura{delMes.length!==1?'s':''}</span>
-          </div>
-          <span style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmt(total)}</span>
+      <div style={{fontSize:13,fontWeight:600,color:C.accent,letterSpacing:.3,marginBottom:10}}>{mesLabel}</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>
+        <div style={{...kpi,background:'#F5F7F9'}}>
+          <div style={lbl}>Emitidas</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:C.text}}>{emitidas.length}</span><span style={unidad}>factura{emitidas.length!==1?'s':''}</span></div>
+          <div style={sub}>{fmt(emitidasCLP)}</div>
         </div>
-        {/* Detalle por cliente */}
-        {abierto&&porCliente.map(cl=>(
-          <div key={cl.id} style={{borderTop:`1px solid ${C.border}`}}>
-            <div onClick={()=>setOpenClient(o=>o===cl.id?null:cl.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px 10px 28px',cursor:'pointer'}}>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <span style={{fontSize:10,color:C.muted,transform:openClient===cl.id?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
-                <span style={{fontSize:13,color:C.text}}>{cl.name}</span>
-                <span style={{fontSize:11,color:C.muted}}>· {cl.items.length}</span>
-              </div>
-              <span style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(cl.total)}</span>
-            </div>
-            {/* Razones sociales + RUT */}
-            {openClient===cl.id&&porRazon(cl.items).map((r,i)=>(
-              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 14px 7px 46px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`}}>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
-                  {r.rut&&<div style={{fontSize:10,color:C.muted}}>{r.rut}</div>}
-                </div>
-                <div style={{fontSize:11,color:C.muted,flexShrink:0,marginLeft:8}}>{r.n} · {fmt(r.total)}</div>
-              </div>
-            ))}
-          </div>
-        ))}
+        <div style={{...kpi,background:'#FFF8E1'}}>
+          <div style={lbl}>Por facturar</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:'#B8860B'}}>{porFacturar.length}</span><span style={unidad}>factura{porFacturar.length!==1?'s':''}</span></div>
+          <div style={sub}>{fmt(porFacturarCLP)}</div>
+        </div>
+        <div style={{...kpi,background:'#E6F1FB'}}>
+          <div style={lbl}>Total mes</div>
+          <div style={{...big,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis'}}>{totalUF!=null?fmtUF(totalUF):'—'}</div>
+          <div style={sub}>{delMes.length} factura{delMes.length!==1?'s':''}</div>
+        </div>
       </div>
     </div>
   )
@@ -1721,7 +1690,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
         </div>
       )}
 
-      <PorFacturarMes billing={billing} clients={clients}/>
+      <PorFacturarMes billing={billing}/>
 
       {tasks?.filter(t=>t.status==='Activo'||t.status==='Terminado').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
