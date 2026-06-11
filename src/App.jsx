@@ -4072,7 +4072,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
-    setShowHistorialFicha(false); setHFichaText(''); setHFichaMes('')
+    setShowHistorialFicha(false); setHFichaDesde(''); setHFichaHasta('')
     if(!selectedClient){ setSelRS(new Set()); setOpenRS(new Set()); return }
     const ids=(clientEntities||[]).filter(x=>x.client_id===selectedClient.id).map(e=>e.id)
     setSelRS(new Set(ids)); setOpenRS(new Set())
