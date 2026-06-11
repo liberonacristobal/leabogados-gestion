@@ -52,7 +52,14 @@ async function reconcileProgramada(clientId, amount, issuedAt){
     const {data} = await supabase.from('billing').select('id,due').eq('client_id',clientId).eq('amount',amount).eq('status','Programada')
     if(!data || !data.length) return
     const cands = issuedAt ? data.filter(b=>!b.due || b.due<=issuedAt) : data
-    if(cands.length===1){ await supabase.from('billing').delete().eq('id',cands[0].id) }
+    if(!cands.length) return
+    // Con múltiples candidatos, elegir el cuyo due esté más cerca de issuedAt
+    const best = cands.length===1 ? cands[0] : cands.reduce((a,b)=>{
+      const da = a.due&&issuedAt ? Math.abs(new Date(a.due)-new Date(issuedAt)) : Infinity
+      const db = b.due&&issuedAt ? Math.abs(new Date(b.due)-new Date(issuedAt)) : Infinity
+      return da<=db ? a : b
+    })
+    await supabase.from('billing').delete().eq('id',best.id)
   }catch(_){}
 }
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
@@ -570,13 +577,17 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       const gastosSel = pendientes.filter(e=>selected.has(e.id))
       const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
       const selIds = new Set(gastosSel.map(e=>e.id))
-      // Marcar CADA gasto como liquidado individualmente (no hay flag global)
-      for(const e of gastosSel) {
-        await supabase.from('expenses').update({ rendered_at: now, render_id: renderId, rendered_by: me }).eq('id',e.id)
-      }
-      // Registrar la liquidación en rendiciones
       const clientesIds = [...new Set(gastosSel.map(e=>e.client_id).filter(Boolean))]
-      await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length })
+      // Registrar la liquidación PRIMERO — si falla, ningún gasto queda marcado
+      const {error:rErr} = await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length })
+      if(rErr) throw rErr
+      // Marcar gastos — acumular errores parciales en vez de silenciarlos
+      const erroresMarcado = []
+      for(const e of gastosSel) {
+        const {error} = await supabase.from('expenses').update({ rendered_at: now, render_id: renderId, rendered_by: me }).eq('id',e.id)
+        if(error) erroresMarcado.push(e.concept||e.id)
+      }
+      if(erroresMarcado.length) alert(`Liquidación creada, pero ${erroresMarcado.length} gasto(s) no se marcaron: ${erroresMarcado.join(', ')}.\nPuedes anularla y reintentar.`)
       // Estado local: agregar rendición y marcar gastos (salen de pendientes y entran a liquidados sin recargar)
       setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalLiq,n_gastos:gastosSel.length,n_clientes:clientesIds.length,created_at:now},...p])
       if(setExpenses) setExpenses(p=>p.map(e=>selIds.has(e.id)?{...e,rendered_at:now,render_id:renderId,rendered_by:me}:e))
@@ -4533,13 +4544,14 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
     const valid = rows.filter(r=>r.amount&&parseInt(r.amount)>0)
     if(!valid.length||!selectedClient) return
     setSaving(true)
-    let count=0
+    let count=0; const errores=[]
     for(const r of valid) {
       try {
         await onSave({client_id:selectedClient.id,type:'gasto',amount:parseInt(r.amount),concept:r.concept,category:r.category,date:r.date||hoy,sale_id:null,entity_id:entityId||null,project:project||null,subcategory:r.category==='Otro'?(r.subcategory?.trim()||null):null,paid_by_client:r.category==='Notaria'?true:!!r.paid_by_client})
         count++
-      } catch(e){ console.error(e) }
+      } catch(e){ errores.push(r.concept||r.category||'Fila') }
     }
+    if(errores.length) alert(`${errores.length} gasto(s) no se guardaron: ${errores.join(', ')}`)
     setSaved(count)
     setRows([{id:Date.now(),category:'CBR',concept:'',amount:'',date:hoy}])
     setSaving(false)
@@ -7638,10 +7650,14 @@ export default function App() {
   },[user])
 
   const handleDeleteExpense=useCallback(async(id)=>{
-    if(!confirm('Eliminar este registro?')) return
+    const exp=expenses.find(x=>x.id===id)
+    const msg=exp?.client_rendered_at
+      ?'Este gasto ya fue incluido en una rendición enviada al cliente.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?'
+      :'¿Eliminar este registro?'
+    if(!confirm(msg)) return
     await supabase.from('expenses').delete().eq('id',id)
     setExpenses(p=>p.filter(x=>x.id!==id));setModal(null)
-  },[])
+  },[expenses])
 
   const handleSaveTask=useCallback(async(f)=>{
     setSaving(true)
