@@ -5217,7 +5217,7 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
       const now = new Date().toISOString()
       await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
       onSent && onSent(r.id, now)
-      const link=document.createElement('a'); link.href=`mailto:${encodeURIComponent(para.trim())}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`; link.click()
+      const link=document.createElement('a'); link.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`; document.body.appendChild(link); link.click(); document.body.removeChild(link)
       onClose()
     }catch(e){ alert('Error: '+e.message) }
     setSending(false)
