@@ -209,11 +209,11 @@ const TABS_LIMITED = [
 
 // ─── CLIENTS VIEW LIMITED ──────────────────────────────────────────────────
 // Recuadros de filtro de estado de clientes (Activos / Terminados / Todos) — compartido admin/limited
-function ClientStatusTabs({value,onChange,activeN,endedN}){
+function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
   return (
     <div style={{display:'flex',gap:6,marginBottom:4}}>
-      {[['Activo',`Activos (${activeN})`],['Terminado',`Terminados (${endedN})`],['all','Todos']].map(([v,l])=>(
-        <button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${value===v?C.accent:C.border}`,background:value===v?'#E6EEF1':'transparent',color:value===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
+      {[['Activo',`Activos (${activeN})`],['Prospecto',`Prospectos (${prospectoN})`],['Terminado',`Terminados (${endedN})`],['all','Todos']].map(([v,l])=>(
+        <button key={v} onClick={()=>onChange(v)} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${value===v?C.accent:C.border}`,background:value===v?'#E6EEF1':'transparent',color:value===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
       ))}
     </div>
   )
@@ -229,9 +229,11 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
 
   const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
   const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
+  const prospectoN=clients.filter(c=>!c.is_internal&&c.status==='Prospecto').length
   const filtered = clients.filter(c=>{
     if(sFilter==='Activo' && (c.status||'Activo')!=='Activo') return false
     if(sFilter==='Terminado' && c.status!=='Terminado') return false
+    if(sFilter==='Prospecto' && c.status!=='Prospecto') return false
     if(q.trim() && !c.name.toLowerCase().includes(q.toLowerCase())) return false
     return true
   }).sort((a,b)=>a.name.localeCompare(b.name))
@@ -415,7 +417,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
           <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:'#003C50',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
         </div>
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',marginBottom:8}}/>
-        <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN}/>
+        <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN} prospectoN={prospectoN}/>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:'#888',textAlign:'center',padding:40}}>Sin clientes</div>}
@@ -2033,7 +2035,6 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
                 <Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/>
                 {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C06A00':C.muted}}>{diasPendiente}d pendiente</span>}
               </div>
-              {s.notes&&<div style={{fontSize:11,color:C.muted,marginTop:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.notes}</div>}
             </div>
           )
         })}
@@ -2042,7 +2043,7 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
   )
 }
 
-function MiniClientForm({onSave,onCancel}) {
+function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
   const [f,setF] = useState({name:'',rut:'',type:'Corporativo'})
   const [saving,setSaving] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -2050,7 +2051,7 @@ function MiniClientForm({onSave,onCancel}) {
     if(!f.name.trim()) return
     setSaving(true)
     try {
-      const {data,error} = await supabase.from('clients').insert({...f,status:'Activo'}).select().single()
+      const {data,error} = await supabase.from('clients').insert({...f,status:defaultStatus}).select().single()
       if(error) throw error
       onSave(data)
     } catch(e) { alert('Error: '+e.message) }
@@ -2465,7 +2466,8 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
           <button onClick={()=>{setSelectedClient(null);up('client_id','')}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
         </div>
       )}
-      {showNewClient&&<MiniClientForm onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
+      {showNewClient&&<MiniClientForm defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
+      {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se creará como Prospecto. Al activar la propuesta se convertirá en cliente activo.</div>}
 
       <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
 
@@ -5258,7 +5260,11 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:18,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
-            <div style={{fontSize:11,color:C.muted}}>{client.type}{client.status==='Terminado'?' · Terminado':''}</div>
+            <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
+              {client.type}
+              {client.status==='Terminado'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#ECECEC',color:C.muted,fontWeight:600}}>Terminado</span>}
+              {client.status==='Prospecto'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#FFF4E0',color:'#C06A00',fontWeight:600}}>Prospecto</span>}
+            </div>
           </div>
           <button onClick={()=>onEdit(client)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
         </div>
@@ -5525,10 +5531,12 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
 
   const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
   const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
+  const prospectoN=clients.filter(c=>!c.is_internal&&c.status==='Prospecto').length
   const cl = useMemo(()=>{
     let base = clients
     if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
     else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
+    else if(sFilter==='Prospecto') base=base.filter(c=>c.status==='Prospecto')
     if(q.trim()) base=base.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
     return base
   },[clients,sFilter,q])
@@ -5577,7 +5585,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         </div>
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
-        <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN}/>
+        <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN} prospectoN={prospectoN}/>
       </div>
       <div style={{padding:'10px 20px 100px'}}>
         {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}
@@ -5860,7 +5868,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
       </div>
       <Fld label='Contacto'><Inp value={f.contact||''} onChange={e=>up('contact',e.target.value)} placeholder='Persona de contacto...'/></Fld>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado']}/></Fld>
+        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Prospecto','Terminado']}/></Fld>
         {f.status==='Terminado'&&<Fld label='Fecha termino'><Inp type='date' value={f.ended_at||''} onChange={e=>up('ended_at',e.target.value)}/></Fld>}
       </div>
       <Fld label='Cartera'>
@@ -7503,6 +7511,14 @@ export default function App() {
       }
       const {data:newBilling} = await getBilling()
       if(newBilling) setBilling(newBilling)
+      // Al activar una propuesta: si el cliente era Prospecto, pasa a Activo automáticamente
+      if(_activandoPropuesta && data.client_id) {
+        const cliente = clients.find(c=>c.id===data.client_id)
+        if(cliente?.status==='Prospecto') {
+          await supabase.from('clients').update({status:'Activo',updated_at:new Date().toISOString()}).eq('id',cliente.id)
+          setClients(p=>p.map(c=>c.id===cliente.id?{...c,status:'Activo'}:c))
+        }
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
