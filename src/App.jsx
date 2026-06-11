@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import mammoth from 'mammoth'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
@@ -2026,10 +2027,105 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [newCuotasCustom,setNewCuotasCustom] = useState([{id:1,monto:'',fecha:''}])
   const [savingTariff,setSavingTariff] = useState(false)
   const [propuestaStep,setPropuestaStep] = useState(null)
+  const [propuestaData,setPropuestaData] = useState(null)
+  const [propError,setPropError] = useState('')
+  const [propClientMatch,setPropClientMatch] = useState(null)
+  const [propEntitySel,setPropEntitySel] = useState('')
+  const [propClientMode,setPropClientMode] = useState('asociar')
+  const [propNewClient,setPropNewClient] = useState({name:'',rut:'',nombre_fantasia:''})
+  const [propCreating,setPropCreating] = useState(false)
+  const [aiFields,setAiFields] = useState(new Set())
   const {uf: ufHoy} = useUF()
   const [openCondicion,setOpenCondicion] = useState(null)
   useEffect(()=>{ if(ufHoy && !f.uf_value) up('uf_value', Math.round(ufHoy)) },[ufHoy])
   const resetMod = () => { setModCobro(false); setModMode('ajustar'); setNewHon(''); setNewVig(''); setNewCosto(''); setNewFmt(''); setNewNCuotas(3); setNewCobroInicio(''); setNewCuotasCustom([{id:1,monto:'',fecha:''}]); setNewCostMode('fijo'); setNewCostPct('') }
+
+  const AiBadge = ({field}) => aiFields.has(field) ? <span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#E4E8EB',color:'#537281',marginLeft:5,verticalAlign:'middle',lineHeight:1}}>IA</span> : null
+
+  const extractFromFile = async (file) => {
+    if(file.size > 10*1024*1024) { setPropError('El archivo supera 10 MB.'); return }
+    setPropuestaStep('extracting')
+    setPropError('')
+    try {
+      let text = ''
+      if(file.name.toLowerCase().endsWith('.pdf')) {
+        const arrayBuf = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuf)}).promise
+        for(let i=1; i<=pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const content = await page.getTextContent()
+          text += content.items.map(it=>it.str||'').join(' ') + '\n'
+        }
+      } else {
+        const arrayBuf = await file.arrayBuffer()
+        const result = await mammoth.extractRawText({arrayBuffer: arrayBuf})
+        text = result.value
+      }
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':import.meta.env.VITE_ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:'Eres un extractor de datos de propuestas de servicios legales. Extrae SOLO los siguientes campos en JSON, sin texto adicional, sin markdown, sin backticks: { cliente_nombre, cliente_rut, nombre_fantasia, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }',messages:[{role:'user',content:text.slice(0,10000)}]})
+      })
+      if(!resp.ok) throw new Error('Error API '+resp.status)
+      const apiData = await resp.json()
+      const raw = apiData.content?.[0]?.text || '{}'
+      const parsed = JSON.parse(raw)
+      setPropuestaData(parsed)
+      const nombre = (parsed.cliente_nombre||'').toLowerCase().trim()
+      const rut = (parsed.cliente_rut||'').replace(/[.\-]/g,'').trim()
+      let match = null
+      if(rut) match = clients.find(c=>(c.rut||'').replace(/[.\-]/g,'')=== rut)
+      if(!match && nombre) match = clients.find(c=>c.name.toLowerCase().includes(nombre)||nombre.includes(c.name.toLowerCase()))
+      setPropClientMatch(match||null)
+      if(match){
+        setPropClientMode('asociar')
+        const ents=(clientEntities||[]).filter(e=>e.client_id===match.id)
+        setPropEntitySel(ents[0]?.id||'')
+      } else {
+        setPropClientMode('crear')
+        setPropNewClient({name:parsed.cliente_nombre||'',rut:parsed.cliente_rut||'',nombre_fantasia:parsed.nombre_fantasia||''})
+      }
+      setPropuestaStep('asociar')
+    } catch(err) {
+      setPropError(err.message||'Error al procesar el archivo.')
+      setPropuestaStep('upload')
+    }
+  }
+
+  const applyPropuesta = async () => {
+    setPropCreating(true)
+    const d = propuestaData
+    const filled = new Set()
+    try {
+      let client = propClientMatch
+      if(!client || propClientMode==='crear') {
+        const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null,nombre_fantasia:propNewClient.nombre_fantasia.trim()||null}).select().single()
+        if(error) throw error
+        client = nc
+        setClients(p=>[...p,nc])
+      }
+      setSelectedClient(client)
+      up('client_id',client.id)
+      if(propEntitySel) up('entity_id',propEntitySel)
+      filled.add('client_id')
+      if(d.proyecto){ up('title',d.proyecto); filled.add('title') }
+      const AREAS = ['Corporativo','Tributario','Laboral','Otro']
+      if(d.area){ const a=AREAS.find(x=>x.toLowerCase()===d.area?.toLowerCase()); if(a){ up('area',a); filled.add('area') } }
+      const WHO_MAP = {'cl@leabogados.cl':'Cristóbal','ee@leabogados.cl':'Erasmo','mc@leabogados.cl':'Martín','mp@leabogados.cl':'Martina','rd@leabogados.cl':'Rodrigo'}
+      if(user?.email){ const nm=WHO_MAP[user.email]; if(nm){ up('responsible',nm); filled.add('responsible') } }
+      if(d.moneda==='CLP'){ up('moneda','CLP'); if(d.honorario_total){ up('amount_clp',String(d.honorario_total)); filled.add('amount_clp') } }
+      else if(d.honorario_total){ up('amount_uf',String(d.honorario_total)); filled.add('amount_uf') }
+      if(d.forma_cobro){ const MAP={cuotas:'cuotas',mensual:'mensual',porcentaje:'porcentaje',personalizada:'personalizada'}; const mapped=MAP[d.forma_cobro?.toLowerCase()]; if(mapped){ setCobroType(mapped); filled.add('cobro_type') } }
+      if(d.n_cuotas){ setNCuotas(parseInt(d.n_cuotas)||3); filled.add('n_cuotas') }
+      if(d.notas){ up('notes',d.notas); filled.add('notes') }
+      setAiFields(filled)
+      setPropuestaStep(null)
+      setPropuestaData(null)
+    } catch(err) {
+      setPropError(err.message||'Error al aplicar la propuesta.')
+    }
+    setPropCreating(false)
+  }
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
@@ -2109,6 +2205,83 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
     setSavingTariff(false)
   }
 
+  if(propuestaStep==='upload'||propuestaStep==='extracting') return (
+    <>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.text}}>Cargar propuesta</div>
+        <button type='button' onClick={()=>{setPropuestaStep(null);setPropError('')}} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
+      </div>
+      {propuestaStep==='upload'?(
+        <>
+          <div
+            onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor=C.accent}}
+            onDragLeave={e=>{e.currentTarget.style.borderColor='#99ABB4'}}
+            onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor='#99ABB4';const fi=e.dataTransfer.files[0];if(fi) extractFromFile(fi)}}
+            onClick={()=>document.getElementById('prop-file-inp').click()}
+            style={{border:'2px dashed #99ABB4',borderRadius:12,padding:'36px 20px',textAlign:'center',cursor:'pointer',transition:'border-color .15s'}}>
+            <input id='prop-file-inp' type='file' accept='.pdf,.docx' style={{display:'none'}} onChange={e=>{const fi=e.target.files[0];if(fi) extractFromFile(fi)}}/>
+            <svg width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
+            <div style={{fontSize:13,fontWeight:600,color:C.text,marginTop:10}}>Arrastra un PDF o Word aqui</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}>o haz clic para seleccionar · max 10 MB</div>
+          </div>
+          {propError&&<div style={{fontSize:12,color:C.overdue,marginTop:8}}>{propError}</div>}
+        </>
+      ):(
+        <div style={{textAlign:'center',padding:'48px 20px',display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
+          <Spin/>
+          <div style={{fontSize:13,color:C.muted}}>Leyendo propuesta con IA...</div>
+        </div>
+      )}
+    </>
+  )
+
+  if(propuestaStep==='asociar'&&propuestaData) return (
+    <>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.text}}>Propuesta leida</div>
+        <button type='button' onClick={()=>{setPropuestaStep(null);setPropuestaData(null);setPropError('')}} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
+      </div>
+      {propClientMatch?(
+        <>
+          <Lbl>Cliente detectado</Lbl>
+          <div style={{padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`,marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{propClientMatch.name}</div>
+            {propClientMatch.rut&&<div style={{fontSize:11,color:C.muted}}>{propClientMatch.rut}</div>}
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:14}}>
+            <button type='button' onClick={()=>setPropClientMode('asociar')}
+              style={{flex:1,padding:'10px 0',borderRadius:8,border:`1px solid ${propClientMode==='asociar'?C.accent:C.border}`,background:propClientMode==='asociar'?C.accent:'transparent',color:propClientMode==='asociar'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+              Asociar a este cliente
+            </button>
+            <button type='button' onClick={()=>setPropClientMode('crear')}
+              style={{flex:1,padding:'10px 0',borderRadius:8,border:`1px solid ${propClientMode==='crear'?C.accent:C.border}`,background:propClientMode==='crear'?C.accent:'transparent',color:propClientMode==='crear'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+              Crear cliente nuevo
+            </button>
+          </div>
+          {propClientMode==='asociar'&&(()=>{const ents=(clientEntities||[]).filter(e=>e.client_id===propClientMatch.id);if(!ents.length)return null;return(<Fld label='Razon social'><select value={propEntitySel} onChange={e=>setPropEntitySel(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:14,color:C.text,boxSizing:'border-box'}}><option value=''>— Asociar despues —</option>{ents.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select></Fld>)})()}
+          {propClientMode==='crear'&&(<>
+            <Fld label='Nombre'><Inp value={propNewClient.name} onChange={e=>setPropNewClient(p=>({...p,name:e.target.value}))} placeholder='Nombre del cliente'/></Fld>
+            <Fld label='RUT'><Inp value={propNewClient.rut} onChange={e=>setPropNewClient(p=>({...p,rut:e.target.value}))} placeholder='12.345.678-9'/></Fld>
+            <Fld label='Nombre fantasia'><Inp value={propNewClient.nombre_fantasia} onChange={e=>setPropNewClient(p=>({...p,nombre_fantasia:e.target.value}))} placeholder='Opcional'/></Fld>
+          </>)}
+        </>
+      ):(
+        <>
+          <Lbl>Cliente no encontrado — crear nuevo</Lbl>
+          <Fld label='Nombre'><Inp value={propNewClient.name} onChange={e=>setPropNewClient(p=>({...p,name:e.target.value}))} placeholder='Nombre del cliente'/></Fld>
+          <Fld label='RUT'><Inp value={propNewClient.rut} onChange={e=>setPropNewClient(p=>({...p,rut:e.target.value}))} placeholder='12.345.678-9'/></Fld>
+          <Fld label='Nombre fantasia'><Inp value={propNewClient.nombre_fantasia} onChange={e=>setPropNewClient(p=>({...p,nombre_fantasia:e.target.value}))} placeholder='Opcional'/></Fld>
+        </>
+      )}
+      {propError&&<div style={{fontSize:12,color:C.overdue,marginBottom:10}}>{propError}</div>}
+      <button type='button' disabled={propCreating||(propClientMode==='crear'&&!propNewClient.name.trim())} onClick={applyPropuesta}
+        style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(propCreating||(propClientMode==='crear'&&!propNewClient.name.trim()))?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginTop:4}}>
+        {propCreating&&<Spin/>}
+        {propCreating?'Aplicando...':'Continuar y pre-llenar formulario'}
+      </button>
+    </>
+  )
+
   return (
     <>
       {/* Botón cargar desde propuesta — solo nueva venta */}
@@ -2156,7 +2329,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       )}
       {showNewClient&&<MiniClientForm onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
 
-      <Fld label='Proyecto'><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
+      <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
 
       {/* 2. Razón social */}
       {f.client_id&&(
@@ -2175,8 +2348,8 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       {/* 3. Contexto: Área + Responsable */}
       {!sale?.id&&<div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Contexto</div>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-        <Fld label='Área'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
-        <Fld label='Responsable'>
+        <Fld label={<>Área<AiBadge field='area'/></>}><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
+        <Fld label={<>Responsable<AiBadge field='responsible'/></>}>
           <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
             <option value=''>— Seleccionar —</option>
             {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
@@ -2198,7 +2371,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
 
       {/* 5–8. Honorarios, costos, cobro, notas — editable solo en NUEVA VENTA */}
       {!sale?.id&&(<>
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Honorarios</div>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Honorarios<AiBadge field='amount_uf'/><AiBadge field='amount_clp'/></div>
         <div style={{display:'flex',alignItems:'stretch',height:44,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',marginBottom:14}}>
           <input type='number' step={moneda==='UF'?'0.01':'1'}
             value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''}
@@ -2322,7 +2495,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       )}
 
       {/* 8. Notas — solo nueva venta */}
-      {!sale?.id&&<Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>}
+      {!sale?.id&&<Fld label={<>Notas<AiBadge field='notes'/></>}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>}
 
       {/* 9. CONDICIONES REGISTRADAS — solo venta guardada */}
       {sale?.id&&(()=>{
