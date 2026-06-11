@@ -20,6 +20,10 @@ const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—'
 const fmtDate = d => { if(!d) return '—'; return new Date(d+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short'}) }
 const daysLeft = d => { if(!d) return null; return Math.round((new Date(d+'T12:00') - new Date()) / 86400000) }
+// Archivo automatico de tareas: una tarea Terminada se considera archivada cuando se completo
+// hace mas de DAYS_TO_ARCHIVE dias. Las terminadas sin completed_at (historicas) cuentan como archivadas.
+const DAYS_TO_ARCHIVE = 15
+const isTaskArchived = t => t.status==='Terminado' && (!t.completed_at || (Date.now()-new Date(t.completed_at).getTime())/86400000 > DAYS_TO_ARCHIVE)
 const urgency = (due,status) => {
   if(['Completado','Pagado','Archivado','Anulado'].includes(status)) return 'done'
   const d = daysLeft(due); if(d===null) return 'normal'
@@ -5279,9 +5283,10 @@ function TasksEditor({clientId,sales}) {
   const toggle = async(t)=>{
     const status=t.status==='Terminado'?'Activo':'Terminado'
     const prev=t.status
-    setTasks(p=>p.map(x=>x.id===t.id?{...x,status}:x))
-    const {error}=await supabase.from('tasks').update({status}).eq('id',t.id)
-    if(error){ alert('No se pudo actualizar la tarea: '+error.message); setTasks(p=>p.map(x=>x.id===t.id?{...x,status:prev}:x)) }
+    const completed_at = status==='Terminado' ? (t.completed_at||new Date().toISOString()) : null
+    setTasks(p=>p.map(x=>x.id===t.id?{...x,status,completed_at}:x))
+    const {error}=await supabase.from('tasks').update({status,completed_at}).eq('id',t.id)
+    if(error){ alert('No se pudo actualizar la tarea: '+error.message); setTasks(p=>p.map(x=>x.id===t.id?{...x,status:prev,completed_at:t.completed_at}:x)) }
   }
 
   const del = async(id)=>{
@@ -6557,13 +6562,14 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     if(filterProject && t.project!==filterProject) return false
     return true
   })
-  const terminadas = tasks.filter(t=>{
+  const terminadasAll = tasks.filter(t=>{
     if(t.status!=='Terminado') return false
     if(t.who!==me && t.assigned_by!==me) return false
     if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
     if(filterProject && t.project!==filterProject) return false
     return true
-  }).sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1).slice(0,30)
+  })
+  const terminadas = terminadasAll.filter(t=>!isTaskArchived(t)).sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1).slice(0,30)
 
   // Mis tareas: las asignadas a mi. Tareas que asigne: yo las cree para otros.
   const mias = base.filter(t=>t.who===me)
@@ -7088,6 +7094,8 @@ export default function App() {
       const {_isNew, ...rest} = f
       const esNueva = _isNew || !rest.id
       const taskPayload={...rest,sale_id:rest.sale_id||null,client_id:rest.client_id||null}
+      // Sella la fecha de termino al completar; la limpia al reabrir. No sobreescribe si ya estaba.
+      taskPayload.completed_at = taskPayload.status==='Terminado' ? (taskPayload.completed_at || new Date().toISOString()) : null
       if(esNueva && !taskPayload.assigned_by) taskPayload.assigned_by = user?.name || null
       const{data,error}=await supabase.from('tasks').upsert(taskPayload).select().single()
       if(error)throw error
