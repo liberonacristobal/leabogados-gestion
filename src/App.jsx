@@ -1084,6 +1084,7 @@ const META_CLP = 400000000
 function CashflowProjection({billing}) {
   const [horizon,setHorizon] = useState(6) // 3 | 6 | 12 meses
   const [openDetalle,setOpenDetalle] = useState(false)
+  const [activePoint,setActivePoint] = useState(null)
   const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due)
   const programadas = billing.filter(b=>b.status==='Programada'&&b.due)
 
@@ -1155,11 +1156,20 @@ function CashflowProjection({billing}) {
           <path d={areaPath} fill="url(#cfArea)"/>
           <path d={linePath} fill="none" stroke="#003C50" strokeWidth="2" strokeLinejoin="round"/>
           {months.map((m,i)=>(
-            <circle key={m.key} cx={xAt(i)} cy={yAt(m)} r="4" fill={m.emitido>0?'#003C50':'#99ABB4'}/>
+            <g key={m.key} onMouseEnter={()=>setActivePoint(i)} onMouseLeave={()=>setActivePoint(null)} onClick={()=>setActivePoint(p=>p===i?null:i)} style={{cursor:'pointer'}}>
+              <rect x={xAt(i)-16} y="8" width="32" height={baseY} fill="transparent"/>
+              <circle cx={xAt(i)} cy={yAt(m)} r={activePoint===i?5.5:4} fill={m.emitido>0?'#003C50':'#99ABB4'} stroke="#fff" strokeWidth={activePoint===i?1.5:0}/>
+            </g>
           ))}
           {months.map((m,i)=>(
-            <text key={m.key} x={xAt(i)} y={baseY+22} fontSize="9" fill="#99ABB4" textAnchor="middle">{m.label}</text>
+            <text key={m.key} x={xAt(i)} y={baseY+22} fontSize="9" fill={activePoint===i?'#003C50':'#99ABB4'} fontWeight={activePoint===i?600:400} textAnchor="middle">{m.label}</text>
           ))}
+          {activePoint!=null&&(()=>{
+            const m=months[activePoint], x=xAt(activePoint), y=yAt(m)
+            const txt=fmt(m.total), w=txt.length*6.2+14
+            const bx=Math.max(2,Math.min(W-w-2,x-w/2)), by=Math.max(2,y-26)
+            return <g pointerEvents="none"><rect x={bx} y={by} width={w} height="18" rx="4" fill="#003C50"/><text x={bx+w/2} y={by+12.5} fontSize="10" fontWeight="600" fill="#fff" textAnchor="middle">{txt}</text></g>
+          })()}
         </svg>
 
         <div onClick={()=>setOpenDetalle(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
