@@ -1611,7 +1611,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
 
-  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso'&&b.status!=='Programada').reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
   const tasaCobro = facturado>0 ? Math.round((cobrado/facturado)*100) : 0
 
@@ -3116,7 +3116,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
   const progMesTotal = useMemo(()=>progMes.reduce((a,b)=>a+(b.amount||0),0),[progMes])
   // Por defecto, todas marcadas; se re-sincroniza si cambia la membresía del mes
   const progIds = progMes.map(b=>b.id).join(',')
-  useEffect(()=>{ setSelExcel(new Set(progMes.map(b=>b.id))) },[progIds])
+  useEffect(()=>{ setSelExcel(new Set()) },[progIds])
   const toggleExcel = id => setSelExcel(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
   const allExcel = progMes.length>0 && selExcel.size===progMes.length
 
@@ -3137,12 +3137,14 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
     setDescExcel(true)
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const ufInfo = await fetchUF()
+      const ufActual = ufInfo.value
       const header=['Cliente','Razón social','RUT receptor','Concepto/glosa','Monto neto','Monto UF','Fecha vencimiento','N° cuota']
       const rows=sel.map(b=>{
         const c=clients.find(x=>x.id===b.client_id)
         const venta=(sales||[]).find(v=>v.id===b.sale_id)
         const esCLP=venta?.moneda==='CLP'
-        const ufVal=venta?.uf_value||null
+        const ufVal=ufActual||null
         const ufEq=(!esCLP&&ufVal)?(b.amount/ufVal):null
         const rs=resolveRS(b)
         return [c?.name||'Sin cliente', rs.name, rs.rut, b.concept||venta?.title||'', b.amount||0, esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), b.due||'', parseCuota(b.concept)]
