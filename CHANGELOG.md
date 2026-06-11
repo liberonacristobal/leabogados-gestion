@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Fix timezone en `fmtD` (CajaChicaView, lista de liquidados): parseaba `e.date` (`YYYY-MM-DD`) con `new Date(iso)`, que se interpreta como medianoche UTC y en Chile (UTC-4) mostraba el día anterior. Ahora usa `new Date(iso+'T12:00')`, igual que `fmtDate` y `fmtFecha`. El resto de los displays de fecha ya estaban correctos (timestamps completos, `new Date()` actual o `T12:00`/`T00:00:00`).
+
+## 2026-06-10
 - Dashboard, Top de áreas (`byArea`): se corrige la cifra por área para que use el helper único `ventaUF()` (`ufDeVenta`) en vez de `amount_uf` crudo. Antes ignoraba el ×12 de las ventas recurrentes y las ventas en CLP, por lo que las áreas se mostraban hasta ~12x más bajas y no cuadraban con el total vendido del Dashboard. Ahora los subtotales por área reconcilian con `vendidoBrutoUF`. Sin cambios de UI.
 
 ## 2026-06-10

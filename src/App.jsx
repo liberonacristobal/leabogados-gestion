@@ -808,7 +808,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           {rendiciones.filter(r=>r.user_name===me).sort((a,b)=>b.created_at>a.created_at?1:-1).map(r=>{
             const isOpen = openRendicion===r.id
             const gastosR = expenses.filter(e=>e.render_id===r.id)
-            const fmtD = iso => { try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+            const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
             return (
             <div key={r.id} style={{background:'#fff',borderRadius:8,marginBottom:8,border:'1px solid #E8E8E8',overflow:'hidden'}}>
               <div onClick={()=>setOpenRendicion(isOpen?null:r.id)} style={{padding:'12px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
