@@ -2068,7 +2068,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       })
       if(!resp.ok) throw new Error('Error API '+resp.status)
       const apiData = await resp.json()
-      const raw = apiData.content?.[0]?.text || '{}'
+      const raw = (apiData.content?.[0]?.text || '{}').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
       const parsed = JSON.parse(raw)
       setPropuestaData(parsed)
       const nombre = (parsed.cliente_nombre||'').toLowerCase().trim()
