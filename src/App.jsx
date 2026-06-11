@@ -2001,14 +2001,14 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [clientQ,setClientQ] = useState('')
   const [showNewClient,setShowNewClient] = useState(false)
   const [selectedClient,setSelectedClient] = useState(initialClients.find(c=>c.id===sale?.client_id)||null)
-  // Forma de cobro
   const [cobroType,setCobroType] = useState(sale?.cobro_type||'cuotas')
   const [nCuotas,setNCuotas] = useState(sale?.cobro_config?.nCuotas||3)
   const [cobroInicio,setCobroInicio] = useState(sale?.cobro_config?.cobroInicio||'')
   const [tramos,setTramos] = useState(sale?.cobro_config?.tramos||[{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
   const [cuotasCustom,setCuotasCustom] = useState(sale?.cobro_config?.cuotasCustom||[{id:1,monto:'',fecha:''}])
   const [mensualInicio,setMensualInicio] = useState(sale?.cobro_config?.mensualInicio||'')
-  // Historial de honorarios (tramos)
+  const [costMode,setCostMode] = useState('fijo')
+  const [costPct,setCostPct] = useState('')
   const [tariffs,setTariffs] = useState([])
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
   const fmtMesAno = d => d ? d.slice(5,7)+'/'+d.slice(0,4) : '—'
@@ -2017,44 +2017,14 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [newHon,setNewHon] = useState('')
   const [newVig,setNewVig] = useState('')
   const [newCosto,setNewCosto] = useState('')
-  const [newMotivo,setNewMotivo] = useState('')
+  const [newCostMode,setNewCostMode] = useState('fijo')
+  const [newCostPct,setNewCostPct] = useState('')
   const [newFmt,setNewFmt] = useState('')
   const [newNCuotas,setNewNCuotas] = useState(3)
   const [newCobroInicio,setNewCobroInicio] = useState('')
   const [newCuotasCustom,setNewCuotasCustom] = useState([{id:1,monto:'',fecha:''}])
   const [savingTariff,setSavingTariff] = useState(false)
-  const resetMod = () => { setModCobro(false); setModMode('ajustar'); setNewHon(''); setNewVig(''); setNewCosto(''); setNewMotivo(''); setNewFmt(''); setNewNCuotas(3); setNewCobroInicio(''); setNewCuotasCustom([{id:1,monto:'',fecha:''}]) }
-  const confirmAjustar = async() => {
-    if(!newHon||!newVig){ alert('Completa el nuevo honorario y la fecha de vigencia.'); return }
-    setSavingTariff(true)
-    const rec = await onSaveTariff(sale, {honorario:parseFloat(newHon)||0, costo:newCosto?(parseFloat(newCosto)||0):null, currency:(f.moneda||'UF'), vigente_desde:newVig+'-01', motivo:newMotivo||null})
-    if(rec){ setTariffs(p=>[...p,rec]); resetMod() }
-    setSavingTariff(false)
-  }
-  const confirmCambiar = async() => {
-    if(!newFmt||!newVig){ alert('Elige el nuevo formato y la fecha de vigencia.'); return }
-    const vigDate = newVig+'-01'
-    const mon = f.moneda||'UF'
-    const ufV = parseFloat(f.uf_value)||0
-    const baseHon = parseFloat(newHon)||(mon==='CLP'?parseFloat(f.amount_clp):parseFloat(f.amount_uf))||0
-    const totalCLP = mon==='CLP' ? baseHon : baseHon*ufV
-    const nuevasCuotas = []
-    if(newFmt==='cuotas'&&newCobroInicio&&newNCuotas>0&&totalCLP>0){
-      const mc=Math.round(totalCLP/newNCuotas)
-      for(let i=0;i<newNCuotas;i++){const d=new Date(newCobroInicio+'T12:00');d.setMonth(d.getMonth()+i);nuevasCuotas.push({due:d.toISOString().slice(0,10),amount:mc,concept:`${sale.title} — Cuota ${i+1}/${newNCuotas}`})}
-    } else if(newFmt==='mensual'&&newVig&&totalCLP>0){
-      const [y,m]=newVig.split('-').map(Number);let cy=y,cm=m
-      for(let i=0;i<12;i++){nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:Math.round(totalCLP),concept:`${sale.title} — Mensual ${MONTHS[cm-1]} ${cy}`});cm++;if(cm>12){cm=1;cy++}}
-    } else if(newFmt==='personalizada'){
-      newCuotasCustom.forEach((c,i)=>{if(c.monto&&c.fecha){const mm=mon==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufV);nuevasCuotas.push({due:c.fecha,amount:mm,concept:`${sale.title} — Cobro ${i+1}`})}})
-    } else if(newFmt==='unico'&&newVig&&totalCLP>0){
-      nuevasCuotas.push({due:vigDate,amount:Math.round(totalCLP),concept:`${sale.title} — Pago único`})
-    }
-    setSavingTariff(true)
-    const rec = await onCambiarFormato(sale, {newFmt, newHon:baseHon||null, newCosto:newCosto?(parseFloat(newCosto)||0):null, vigDate, motivo:newMotivo||null, nuevasCuotas})
-    if(rec){ setTariffs(p=>[...p,rec]); resetMod() }
-    setSavingTariff(false)
-  }
+  const resetMod = () => { setModCobro(false); setModMode('ajustar'); setNewHon(''); setNewVig(''); setNewCosto(''); setNewFmt(''); setNewNCuotas(3); setNewCobroInicio(''); setNewCuotasCustom([{id:1,monto:'',fecha:''}]); setNewCostMode('fijo'); setNewCostPct('') }
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
@@ -2064,42 +2034,78 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const amountUF = parseFloat(f.amount_uf)||0
   const montoCLP = parseFloat(f.amount_clp)||0
   const totalCLP = moneda==='CLP' ? montoCLP : amountUF*ufVal
+  const costVal = costMode==='pct'
+    ? (moneda==='UF' ? amountUF*(parseFloat(costPct)||0)/100 : montoCLP*(parseFloat(costPct)||0)/100)
+    : (moneda==='UF' ? parseFloat(f.cost_uf)||0 : parseFloat(f.cost_clp)||0)
+  const panelHon = parseFloat(newHon)||0
+  const panelCosto = newCostMode==='pct' ? panelHon*(parseFloat(newCostPct)||0)/100 : parseFloat(newCosto)||0
 
-  // Generar cobros desde forma de cobro
   const generarCobros = () => {
     if(!f.client_id||!totalCLP) return []
     const cobros = []
     if(cobroType==='mensual' && mensualInicio) {
-      const [y,m] = mensualInicio.split('-').map(Number)
-      let cy=y, cm=m
-      for(let i=0;i<12;i++){
-        const fecha=`${cy}-${String(cm).padStart(2,'0')}-01`
-        cobros.push({monto:Math.round(totalCLP), fecha, label:`Mensual ${MONTHS[cm-1]} ${cy}`})
-        cm++; if(cm>12){cm=1;cy++}
-      }
+      const [y,m] = mensualInicio.split('-').map(Number); let cy=y, cm=m
+      for(let i=0;i<12;i++){ cobros.push({monto:Math.round(totalCLP), fecha:`${cy}-${String(cm).padStart(2,'0')}-01`, label:`Mensual ${MONTHS[cm-1]} ${cy}`}); cm++; if(cm>12){cm=1;cy++} }
     } else if(cobroType==='cuotas' && cobroInicio && nCuotas>0) {
-      const montoCuota = Math.round(totalCLP/nCuotas)
-      for(let i=0;i<nCuotas;i++) {
-        const d = new Date(cobroInicio+'T12:00')
-        d.setMonth(d.getMonth()+i)
-        cobros.push({monto:montoCuota, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${nCuotas}`})
-      }
+      const mc = Math.round(totalCLP/nCuotas)
+      for(let i=0;i<nCuotas;i++) { const d=new Date(cobroInicio+'T12:00'); d.setMonth(d.getMonth()+i); cobros.push({monto:mc, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${nCuotas}`}) }
     } else if(cobroType==='porcentaje') {
       tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:t.fecha, label:`${t.pct}%`}) })
     } else if(cobroType==='personalizada') {
-      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha){ const mm = moneda==='CLP' ? Math.round(parseFloat(c.monto)||0) : Math.round((parseFloat(c.monto)||0)*ufVal); cobros.push({monto:mm, fecha:c.fecha, label: moneda==='CLP'?`Cobro ${i+1}`:`Cobro ${i+1} (${c.monto} UF)`}) } })
+      cuotasCustom.forEach((c,i)=>{ if(c.monto&&c.fecha){ const mm=moneda==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufVal); cobros.push({monto:mm, fecha:c.fecha, label:moneda==='CLP'?`Cobro ${i+1}`:`Cobro ${i+1} (${c.monto} UF)`}) } })
     }
     return cobros
   }
   const cobros = generarCobros()
 
   const handleSave = () => {
-    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
+    const saveF = {...f}
+    if(costMode==='pct') {
+      if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
+      else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
+    }
+    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
+  }
+
+  const confirmAndSave = async() => {
+    if(modMode==='ajustar') {
+      if(!newHon||!newVig){ alert('Completa el nuevo honorario y la fecha de vigencia.'); return }
+      setSavingTariff(true)
+      const rec = await onSaveTariff(sale, {honorario:panelHon, costo:panelCosto||null, currency:moneda, vigente_desde:newVig+'-01', motivo:null})
+      if(rec) {
+        setTariffs(p=>[...p,rec])
+        const updF = {...f}
+        if(moneda==='UF'){updF.amount_uf=newHon;updF.cost_uf=panelCosto||null;updF.cost_clp=null}
+        else{updF.amount_clp=newHon;updF.cost_clp=panelCosto||null;updF.cost_uf=null}
+        onSave({...updF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
+      }
+    } else {
+      if(!newFmt||!newVig){ alert('Elige el nuevo formato y la fecha de vigencia.'); return }
+      const vigDate=newVig+'-01'
+      const baseHon=panelHon||(moneda==='CLP'?montoCLP:amountUF)||0
+      const totalC=moneda==='CLP'?baseHon:baseHon*ufVal
+      const nuevasCuotas=[]
+      if(newFmt==='cuotas'&&newCobroInicio&&newNCuotas>0&&totalC>0){
+        const mc=Math.round(totalC/newNCuotas)
+        for(let i=0;i<newNCuotas;i++){const d=new Date(newCobroInicio+'T12:00');d.setMonth(d.getMonth()+i);nuevasCuotas.push({due:d.toISOString().slice(0,10),amount:mc,concept:`${sale.title} — Cuota ${i+1}/${newNCuotas}`})}
+      } else if(newFmt==='mensual'&&newVig&&totalC>0){
+        const [y,m]=newVig.split('-').map(Number);let cy=y,cm=m
+        for(let i=0;i<12;i++){nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:Math.round(totalC),concept:`${sale.title} — Mensual ${MONTHS[cm-1]} ${cy}`});cm++;if(cm>12){cm=1;cy++}}
+      } else if(newFmt==='personalizada'){
+        newCuotasCustom.forEach((c,i)=>{if(c.monto&&c.fecha){const mm=moneda==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufVal);nuevasCuotas.push({due:c.fecha,amount:mm,concept:`${sale.title} — Cobro ${i+1}`})}})
+      } else if(newFmt==='unico'&&newVig&&totalC>0){
+        nuevasCuotas.push({due:vigDate,amount:Math.round(totalC),concept:`${sale.title} — Pago único`})
+      }
+      setSavingTariff(true)
+      const rec=await onCambiarFormato(sale,{newFmt,newHon:baseHon||null,newCosto:panelCosto||null,vigDate,motivo:null,nuevasCuotas})
+      if(rec){ setTariffs(p=>[...p,rec]); onSave({...f,cobros,cobro_type:cobroType,cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio},_actualizarPago:false}) }
+    }
+    setSavingTariff(false)
   }
 
   return (
     <>
-      {/* Selector de cliente con búsqueda */}
+      {/* 1. Cliente */}
       {!selectedClient ? (
         <Fld label='Cliente'>
           <div style={{position:'relative'}}>
@@ -2131,11 +2137,11 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
           <button onClick={()=>{setSelectedClient(null);up('client_id','')}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
         </div>
       )}
-
       {showNewClient&&<MiniClientForm onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
 
       <Fld label='Proyecto'><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
 
+      {/* 2. Razón social */}
       {f.client_id&&(
         <Fld label='Razón social a facturar'>
           {clientEntitiesList.length>0?(
@@ -2144,20 +2150,13 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
               {clientEntitiesList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
             </select>
           ):(
-            <div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Este cliente no tiene razones sociales registradas. Se asociará al emitir la primera factura.</div>
+            <div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Este cliente no tiene razones sociales. Se asociará al emitir la primera factura.</div>
           )}
         </Fld>
       )}
 
-      <div style={{marginBottom:10}}>
-        <Lbl>Moneda</Lbl>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
-          {[['UF','UF'],['CLP','Pesos (CLP)']].map(([v,l])=>(
-            <button key={v} type='button' onClick={()=>up('moneda',v)} style={{padding:'8px',borderRadius:8,border:`2px solid ${moneda===v?C.accent:C.border}`,background:moneda===v?'#E6EEF1':'transparent',color:moneda===v?C.accent:C.muted,fontSize:12,fontWeight:700,cursor:'pointer'}}>{l}</button>
-          ))}
-        </div>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      {/* 3. Contexto: Área + Responsable */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
         <Fld label='Área'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
         <Fld label='Responsable'>
           <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
@@ -2165,16 +2164,12 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
             {WHO_LIST.map(w=><option key={w} value={w}>{w}</option>)}
           </select>
         </Fld>
-        {moneda==='UF'?<>
-        <Fld label='Honorarios UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
-        <Fld label='Costo UF (terceros)'><Inp type='number' step='0.01' value={f.cost_uf||''} onChange={e=>up('cost_uf',e.target.value)} placeholder='0.00'/></Fld>
-        <Fld label='Valor UF (CLP)'><Inp type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder='Ej: 38500'/></Fld>
-        </>:<>
-        <Fld label='Monto total (CLP)'><Inp type='number' value={f.amount_clp||''} onChange={e=>up('amount_clp',e.target.value)} placeholder='Ej: 1500000'/></Fld>
-        <Fld label='Costo CLP (terceros)'><Inp type='number' value={f.cost_clp||''} onChange={e=>up('cost_clp',e.target.value)} placeholder='0'/></Fld>
-        </>}
+      </div>
+
+      {/* 4. Estado + Año + Mes */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
-        <Fld label='Año presupuesto'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
+        <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
         <Fld label='Mes'>
           <select value={f.month||currentMonth} onChange={e=>up('month',parseInt(e.target.value))} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
             {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
@@ -2182,16 +2177,50 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         </Fld>
       </div>
 
-      {/* Forma de cobro */}
+      {/* 5. Honorarios con selector de moneda inline */}
+      <div style={{marginBottom:14}}>
+        <Lbl>Honorarios</Lbl>
+        <div style={{display:'flex',height:42,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+          <input type='number' step={moneda==='UF'?'0.01':'1'}
+            value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''}
+            onChange={e=>up(moneda==='UF'?'amount_uf':'amount_clp',e.target.value)}
+            placeholder={moneda==='UF'?'0.00':'0'}
+            style={{flex:1,border:'none',padding:'0 12px',fontSize:14,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0}}
+          />
+          <select value={moneda} onChange={e=>up('moneda',e.target.value)}
+            style={{width:62,border:'none',borderLeft:`1px solid ${C.border}`,padding:'0 6px',fontSize:13,background:'#EFF3F5',color:C.accent,fontWeight:700,cursor:'pointer',outline:'none'}}>
+            <option value='UF'>UF</option>
+            <option value='CLP'>CLP</option>
+          </select>
+        </div>
+        {moneda==='UF'&&<div style={{marginTop:8}}><Fld label='Valor UF (CLP)'><Inp type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder='Ej: 38500'/></Fld></div>}
+      </div>
+
+      {/* 6. Costo de terceros */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:costMode==='pct'&&costVal>0?4:14}}>
+        <span style={{fontSize:13,color:C.muted,flexShrink:0}}>Costo de terceros</span>
+        <div style={{display:'flex',height:38,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
+          <button type='button' onClick={()=>setCostMode('fijo')} style={{padding:'0 10px',border:'none',background:costMode==='fijo'?C.accent:'#EFF3F5',color:costMode==='fijo'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{moneda}</button>
+          <button type='button' onClick={()=>setCostMode('pct')} style={{padding:'0 10px',border:'none',borderLeft:`1px solid ${C.border}`,background:costMode==='pct'?C.accent:'#EFF3F5',color:costMode==='pct'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>%</button>
+        </div>
+        <input type='number' step={costMode==='pct'?'0.1':'0.01'}
+          value={costMode==='pct'?costPct:(moneda==='UF'?f.cost_uf||'':f.cost_clp||'')}
+          onChange={e=>{ if(costMode==='pct') setCostPct(e.target.value); else up(moneda==='UF'?'cost_uf':'cost_clp',e.target.value) }}
+          placeholder='0'
+          style={{flex:1,padding:'0 10px',height:38,borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0,boxSizing:'border-box'}}
+        />
+      </div>
+      {costMode==='pct'&&costVal>0&&<div style={{fontSize:11,color:C.muted,marginBottom:14}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
+
+      {/* 7. Forma de cobro */}
       {totalCLP>0&&(
-        <div style={{marginTop:4,marginBottom:12}}>
+        <div style={{marginBottom:12}}>
           <Lbl>Forma de cobro</Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
             {[['cuotas','Cuotas mensuales'],['mensual','Mensual recurrente'],['porcentaje','Por porcentaje'],['personalizada','Personalizada']].map(([v,l])=>(
               <button key={v} onClick={()=>setCobroType(v)} style={{padding:'8px 4px',borderRadius:8,border:`2px solid ${cobroType===v?C.accent:C.border}`,background:cobroType===v?'#E6EEF1':'transparent',color:cobroType===v?C.accent:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',textAlign:'center'}}>{l}</button>
             ))}
           </div>
-
           {cobroType==='mensual'&&(
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
@@ -2203,7 +2232,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
               {mensualInicio&&totalCLP>0&&<div style={{fontSize:11,color:C.muted}}>Genera <strong style={{color:C.text}}>12 cobros</strong> de <strong style={{color:C.text}}>{fmt(Math.round(totalCLP))}</strong>/mes desde {mensualInicio.slice(0,7)}</div>}
             </div>
           )}
-
           {cobroType==='cuotas'&&(
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
@@ -2213,7 +2241,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
               {cobroInicio&&<div style={{fontSize:11,color:C.muted}}>Cuota mensual: <strong style={{color:C.text}}>{fmt(Math.round(totalCLP/nCuotas))}</strong> · Total: {fmt(totalCLP)}</div>}
             </div>
           )}
-
           {cobroType==='porcentaje'&&(
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               {tramos.map((t,i)=>(
@@ -2227,7 +2254,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
               <div style={{fontSize:11,color:tramos.reduce((a,t)=>a+t.pct,0)!==100?C.overdue:C.normal,marginTop:4}}>Total: {tramos.reduce((a,t)=>a+t.pct,0)}% {tramos.reduce((a,t)=>a+t.pct,0)!==100?'(debe sumar 100%)':''}</div>
             </div>
           )}
-
           {cobroType==='personalizada'&&(
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               {cuotasCustom.map((c,i)=>(
@@ -2246,7 +2272,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
               {cuotasCustom.some(c=>c.monto)&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Total: <strong style={{color:C.text}}>{fmtUF(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0))}</strong> = {fmt(Math.round(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0)*ufVal))}</div>}
             </div>
           )}
-
           {cobros.length>0&&(
             <div style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#E6EEF1',fontSize:11,color:C.accent}}>
               Se crearán <strong>{cobros.length} cobro{cobros.length!==1?'s':''}</strong> pendientes: {cobros.map(c=>`${c.label} ${fmt(c.monto)} (${c.fecha})`).join(' · ')}
@@ -2255,55 +2280,61 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         </div>
       )}
 
-      {Number(f.monto_terceros)>0 && <div style={{fontSize:11,color:C.accent,marginTop:-4,marginBottom:8}}>Neto firma: {fmt((Number(f.amount)||0)-(Number(f.monto_terceros)||0))} · Terceros: {fmt(Number(f.monto_terceros)||0)}</div>}
+      {/* 8. Notas */}
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
+
+      {/* 9. Actualizar honorarios (solo ventas guardadas) */}
       {sale?.id&&(
         <div style={{marginTop:6,marginBottom:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-          {/* Resumen cobro actual */}
-          {(()=>{
-            const mon=f.moneda||'UF'
-            const fmtLabel={'mensual':'Mensual','cuotas':'Cuotas','porcentaje':'Porcentaje','personalizada':'Personalizada','unico':'Pago único'}[cobroType]||'—'
-            const monto=mon==='CLP'?fmt(parseFloat(f.amount_clp)||0):fmtUF(parseFloat(f.amount_uf)||0)
-            const costo=mon==='CLP'?(parseFloat(f.cost_clp)||0):(parseFloat(f.cost_uf)||0)
-            return (
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'10px 12px',borderRadius:10,background:'#F0F5F7',border:`1px solid #C8D9E0`,marginBottom:12}}>
-                <div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:2}}>Cobro actual</div>
-                  <div style={{fontSize:15,fontWeight:600,color:C.accent}}>{monto}{cobroType==='mensual'?' / mes':''}</div>
-                  {costo>0&&<div style={{fontSize:11,color:C.overdue,marginTop:2}}>Costo {mon==='CLP'?fmt(costo):fmtUF(costo)}</div>}
-                </div>
-                <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,padding:'3px 8px',borderRadius:4,background:'#E1F5EE',color:'#0F6E56'}}>{fmtLabel}{f.status==='Activo'?' · Activo':''}</span>
-              </div>
-            )
-          })()}
-          {/* Switch modificar cobro */}
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
-            <span style={{fontSize:13,fontWeight:600,color:C.text}}>Modificar cobro</span>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:modCobro?10:0}}>
+            <span style={{fontSize:13,fontWeight:600,color:C.text}}>Actualizar honorarios</span>
             <Switch on={modCobro} onToggle={()=>{ modCobro ? resetMod() : setModCobro(true) }}/>
           </div>
-          {/* Panel modificar */}
           {modCobro&&(
-            <div style={{marginTop:10}}>
-              <div style={{display:'flex',gap:8,marginBottom:14}}>
+            <div>
+              <div style={{fontSize:12,color:C.muted,background:'#F7F7F7',borderRadius:8,padding:'8px 10px',marginBottom:10,lineHeight:1.4}}>Reemplaza las cuotas programadas. Las ya emitidas y pagadas no se tocan.</div>
+              <div style={{display:'flex',gap:0,marginBottom:12,border:`0.5px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
                 {['ajustar','cambiar'].map(m=>(
-                  <button key={m} onClick={()=>setModMode(m)} style={{flex:1,padding:'8px 6px',borderRadius:8,border:`0.5px solid ${modMode===m?C.accent:C.border}`,background:modMode===m?'#EDF3F5':'transparent',color:modMode===m?C.accent:C.muted,fontSize:12,fontWeight:modMode===m?600:400,cursor:'pointer'}}>
+                  <button key={m} onClick={()=>setModMode(m)} style={{flex:1,padding:'8px 6px',border:'none',background:modMode===m?C.accent:'#EFF3F5',color:modMode===m?'#fff':C.muted,fontSize:12,fontWeight:modMode===m?600:400,cursor:'pointer'}}>
                     {m==='ajustar'?'Ajustar monto':'Cambiar formato'}
                   </button>
                 ))}
               </div>
               {modMode==='ajustar'&&(
                 <>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                    <Fld label={`Nuevo honorario (${f.moneda||'UF'})`}><Inp type='number' step={(f.moneda||'UF')==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder={(f.moneda||'UF')==='CLP'?'0':'0.00'} autoFocus/></Fld>
-                    <Fld label='Vigente desde'><Inp type='month' value={newVig} onChange={e=>setNewVig(e.target.value)}/></Fld>
-                    <Fld label='Nuevo costo (opc.)'><Inp type='number' step={(f.moneda||'UF')==='CLP'?'1':'0.01'} value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder='0'/></Fld>
-                    <Fld label='Motivo (opc.)'><Inp value={newMotivo} onChange={e=>setNewMotivo(e.target.value)} placeholder='Ej: reajuste'/></Fld>
+                  <div style={{display:'flex',gap:8,marginBottom:10,alignItems:'flex-end'}}>
+                    <div style={{flex:'0 0 60%',boxSizing:'border-box'}}>
+                      <Lbl>Nuevo honorario</Lbl>
+                      <div style={{display:'flex',height:40,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+                        <input type='number' step={moneda==='UF'?'0.01':'1'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder={moneda==='UF'?'0.00':'0'}
+                          style={{flex:1,border:'none',padding:'0 10px',fontSize:13,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0}} autoFocus/>
+                        <select value={moneda} onChange={e=>up('moneda',e.target.value)}
+                          style={{width:52,border:'none',borderLeft:`1px solid ${C.border}`,padding:'0 4px',fontSize:12,background:'#EFF3F5',color:C.accent,fontWeight:600,cursor:'pointer',outline:'none'}}>
+                          <option value='UF'>UF</option>
+                          <option value='CLP'>CLP</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{flex:'0 0 calc(40% - 8px)',boxSizing:'border-box'}}>
+                      <Lbl>Vigente desde</Lbl>
+                      <Inp type='month' value={newVig} onChange={e=>setNewVig(e.target.value)} style={{fontSize:11,padding:'10px 6px'}}/>
+                    </div>
                   </div>
-                  {newVig&&(()=>{const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=newVig+'-01').length;return progN>0?<div style={{fontSize:11,color:'#B97A00',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',margin:'8px 0',lineHeight:1.4}}>Se recalcularán <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''}.</div>:null})()}
-                  <div style={{display:'flex',gap:8,marginTop:8}}>
-                    <button onClick={resetMod} style={{flex:1,padding:10,borderRadius:10,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,cursor:'pointer'}}>Cancelar</button>
-                    <button onClick={confirmAjustar} disabled={savingTariff||!newHon||!newVig} style={{flex:2,padding:10,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',opacity:(savingTariff||!newHon||!newVig)?.6:1}}>{savingTariff?'Guardando...':'Confirmar'}</button>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:panelCosto>0?4:10}}>
+                    <span style={{fontSize:12,color:C.muted,flexShrink:0}}>Agregar costo</span>
+                    <div style={{display:'flex',height:34,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
+                      <button type='button' onClick={()=>setNewCostMode('fijo')} style={{padding:'0 10px',border:'none',background:newCostMode==='fijo'?C.accent:'#EFF3F5',color:newCostMode==='fijo'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{moneda}</button>
+                      <button type='button' onClick={()=>setNewCostMode('pct')} style={{padding:'0 10px',border:'none',borderLeft:`1px solid ${C.border}`,background:newCostMode==='pct'?C.accent:'#EFF3F5',color:newCostMode==='pct'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>%</button>
+                    </div>
+                    <input type='number' step={newCostMode==='pct'?'0.1':'0.01'}
+                      value={newCostMode==='pct'?newCostPct:newCosto}
+                      onChange={e=>{ if(newCostMode==='pct') setNewCostPct(e.target.value); else setNewCosto(e.target.value) }}
+                      placeholder='0'
+                      style={{flex:1,padding:'0 10px',height:34,borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0,boxSizing:'border-box'}}
+                    />
                   </div>
+                  {panelHon>0&&panelCosto>0&&<div style={{fontSize:12,color:C.muted,marginBottom:10}}>= {moneda==='UF'?fmtUF(panelCosto):fmt(Math.round(panelCosto))} · neto firma <strong style={{color:C.text}}>{moneda==='UF'?fmtUF(panelHon-panelCosto):fmt(Math.round(panelHon-panelCosto))}</strong></div>}
+                  {newVig&&(()=>{const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=newVig+'-01').length;return progN>0?<div style={{fontSize:11,color:'#856404',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',marginBottom:8,lineHeight:1.4}}>Se recalcularán <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}.</div>:null})()}
                 </>
               )}
               {modMode==='cambiar'&&(
@@ -2322,16 +2353,16 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
                     <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px',border:`0.5px solid ${C.border}`,margin:'8px 0'}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                         <Fld label='N.° de cuotas'><Inp type='number' value={newNCuotas} onChange={e=>setNewNCuotas(parseInt(e.target.value)||3)} placeholder='3'/></Fld>
-                        <Fld label={`Monto total (${f.moneda||'UF'})`}><Inp type='number' step={(f.moneda||'UF')==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder='0'/></Fld>
+                        <Fld label={`Monto total (${moneda})`}><Inp type='number' step={moneda==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder='0'/></Fld>
                         <Fld label='Primera cuota'><Inp type='month' value={newCobroInicio} onChange={e=>setNewCobroInicio(e.target.value)}/></Fld>
                         <Fld label='Costo (opc.)'><Inp type='number' value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder='0'/></Fld>
                       </div>
-                      {newHon&&newNCuotas>0&&(()=>{const mon=f.moneda||'UF';const ufV=parseFloat(f.uf_value)||0;const tot=mon==='CLP'?parseFloat(newHon)||0:(parseFloat(newHon)||0)*ufV;const mc=tot>0?Math.round(tot/newNCuotas):0;return mc>0?<div style={{fontSize:11,color:C.muted,background:'#fff',borderRadius:6,padding:'6px 8px',border:`0.5px solid ${C.border}`}}>{newNCuotas} cuotas de <strong style={{color:C.accent}}>{fmt(mc)}</strong></div>:null})()}
+                      {newHon&&newNCuotas>0&&(()=>{const tot=moneda==='CLP'?parseFloat(newHon)||0:(parseFloat(newHon)||0)*ufVal;const mc=tot>0?Math.round(tot/newNCuotas):0;return mc>0?<div style={{fontSize:11,color:C.muted,background:'#fff',borderRadius:6,padding:'6px 8px',border:`0.5px solid ${C.border}`}}>{newNCuotas} cuotas de <strong style={{color:C.accent}}>{fmt(mc)}</strong></div>:null})()}
                     </div>
                   )}
                   {newFmt==='mensual'&&(
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'8px 0'}}>
-                      <Fld label={`Nuevo monto (${f.moneda||'UF'})`}><Inp type='number' step={(f.moneda||'UF')==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder='0'/></Fld>
+                      <Fld label={`Nuevo monto (${moneda})`}><Inp type='number' step={moneda==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder='0'/></Fld>
                       <Fld label='Costo (opc.)'><Inp type='number' value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder='0'/></Fld>
                     </div>
                   )}
@@ -2339,7 +2370,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
                     <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px',border:`0.5px solid ${C.border}`,margin:'8px 0'}}>
                       {newCuotasCustom.map((c,i)=>(
                         <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 28px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
-                          <Fld label={i===0?`Monto (${f.moneda||'UF'})`:''}><Inp type='number' step={(f.moneda||'UF')==='CLP'?'1':'0.01'} value={c.monto} onChange={e=>setNewCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))}/></Fld>
+                          <Fld label={i===0?`Monto (${moneda})`:''}><Inp type='number' step={moneda==='CLP'?'1':'0.01'} value={c.monto} onChange={e=>setNewCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))}/></Fld>
                           <Fld label={i===0?'Fecha':''}><Inp type='date' value={c.fecha} onChange={e=>setNewCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:e.target.value}:x))}/></Fld>
                           {newCuotasCustom.length>1&&<button onClick={()=>setNewCuotasCustom(p=>p.filter(x=>x.id!==c.id))} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,paddingBottom:2}}>×</button>}
                         </div>
@@ -2349,22 +2380,17 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
                   )}
                   {newFmt==='unico'&&(
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'8px 0'}}>
-                      <Fld label={`Monto (${f.moneda||'UF'})`}><Inp type='number' step={(f.moneda||'UF')==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder='0'/></Fld>
+                      <Fld label={`Monto (${moneda})`}><Inp type='number' step={moneda==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder='0'/></Fld>
                       <Fld label='Costo (opc.)'><Inp type='number' value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder='0'/></Fld>
                     </div>
                   )}
-                  <Fld label='Motivo (opc.)'><Inp value={newMotivo} onChange={e=>setNewMotivo(e.target.value)} placeholder='Ej: cambio de acuerdo'/></Fld>
-                  {newVig&&newFmt&&(()=>{const vigDate=newVig+'-01';const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=vigDate).length;return <div style={{fontSize:11,color:'#B97A00',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',margin:'8px 0',lineHeight:1.4}}>Reemplaza <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}. Las emitidas/pagadas no se tocan.</div>})()}
-                  <div style={{display:'flex',gap:8,marginTop:8}}>
-                    <button onClick={resetMod} style={{flex:1,padding:10,borderRadius:10,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,cursor:'pointer'}}>Cancelar</button>
-                    <button onClick={confirmCambiar} disabled={savingTariff||!newFmt||!newVig} style={{flex:2,padding:10,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',opacity:(savingTariff||!newFmt||!newVig)?.6:1}}>{savingTariff?'Guardando...':'Confirmar'}</button>
-                  </div>
+                  {newVig&&newFmt&&(()=>{const vigDate=newVig+'-01';const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=vigDate).length;return <div style={{fontSize:11,color:'#856404',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',margin:'8px 0',lineHeight:1.4}}>Reemplaza <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}. Las emitidas/pagadas no se tocan.</div>})()}
                 </>
               )}
             </div>
           )}
-          {/* Historial */}
-          <div style={{marginTop:modCobro?14:0,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+          {/* 10. Historial de honorarios */}
+          <div style={{marginTop:modCobro?14:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
             <Lbl>Historial de honorarios</Lbl>
             {tariffs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin historial registrado.</div>}
             {tariffs.map((t,i)=>{
@@ -2389,11 +2415,14 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
           </div>
         </div>
       )}
+
+      {/* 11. Botones */}
       <div style={{display:'flex',gap:8,marginTop:4}}>
-        {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.client_id||!f.title} onClick={handleSave} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
-          {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
+        {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{flex:1,padding:'11px 0',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
+        <button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:handleSave}
+          style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
+          {(saving||savingTariff)?<Spin/>:null}{(saving||savingTariff)?'Guardando...':(modCobro?'Confirmar y guardar':'Guardar')}
         </button>
       </div>
     </>
