@@ -29,7 +29,10 @@
       "Bash(cd *)",
       "Bash(xargs -I{} sed -n '{}p' src/App.jsx)",
       "Bash(vercel --prod --yes)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(python3 -m json.tool)"
     ]
   }
 }
