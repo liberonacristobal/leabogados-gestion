@@ -2064,7 +2064,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       const resp = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':import.meta.env.VITE_ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:'Eres un extractor de datos de propuestas de servicios legales. Extrae SOLO los siguientes campos en JSON, sin texto adicional, sin markdown, sin backticks: { cliente_nombre, cliente_rut, nombre_fantasia, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }',messages:[{role:'user',content:text.slice(0,10000)}]})
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:'Eres un extractor de datos de propuestas de servicios legales. Extrae SOLO los siguientes campos en JSON, sin texto adicional, sin markdown, sin backticks: { cliente_nombre, cliente_rut, nombre_fantasia, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }',messages:[{role:'user',content:text.slice(0,10000)}]})
       })
       if(!resp.ok) throw new Error('Error API '+resp.status)
       const apiData = await resp.json()
