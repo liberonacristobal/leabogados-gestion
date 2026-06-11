@@ -1083,7 +1083,8 @@ const META_UF = 9800
 const META_CLP = 400000000
 
 function CashflowProjection({billing}) {
-  const [horizon,setHorizon] = useState(3) // 3 | 6 | 12 meses
+  const [horizon,setHorizon] = useState(6) // 3 | 6 | 12 meses
+  const [openDetalle,setOpenDetalle] = useState(false)
   const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due)
   const programadas = billing.filter(b=>b.status==='Programada'&&b.due)
 
@@ -1094,11 +1095,12 @@ function CashflowProjection({billing}) {
       const d = new Date(now.getFullYear(), now.getMonth()+i, 1)
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
       const label = d.toLocaleDateString('es-CL',{month:'short',year:'2-digit'})
+      const labelFull = d.toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())
       const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
       const overdue = pending.filter(b=>b.due<key.slice(0,7)+'-01'&&i===0).reduce((a,b)=>a+(b.amount||0),0)
       const emitido = i===0?emitidoMes+overdue:emitidoMes
       const programado = programadas.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
-      result.push({key,label,emitido,programado,total:emitido+programado,overdue:i===0?overdue:0})
+      result.push({key,label,labelFull,emitido,programado,total:emitido+programado,overdue:i===0?overdue:0})
     }
     return result
   },[billing,horizon])
@@ -1108,35 +1110,92 @@ function CashflowProjection({billing}) {
   const totalEmitido = months.reduce((a,m)=>a+m.emitido,0)
   const totalProgramado = months.reduce((a,m)=>a+m.programado,0)
 
+  // Geometria del grafico de linea
+  const W=470, padX=24, padTop=14, baseY=120, n=months.length
+  const xAt = i => n>1 ? padX + i*(W-2*padX)/(n-1) : W/2
+  const yAt = m => baseY - (m.total/maxVal)*(baseY-padTop)
+  const linePath = months.map((m,i)=>`${i?'L':'M'}${xAt(i).toFixed(1)},${yAt(m).toFixed(1)}`).join(' ')
+  const areaPath = `${linePath} L${xAt(n-1).toFixed(1)},${baseY} L${xAt(0).toFixed(1)},${baseY} Z`
+
+  const tcell = {borderRadius:10,padding:'10px 12px',background:'#F5F7F9',minWidth:0}
+  const tlabel = {fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}
+  const badge = {fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,whiteSpace:'nowrap'}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        <div style={{display:'flex',gap:4}}>
-          {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
-            <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+      <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,gap:8}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.accent,letterSpacing:.3,textTransform:'uppercase'}}>Proyección flujo de caja</div>
+          <div style={{display:'flex',gap:4,flexShrink:0}}>
+            {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
+              <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:'#99ABB4',fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10,marginBottom:12}}>
+          <div style={tcell}><div style={tlabel}>Total</div><div style={{fontSize:15,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(totalHorizon)}</div></div>
+          <div style={tcell}><div style={tlabel}>Emitido</div><div style={{fontSize:15,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(totalEmitido)}</div></div>
+          <div style={tcell}><div style={tlabel}>Programado</div><div style={{fontSize:15,fontWeight:700,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(totalProgramado)}</div></div>
+        </div>
+
+        <div style={{display:'flex',gap:14,fontSize:10,color:'#537281',marginBottom:4}}>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:'50%',background:C.accent,display:'inline-block'}}/>Emitido</span>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:'50%',background:'#99ABB4',display:'inline-block'}}/>Programado</span>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px dashed #99ABB4',display:'inline-block'}}/>Hoy</span>
+        </div>
+
+        <svg viewBox={`0 0 ${W} 150`} width="100%" style={{display:'block'}}>
+          <defs>
+            <linearGradient id="cfArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#003C50" stopOpacity="0.20"/>
+              <stop offset="100%" stopColor="#003C50" stopOpacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <line x1={xAt(0)} y1="10" x2={xAt(0)} y2={baseY} stroke="#99ABB4" strokeWidth="1" strokeDasharray="3 3"/>
+          <text x={xAt(0)+4} y="16" fontSize="9" fill="#99ABB4" fontWeight="600">Hoy</text>
+          <path d={areaPath} fill="url(#cfArea)"/>
+          <path d={linePath} fill="none" stroke="#003C50" strokeWidth="2" strokeLinejoin="round"/>
+          {months.map((m,i)=>(
+            <circle key={m.key} cx={xAt(i)} cy={yAt(m)} r="4" fill={m.emitido>0?'#003C50':'#99ABB4'}/>
           ))}
-        </div>
-      </div>
-      <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`,marginBottom:6}}>
-        <div style={{fontSize:11,color:C.muted,marginBottom:2}}>Total esperado {horizon} meses: <strong style={{color:C.text,fontSize:13}}>{fmt(totalHorizon)}</strong></div>
-        <div style={{display:'flex',gap:12,marginBottom:8,fontSize:10,color:C.muted}}>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:2,background:C.accent,display:'inline-block'}}/>Emitido {fmt(totalEmitido)}</span>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:2,background:'#7C5CBF',display:'inline-block'}}/>Programado {fmt(totalProgramado)}</span>
-        </div>
-        <div style={{display:'flex',gap:4,alignItems:'flex-end',height:64}}>
-          {months.map(m=>(
-            <div key={m.key} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-              <div style={{fontSize:9,color:C.muted,fontWeight:600}}>{m.total>0?fmt(m.total).replace('$','').replace('.000','k'):''}</div>
-              <div style={{width:'100%',borderRadius:3,overflow:'hidden',background:'#E8EEF0',height:40,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
-                {m.programado>0&&<div style={{width:'100%',background:'#7C5CBF',height:`${Math.round((m.programado/maxVal)*100)}%`,minHeight:2}}/>}
-                {m.emitido>0&&<div style={{width:'100%',background:m.overdue>0?C.overdue:C.accent,height:`${Math.round((m.emitido/maxVal)*100)}%`,minHeight:2}}/>}
-              </div>
-              <div style={{fontSize:9,color:C.muted,textAlign:'center'}}>{m.label}</div>
-            </div>
+          {months.map((m,i)=>(
+            <text key={m.key} x={xAt(i)} y={baseY+22} fontSize="9" fill="#99ABB4" textAnchor="middle">{m.label}</text>
           ))}
+        </svg>
+
+        <div onClick={()=>setOpenDetalle(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+          <span style={{fontSize:11,color:C.muted,transform:openDetalle?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
+          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Detalle</span>
         </div>
+        {openDetalle&&(
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,marginTop:8}}>
+            <thead><tr>
+              <th style={{textAlign:'left',fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,padding:'6px 4px',borderBottom:`1px solid ${C.border}`}}>Mes</th>
+              <th style={{textAlign:'left',fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,padding:'6px 4px',borderBottom:`1px solid ${C.border}`}}>Estado</th>
+              <th style={{textAlign:'right',fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,padding:'6px 4px',borderBottom:`1px solid ${C.border}`}}>Monto</th>
+            </tr></thead>
+            <tbody>
+              {months.map(m=>{
+                const emitNoVenc = m.emitido - m.overdue
+                return (
+                  <tr key={m.key}>
+                    <td style={{padding:'8px 4px',borderBottom:'1px solid #F1F1F1',color:C.text}}>{m.labelFull}</td>
+                    <td style={{padding:'8px 4px',borderBottom:'1px solid #F1F1F1'}}>
+                      <span style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                        {m.overdue>0&&<span style={{...badge,background:'#FCEBEB',color:'#A32D2D'}}>Vencido</span>}
+                        {emitNoVenc>0&&<span style={{...badge,background:'#E4E8EB',color:'#003C50'}}>Emitido</span>}
+                        {m.programado>0&&<span style={{...badge,background:'#F1F1F1',color:'#537281'}}>Programado</span>}
+                        {m.total===0&&<span style={{fontSize:11,color:'#99ABB4'}}>—</span>}
+                      </span>
+                    </td>
+                    <td style={{padding:'8px 4px',borderBottom:'1px solid #F1F1F1',textAlign:'right',fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{fmt(m.total)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
-      {months[0]?.overdue>0&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginTop:4}}>Incluye {fmt(months[0].overdue)} vencido en este mes</div>}
     </div>
   )
 }
