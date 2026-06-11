@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-11
+- 5 mejoras dashboard/propuestas: (1) "Subir archivo" + "Drive" en header de Nueva propuesta — Drive muestra archivos PDF/Word/Google Docs modificados en últimos 15 días, selección descarga y pasa a extractFromFile. (2) Matching IA por tokens: ≥2 palabras en común = match; si múltiples candidatos muestra lista para elegir; si ninguno: buscar cliente manual o crear Prospecto; "Nombre de Fantasía" reemplazado por "Razón Social". (3) Gestión Caja Chica en dashboard admin muestra solo usuarios limited (Martín, Martina, Rodrigo). (4) Terminadas en DashboardTasks: acordeón maestro que colapsa todo (incluso nombres); sección renombrada "Gestión Caja Chica". (5) CashflowProjection movida a después de VentasPorMes, siempre visible, sección "CASH FLOW FORECAST" con subtítulo dinámico "Proyección al [día] [DD] de [mes] de [YYYY]".
+
+## 2026-06-11
 - Tanda 3: (GAPS 5) Adjuntos en facturas — tabla `billing_attachments` creada en Supabase; BillingForm carga y muestra el componente Attachments al editar un cobro existente; estado `billingAttachments` cargado en boot junto a los demás adjuntos. (GAPS 1) Cruce reembolso↔rendición — al completar una rendición de cliente se ofrece crear automáticamente un cobro de tipo "Reembolso gastos" en Facturación con monto, cliente y notas del período; aplica desde ExpensesView y ClientsView.
 
 ## 2026-06-11
