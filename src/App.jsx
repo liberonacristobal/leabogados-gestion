@@ -1272,7 +1272,7 @@ function VentasPorMes({sales,ufHoy}) {
   const data = useMemo(()=>{
     const arr = Array.from({length:12},(_,i)=>({mes:MESES[i], uf:0, clp:0}))
     const ufConv = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
-    sales.filter(s=>s.year===yr).forEach(s=>{
+    sales.filter(s=>s.year===yr&&s.status!=='Borrador').forEach(s=>{
       const esRec = s.cobro_type==='mensual' && s.status==='Activo'
       // Monto mensual de esta venta en UF y CLP
       const uf = s.moneda==='CLP'
@@ -1586,7 +1586,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
 function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,onEditTask,onCompleteTask,onPreviewTask}) {
   const yr = currentYear
   const bb = billing
-  const salesYr = sales.filter(s=>s.year===yr)
+  const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador')
   const ufState = useUF()
   const ufHoy = ufState.uf
 
@@ -5146,7 +5146,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [ftab,setFtab] = useState('resumen')
   const ufState = useUF()
   const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || 40000
-  const clientSales = sales.filter(s=>s.client_id===client.id)
+  const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador')
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
   const clientTasks = tasks.filter(t=>t.client_id===client.id&&t.status!=='Terminado')
@@ -6614,7 +6614,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
 
     // ── VENTAS
     if(sections.ventas){
-      const ss=filterByPeriod(sales.map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})),'date')
+      const ss=filterByPeriod(sales.filter(s=>s.status!=='Borrador').map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})),'date')
       const brutoUF=ss.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
       const costoUF=ss.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
       const netoUF=brutoUF-costoUF
