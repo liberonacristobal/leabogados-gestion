@@ -1595,7 +1595,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const ufDeVenta = s => ventaUF(s, ufRef)
   const clpDeVenta = s => ventaCLP(s, ufRef)
   const vendidoBrutoUF = salesYr.reduce((a,s)=>a+ufDeVenta(s),0)
-  const costoUF = salesYr.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1)),0)
+  const costoUF = salesYr.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))+(s.moneda==='CLP'&&s.cost_clp&&ufRef>0?((parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1)):0),0)
   const vendidoNetoUF = vendidoBrutoUF - costoUF
   const vendidoBrutoCLP = Math.round(salesYr.reduce((a,s)=>a+clpDeVenta(s),0))
   const costoCLP = Math.round(costoUF * ufRef)
@@ -2008,7 +2008,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [tramos,setTramos] = useState(sale?.cobro_config?.tramos||[{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
   const [cuotasCustom,setCuotasCustom] = useState(sale?.cobro_config?.cuotasCustom||[{id:1,monto:'',fecha:''}])
   const [mensualInicio,setMensualInicio] = useState(sale?.cobro_config?.mensualInicio||'')
-  const [actualizarPago,setActualizarPago] = useState(false)
   // Historial de honorarios (tramos)
   const [tariffs,setTariffs] = useState([])
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
@@ -2095,7 +2094,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const cobros = generarCobros()
 
   const handleSave = () => {
-    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:actualizarPago})
+    onSave({...f, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
   }
 
   return (
@@ -2172,6 +2171,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         <Fld label='Valor UF (CLP)'><Inp type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder='Ej: 38500'/></Fld>
         </>:<>
         <Fld label='Monto total (CLP)'><Inp type='number' value={f.amount_clp||''} onChange={e=>up('amount_clp',e.target.value)} placeholder='Ej: 1500000'/></Fld>
+        <Fld label='Costo CLP (terceros)'><Inp type='number' value={f.cost_clp||''} onChange={e=>up('cost_clp',e.target.value)} placeholder='0'/></Fld>
         </>}
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
         <Fld label='Año presupuesto'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
@@ -2257,12 +2257,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
 
       {Number(f.monto_terceros)>0 && <div style={{fontSize:11,color:C.accent,marginTop:-4,marginBottom:8}}>Neto firma: {fmt((Number(f.amount)||0)-(Number(f.monto_terceros)||0))} · Terceros: {fmt(Number(f.monto_terceros)||0)}</div>}
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
-      {sale?.id&&cobros.length>0&&(
-        <label style={{display:'flex',alignItems:'flex-start',gap:8,padding:'10px 12px',borderRadius:8,background:'#FFF8EC',border:`1px solid #E8D9B5`,marginBottom:10,marginTop:4,cursor:'pointer'}}>
-          <input type='checkbox' checked={actualizarPago} onChange={e=>setActualizarPago(e.target.checked)} style={{marginTop:2,flexShrink:0,cursor:'pointer'}}/>
-          <span style={{fontSize:12,color:C.text}}>Actualizar forma de pago<br/><span style={{fontSize:11,color:C.muted}}>Reemplaza las cuotas programadas por las nuevas. Conserva las ya emitidas y pagadas.</span></span>
-        </label>
-      )}
       {sale?.id&&(
         <div style={{marginTop:6,marginBottom:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
           {/* Resumen cobro actual */}
@@ -7031,7 +7025,7 @@ export default function App() {
       const {cobros, cobroType, _actualizarPago, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
-      const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),updated_at:new Date().toISOString()}
+      const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
