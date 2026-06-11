@@ -35,7 +35,23 @@
       "Bash(python3 -m json.tool)",
       "mcp__visualize__read_me",
       "mcp__visualize__show_widget",
-      "Bash(open p7-render.html)"
+      "Bash(open p7-render.html)",
+      "Bash(echo \"=== en el proyecto \\(imagenes recientes\\) ===\" *)",
+      "Bash(echo \"=== archivos modificados hoy \\(11 jun\\) en home, imagenes ===\" *)",
+      "Bash(sips -g pixelWidth -g pixelHeight -g hasAlpha '/Users/cristobal.liberona/Downloads/Logo LE Abogados \\(30 x 30 cm\\) \\(5 x 20 cm\\) \\(5 x 10 cm\\).png')",
+      "Bash(cp \"/Users/cristobal.liberona/Downloads/Logo LE Abogados \\(30 x 30 cm\\) \\(5 x 20 cm\\) \\(5 x 10 cm\\).png\" le_logo.png)",
+      "Bash(sips --rotate 90 le_logo.png --out le_logo_cw.png)",
+      "Bash(sips --rotate 270 le_logo.png --out le_logo_ccw.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /tmp/le_logo_cw.png)",
+      "Bash(command -v magick)",
+      "Bash(command -v convert)",
+      "Bash(python3 -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
+      "Bash(python3 -)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(python3 -c \"import PIL,sys;print\\('PIL ok'\\)\")",
+      "Bash(python3 -m pip --version)",
+      "Bash(python3 -m pip install --quiet --user pillow)",
+      "Bash(cp /tmp/le_logo_white.png \"/Users/cristobal.liberona/Downloads/leabogados-gestion/src/le-logo-blanco.png\" *)"
     ]
   }
 }

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-11
+- Documento de rendición al cliente, rediseño + unificación (cierra bug #6 "PDF triplicado"): se creó una fuente única `rendicionDocHtml` que ahora usan tanto el "Ver PDF" del historial (`rendicionPdfHtml`) como el envío desde RendicionModal (`generatePDFContent`); antes eran dos copias casi idénticas que podían divergir. Cambios de diseño aprobados: (1) logo "Liberona Escala Abogados" en blanco sobre el header azul (`#003C50`) en vez del wordmark de texto; (2) tipografía uniformada (de 7 tamaños a una escala 9/10/11px + nombre del cliente 14px; KPIs 16→13px); (3) el título del mensaje de cobro "Saldo pendiente — transferir a Liberona Escala" pasa de azul 13px a grafito `#3D3D3D` 11px, igual que el resto de la caja. El logo se importa desde `src/le-logo-blanco.png` y se incrusta como data URI (`assetsInlineLimit` subido en vite.config) para que imprima/exporte sin depender de la red. Cálculos de montos/saldo sin cambios.
+
 ## 2026-06-10
 - Proyección flujo de caja: los puntos del gráfico ahora son interactivos. Al pasar por encima (desktop) o tocar (mobile) un punto se muestra un tooltip con el monto total de ese mes; el punto se agranda y el mes queda resaltado. Área de toque ampliada para mobile.
 

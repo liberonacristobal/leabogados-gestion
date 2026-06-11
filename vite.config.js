@@ -6,5 +6,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // El logo de la rendición debe quedar inline (data URI) para que el PDF imprima sin red.
+    assetsInlineLimit: 20000,
   }
 })
