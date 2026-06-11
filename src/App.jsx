@@ -2490,8 +2490,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         </Fld>
       )}
 
-      {/* 3. Contexto: Área + Responsable */}
-      {!sale?.id&&<div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Contexto</div>}
+      {/* 3. Área + Responsable */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
         <Fld label={<>Área<AiBadge field='area'/></>}><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
         <Fld label={<>Responsable<AiBadge field='responsible'/></>}>
@@ -2503,7 +2502,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       </div>
 
       {/* 4. Estado + Año + Mes */}
-      {!sale?.id&&<div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Estado y período</div>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
         <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
@@ -2617,18 +2615,27 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               {cuotasCustom.map((c,i)=>(
                 <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
-                  <Fld label={i===0?'Monto UF':''}><Inp type='number' step='0.01' value={c.monto} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))} placeholder='0.00'/></Fld>
+                  <Fld label={i===0?`Monto ${moneda}`:''}>
+                    <Inp type='number' step={moneda==='UF'?'0.01':'1'} value={c.monto} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))} placeholder={moneda==='UF'?'0.00':'0'}/>
+                  </Fld>
                   <Fld label={i===0?'Fecha':''}>
                     <div>
                       <Inp type='date' value={c.fecha} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,fecha:e.target.value}:x))}/>
-                      {c.monto&&ufVal>0&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{fmt(Math.round(parseFloat(c.monto)*ufVal))}</div>}
+                      {moneda==='UF'&&c.monto&&ufVal>0&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{fmt(Math.round(parseFloat(c.monto)*ufVal))}</div>}
                     </div>
                   </Fld>
                   {cuotasCustom.length>1&&<button onClick={()=>setCuotasCustom(p=>p.filter(x=>x.id!==c.id))} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,paddingBottom:2}}>×</button>}
                 </div>
               ))}
               <button onClick={()=>setCuotasCustom(p=>[...p,{id:Date.now(),monto:'',fecha:''}])} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>+ Agregar cuota</button>
-              {cuotasCustom.some(c=>c.monto)&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Total: <strong style={{color:C.text}}>{fmtUF(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0))}</strong> = {fmt(Math.round(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0)*ufVal))}</div>}
+              {cuotasCustom.some(c=>c.monto)&&(
+                <div style={{fontSize:11,color:C.muted,marginTop:6}}>
+                  {moneda==='UF'
+                    ? <>Total: <strong style={{color:C.text}}>{fmtUF(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0))}</strong> = {fmt(Math.round(cuotasCustom.reduce((a,c)=>a+(parseFloat(c.monto)||0),0)*ufVal))}</>
+                    : <>Total: <strong style={{color:C.text}}>{fmt(cuotasCustom.reduce((a,c)=>a+Math.round(parseFloat(c.monto)||0),0))}</strong></>
+                  }
+                </div>
+              )}
             </div>
           )}
           {cobros.length>0&&(
