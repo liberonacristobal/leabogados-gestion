@@ -2498,7 +2498,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
 
       {/* 4. Estado + Año + Mes */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
-        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
+        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado']}/></Fld>
         <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
         <Fld label='Mes'>
           <select value={f.month||currentMonth} onChange={e=>up('month',parseInt(e.target.value))} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
