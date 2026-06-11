@@ -18,6 +18,8 @@ const C = {
 }
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—'
+// Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
+const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => { if(!d) return '—'; return new Date(d+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short'}) }
 const daysLeft = d => { if(!d) return null; return Math.round((new Date(d+'T12:00') - new Date()) / 86400000) }
 // Archivo automatico de tareas: una tarea Terminada se considera archivada cuando se completo
@@ -95,7 +97,6 @@ function rsBalances(clientId, expenses, entities){
 // Mismo formato que el de RendicionModal; deriva razón social de los gastos rendidos.
 function rendicionPdfHtml(r, client, expenses, clientEntities){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4'
-  const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
   const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
   const fondosList = (expenses||[]).filter(e=>e.client_id===(client&&client.id)&&e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
   const entId = (gastos.find(e=>e.entity_id)||{}).entity_id
@@ -532,7 +533,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
 
   const totalSel = pendientes.filter(e=>selected.has(e.id)).reduce((a,e)=>a+e.amount,0)
 
-  const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+  const fmtCLP = fmtN
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
   // Auto-cierre del mensaje de confirmación post-liquidación
@@ -604,7 +605,6 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const generatePDF = () => {
     const gastosSel = pendientes.filter(e=>selected.has(e.id))
     const now = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
-    const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
     const A='#003C50', A2='#537281', A4='#E4E8EB'
     // Agrupar por cliente
     const porCliente = {}
@@ -849,7 +849,6 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                   <div style={{display:'flex',gap:8,marginTop:10}}>
                     <button onClick={()=>{
                       const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
-                      const fmtN=n=>'$'+Math.abs(n||0).toLocaleString('es-CL')
                       const A='#003C50',A2='#537281',A4='#E4E8EB'
                       const porCliente={}
                       gastosR.forEach(e=>{ const cn=clients.find(x=>x.id===e.client_id)?.name||'Sin cliente'; if(!porCliente[cn])porCliente[cn]=[]; porCliente[cn].push(e) })
@@ -1770,7 +1769,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
       {(()=>{
         const cajaUsers = [...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))
         if(cajaUsers.length===0) return null
-        const money = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+        const money = fmtN
         const filas = cajaUsers.map(u=>{
           const saldo = saldoCajaChica(pettyCash, expenses, u)
           const misGastos = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===u)
@@ -2998,8 +2997,6 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     else setSelected(new Set(disponibles.map(e=>e.id)))
   }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
-
-  const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Otro':'#ECECEC'}
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
@@ -3010,7 +3007,6 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     const razon = ent?.name || client.name || '\u2014'
     const rut = ent?.rut || client.rut || ''
     const fechaEmision = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
-    const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
     // Per\u00edodo: rango de fechas (gastos + fondos)
     const fechas = [...gastosSel, ...fondosList].map(e=>e.date).filter(Boolean).sort()
     const mesAno = d => new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'})
@@ -4749,7 +4745,6 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const [para,setPara] = useState(client?.email||'')
   const [asunto,setAsunto] = useState(`Rendición de gastos ${client?.name||''} — ${r.periodo}`)
   const [sending,setSending] = useState(false)
-  const fmtN = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
     const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#C2382B">-${fmtN(e.amount)}</td></tr>`).join('')
@@ -6189,8 +6184,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
     const label=getPeriodLabel()
     const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
     const A='#003C50', A2='#537281', A3='#99ABB4', A4='#E4E8EB', G='#3D3D3D'
-    const fmtN=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
-    const fmtUFN=n=>n?`UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—'
+    const fmtN=fmt
+    const fmtUFN=fmtUF
 
     let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Reporte LE — ${label}</title>
@@ -6776,7 +6771,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             if(da!==db) return da<db?1:-1
             return (b.created_at||'')<(a.created_at||'')?-1:1
           }).slice(0,3)
-          const fmtCLP = n => '$'+Math.abs(n||0).toLocaleString('es-CL')
+          const fmtCLP = fmtN
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
           const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
           const GREEN={num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0',label:C.muted}
