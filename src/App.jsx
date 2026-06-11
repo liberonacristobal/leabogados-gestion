@@ -2007,10 +2007,10 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
           const tardio = isPropuesta && diasPendiente>14
           return (
             <div key={s.id}
-              onClick={isPropuesta?undefined:()=>onEdit(s)}
-              style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?'#E8A640':C.border}`,borderLeft:tardio?`4px solid #E8A640`:undefined,cursor:isPropuesta?'default':'pointer'}}
-              onMouseEnter={e=>{if(!isPropuesta)e.currentTarget.style.borderColor=C.accent}}
-              onMouseLeave={e=>{if(!isPropuesta)e.currentTarget.style.borderColor=tardio?'#E8A640':C.border}}>
+              onClick={()=>onEdit(s)}
+              style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?'#E8A640':C.border}`,borderLeft:tardio?`4px solid #E8A640`:undefined,cursor:'pointer'}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?'#E8A640':C.accent}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=tardio?'#E8A640':C.border}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:5}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
@@ -2019,6 +2019,12 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
                 <div style={{textAlign:'right',flexShrink:0}}>
                   {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</div>}
                   {clpA>0&&<div style={{fontSize:11,color:C.muted}}>{fmt(clpA)}</div>}
+                  {isPropuesta&&(
+                    <div style={{display:'flex',gap:4,justifyContent:'flex-end',marginTop:4}} onClick={e=>e.stopPropagation()}>
+                      <span onClick={()=>onRechazar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FDEAEA',color:C.overdue,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Rechazar</span>
+                      <span onClick={()=>onActivar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#DCF5EC',color:'#0F6E56',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
@@ -2026,12 +2032,6 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
                 <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
                 <Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/>
                 {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C06A00':C.muted}}>{diasPendiente}d pendiente</span>}
-                {isPropuesta&&(
-                  <span onClick={e=>{e.stopPropagation();onRechazar(s)}} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FDEAEA',color:C.overdue,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Rechazar</span>
-                )}
-                {isPropuesta&&(
-                  <span onClick={e=>{e.stopPropagation();onActivar(s)}} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#DCF5EC',color:'#0F6E56',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
-                )}
               </div>
               {s.notes&&<div style={{fontSize:11,color:C.muted,marginTop:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.notes}</div>}
             </div>
@@ -7808,7 +7808,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?'Editar venta':modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Cargar desde archivo</button>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Cargar desde archivo</button>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
