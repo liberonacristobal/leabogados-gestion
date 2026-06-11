@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-11
+- Fix "modificar tarifa/propuesta" (recálculo de programadas): antes `handleSaveTariff` le ponía el honorario completo a TODAS las facturas programadas, ignorando la forma de pago — solo era correcto para "mensual recurrente"; en cuotas iguales inflaba el total ×N, en porcentaje ignoraba los %, en personalizada perdía los montos. Además, en ventas UF sin Valor UF el recálculo se saltaba (no en CLP). Ahora se ESCALA cada cuota programada por la razón (nuevo honorario / honorario anterior): respeta la distribución de cuotas / % / personalizada / mensual, y queda igual en UF y CLP (la razón no tiene unidades, ya no requiere Valor UF). El honorario anterior se toma de la última tarifa registrada o, si no hay, del monto base de la venta; si no se puede determinar, avisa y no toca las programadas.
+
+## 2026-06-11
 - Documento de rendición al cliente, rediseño + unificación (cierra bug #6 "PDF triplicado"): se creó una fuente única `rendicionDocHtml` que ahora usan tanto el "Ver PDF" del historial (`rendicionPdfHtml`) como el envío desde RendicionModal (`generatePDFContent`); antes eran dos copias casi idénticas que podían divergir. Cambios de diseño aprobados: (1) logo "Liberona Escala Abogados" en blanco sobre el header azul (`#003C50`) en vez del wordmark de texto; (2) tipografía uniformada (de 7 tamaños a una escala 9/10/11px + nombre del cliente 14px; KPIs 16→13px); (3) el título del mensaje de cobro "Saldo pendiente — transferir a Liberona Escala" pasa de azul 13px a grafito `#3D3D3D` 11px, igual que el resto de la caja. El logo se importa desde `src/le-logo-blanco.png` y se incrusta como data URI (`assetsInlineLimit` subido en vite.config) para que imprima/exporte sin depender de la red. Cálculos de montos/saldo sin cambios.
 
 ## 2026-06-10
