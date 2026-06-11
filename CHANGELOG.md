@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Deuda técnica (#4): se eliminó el azul `#185FA5` (fuera de paleta) y se reemplazó por el azul corporativo `#003C50` en todos sus usos: badge "Notaría" (texto sobre fondo #E6F1FB), checkboxes seleccionados (borde/fondo) en caja chica y ficha de cliente, color del usuario Cristóbal y botón de adjunto. Solo cambia el tono de azul; layout y contraste se mantienen.
+
+## 2026-06-10
 - Deuda técnica (#5): unificación de los formateadores de dinero. Antes había ~9 definiciones locales repetidas del mismo formato CLP (`'$'+Math.abs(n).toLocaleString('es-CL')`) más redefiniciones locales de Intl currency y UF. Ahora hay una sola fuente: `fmt` (Intl currency con signo), `fmtN` (monto CLP absoluto sin signo, el llamador agrega el +/-) y `fmtUF`, todas globales; los antiguos `fmtCLP`, `money`, `fmtUFN` y la redefinición de `fmtN`/Intl en el PDF del Dashboard quedaron como alias de esas fuentes. Cambio sin efecto visible: los textos mostrados son idénticos (el PDF del Dashboard conserva su Intl con signo vía alias a `fmt`). Se mantiene aparte solo el `fmtN` de `UFStamp` porque redondea el valor UF (necesidad legítima distinta).
 
 ## 2026-06-10
