@@ -859,6 +859,16 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                       const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
                       const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
                     }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>Enviar por correo</button>
+                    <button onClick={async()=>{
+                      if(!confirm('¿Anular esta liquidación? Los gastos vuelven a la pestaña Liquidar como pendientes.')) return
+                      try {
+                        await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
+                        await supabase.from('rendiciones').delete().eq('id',r.id)
+                        if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
+                        if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
+                        setOpenRendicion(null)
+                      } catch(err) { alert('Error: '+err.message) }
+                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #E24B4A',background:'transparent',color:'#E24B4A',fontSize:11,fontWeight:600,cursor:'pointer'}}>Anular</button>
                   </div>
                 </div>
               )}
