@@ -108,7 +108,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities){
   const saldo = totFondos - totGastos
   const fechaEmision = r.created_at ? new Date(r.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'}) : ''
   const periodo = r.periodo || ''
-  const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg='#537281',label=cat||'Otro'; if(c.includes('notar')){bg='#E6F1FB';fg='#185FA5';label='Notaría'} else if(c.includes('transp')){bg='#E1F5EE';fg='#0F6E56'} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${label}</span>` }
+  const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg='#537281',label=cat||'Otro'; if(c.includes('notar')){bg='#E6F1FB';fg='#003C50';label='Notaría'} else if(c.includes('transp')){bg='#E1F5EE';fg='#0F6E56'} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${label}</span>` }
   const filasGastos = gastos.map(e=>`<tr><td>${e.date||'—'}</td><td>${e.concept||'—'}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600'>${fmtN(e.amount)}</td></tr>`).join('')
   const filasFondos = fondosList.length ? fondosList.map(e=>`<tr><td style='width:90px'>${e.date||'—'}</td><td>${e.concept||'Fondo recibido'}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>Sin fondos registrados</td></tr>`
   let saldoBox=''
@@ -741,10 +741,10 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             return (
               <div key={e.id} onClick={()=>toggleSelect(e.id)}
                 style={{background:isSel?'#E6F1FB':'#fff',borderRadius:8,padding:'10px 12px',marginBottom:6,
-                  border:`1px solid ${isSel?'#185FA5':'#E8E8E8'}`,cursor:'pointer',
+                  border:`1px solid ${isSel?'#003C50':'#E8E8E8'}`,cursor:'pointer',
                   display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isSel?'#185FA5':'#ccc'}`,
-                  background:isSel?'#185FA5':'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isSel?'#003C50':'#ccc'}`,
+                  background:isSel?'#003C50':'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   {isSel&&<span style={{color:'#fff',fontSize:11}}>&#10003;</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
@@ -1445,7 +1445,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   }
   const avatarColor = name => {
     const map = {
-      'Crist\u00f3bal': ['#E6F1FB','#185FA5'],
+      'Crist\u00f3bal': ['#E6F1FB','#003C50'],
       'Erasmo':          ['#E1F5EE','#0F6E56'],
       'Mart\u00edn':    ['#EAF3DE','#3B6D11'],
       'Martina':         ['#EEEDFE','#534AB7'],
@@ -3020,7 +3020,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     const badge = (cat) => {
       const c=(cat||'').toLowerCase()
       let bg='#E4E8EB', fg='#537281', label=cat||'Otro'
-      if(c.includes('notar')){ bg='#E6F1FB'; fg='#185FA5'; label='Notar\u00eda' }
+      if(c.includes('notar')){ bg='#E6F1FB'; fg='#003C50'; label='Notar\u00eda' }
       else if(c.includes('transp')){ bg='#E1F5EE'; fg='#0F6E56' }
       return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${label}</span>`
     }
@@ -3209,9 +3209,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
           return (
             <div key={e.id} onClick={()=>toggleOne(e.id)}
               style={{background:isSel?'#E6F1FB':'#fff',borderRadius:7,padding:'8px 10px',marginBottom:5,
-                border:`1px solid ${isSel?'#185FA5':'#E8E8E8'}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
-              <div style={{width:16,height:16,borderRadius:3,border:`2px solid ${isSel?'#185FA5':'#ccc'}`,
-                background:isSel?'#185FA5':'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                border:`1px solid ${isSel?'#003C50':'#E8E8E8'}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:16,height:16,borderRadius:3,border:`2px solid ${isSel?'#003C50':'#ccc'}`,
+                background:isSel?'#003C50':'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 {isSel&&<span style={{color:'#fff',fontSize:10}}>&#10003;</span>}
               </div>
               <div style={{flex:1,minWidth:0}}>
@@ -3655,8 +3655,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const AdjuntoIcon = ({e}) => {
     const n=(expenseAttachments||[]).filter(a=>a.expense_id===e.id).length
     return n>0
-      ? <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title={`${n} adjunto(s)`} style={{display:'flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,border:'1px solid #185FA5',background:'#E6F1FB',color:'#185FA5',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0}}>
-          <span style={{width:8,height:11,border:'1.5px solid #185FA5',borderRadius:3,display:'inline-block',transform:'rotate(35deg)'}}/>{n}
+      ? <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title={`${n} adjunto(s)`} style={{display:'flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,border:'1px solid #003C50',background:'#E6F1FB',color:'#003C50',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0}}>
+          <span style={{width:8,height:11,border:'1.5px solid #003C50',borderRadius:3,display:'inline-block',transform:'rotate(35deg)'}}/>{n}
         </button>
       : <button onClick={ev=>{ev.stopPropagation();setAttachExpense(e)}} title='Adjuntar comprobante' style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer',flexShrink:0,fontSize:13,lineHeight:1}}>↑</button>
   }
