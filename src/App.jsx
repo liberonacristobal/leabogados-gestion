@@ -1912,7 +1912,7 @@ function SalesView({sales,clients,onEdit,onAdd}) {
           </select>
           <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
             <option value=''>Todos</option>
-            {['Activo','Terminado','Pausado'].map(s=><option key={s} value={s}>{s}</option>)}
+            {['Activo','Terminado','Pausado','Borrador'].map(s=><option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         {filtered.length>0&&(
@@ -1953,7 +1953,7 @@ function SalesView({sales,clients,onEdit,onAdd}) {
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                 <AreaChip area={s.area}/>
                 <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
-                <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Terminado'?C.done:'#C77F18'} small/>
+                <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Borrador'?'#E8CC6A':s.status==='Terminado'?C.done:'#C77F18'} color={s.status==='Borrador'?'#4A3800':undefined} small/>
               </div>
               {s.notes&&<div style={{fontSize:11,color:C.muted,marginTop:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.notes}</div>}
             </div>
@@ -2035,12 +2035,46 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [propNewClient,setPropNewClient] = useState({name:'',rut:'',nombre_fantasia:''})
   const [propCreating,setPropCreating] = useState(false)
   const [aiFields,setAiFields] = useState(new Set())
+  const [hasDraft,setHasDraft] = useState(false)
+  const [draftTs,setDraftTs] = useState(null)
+  const draftTimer = useRef(null)
+  const DRAFT_KEY = 'leabogados_sale_draft'
   const {uf: ufHoy} = useUF()
   const [openCondicion,setOpenCondicion] = useState(null)
   useEffect(()=>{ if(ufHoy && !f.uf_value) up('uf_value', Math.round(ufHoy)) },[ufHoy])
+  useEffect(()=>{
+    if(sale?.id) return
+    try { const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null'); if(d?.ts){setHasDraft(true);setDraftTs(d.ts)} } catch {}
+  },[])
+  useEffect(()=>{
+    if(sale?.id) return
+    clearTimeout(draftTimer.current)
+    draftTimer.current=setTimeout(()=>{
+      localStorage.setItem(DRAFT_KEY,JSON.stringify({f,selectedClient,cobroType,nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,costMode,costPct,costSwitch,ts:Date.now()}))
+    },2000)
+    return ()=>clearTimeout(draftTimer.current)
+  },[f,selectedClient,cobroType,nCuotas,cobroInicio,mensualInicio,costMode,costPct,costSwitch,tramos,cuotasCustom])
   const resetMod = () => { setModCobro(false); setModMode('ajustar'); setNewHon(''); setNewVig(''); setNewCosto(''); setNewFmt(''); setNewNCuotas(3); setNewCobroInicio(''); setNewCuotasCustom([{id:1,monto:'',fecha:''}]); setNewCostMode('fijo'); setNewCostPct('') }
 
   const AiBadge = ({field}) => aiFields.has(field) ? <span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#E4E8EB',color:'#537281',marginLeft:5,verticalAlign:'middle',lineHeight:1}}>IA</span> : null
+  const clearDraft = () => { localStorage.removeItem(DRAFT_KEY); setHasDraft(false) }
+  const restoreDraft = () => {
+    try {
+      const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'{}')
+      if(d.f) setF(d.f)
+      if(d.selectedClient){setSelectedClient(d.selectedClient);setClientQ('')}
+      if(d.cobroType) setCobroType(d.cobroType)
+      if(d.nCuotas) setNCuotas(d.nCuotas)
+      if(d.cobroInicio) setCobroInicio(d.cobroInicio)
+      if(d.tramos) setTramos(d.tramos)
+      if(d.cuotasCustom) setCuotasCustom(d.cuotasCustom)
+      if(d.mensualInicio) setMensualInicio(d.mensualInicio)
+      if(d.costMode) setCostMode(d.costMode)
+      if(d.costPct) setCostPct(d.costPct)
+      if(typeof d.costSwitch==='boolean') setCostSwitch(d.costSwitch)
+    } catch {}
+    setHasDraft(false)
+  }
 
   const extractFromFile = async (file) => {
     if(file.size > 10*1024*1024) { setPropError('El archivo supera 10 MB.'); return }
@@ -2166,7 +2200,19 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
       else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
     }
+    clearDraft()
     onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
+  }
+
+  const handleSaveDraft = () => {
+    const saveF = {...f, status:'Borrador'}
+    if(!costSwitch) { saveF.cost_uf = null; saveF.cost_clp = null }
+    else if(costMode==='pct') {
+      if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
+      else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
+    }
+    clearDraft()
+    onSave({...saveF, cobros:[], cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
   }
 
   const confirmAndSave = async() => {
@@ -2292,6 +2338,20 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
             Cargar desde propuesta
           </button>
+        </div>
+      )}
+
+      {/* Banner recuperar borrador local */}
+      {hasDraft&&!sale?.id&&(
+        <div style={{background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:8,padding:'9px 12px',marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+          <div>
+            <div style={{fontSize:12,fontWeight:600,color:'#7A5C00'}}>Borrador guardado</div>
+            {draftTs&&<div style={{fontSize:11,color:'#7A5C00'}}>{new Date(draftTs).toLocaleDateString('es-CL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>}
+          </div>
+          <div style={{display:'flex',gap:8,flexShrink:0}}>
+            <button onClick={clearDraft} style={{background:'none',border:'none',color:'#7A5C00',fontSize:12,cursor:'pointer',fontWeight:600}}>Descartar</button>
+            <button onClick={restoreDraft} style={{padding:'5px 12px',borderRadius:6,border:'none',background:'#E8CC6A',color:'#4A3800',fontSize:12,fontWeight:700,cursor:'pointer'}}>Recuperar</button>
+          </div>
         </div>
       )}
 
@@ -2667,6 +2727,10 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{flex:1,padding:'11px 0',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft}
+          style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+          Borrador
+        </button>}
         <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:handleSave}
           style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
           {(saving||savingTariff)?<Spin/>:null}{(saving||savingTariff)?'Guardando...':(modCobro?'Confirmar y guardar':'Guardar')}
@@ -5168,7 +5232,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                 <div style={{display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
                   <AreaChip area={s.area}/>
                   <span style={{fontSize:10,color:C.muted}}>{s.year}</span>
-                  <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Terminado'?C.done:'#C77F18'} small/>
+                  <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Borrador'?'#E8CC6A':s.status==='Terminado'?C.done:'#C77F18'} color={s.status==='Borrador'?'#4A3800':undefined} small/>
                   {saleTasks.length>0&&<span style={{fontSize:10,color:C.muted}}>{saleTasks.length} tarea{saleTasks.length!==1?'s':''}</span>}
                 </div>
               </div>
