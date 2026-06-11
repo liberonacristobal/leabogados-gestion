@@ -1112,9 +1112,13 @@ const META_UF = 9800
 const META_CLP = 400000000
 
 function CashflowProjection({billing}) {
-  const [horizon,setHorizon] = useState(6) // 3 | 6 | 12 meses
+  const [horizon,setHorizon] = useState(6)
   const [openDetalle,setOpenDetalle] = useState(false)
   const [activePoint,setActivePoint] = useState(null)
+  const _diasES=['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
+  const _mesesES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const _hoy=new Date()
+  const fechaTitulo=`Proyección al ${_diasES[_hoy.getDay()]} ${_hoy.getDate()} de ${_mesesES[_hoy.getMonth()]} de ${_hoy.getFullYear()}`
   const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due)
   const programadas = billing.filter(b=>b.status==='Programada'&&b.due)
 
@@ -1154,7 +1158,10 @@ function CashflowProjection({billing}) {
     <div style={{padding:'16px 20px 0'}}>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,gap:8}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.accent,letterSpacing:.3,textTransform:'uppercase'}}>Proyección flujo de caja</div>
+          <div>
+            <div style={{fontSize:13,fontWeight:600,color:C.accent,letterSpacing:.3,textTransform:'uppercase'}}>Cash Flow Forecast</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:'uppercase',letterSpacing:.3}}>{fechaTitulo}</div>
+          </div>
           <div style={{display:'flex',gap:4,flexShrink:0}}>
             {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
               <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:'#99ABB4',fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
@@ -1443,6 +1450,7 @@ function UFStamp({uf,isToday,asOf,loading}){
 function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   const [sortBy,setSortBy] = useState('encargo')
   const [openPersonas,setOpenPersonas] = useState({})
+  const [openTerminadas,setOpenTerminadas] = useState(false)
   const activas = tasks.filter(t=>t.status==='Activo')
   const porPersona = {}
   activas.forEach(t=>{ const w=t.who||'Sin asignar'; (porPersona[w]=porPersona[w]||[]).push(t) })
@@ -1564,8 +1572,11 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         const personasTerm = Object.keys(porPersonaTerm).sort()
         return (
           <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-            <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Terminadas · {termTasks.length}</div>
-            {personasTerm.map(persona=>{
+            <div onClick={()=>setOpenTerminadas(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer',userSelect:'none',marginBottom:openTerminadas?8:0}}>
+              <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,flex:1}}>Terminadas · {termTasks.length}</span>
+              <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:openTerminadas?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:openTerminadas?-2:2,flexShrink:0}}></span>
+            </div>
+            {openTerminadas&&personasTerm.map(persona=>{
               const isOpenT=!!openPersonas['__term__'+persona]
               return (
                 <div key={persona} style={{marginBottom:8}}>
@@ -1641,7 +1652,6 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
-  const [openCaja,setOpenCaja] = useState(false)
   const [openOficina,setOpenOficina] = useState(false)
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
@@ -1687,6 +1697,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
       </div>
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy}/>
+      <CashflowProjection billing={billing}/>
 
       {/* Facturación */}
       <div style={{padding:'0 20px 16px'}}>
@@ -1796,18 +1807,10 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
         </div>
       )}
 
-      {/* Proyección de caja */}
-      <div style={{padding:'16px 20px 0'}}>
-        <button onClick={()=>setOpenCaja(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:openCaja?4:0}}>
-          <span style={{fontSize:10,color:C.muted,transform:openCaja?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Proyección de caja</span>
-        </button>
-      </div>
-      {openCaja&&<CashflowProjection billing={billing}/>}
-
-      {/* Gestión · Gastos y Caja Chica — control del equipo (el Dashboard ya es admin-only) */}
+      {/* Gestión Caja Chica — control del equipo (el Dashboard ya es admin-only) */}
       {(()=>{
-        const cajaUsers = [...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))
+        const LIMITED_NAMES=new Set(['Martín','Martina','Rodrigo'])
+        const cajaUsers = [...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>LIMITED_NAMES.has(u)).sort((a,b)=>a.localeCompare(b,'es'))
         if(cajaUsers.length===0) return null
         const money = fmtN
         const filas = cajaUsers.map(u=>{
@@ -1825,7 +1828,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
         const th = {fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}
         return (
           <div style={{padding:'16px 20px 0'}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Gestión · Gastos y Caja Chica</div>
+            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Gestión Caja Chica</div>
             <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
               <div style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'8px 12px',borderBottom:`1px solid ${C.border}`,background:'#F7F8F9'}}>
                 <div style={th}>Usuario</div>
@@ -2087,7 +2090,7 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Si estamos activando una propuesta, guardar el honorario original antes de que el usuario lo edite
@@ -2127,10 +2130,15 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [propuestaData,setPropuestaData] = useState(null)
   const [propError,setPropError] = useState('')
   const [propClientMatch,setPropClientMatch] = useState(null)
+  const [propClientCandidates,setPropClientCandidates] = useState([])
+  const [propSearchQ,setPropSearchQ] = useState('')
   const [propEntitySel,setPropEntitySel] = useState('')
   const [propClientMode,setPropClientMode] = useState('asociar')
-  const [propNewClient,setPropNewClient] = useState({name:'',rut:'',nombre_fantasia:''})
+  const [propNewClient,setPropNewClient] = useState({name:'',rut:'',razon_social:''})
   const [propCreating,setPropCreating] = useState(false)
+  const [propDriveFiles,setPropDriveFiles] = useState([])
+  const [propDriveLoading,setPropDriveLoading] = useState(false)
+  const [propDriveError,setPropDriveError] = useState('')
   const [aiFields,setAiFields] = useState(new Set())
   const [hasDraft,setHasDraft] = useState(false)
   const [draftTs,setDraftTs] = useState(null)
@@ -2139,6 +2147,24 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const {uf: ufHoy} = useUF()
   const [openCondicion,setOpenCondicion] = useState(null)
   useEffect(()=>{ if(onExposeUpload) onExposeUpload(()=>setPropuestaStep('upload')) },[])
+  useEffect(()=>{
+    if(!onExposeDrive) return
+    onExposeDrive(async()=>{
+      setPropuestaStep('drive')
+      setPropDriveError('')
+      setPropDriveLoading(true)
+      try {
+        const token = await driveToken()
+        const cutoff = new Date(Date.now()-15*24*60*60*1000).toISOString()
+        const q = encodeURIComponent(`modifiedTime>'${cutoff}' and trashed=false and (mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')`)
+        const data = await driveGet(token,`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=50`)
+        setPropDriveFiles(data.files||[])
+      } catch(e) {
+        setPropDriveError(e.message||'Error al conectar con Drive')
+      }
+      setPropDriveLoading(false)
+    })
+  },[])
   useEffect(()=>{ if(ufHoy && !f.uf_value) up('uf_value', Math.round(ufHoy)) },[ufHoy])
   useEffect(()=>{
     if(sale?.id) return
@@ -2196,7 +2222,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       const resp = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':import.meta.env.VITE_ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:'Eres un extractor de datos de propuestas de servicios legales. Extrae SOLO los siguientes campos en JSON, sin texto adicional, sin markdown, sin backticks: { cliente_nombre, cliente_rut, nombre_fantasia, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }',messages:[{role:'user',content:text.slice(0,10000)}]})
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:'Eres un extractor de datos de propuestas de servicios legales. Extrae SOLO los siguientes campos en JSON, sin texto adicional, sin markdown, sin backticks: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }',messages:[{role:'user',content:text.slice(0,10000)}]})
       })
       if(!resp.ok) throw new Error('Error API '+resp.status)
       const apiData = await resp.json()
@@ -2205,17 +2231,29 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       setPropuestaData(parsed)
       const nombre = (parsed.cliente_nombre||'').toLowerCase().trim()
       const rut = (parsed.cliente_rut||'').replace(/[.\-]/g,'').trim()
-      let match = null
-      if(rut) match = clients.find(c=>(c.rut||'').replace(/[.\-]/g,'')=== rut)
-      if(!match && nombre) match = clients.find(c=>c.name.toLowerCase().includes(nombre)||nombre.includes(c.name.toLowerCase()))
+      const tokenize = s => s.toLowerCase().replace(/[^\wáéíóúüñ\s]/g,'').split(/\s+/).filter(w=>w.length>2)
+      const countCommon = (a,b) => { const sb=new Set(tokenize(b)); return tokenize(a).filter(w=>sb.has(w)).length }
+      let exactMatch = null
+      if(rut) exactMatch = clients.find(c=>(c.rut||'').replace(/[.\-]/g,'')=== rut)
+      let tokenCandidates = []
+      if(!exactMatch && nombre) {
+        const scored = clients.map(c=>({c,score:countCommon(nombre,c.name)})).filter(x=>x.score>=2)
+        scored.sort((a,b)=>b.score-a.score)
+        tokenCandidates = scored.map(x=>x.c)
+      }
+      const match = exactMatch||(tokenCandidates.length===1?tokenCandidates[0]:null)
       setPropClientMatch(match||null)
+      setPropClientCandidates(tokenCandidates.length>1?tokenCandidates:[])
+      setPropSearchQ('')
       if(match){
         setPropClientMode('asociar')
         const ents=(clientEntities||[]).filter(e=>e.client_id===match.id)
         setPropEntitySel(ents[0]?.id||'')
+      } else if(tokenCandidates.length>1) {
+        setPropClientMode('candidatos')
       } else {
         setPropClientMode('crear')
-        setPropNewClient({name:parsed.cliente_nombre||'',rut:parsed.cliente_rut||'',nombre_fantasia:parsed.nombre_fantasia||''})
+        setPropNewClient({name:parsed.cliente_nombre||'',rut:parsed.cliente_rut||'',razon_social:parsed.razon_social||''})
       }
       setPropuestaStep('asociar')
     } catch(err) {
@@ -2231,7 +2269,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
     try {
       let client = propClientMatch
       if(!client || propClientMode==='crear') {
-        const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null,nombre_fantasia:propNewClient.nombre_fantasia.trim()||null}).select().single()
+        const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null,razon_social:propNewClient.razon_social.trim()||null}).select().single()
         if(error) throw error
         client = nc
         setClients(p=>[...p,nc])
@@ -2355,6 +2393,54 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
     setSavingTariff(false)
   }
 
+  if(propuestaStep==='drive') return (
+    <>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.text}}>Cargar desde Drive</div>
+        <button type='button' onClick={()=>{setPropuestaStep(null);setPropDriveError('')}} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
+      </div>
+      {propDriveLoading?(
+        <div style={{textAlign:'center',padding:'40px 20px',display:'flex',flexDirection:'column',alignItems:'center',gap:10}}>
+          <Spin/>
+          <div style={{fontSize:13,color:C.muted}}>Buscando archivos en Drive...</div>
+        </div>
+      ):propDriveError?(
+        <div style={{fontSize:12,color:C.overdue,padding:'12px 0'}}>{propDriveError}</div>
+      ):propDriveFiles.length===0?(
+        <div style={{fontSize:13,color:C.muted,padding:'24px 0',textAlign:'center'}}>No hay archivos modificados en los ultimos 15 dias</div>
+      ):(
+        <>
+          <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Archivos modificados en los ultimos 15 dias</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:320,overflowY:'auto'}}>
+            {propDriveFiles.map(f=>(
+              <button key={f.id} type='button' onClick={async()=>{
+                setPropuestaStep('extracting')
+                try {
+                  const token = await driveToken()
+                  const isGDoc = f.mimeType==='application/vnd.google-apps.document'
+                  const downloadUrl = isGDoc
+                    ? `https://www.googleapis.com/drive/v3/files/${f.id}/export?mimeType=application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+                    : `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`
+                  const res = await fetch(downloadUrl,{headers:{Authorization:'Bearer '+token}})
+                  const blob = await res.blob()
+                  const fname = isGDoc?(f.name.includes('.')?f.name:f.name+'.docx'):(f.name||'archivo.pdf')
+                  const file = new File([blob],fname,{type:blob.type})
+                  await extractFromFile(file)
+                } catch(e) {
+                  setPropDriveError(e.message||'Error al descargar el archivo')
+                  setPropuestaStep('drive')
+                }
+              }} style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',textAlign:'left',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</div>
+                <div style={{fontSize:10,color:C.muted,flexShrink:0}}>{new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'})}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+
   if(propuestaStep==='upload'||propuestaStep==='extracting') return (
     <>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -2391,7 +2477,27 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         <div style={{fontSize:13,fontWeight:600,color:C.text}}>Propuesta leida</div>
         <button type='button' onClick={()=>{setPropuestaStep(null);setPropuestaData(null);setPropError('')}} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
       </div>
-      {propClientMatch?(
+      {/* Candidatos múltiples */}
+      {propClientMode==='candidatos'&&(
+        <>
+          <Lbl>Varios clientes posibles — elige uno</Lbl>
+          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
+            {propClientCandidates.map(c=>(
+              <button key={c.id} type='button' onClick={()=>{setPropClientMatch(c);setPropClientMode('asociar');const ents=(clientEntities||[]).filter(e=>e.client_id===c.id);setPropEntitySel(ents[0]?.id||'')}}
+                style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',textAlign:'left',cursor:'pointer'}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{c.name}</div>
+                {c.rut&&<div style={{fontSize:11,color:C.muted}}>{c.rut}</div>}
+              </button>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:4}}>
+            <button type='button' onClick={()=>{setPropClientMode('buscar');setPropSearchQ('')}} style={{flex:1,padding:'9px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Buscar otro cliente</button>
+            <button type='button' onClick={()=>{setPropClientMode('crear');setPropNewClient({name:propuestaData?.cliente_nombre||'',rut:propuestaData?.cliente_rut||'',razon_social:propuestaData?.razon_social||''})}} style={{flex:1,padding:'9px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Crear como Prospecto</button>
+          </div>
+        </>
+      )}
+      {/* Cliente detectado con certeza */}
+      {(propClientMode==='asociar'||propClientMode==='crear')&&propClientMatch&&(
         <>
           <Lbl>Cliente detectado</Lbl>
           <div style={{padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`,marginBottom:12}}>
@@ -2412,23 +2518,47 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
           {propClientMode==='crear'&&(<>
             <Fld label='Nombre'><Inp value={propNewClient.name} onChange={e=>setPropNewClient(p=>({...p,name:e.target.value}))} placeholder='Nombre del cliente'/></Fld>
             <Fld label='RUT'><Inp value={propNewClient.rut} onChange={e=>setPropNewClient(p=>({...p,rut:e.target.value}))} placeholder='12.345.678-9'/></Fld>
-            <Fld label='Nombre fantasia'><Inp value={propNewClient.nombre_fantasia} onChange={e=>setPropNewClient(p=>({...p,nombre_fantasia:e.target.value}))} placeholder='Opcional'/></Fld>
+            <Fld label='Razon social'><Inp value={propNewClient.razon_social} onChange={e=>setPropNewClient(p=>({...p,razon_social:e.target.value}))} placeholder='Opcional'/></Fld>
           </>)}
         </>
-      ):(
+      )}
+      {/* Sin match — crear nuevo */}
+      {(propClientMode==='crear'||propClientMode==='buscar')&&!propClientMatch&&propClientMode!=='buscar'&&(
         <>
-          <Lbl>Cliente no encontrado — crear nuevo</Lbl>
+          <Lbl>Cliente no encontrado</Lbl>
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            <button type='button' onClick={()=>{setPropClientMode('buscar');setPropSearchQ('')}} style={{flex:1,padding:'9px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Buscar otro cliente</button>
+          </div>
           <Fld label='Nombre'><Inp value={propNewClient.name} onChange={e=>setPropNewClient(p=>({...p,name:e.target.value}))} placeholder='Nombre del cliente'/></Fld>
           <Fld label='RUT'><Inp value={propNewClient.rut} onChange={e=>setPropNewClient(p=>({...p,rut:e.target.value}))} placeholder='12.345.678-9'/></Fld>
-          <Fld label='Nombre fantasia'><Inp value={propNewClient.nombre_fantasia} onChange={e=>setPropNewClient(p=>({...p,nombre_fantasia:e.target.value}))} placeholder='Opcional'/></Fld>
+          <Fld label='Razon social'><Inp value={propNewClient.razon_social} onChange={e=>setPropNewClient(p=>({...p,razon_social:e.target.value}))} placeholder='Opcional'/></Fld>
+        </>
+      )}
+      {/* Búsqueda manual */}
+      {propClientMode==='buscar'&&(
+        <>
+          <Lbl>Buscar cliente</Lbl>
+          <Inp value={propSearchQ} onChange={e=>setPropSearchQ(e.target.value)} placeholder='Escribe nombre o RUT...' style={{marginBottom:8}}/>
+          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12,maxHeight:180,overflowY:'auto'}}>
+            {(propSearchQ.trim().length>=2?clients.filter(c=>c.name.toLowerCase().includes(propSearchQ.toLowerCase())||((c.rut||'').includes(propSearchQ))):clients.slice(0,8)).map(c=>(
+              <button key={c.id} type='button' onClick={()=>{setPropClientMatch(c);setPropClientMode('asociar');const ents=(clientEntities||[]).filter(e=>e.client_id===c.id);setPropEntitySel(ents[0]?.id||'')}}
+                style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',textAlign:'left',cursor:'pointer'}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{c.name}</div>
+                {c.rut&&<div style={{fontSize:11,color:C.muted}}>{c.rut}</div>}
+              </button>
+            ))}
+          </div>
+          <button type='button' onClick={()=>{setPropClientMode('crear');setPropClientMatch(null);setPropNewClient({name:propuestaData?.cliente_nombre||'',rut:propuestaData?.cliente_rut||'',razon_social:propuestaData?.razon_social||''})}} style={{width:'100%',padding:'9px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:4}}>Crear como Prospecto</button>
         </>
       )}
       {propError&&<div style={{fontSize:12,color:C.overdue,marginBottom:10}}>{propError}</div>}
-      <button type='button' disabled={propCreating||(propClientMode==='crear'&&!propNewClient.name.trim())} onClick={applyPropuesta}
-        style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(propCreating||(propClientMode==='crear'&&!propNewClient.name.trim()))?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginTop:4}}>
-        {propCreating&&<Spin/>}
-        {propCreating?'Aplicando...':'Continuar y pre-llenar formulario'}
-      </button>
+      {(propClientMode==='asociar'||propClientMode==='crear')&&(
+        <button type='button' disabled={propCreating||(propClientMode==='crear'&&!propNewClient.name.trim())} onClick={applyPropuesta}
+          style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(propCreating||(propClientMode==='crear'&&!propNewClient.name.trim()))?0.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginTop:4}}>
+          {propCreating&&<Spin/>}
+          {propCreating?'Aplicando...':'Continuar y pre-llenar formulario'}
+        </button>
+      )}
     </>
   )
 
@@ -7428,6 +7558,7 @@ export default function App() {
   const [tab,setTab]=useState('dashboard')
   const [modal,setModal]=useState(null)
   const saleUploadRef = useRef(null)
+  const saleDriveRef = useRef(null)
 
   const loadUserRole = async(email) => {
     const {data} = await supabase.from('user_roles').select('*').eq('email',email).maybeSingle()
@@ -7875,7 +8006,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Cargar desde archivo</button>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
