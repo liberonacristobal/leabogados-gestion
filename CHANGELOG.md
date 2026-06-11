@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Archivo automático de tareas (PASO 2): pill "Archivadas (N)" al final de la fila de filtros de la vista Tareas (borde punteado #99ABB4 inactiva, sólida #003C50 activa). Al activarla se muestran solo las tareas archivadas (con opacidad reducida y sin borde de urgencia, vía `done`), ocultando Activas/Asignadas/Terminadas; al desactivarla vuelve la vista normal. La pill solo aparece si hay archivadas (o si está activa).
+
+## 2026-06-10
 - Archivo automático de tareas (PASO 1): nueva columna `tasks.completed_at` (SQL aparte). Al marcar una tarea como Terminada se sella `completed_at`; al reabrirla se limpia (en `handleSaveTask` y en el toggle de la vista de tareas de cliente). Constante `DAYS_TO_ARCHIVE = 15` y helper `isTaskArchived`: una tarea Terminada hace más de 15 días (o sin `completed_at`, las históricas) se considera archivada. La sección "Terminadas" de la vista Tareas ahora muestra solo las terminadas recientes (no archivadas). No se borra nada.
 
 ## 2026-06-10
