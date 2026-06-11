@@ -1,6 +1,12 @@
 # Changelog
 
 ## 2026-06-11
+- Tanda 3: (GAPS 5) Adjuntos en facturas — tabla `billing_attachments` creada en Supabase; BillingForm carga y muestra el componente Attachments al editar un cobro existente; estado `billingAttachments` cargado en boot junto a los demás adjuntos. (GAPS 1) Cruce reembolso↔rendición — al completar una rendición de cliente se ofrece crear automáticamente un cobro de tipo "Reembolso gastos" en Facturación con monto, cliente y notas del período; aplica desde ExpensesView y ClientsView.
+
+## 2026-06-11
+- Pipeline de Propuestas: header con dos pills "Nueva venta" (ghost) y "Nueva propuesta" (accent); selector de estado ampliado (Activo, Propuesta, Borrador, Rechazada, Terminado, Pausado); cuando el filtro es "Propuesta" se muestran 6 KPIs en grilla 3×2 (Pipeline UF, Pendientes, Conversión, Descuento prom., Rechazadas, Valor rechazado); tarjetas de propuesta con días pendiente, borde naranja si >14 días y botones pill "Rechazar" (rojo suave) y "Activar" (verde suave); "Activar" abre SaleForm con datos pre-llenados y botón "Activar propuesta" en verde que guarda proposal_amount_uf/clp + activated_at + status=Activo; "Rechazar" actualiza status=Rechazada sin abrir modal; Propuesta y Rechazada excluidas de todos los KPIs y totales (dashboard, gráfico, ficha cliente, reporte).
+
+## 2026-06-11
 - SaleForm "Cargar desde propuesta" [2-4/4]: zona de arrastre PDF/Word (máx 10 MB) con spinner "Leyendo propuesta con IA...", extracción de texto (pdfjs para PDF, mammoth para docx), llamada a Claude API (`claude-sonnet-4-20250514`) para extraer JSON con cliente, proyecto, área, honorario, forma de cobro y notas; modal de asociación de cliente (CASO A: cliente encontrado por nombre/RUT con opción de asociar o crear nuevo; CASO B: crear nuevo pre-rellenado); pre-llenado automático del formulario con badge "IA" (#E4E8EB/#537281) en los campos llenados por IA.
 
 ## 2026-06-11
