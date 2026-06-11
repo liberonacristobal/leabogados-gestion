@@ -43,6 +43,12 @@ La app maneja dinero, UF, gastos, saldos y proyecciones. Cero tolerancia a error
 - Verificar que subtotales sumen el total general antes de mostrar agregados.
 - Cifras auditables: el usuario debe poder entender de dónde sale cada número.
 
+## Economía de espacio en formularios
+
+- Formularios y paneles deben ser densos pero legibles. Eliminar padding decorativo, márgenes inflados y secciones que obligan a scroll innecesario.
+- Antes de agregar un campo nuevo, preguntar si cabe en una línea existente (label inline, toggle + input en fila).
+- Toda decisión de layout debe pasar por la pregunta: ¿esto requiere scroll en iPhone que podría evitarse?
+
 ## Flujo de trabajo
 
 - Cambios estructurales o grandes: mostrarme el plan antes de tocar código.
