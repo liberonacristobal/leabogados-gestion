@@ -160,12 +160,15 @@ const Switch = ({on,onToggle,disabled}) => (
 const TrashIcon = ({color}) => (
   <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={color||'#8A8A8A'} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/></svg>
 )
-const Modal = ({title,onClose,children,closeOnBackdrop=true}) => (
+const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight}) => (
   <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
     <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,paddingBottom:24}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:1}}>
         <span style={{fontSize:16,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>{title}</span>
-        <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          {titleRight}
+          <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
+        </div>
       </div>
       <div style={{padding:'18px 20px'}}>{children}</div>
     </div>
@@ -2069,7 +2072,7 @@ function MiniClientForm({onSave,onCancel}) {
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Si estamos activando una propuesta, guardar el honorario original antes de que el usuario lo edite
@@ -2120,6 +2123,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const DRAFT_KEY = 'leabogados_sale_draft'
   const {uf: ufHoy} = useUF()
   const [openCondicion,setOpenCondicion] = useState(null)
+  useEffect(()=>{ if(onExposeUpload) onExposeUpload(()=>setPropuestaStep('upload')) },[])
   useEffect(()=>{ if(ufHoy && !f.uf_value) up('uf_value', Math.round(ufHoy)) },[ufHoy])
   useEffect(()=>{
     if(sale?.id) return
@@ -2415,17 +2419,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
 
   return (
     <>
-      {/* Botón cargar desde propuesta — solo nueva venta */}
-      {!sale?.id&&propuestaStep===null&&(
-        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
-          <button type='button' onClick={()=>setPropuestaStep('upload')}
-            style={{display:'flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>
-            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
-            Cargar desde propuesta
-          </button>
-        </div>
-      )}
-
       {/* Banner recuperar borrador local */}
       {hasDraft&&!sale?.id&&(
         <div style={{background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:8,padding:'9px 12px',marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
@@ -2565,14 +2558,12 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         )}
         {costSwitch&&costMode==='pct'&&costVal>0&&<div style={{fontSize:11,color:C.muted,marginBottom:14}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
 
-        {totalCLP>0&&(<>
-          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Forma de cobro</div></>) }
       </>)}
 
       {/* 7. Forma de cobro — solo nueva venta */}
       {!sale?.id&&totalCLP>0&&(
         <div style={{marginBottom:12}}>
-          <Lbl>Forma de cobro</Lbl>
+          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Forma de cobro</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
             {[['cuotas','Cuotas mensuales'],['mensual','Mensual recurrente'],['porcentaje','Por porcentaje'],['personalizada','Personalizada']].map(([v,l])=>(
               <button key={v} onClick={()=>setCobroType(v)} style={{padding:'8px 4px',borderRadius:8,border:`2px solid ${cobroType===v?C.accent:C.border}`,background:cobroType===v?'#E6EEF1':'transparent',color:cobroType===v?C.accent:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',textAlign:'center'}}>{l}</button>
@@ -2615,7 +2606,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
             <div style={{background:'#F7F7F7',borderRadius:8,padding:'12px 14px'}}>
               {cuotasCustom.map((c,i)=>(
                 <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
-                  <Fld label={i===0?`Monto ${moneda}`:''}>
+                  <Fld label={i===0?'Monto':''}>
                     <Inp type='number' step={moneda==='UF'?'0.01':'1'} value={c.monto} onChange={e=>setCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))} placeholder={moneda==='UF'?'0.00':'0'}/>
                   </Fld>
                   <Fld label={i===0?'Fecha':''}>
@@ -7393,6 +7384,7 @@ export default function App() {
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
   const [modal,setModal]=useState(null)
+  const saleUploadRef = useRef(null)
 
   const loadUserRole = async(email) => {
     const {data} = await supabase.from('user_roles').select('*').eq('email',email).maybeSingle()
@@ -7816,7 +7808,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?'Editar venta':modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?'Editar venta':modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Cargar desde archivo</button>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
