@@ -4021,8 +4021,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const [hFiltMes,setHFiltMes] = useState('')
   const [hFiltText,setHFiltText] = useState('')
   const [showHistorialFicha,setShowHistorialFicha] = useState(false)   // historial dentro de la ficha del cliente
-  const [hFichaText,setHFichaText] = useState('')
-  const [hFichaMes,setHFichaMes] = useState('')
+  const [hFichaDesde,setHFichaDesde] = useState('')
+  const [hFichaHasta,setHFichaHasta] = useState('')
   const handleAnularRendicion = async(r) => {
     if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
     try {
@@ -4158,10 +4158,12 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
           <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
           <div style={{textAlign:'right'}}>{estadoBadge(r)}</div>
         </div>
-        <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center',flexWrap:'wrap'}}>
-          <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
-          {cl&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
           <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
+            {cl&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
+          </div>
         </div>
       </div>
     )
@@ -4189,11 +4191,18 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
       </div>
       {showHistorialFicha&&(
         <div style={{marginTop:12}}>
-          <input value={hFichaText} onChange={e=>setHFichaText(e.target.value)} placeholder='Buscar periodo...' style={{...selStyle,marginBottom:8}}/>
-          <input type='month' value={hFichaMes} onChange={e=>setHFichaMes(e.target.value)} style={{...selStyle,marginBottom:12}}/>
+          <div style={{display:'flex',gap:6,marginBottom:12}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Desde</div>
+              <input type='month' value={hFichaDesde} onChange={e=>setHFichaDesde(e.target.value)} style={{...selStyle}}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Hasta</div>
+              <input type='month' value={hFichaHasta} onChange={e=>setHFichaHasta(e.target.value)} style={{...selStyle}}/>
+            </div>
+          </div>
           {(()=>{
-            const q=hFichaText.trim().toLowerCase()
-            const rends=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&r.client_id===selectedClient.id&&(!hFichaMes||r.created_at?.startsWith(hFichaMes))&&(!q||(r.periodo||'').toLowerCase().includes(q))).sort((a,b)=>b.created_at>a.created_at?1:-1)
+            const rends=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&r.client_id===selectedClient.id&&(!hFichaDesde||r.created_at?.slice(0,7)>=hFichaDesde)&&(!hFichaHasta||r.created_at?.slice(0,7)<=hFichaHasta)).sort((a,b)=>b.created_at>a.created_at?1:-1)
             return renderHistorialTable(rends,false)
           })()}
         </div>
@@ -4220,6 +4229,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
             {!selectedClient&&<button onClick={onBulk} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Carga masiva</button>}
             <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
             <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
+            {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={{padding:'6px 12px',borderRadius:8,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>}
           </div>
         </div>
 
@@ -5198,7 +5208,7 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
     const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#C2382B">-${fmtN(e.amount)}</td></tr>`).join('')
-    return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:15px;font-weight:700">Liberona Escala Abogados</div><div style="font-size:11px;opacity:.85;margin-top:2px">Rendición de gastos · ${client?.name||''} · ${r.periodo}</div></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#C2382B">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
+    return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:15px;font-weight:700">Liberona Escala Abogados</div><div style="font-size:11px;opacity:.85;margin-top:2px">Rendición de gastos · ${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="LE" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#C2382B">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
   }
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
