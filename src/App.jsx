@@ -4018,8 +4018,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const [showHistorial,setShowHistorial] = useState(false)
   const [emailRend,setEmailRend] = useState(null)
   const [hFiltCliente,setHFiltCliente] = useState('')
-  const [hFiltMes,setHFiltMes] = useState('')
-  const [hFiltText,setHFiltText] = useState('')
+  const [hFiltDesde,setHFiltDesde] = useState('')
+  const [hFiltHasta,setHFiltHasta] = useState('')
   const [showHistorialFicha,setShowHistorialFicha] = useState(false)   // historial dentro de la ficha del cliente
   const [hFichaDesde,setHFichaDesde] = useState('')
   const [hFichaHasta,setHFichaHasta] = useState('')
@@ -4300,21 +4300,20 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
             </div>
             {showHistorial&&(
               <div style={{marginTop:12}}>
-                <input value={hFiltText} onChange={e=>setHFiltText(e.target.value)} placeholder='Buscar cliente o periodo...' style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12,boxSizing:'border-box',outline:'none',marginBottom:8}}/>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-                  <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}>
+                <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
+                  <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}>
                     <option value=''>Todos los clientes</option>
                     {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
                   </select>
-                  <input type='month' value={hFiltMes} onChange={e=>setHFiltMes(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}/>
+                  <input type='month' value={hFiltDesde} onChange={e=>setHFiltDesde(e.target.value)} placeholder='Desde' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}/>
+                  <input type='month' value={hFiltHasta} onChange={e=>setHFiltHasta(e.target.value)} placeholder='Hasta' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12}}/>
                 </div>
                 {(()=>{
-                  const q=hFiltText.trim().toLowerCase()
                   const rends=(rendiciones||[]).filter(r=>{
                     if(r.tipo!=='cliente') return false
                     if(hFiltCliente&&r.client_id!==hFiltCliente) return false
-                    if(hFiltMes&&!r.created_at?.startsWith(hFiltMes)) return false
-                    if(q){ const cl=clients.find(x=>x.id===r.client_id); if(!((cl?.name||'').toLowerCase().includes(q)||(r.periodo||'').toLowerCase().includes(q))) return false }
+                    if(hFiltDesde&&r.created_at?.slice(0,7)<hFiltDesde) return false
+                    if(hFiltHasta&&r.created_at?.slice(0,7)>hFiltHasta) return false
                     return true
                   }).sort((a,b)=>b.created_at>a.created_at?1:-1)
                   return renderHistorialTable(rends,true)
