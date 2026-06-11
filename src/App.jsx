@@ -2024,6 +2024,9 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [newCobroInicio,setNewCobroInicio] = useState('')
   const [newCuotasCustom,setNewCuotasCustom] = useState([{id:1,monto:'',fecha:''}])
   const [savingTariff,setSavingTariff] = useState(false)
+  const {uf: ufHoy} = useUF()
+  const [openCondicion,setOpenCondicion] = useState(null)
+  useEffect(()=>{ if(ufHoy && !f.uf_value) up('uf_value', Math.round(ufHoy)) },[ufHoy])
   const resetMod = () => { setModCobro(false); setModMode('ajustar'); setNewHon(''); setNewVig(''); setNewCosto(''); setNewFmt(''); setNewNCuotas(3); setNewCobroInicio(''); setNewCuotasCustom([{id:1,monto:'',fecha:''}]); setNewCostMode('fijo'); setNewCostPct('') }
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -2156,6 +2159,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       )}
 
       {/* 3. Contexto: Área + Responsable */}
+      {!sale?.id&&<div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Contexto</div>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
         <Fld label='Área'><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
         <Fld label='Responsable'>
@@ -2167,6 +2171,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       </div>
 
       {/* 4. Estado + Año + Mes */}
+      {!sale?.id&&<div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Estado y período</div>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Terminado','Pausado']}/></Fld>
         <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
@@ -2177,43 +2182,53 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         </Fld>
       </div>
 
-      {/* 5. Honorarios con selector de moneda inline */}
-      <div style={{marginBottom:14}}>
-        <Lbl>Honorarios</Lbl>
-        <div style={{display:'flex',height:42,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
-          <input type='number' step={moneda==='UF'?'0.01':'1'}
-            value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''}
-            onChange={e=>up(moneda==='UF'?'amount_uf':'amount_clp',e.target.value)}
-            placeholder={moneda==='UF'?'0.00':'0'}
-            style={{flex:1,border:'none',padding:'0 12px',fontSize:14,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0}}
+      {/* 5–8. Honorarios, costos, cobro, notas — editable solo en NUEVA VENTA */}
+      {!sale?.id&&(<>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Honorarios</div>
+        <div style={{marginBottom:14}}>
+          <div style={{display:'flex',height:42,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+            <input type='number' step={moneda==='UF'?'0.01':'1'}
+              value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''}
+              onChange={e=>up(moneda==='UF'?'amount_uf':'amount_clp',e.target.value)}
+              placeholder={moneda==='UF'?'0.00':'0'}
+              style={{flex:1,border:'none',padding:'0 12px',fontSize:14,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0}}
+            />
+            <select value={moneda} onChange={e=>up('moneda',e.target.value)}
+              style={{width:52,border:'none',borderLeft:`1px solid ${C.border}`,padding:'0 4px',fontSize:12,background:'#EFF3F5',color:C.accent,fontWeight:700,cursor:'pointer',outline:'none'}}>
+              <option value='UF'>UF</option>
+              <option value='CLP'>CLP</option>
+            </select>
+            {moneda==='UF'&&(
+              <input type='number' value={f.uf_value||''}
+                onChange={e=>up('uf_value',e.target.value)}
+                placeholder={ufHoy?String(Math.round(ufHoy)):'Valor UF'}
+                style={{width:86,border:'none',borderLeft:`1px solid ${C.border}`,padding:'0 8px',fontSize:12,background:'#F7F7F7',color:C.muted,outline:'none'}}
+              />
+            )}
+          </div>
+        </div>
+
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Costos de terceros</div>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:costMode==='pct'&&costVal>0?4:14}}>
+          <div style={{display:'flex',height:38,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
+            <button type='button' onClick={()=>setCostMode('fijo')} style={{padding:'0 10px',border:'none',background:costMode==='fijo'?C.accent:'#EFF3F5',color:costMode==='fijo'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{moneda}</button>
+            <button type='button' onClick={()=>setCostMode('pct')} style={{padding:'0 10px',border:'none',borderLeft:`1px solid ${C.border}`,background:costMode==='pct'?C.accent:'#EFF3F5',color:costMode==='pct'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>%</button>
+          </div>
+          <input type='number' step={costMode==='pct'?'0.1':'0.01'}
+            value={costMode==='pct'?costPct:(moneda==='UF'?f.cost_uf||'':f.cost_clp||'')}
+            onChange={e=>{ if(costMode==='pct') setCostPct(e.target.value); else up(moneda==='UF'?'cost_uf':'cost_clp',e.target.value) }}
+            placeholder='0'
+            style={{flex:1,padding:'0 10px',height:38,borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0,boxSizing:'border-box'}}
           />
-          <select value={moneda} onChange={e=>up('moneda',e.target.value)}
-            style={{width:62,border:'none',borderLeft:`1px solid ${C.border}`,padding:'0 6px',fontSize:13,background:'#EFF3F5',color:C.accent,fontWeight:700,cursor:'pointer',outline:'none'}}>
-            <option value='UF'>UF</option>
-            <option value='CLP'>CLP</option>
-          </select>
         </div>
-        {moneda==='UF'&&<div style={{marginTop:8}}><Fld label='Valor UF (CLP)'><Inp type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder='Ej: 38500'/></Fld></div>}
-      </div>
+        {costMode==='pct'&&costVal>0&&<div style={{fontSize:11,color:C.muted,marginBottom:14}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
 
-      {/* 6. Costo de terceros */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:costMode==='pct'&&costVal>0?4:14}}>
-        <span style={{fontSize:13,color:C.muted,flexShrink:0}}>Costo de terceros</span>
-        <div style={{display:'flex',height:38,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
-          <button type='button' onClick={()=>setCostMode('fijo')} style={{padding:'0 10px',border:'none',background:costMode==='fijo'?C.accent:'#EFF3F5',color:costMode==='fijo'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{moneda}</button>
-          <button type='button' onClick={()=>setCostMode('pct')} style={{padding:'0 10px',border:'none',borderLeft:`1px solid ${C.border}`,background:costMode==='pct'?C.accent:'#EFF3F5',color:costMode==='pct'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>%</button>
-        </div>
-        <input type='number' step={costMode==='pct'?'0.1':'0.01'}
-          value={costMode==='pct'?costPct:(moneda==='UF'?f.cost_uf||'':f.cost_clp||'')}
-          onChange={e=>{ if(costMode==='pct') setCostPct(e.target.value); else up(moneda==='UF'?'cost_uf':'cost_clp',e.target.value) }}
-          placeholder='0'
-          style={{flex:1,padding:'0 10px',height:38,borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#F7F7F7',color:C.text,outline:'none',minWidth:0,boxSizing:'border-box'}}
-        />
-      </div>
-      {costMode==='pct'&&costVal>0&&<div style={{fontSize:11,color:C.muted,marginBottom:14}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
+        {totalCLP>0&&(<>
+          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Forma de cobro</div></>) }
+      </>)}
 
-      {/* 7. Forma de cobro */}
-      {totalCLP>0&&(
+      {/* 7. Forma de cobro — solo nueva venta */}
+      {!sale?.id&&totalCLP>0&&(
         <div style={{marginBottom:12}}>
           <Lbl>Forma de cobro</Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
@@ -2280,10 +2295,43 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         </div>
       )}
 
-      {/* 8. Notas */}
-      <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
+      {/* 8. Notas — solo nueva venta */}
+      {!sale?.id&&<Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>}
 
-      {/* 9. Actualizar honorarios (solo ventas guardadas) */}
+      {/* 9. CONDICIONES REGISTRADAS — solo venta guardada */}
+      {sale?.id&&(()=>{
+        const COBRO_LBL = {cuotas:'Cuotas mensuales',mensual:'Mensual recurrente',porcentaje:'Por porcentaje',personalizada:'Personalizada'}
+        const curHon = moneda==='UF' ? (amountUF>0?fmtUF(amountUF):'—') : (montoCLP>0?fmt(montoCLP):'—')
+        const curCost = moneda==='UF' ? (parseFloat(f.cost_uf)>0?fmtUF(parseFloat(f.cost_uf)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—')) : (parseFloat(f.cost_clp)>0?fmt(parseFloat(f.cost_clp)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—'))
+        const curCobro = COBRO_LBL[cobroType]||'—'
+        const notasPrev = f.notes ? (f.notes.length>48?f.notes.slice(0,48)+'…':f.notes) : '—'
+        const row = (lbl,val,key,isLast) => (
+          <div key={key} onClick={()=>setOpenCondicion(openCondicion===key?null:key)}
+            style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:isLast?'none':`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
+            <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>{lbl}</div>
+            <div style={{flex:1,fontSize:13,fontWeight:500,color:val==='—'?C.muted:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{val}</div>
+            <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion===key?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}>›</span>
+          </div>
+        )
+        return (
+          <>
+            <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Condiciones registradas</div>
+            <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+              {row('Honorarios',curHon,'honorarios',false)}
+              {row('Costos de terceros',curCost,'costos',false)}
+              {row('Forma de cobro',curCobro,'cobro',false)}
+              {row('Notas',notasPrev,'notas',true)}
+              {openCondicion==='notas'&&(
+                <div style={{padding:'8px 12px 12px',borderTop:`1px solid ${C.border}`}}>
+                  <Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/>
+                </div>
+              )}
+            </div>
+          </>
+        )
+      })()}
+
+      {/* 10. Actualizar honorarios (solo ventas guardadas) */}
       {sale?.id&&(
         <div style={{marginTop:6,marginBottom:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:modCobro?10:0}}>
