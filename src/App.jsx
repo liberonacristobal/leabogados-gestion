@@ -4745,12 +4745,15 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
 function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState('resumen')
+  const ufState = useUF()
+  const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || 40000
   const clientSales = sales.filter(s=>s.client_id===client.id)
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
   const clientTasks = tasks.filter(t=>t.client_id===client.id&&t.status!=='Terminado')
 
-  const vendidoUF = clientSales.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
+  // Vendido UF: misma fuente que Dashboard/Ventas (recurrentes x12, CLP convertido a UF)
+  const vendidoUF = clientSales.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const facturado = clientBilling.reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
   const porCobrar = clientBilling.filter(b=>['Pendiente','Vencido'].includes(b.status))
