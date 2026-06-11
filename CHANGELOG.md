@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-10
+- Deuda técnica (#5): unificación de los formateadores de dinero. Antes había ~9 definiciones locales repetidas del mismo formato CLP (`'$'+Math.abs(n).toLocaleString('es-CL')`) más redefiniciones locales de Intl currency y UF. Ahora hay una sola fuente: `fmt` (Intl currency con signo), `fmtN` (monto CLP absoluto sin signo, el llamador agrega el +/-) y `fmtUF`, todas globales; los antiguos `fmtCLP`, `money`, `fmtUFN` y la redefinición de `fmtN`/Intl en el PDF del Dashboard quedaron como alias de esas fuentes. Cambio sin efecto visible: los textos mostrados son idénticos (el PDF del Dashboard conserva su Intl con signo vía alias a `fmt`). Se mantiene aparte solo el `fmtN` de `UFStamp` porque redondea el valor UF (necesidad legítima distinta).
+
+## 2026-06-10
 - Dashboard, "Proyección flujo de caja" (P3): rediseño del componente `CashflowProjection`. Header con título + toggles 3M/6M/12M; fila de totales en 3 celdas (Total / Emitido azul #003C50 / Programado); gráfico de línea del total mensual con área de relleno en gradiente #003C50 semitransparente, puntos coloreados (emitido #003C50 / programado #99ABB4) y línea punteada vertical marcando "Hoy"; tabla Mes/Estado/Monto con badges (Vencido #FCEBEB/#A32D2D, Emitido #E4E8EB/#003C50, Programado gris) dentro de un acordeón "Detalle" colapsado por defecto. El toggle actualiza gráfico y tabla. Se quitó el gráfico de barras anterior y el mensaje rojo de vencidos (los vencidos siguen visibles como badge en el Detalle). Mismos cálculos de emitido/programado/vencido que la versión previa. Paleta corporativa, sin emojis, layout mobile-safe.
 
 ## 2026-06-10
