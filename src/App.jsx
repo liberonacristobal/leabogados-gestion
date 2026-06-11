@@ -6534,6 +6534,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const [filterClient,setFilterClient] = useState('')
   const [filterProject,setFilterProject] = useState('')
   const [openTerm,setOpenTerm] = useState(false)
+  const [verArchivadas,setVerArchivadas] = useState(false)
   const [openActivas,setOpenActivas] = useState(true)
   const [openAsignadas,setOpenAsignadas] = useState(true)
   const [preview,setPreview] = useState(null)
@@ -6570,6 +6571,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     return true
   })
   const terminadas = terminadasAll.filter(t=>!isTaskArchived(t)).sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1).slice(0,30)
+  const archivadas = terminadasAll.filter(t=>isTaskArchived(t)).sort((a,b)=>((b.completed_at||b.created_at||'')>(a.completed_at||a.created_at||'')?1:-1))
 
   // Mis tareas: las asignadas a mi. Tareas que asigne: yo las cree para otros.
   const mias = base.filter(t=>t.who===me)
@@ -6652,8 +6654,20 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             {(filterProject||filterClient)&&
               <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>×</button>
             }
+            {(archivadas.length>0||verArchivadas)&&
+              <button onClick={()=>setVerArchivadas(v=>!v)} style={{padding:'4px 9px',borderRadius:7,border:`1px ${verArchivadas?'solid':'dashed'} ${verArchivadas?C.accent:'#99ABB4'}`,fontSize:11,fontWeight:600,background:verArchivadas?'#E6EEF1':'transparent',color:verArchivadas?C.accent:'#99ABB4',cursor:'pointer'}}>Archivadas ({archivadas.length})</button>
+            }
           </div>
         </div>
+        {verArchivadas ? (
+          <>
+            <SubHeader label='Archivadas' count={archivadas.length} open={true} onToggle={()=>setVerArchivadas(false)}/>
+            {archivadas.length>0
+              ? archivadas.map(t=><div key={t.id} style={{opacity:.6}}><Card t={t} showWho={true} done={true}/></div>)
+              : <div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin tareas archivadas con estos filtros</div>}
+          </>
+        ) : (
+          <>
         <SubHeader label='Activas' count={mias.length} open={openActivas} onToggle={()=>setOpenActivas(o=>!o)}/>
         {openActivas&&(mias.length>0
           ? porUrgencia(mias).map(t=><Card key={t.id} t={t} showWho={false}/>)
@@ -6668,6 +6682,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           <>
             <SubHeader label='Terminadas' count={terminadas.length} open={openTerm} onToggle={()=>setOpenTerm(o=>!o)}/>
             {openTerm&&terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
+          </>
+        )}
           </>
         )}
       </div>
