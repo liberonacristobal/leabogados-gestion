@@ -2027,15 +2027,13 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
                       <span onClick={()=>onActivar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#DCF5EC',color:'#0F6E56',fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
                     </div>
                   )}
-                  <div style={{display:'flex',justifyContent:'flex-end',marginTop:3}}>
-                    <Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/>
-                  </div>
                 </div>
               </div>
-              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
                 <AreaChip area={s.area}/>
                 <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
                 {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C06A00':C.muted}}>{diasPendiente}d pendiente</span>}
+                <span style={{marginLeft:'auto'}}><Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/></span>
               </div>
             </div>
           )
