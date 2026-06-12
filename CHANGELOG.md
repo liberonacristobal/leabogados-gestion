@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026-06-11
+- Paleta corporativa (núcleo): objeto `C` alineado al CLAUDE.md — `muted` #8A8A8A→#537281, `overdue`/`urgent` #C2382B→#E24B4A, `normal` #2E7D55→#1D9E75, `border` #E4E4E4→#E4E8EB. Además unificación de hex sueltos que duplicaban esos roles en toda la app (incl. plantillas PDF) y dos colores 1:1 fuera de paleta: #A32D2D→#E24B4A (saldo negativo) y #56616B→#537281 (texto de badges). Pendiente: estados cálidos (ámbar/marrón/naranja de Propuesta/Prospecto/Borrador/próximo a vencer/costo terceros) — la paleta oficial no tiene ámbar, requiere decisión de color de aviso.
+
+## 2026-06-11
 - 5 mejoras dashboard/propuestas: (1) "Subir archivo" + "Drive" en header de Nueva propuesta — Drive muestra archivos PDF/Word/Google Docs modificados en últimos 15 días, selección descarga y pasa a extractFromFile. (2) Matching IA por tokens: ≥2 palabras en común = match; si múltiples candidatos muestra lista para elegir; si ninguno: buscar cliente manual o crear Prospecto; "Nombre de Fantasía" reemplazado por "Razón Social". (3) Gestión Caja Chica en dashboard admin muestra solo usuarios limited (Martín, Martina, Rodrigo). (4) Terminadas en DashboardTasks: acordeón maestro que colapsa todo (incluso nombres); sección renombrada "Gestión Caja Chica". (5) CashflowProjection movida a después de VentasPorMes, siempre visible, sección "CASH FLOW FORECAST" con subtítulo dinámico "Proyección al [día] [DD] de [mes] de [YYYY]".
 
 ## 2026-06-11
