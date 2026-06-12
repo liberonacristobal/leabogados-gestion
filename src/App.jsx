@@ -1294,22 +1294,24 @@ function PorFacturarMes({billing}) {
   const kpi = {minWidth:0,borderRadius:10,padding:'13px 12px'}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:13,fontWeight:600,color:C.accent,letterSpacing:.3,marginBottom:10}}>{mesLabel}</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>
-        <div style={{...kpi,background:'#F5F7F9'}}>
-          <div style={lbl}>Emitidas</div>
-          <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:C.text}}>{emitidas.length}</span><span style={unidad}>factura{emitidas.length!==1?'s':''}</span></div>
-          <div style={sub}>{fmt(emitidasCLP)}</div>
-        </div>
-        <div style={{...kpi,background:'#FFF8E1'}}>
-          <div style={lbl}>Por facturar</div>
-          <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:'#C77F18'}}>{porFacturar.length}</span><span style={unidad}>factura{porFacturar.length!==1?'s':''}</span></div>
-          <div style={sub}>{fmt(porFacturarCLP)}</div>
-        </div>
-        <div style={{...kpi,background:'#E6F1FB'}}>
-          <div style={lbl}>Total mes</div>
-          <div style={{...big,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis'}}>{totalUF!=null?fmtUF(totalUF):'—'}</div>
-          <div style={sub}>{delMes.length} factura{delMes.length!==1?'s':''}</div>
+      <div style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>{mesLabel}</div>
+      <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>
+          <div style={{...kpi,background:'#F5F7F9'}}>
+            <div style={lbl}>Emitidas</div>
+            <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:C.text}}>{emitidas.length}</span><span style={unidad}>factura{emitidas.length!==1?'s':''}</span></div>
+            <div style={sub}>{fmt(emitidasCLP)}</div>
+          </div>
+          <div style={{...kpi,background:'#F5F7F9'}}>
+            <div style={lbl}>Por facturar</div>
+            <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:'#C77F18'}}>{porFacturar.length}</span><span style={unidad}>factura{porFacturar.length!==1?'s':''}</span></div>
+            <div style={sub}>{fmt(porFacturarCLP)}</div>
+          </div>
+          <div style={{...kpi,background:'#F5F7F9'}}>
+            <div style={lbl}>Total mes</div>
+            <div style={{...big,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis'}}>{totalUF!=null?fmtUF(totalUF):'—'}</div>
+            <div style={sub}>{delMes.length} factura{delMes.length!==1?'s':''}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1701,9 +1703,9 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {[
-              ['Bruto',fmtUF(vendidoBrutoUF),fmt(vendidoBrutoCLP),'#E3EEF3',C.accent],
-              ['Costo',costoUF>0?fmtUF(costoUF):'-',costoUF>0?fmt(costoCLP):'-','#FBE9E7',C.overdue],
-              ['Neto',fmtUF(vendidoNetoUF),fmt(vendidoNetoCLP),'#E4F1EA',C.normal],
+              ['Bruto',fmtUF(vendidoBrutoUF),fmt(vendidoBrutoCLP),'#F5F7F9',C.accent],
+              ['Costo',costoUF>0?fmtUF(costoUF):'-',costoUF>0?fmt(costoCLP):'-','#F5F7F9',C.overdue],
+              ['Neto',fmtUF(vendidoNetoUF),fmt(vendidoNetoCLP),'#F5F7F9',C.normal],
             ].map(([l,v,sub,bg,col])=>(
               <div key={l} style={{background:bg,borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
@@ -1722,35 +1724,37 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
       {/* Facturación */}
       <div style={{padding:'0 20px 16px'}}>
         <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Facturación {yr}</div>
+        <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
         {(()=>{
           const terceros = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
           const netoFirma = facturado - terceros
           return (
             <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
-                {[['Facturado (bruto)',fmt(facturado),'#EEF3E3',C.normal],['Cobrado',fmt(cobrado),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
-                  <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:terceros>0?8:0}}>
+                {[['Facturado (bruto)',fmt(facturado),C.normal],['Cobrado',fmt(cobrado),C.normal]].map(([l,v,col])=>(
+                  <div key={l} style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
                     <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:col}}>{v}</div>
                   </div>
                 ))}
               </div>
               {terceros>0&&(
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
-                  <div style={{background:'#F0F4F8',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <div style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
                     <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Neto firma</div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmt(netoFirma)}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:C.accent}}>{fmt(netoFirma)}</div>
                   </div>
-                  <div style={{background:'#F7F2EC',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+                  <div style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
                     <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Terceros</div>
-                    <div style={{fontSize:13,fontWeight:700,color:'#C77F18'}}>{fmt(terceros)}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:'#C77F18'}}>{fmt(terceros)}</div>
                   </div>
                 </div>
               )}
-              {facturado>0&&<div style={{fontSize:12,color:C.muted,textAlign:'right',marginBottom:6}}>Tasa de cobro: <span style={{fontWeight:700,color:tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue}}>{tasaCobro}%</span></div>}
+              {facturado>0&&<div style={{fontSize:12,color:C.muted,textAlign:'right',marginTop:8}}>Tasa de cobro: <span style={{fontWeight:700,color:tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue}}>{tasaCobro}%</span></div>}
             </>
           )
         })()}
+        </div>
       </div>
 
       {/* Cobranza */}
@@ -1771,7 +1775,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
             {[['0-30d',fmt(age0_30),C.normal],['31-60d',fmt(age31_60),C.soon],['60d+',fmt(age60p),C.overdue]].map(([l,v,col])=>(
-              <div key={l} style={{textAlign:'center',padding:'6px 0',borderRadius:7,background:'#F7F7F7'}}>
+              <div key={l} style={{textAlign:'center',padding:'6px 0',borderRadius:7,background:'#F5F7F9'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{l}</div>
                 <div style={{fontSize:11,fontWeight:700,color:col}}>{v}</div>
               </div>
