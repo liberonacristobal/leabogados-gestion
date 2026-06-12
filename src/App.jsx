@@ -74,6 +74,8 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
 const ddItem = { padding:'9px 14px', fontSize:13, color:'#3D3D3D', cursor:'pointer', display:'flex', alignItems:'center', gap:8, borderRadius:6, margin:'0 4px' }
+// Iniciales nombre+apellido de cada responsable (mismas de su correo)
+const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina':'MP','Rodrigo':'RD'}
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -6233,7 +6235,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
             <button onClick={()=>{setSFilter(null);setRespSel(new Set())}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]}</button>
             {responsables.map(r=>{ const on=respSel.has(r); return (
-              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{minWidth:30,height:30,padding:'0 8px',borderRadius:8,border:`0.5px solid ${on?'#99ABB4':'#E4E8EB'}`,background:on?'#E4E8EB':'#fff',color:on?'#003C50':'#537281',fontSize:12,fontWeight:on?600:500,cursor:'pointer'}}>{r.charAt(0).toUpperCase()}</button>
+              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{minWidth:34,height:30,padding:'0 9px',borderRadius:8,border:`0.5px solid ${on?'#99ABB4':'#E4E8EB'}`,background:on?'#E4E8EB':'#fff',color:on?'#003C50':'#537281',fontSize:12,fontWeight:on?600:500,letterSpacing:'.3px',cursor:'pointer'}}>{INICIALES_RESP[r]||r.slice(0,2).toUpperCase()}</button>
             )})}
           </div>
         ) : (
