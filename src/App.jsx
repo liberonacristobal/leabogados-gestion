@@ -5723,11 +5723,14 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                 if(g) g.items.push(b)
                 else groups.push({name:key, rut:b.receptor_rut||null, items:[b]})
               })
-              return groups.map(g=>(
+              return groups.map(g=>{
+                const sinRS = g.name==='Sin razón social'
+                const col = sinRS ? C.soon : C.accent
+                return (
                 <div key={g.name} style={{marginBottom:8}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:`2px solid ${C.accent}`}}>
-                    <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3}}>{g.name}{g.rut?` · ${g.rut}`:''}</div>
-                    <div style={{fontSize:11,fontWeight:700,color:C.accent}}>{fmt(g.items.reduce((a,b)=>a+(b.amount||0),0))}</div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:`2px solid ${col}`}}>
+                    <div style={{fontSize:11,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:.3,display:'flex',alignItems:'center',gap:6}}>{g.name}{g.rut?` · ${g.rut}`:''}{sinRS&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:'#FEF6EE',color:C.soon,letterSpacing:0}}>asignar</span>}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:col}}>{fmt(g.items.reduce((a,b)=>a+(b.amount||0),0))}</div>
                   </div>
                   {g.items.map(b=>(
                     <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
@@ -5743,7 +5746,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     </div>
                   ))}
                 </div>
-              ))
+              )})
             })()}
           </div>
         )}
@@ -8248,7 +8251,11 @@ export default function App() {
     if(!r.total||r.total<=0) return
     if(!confirm(`Rendición enviada.\n\n¿Crear cobro por reembolso de gastos ($${fmtN(r.total)})?`)) return
     const today=new Date().toISOString().slice(0,10)
-    const newBill={client_id:r.client_id,billing_type:'reembolso',concept:`Reembolso gastos ${r.periodo||''}`.trim(),amount:r.total,status:'Pendiente',issued_at:today,due:dueFromIssued(today),notes:`Rendición ID ${r.id} · ${r.n_gastos||0} gasto(s)`}
+    // Razón social del reembolso: la del gasto rendido; si no, la única RS del cliente
+    const gEnt=expenses.find(e=>e.client_render_id===r.id&&e.entity_id)
+    const entsCli=clientEntities.filter(x=>x.client_id===r.client_id)
+    const ent=(gEnt&&clientEntities.find(x=>x.id===gEnt.entity_id))||(entsCli.length===1?entsCli[0]:null)
+    const newBill={client_id:r.client_id,entity_id:ent?.id||null,receptor_name:ent?.name||null,receptor_rut:ent?.rut||null,billing_type:'reembolso',concept:`Reembolso gastos ${r.periodo||''}`.trim(),amount:r.total,status:'Pendiente',issued_at:today,due:dueFromIssued(today),notes:`Rendición ID ${r.id} · ${r.n_gastos||0} gasto(s)`}
     const {data,error}=await supabase.from('billing').insert(newBill).select().single()
     if(error){alert('No se pudo crear el cobro: '+error.message);return}
     setBilling(p=>[data,...p])
