@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-06-11
+- Paleta corporativa (estado Programado): el KPI de facturación deja el púrpura #5B4B8A/#EEEAF3 y pasa a #537281 sobre #E4E8EB, consistente con el resto de la app (que ya pintaba "Programado" en azul-gris). Se preservan a propósito los tintes categóricos (áreas legales, tipos de documento), que son multicolor por diseño.
 - Paleta corporativa (ámbar de aviso): se oficializa `C.soon` #C77F18 como único color cálido permitido. Consolidación de los tonos cálidos sueltos hacia él: #854F0B, #8B5C2A, #C2761F, #C06A00, #E8A640 → #C77F18 (textos/acentos de Propuesta/Prospecto/Borrador/próximo a vencer/costo terceros). Gris "terminado" #A8A8A8 → #99ABB4 (AZUL3). Se preservan #E8CC6A/#FFFBF0 (esquema propio del banner "Recuperar borrador") y #F2E9DE (color categórico de áreas legales, no de estado).
 - Paleta corporativa (núcleo): objeto `C` alineado al CLAUDE.md — `muted` #8A8A8A→#537281, `overdue`/`urgent` #C2382B→#E24B4A, `normal` #2E7D55→#1D9E75, `border` #E4E4E4→#E4E8EB. Además unificación de hex sueltos que duplicaban esos roles en toda la app (incl. plantillas PDF) y dos colores 1:1 fuera de paleta: #A32D2D→#E24B4A (saldo negativo) y #56616B→#537281 (texto de badges). Pendiente: estados cálidos (ámbar/marrón/naranja de Propuesta/Prospecto/Borrador/próximo a vencer/costo terceros) — la paleta oficial no tiene ámbar, requiere decisión de color de aviso.
 
