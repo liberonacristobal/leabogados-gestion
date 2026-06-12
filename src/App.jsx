@@ -396,7 +396,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
                                 {e.category&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:CATS[e.category]||CATS['Otro'],color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                                 <span style={{fontSize:12,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                               </div>
-                              <div style={{fontSize:11,color:'#888',flexShrink:0,marginLeft:8}}>{e.date}</div>
+                              <div style={{fontSize:11,color:'#888',flexShrink:0,marginLeft:8}}>{fmtFechaDMY(e.date)}</div>
                               <div style={{fontSize:12,fontWeight:600,color:'#E24B4A',flexShrink:0,marginLeft:8}}>-${(e.amount||0).toLocaleString('es-CL')}</div>
                             </div>
                           ))}
@@ -418,7 +418,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
             {clientTasks.map(t=>(
               <div key={t.id} style={{padding:'8px 0',borderBottom:'1px solid #E8E8E8'}}>
                 <div style={{fontSize:13,color:'#3D3D3D',fontWeight:500}}>{t.title}</div>
-                {t.due&&<div style={{fontSize:11,color:'#888',marginTop:2}}>Vence: {t.due}</div>}
+                {t.due&&<div style={{fontSize:11,color:'#888',marginTop:2}}>Vence: {fmtFechaDMY(t.due)}</div>}
               </div>
             ))}
           </div>
@@ -813,7 +813,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                   <div style={{fontSize:10,color:'#888',marginTop:2,display:'flex',gap:6,alignItems:'center'}}>
                     {client&&<span>{client.name}</span>}
                     {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
-                    {e.date&&<span>{e.date}</span>}
+                    {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
                   </div>
                 </div>
                 <div style={{fontSize:13,fontWeight:700,color:'#E24B4A',flexShrink:0}}>{fmtCLP(e.amount)}</div>
@@ -839,7 +839,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                       <div style={{fontSize:10,color:'#888',marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                         {client&&<span>{client.name}</span>}
                         {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
-                        {e.date&&<span>{e.date}</span>}
+                        {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
                         <span style={{color:'#0F6E56',fontWeight:600}}>Liquidado {liqD}</span>
                       </div>
                     </div>
@@ -2834,7 +2834,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           )}
           {cobros.length>0&&(
             <div style={{marginTop:8,padding:'8px 12px',borderRadius:8,background:'#E6EEF1',fontSize:11,color:C.accent}}>
-              Se crearán <strong>{cobros.length} cobro{cobros.length!==1?'s':''}</strong> pendientes: {cobros.map(c=>`${c.label} ${fmt(c.monto)} (${c.fecha})`).join(' · ')}
+              Se crearán <strong>{cobros.length} cobro{cobros.length!==1?'s':''}</strong> pendientes: {cobros.map(c=>`${c.label} ${fmt(c.monto)} (${fmtFechaDMY(c.fecha)})`).join(' · ')}
             </div>
           )}
         </div>
@@ -3876,7 +3876,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.concept||'—'}</div>
                 <div style={{fontSize:10,color:'#888',marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
-                  {e.date&&<span>{e.date}</span>}
+                  {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
                   {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
                 </div>
               </div>
@@ -5294,7 +5294,7 @@ function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
                 <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
-                    <div style={{fontSize:10,color:C.muted}}>{b.issued_at}{b.invoice_no?` · N° ${b.invoice_no}`:''}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{fmtFechaDMY(b.issued_at)}{b.invoice_no?` · N° ${b.invoice_no}`:''}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     <div style={{fontSize:12,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
