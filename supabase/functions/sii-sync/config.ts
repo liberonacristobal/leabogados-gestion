@@ -13,9 +13,11 @@ export type Ambiente = 'certificacion' | 'produccion'
 
 export function getConfig() {
   const ambiente = (Deno.env.get('SII_AMBIENTE') || 'certificacion') as Ambiente
-  const dteBase = ambiente === 'produccion'
-    ? 'https://palena.sii.cl/DTEWS'
-    : 'https://maullin.sii.cl/DTEWS'
+  const prod = ambiente === 'produccion'
+  const dteBase = prod ? 'https://palena.sii.cl/DTEWS' : 'https://maullin.sii.cl/DTEWS'
+  // El RCV vive en el portal del SII (www4 prod / www4c cert). Se consulta con el
+  // token de la danza puesto en las cookies TOKEN y CSESSIONID.
+  const rcvBase = prod ? 'https://www4.sii.cl' : 'https://www4c.sii.cl'
   return {
     ambiente,
     rutEmpresa: Deno.env.get('SII_RUT_EMPRESA') || '',
@@ -23,7 +25,7 @@ export function getConfig() {
     certPassword: Deno.env.get('SII_CERT_PASSWORD') || '',
     seedUrl: `${dteBase}/CrSeed.jws`,
     tokenUrl: `${dteBase}/GetTokenFromSeed.jws`,
-    rcvUrl: 'https://www4.sii.cl/consdcvinternetui/services/data/facadeService/getDetalleCompraVenta',
+    rcvBase,
     timeoutMs: 30000,
   }
 }

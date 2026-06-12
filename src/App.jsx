@@ -3173,7 +3173,7 @@ function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
 
 // Modal de sincronización con el SII — Fase 1: lee el Registro de Ventas y
 // concilia Programadas -> Pendientes vía la Edge Function sii-sync (solo admin).
-function SiiSyncModal({onClose,onRefresh}) {
+function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   const hoy = new Date()
   const [mes,setMes] = useState(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`)
   const [loading,setLoading] = useState(false)
@@ -3181,6 +3181,72 @@ function SiiSyncModal({onClose,onRefresh}) {
   const [result,setResult] = useState(null)
   const [testMsg,setTestMsg] = useState('')
   const [error,setError] = useState('')
+  const [ingresando,setIngresando] = useState(null)        // folio en curso
+  const [ingresadas,setIngresadas] = useState(()=>({}))    // folio -> {cliente|null}
+
+  // Resuelve el cliente de una factura huerfana igual que la carga de PDFs:
+  // RUT en vinculos aprendidos -> nombre en vinculos -> RUT en clientes -> nombre en clientes.
+  const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
+  const resolverCliente = (rut,nombre) => {
+    const nr = normRut(rut)
+    if(nr){ const ce=clientEntities.find(e=>normRut(e.rut)===nr); const c=ce&&clients.find(c=>c.id===ce.client_id); if(c) return c }
+    if(nombre){ const ce=clientEntities.find(e=>e.name?.toLowerCase()===nombre.toLowerCase()); const c=ce&&clients.find(c=>c.id===ce.client_id); if(c) return c }
+    if(nr){ const c=clients.find(c=>normRut(c.rut)===nr); if(c) return c }
+    if(nombre){ const c=clients.find(c=>c.name?.toLowerCase()===nombre.toLowerCase()); if(c) return c }
+    return null
+  }
+  // Crea el cobro en billing desde la factura del SII. Si reconoce el cliente, vincula
+  // y aprende el RUT para siempre; si no, lo deja sin cliente para asignarlo en Facturacion.
+  const ingresarHuerfana = async(it) => {
+    setIngresando(it.folio); setError('')
+    try{
+      const cli = resolverCliente(it.rut,it.receptor)
+      await upsertBilling({
+        client_id: cli?.id||null,
+        concept: 'Honorarios',
+        receptor_name: it.receptor||null,
+        receptor_rut: it.rut||null,
+        amount: it.monto,
+        status: 'Pendiente',
+        invoice_no: String(it.folio),
+        issued_at: it.fechaEmision,
+        due: dueFromIssued(it.fechaEmision),
+        billing_type: 'honorarios',
+        sii_tipo_dte: it.tipoDte||null,
+        sii_synced_at: new Date().toISOString(),
+        notes: null,
+      })
+      if(cli){
+        await reconcileProgramada(cli.id, it.monto, it.fechaEmision)
+        if(it.rut) await supabase.from('client_entities').upsert({client_id:cli.id,rut:it.rut,name:it.receptor||null},{onConflict:'rut'})
+      }
+      setIngresadas(p=>({...p,[it.folio]:{cliente:cli?.name||null}}))
+      if(onRefresh) await onRefresh()
+    }catch(e){
+      setError(e.message?.includes('duplicate')?`F° ${it.folio} ya estaba registrada`:`No se pudo ingresar F° ${it.folio}: ${e.message}`)
+    }
+    setIngresando(null)
+  }
+
+  const [corrigiendo,setCorrigiendo] = useState(null)        // billingId en curso
+  const [corregidas,setCorregidas] = useState(()=>({}))      // billingId -> true
+  // Asigna el folio real del SII a una venta ya emitida que tenia folio manual o sin folio.
+  const aplicarCorreccion = async(it) => {
+    setCorrigiendo(it.billingId); setError('')
+    try{
+      const {error} = await supabase.from('billing').update({
+        invoice_no: String(it.folio),
+        issued_at: it.fechaEmision,
+        sii_tipo_dte: it.tipoDte||null,
+        sii_synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', it.billingId)
+      if(error) throw error
+      setCorregidas(p=>({...p,[it.billingId]:true}))
+      if(onRefresh) await onRefresh()
+    }catch(e){ setError(`No se pudo corregir F° ${it.folio}: ${e.message}`) }
+    setCorrigiendo(null)
+  }
 
   const llamar = async(body) => {
     const {data:{session}} = await supabase.auth.getSession()
@@ -3218,7 +3284,7 @@ function SiiSyncModal({onClose,onRefresh}) {
       </div>
     </div>
   )
-  const vacio = result&&!result.actualizadas?.length&&!result.ambiguas?.length&&!result.sinMatch?.length&&!result.errores?.length
+  const vacio = result&&!result.actualizadas?.length&&!result.corregirFolio?.length&&!result.ambiguas?.length&&!result.sinMatch?.length&&!result.errores?.length
   return (
     <Modal title='Sincronizar con SII' onClose={onClose} closeOnBackdrop={false}>
       <div style={{display:'flex',gap:8,alignItems:'flex-end',marginBottom:14}}>
@@ -3235,15 +3301,38 @@ function SiiSyncModal({onClose,onRefresh}) {
         ? <div style={{textAlign:'center',padding:'18px 0',fontSize:13,color:C.normal,fontWeight:600}}>Todo está al día{result.yaRegistradas>0?` · ${result.yaRegistradas} factura(s) ya estaban registradas`:''}</div>
         : <>
             <Sec titulo='Actualizadas a Pendiente' color={C.normal} bg='#E1F5EE' items={result.actualizadas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente} · F° {it.folio}</span><span style={{fontWeight:700,color:C.normal,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec titulo='Corregir número de folio' color={C.accent} bg='#E6EEF1' items={result.corregirFolio} render={it=>{
+              const ya = corregidas[it.billingId]
+              return (<>
+                <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente} · {it.folioActual?`F° ${it.folioActual} → ${it.folio}`:`asignar F° ${it.folio}`}</span>
+                <span style={{display:'flex',alignItems:'center',gap:8,whiteSpace:'nowrap',flexShrink:0}}>
+                  <span style={{fontWeight:700,color:C.accent}}>{fmt(it.monto)}</span>
+                  {ya
+                    ? <span style={{fontSize:11,fontWeight:700,color:C.normal}}>Corregido</span>
+                    : <button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:700,cursor:'pointer',opacity:corrigiendo===it.billingId?.5:1}}>{corrigiendo===it.billingId?'...':'Corregir'}</button>}
+                </span>
+              </>)
+            }}/>
             <Sec titulo='Requieren revisión manual' color={C.soon} bg='#FEF6EE' items={result.ambiguas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.rut} · {it.candidatos?.length} candidatos</span><span style={{fontWeight:700,color:C.soon,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
-            <Sec titulo='Facturas del SII sin registro en la app' color='#99ABB4' bg='#F5F7F9' items={result.sinMatch} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.rut}</span><span style={{fontWeight:700,color:'#537281',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec titulo='Facturas del SII sin registro en la app' color='#99ABB4' bg='#F5F7F9' items={result.sinMatch} render={it=>{
+              const ya = ingresadas[it.folio]
+              return (<>
+                <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.receptor||it.rut}</span>
+                <span style={{display:'flex',alignItems:'center',gap:8,whiteSpace:'nowrap',flexShrink:0}}>
+                  <span style={{fontWeight:700,color:'#537281'}}>{fmt(it.monto)}</span>
+                  {ya
+                    ? <span style={{fontSize:11,fontWeight:700,color:C.normal}}>{ya.cliente?'Ingresada':'Ingresada · asigna cliente'}</span>
+                    : <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:700,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'...':'Ingresar'}</button>}
+                </span>
+              </>)
+            }}/>
             {result.errores?.length>0&&<Sec titulo='Errores' color={C.overdue} bg='#FCEBEB' items={result.errores} render={it=>(<><span>F° {it.folio}</span><span style={{fontSize:11,color:C.overdue}}>{it.error}</span></>)}/>}
             {result.yaRegistradas>0&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{result.yaRegistradas} factura(s) del SII ya estaban registradas en la app.</div>}
           </>
       )}
       <div style={{marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
         <button onClick={probarAuth} disabled={testLoading} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',textDecoration:'underline',padding:0}}>{testLoading?'Probando...':'Probar conexión con el SII'}</button>
-        <span style={{fontSize:10,color:'#99ABB4'}}>Solo lectura: nunca crea ni borra cobros</span>
+        <span style={{fontSize:10,color:'#99ABB4'}}>La sincronización solo lee · "Ingresar" crea el cobro</span>
       </div>
     </Modal>
   )
@@ -3535,11 +3624,10 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
             {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:descargando?'default':'pointer',opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
             <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button>
-            <button onClick={()=>setSiiOpen(true)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>SII</button>
-            <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
+            <button onClick={()=>setSiiOpen(true)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ SII</button>
           </div>
         </div>
-        {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh}/>}
+        {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
           {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
