@@ -22,6 +22,10 @@ const C = {
 }
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—'
+// CLP abreviado para KPIs ($216,2M / $30K). Conserva el signo.
+const fmtShort = n => { const a=Math.abs(n||0), s=n<0?'-':''; if(a>=1000000) return s+'$'+(a/1000000).toFixed(a>=10000000?0:1).replace('.',',')+'M'; if(a>=1000) return s+'$'+Math.round(a/1000)+'K'; return s+'$'+a.toLocaleString('es-CL') }
+// UF abreviada para KPIs (UF 9.800 / UF 6.309), sin decimales para no recargar.
+const fmtUFk = n => `UF ${Math.round(n||0).toLocaleString('es-CL')}`
 // Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
 const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => { if(!d) return '—'; return new Date(d+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short'}) }
@@ -1134,7 +1138,7 @@ function TasksByPerson({tasks,clients}) {
 const META_UF = 9800
 const META_CLP = 400000000
 
-function CashflowProjection({billing}) {
+function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
   const [horizon,setHorizon] = useState(6)
   const [openDetalle,setOpenDetalle] = useState(false)
   const [activePoint,setActivePoint] = useState(null)
@@ -1166,6 +1170,7 @@ function CashflowProjection({billing}) {
   const totalHorizon = months.reduce((a,m)=>a+m.total,0)
   const totalEmitido = months.reduce((a,m)=>a+m.emitido,0)
   const totalProgramado = months.reduce((a,m)=>a+m.programado,0)
+  const fmtKpi = clp => moneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
 
   // Geometria del grafico de linea
   const W=470, padX=24, padTop=14, baseY=120, n=months.length
@@ -1193,9 +1198,9 @@ function CashflowProjection({billing}) {
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10,marginBottom:12}}>
-          <div style={tcell}><div style={tlabel}>Total</div><div style={{fontSize:15,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(totalHorizon)}</div></div>
-          <div style={tcell}><div style={tlabel}>Emitido</div><div style={{fontSize:15,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(totalEmitido)}</div></div>
-          <div style={tcell}><div style={tlabel}>Programado</div><div style={{fontSize:15,fontWeight:700,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(totalProgramado)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}><div style={tlabel}>Total</div><div style={{fontSize:17,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalHorizon)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`}}><div style={tlabel}>Emitido</div><div style={{fontSize:17,fontWeight:700,color:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalEmitido)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}><div style={tlabel}>Programado</div><div style={{fontSize:17,fontWeight:700,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalProgramado)}</div></div>
         </div>
 
         <div style={{display:'flex',gap:14,fontSize:10,color:'#537281',marginBottom:4}}>
@@ -1269,7 +1274,7 @@ function CashflowProjection({billing}) {
   )
 }
 
-function PorFacturarMes({billing}) {
+function PorFacturarMes({billing, moneda='CLP'}) {
   const ufState = useUF()
   const now = new Date()
   const key = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
@@ -1285,6 +1290,8 @@ function PorFacturarMes({billing}) {
   const emitidasCLP = emitidas.reduce((a,b)=>a+(b.amount||0),0)
   const porFacturarCLP = porFacturar.reduce((a,b)=>a+(b.amount||0),0)
   const totalUF = ufState.uf ? (emitidasCLP+porFacturarCLP)/ufState.uf : null
+  const totalCLP = emitidasCLP+porFacturarCLP
+  const sm = clp => moneda==='UF' ? (ufState.uf?fmtUFk(clp/ufState.uf):'—') : fmtShort(clp)
   const lbl = {fontSize:11,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}
   const big = {fontSize:22,fontWeight:700,lineHeight:1,whiteSpace:'nowrap'}
   const unidad = {fontSize:11,color:'#99ABB4'}
@@ -1294,20 +1301,20 @@ function PorFacturarMes({billing}) {
     <div style={{padding:'16px 20px 0'}}>
       <div style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>{mesLabel}</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>
-          <div style={{...kpi,background:'#F5F7F9'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8}}>
+          <div style={{...kpi,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}>
             <div style={lbl}>Emitidas</div>
             <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:C.text}}>{emitidas.length}</span><span style={unidad}>factura{emitidas.length!==1?'s':''}</span></div>
-            <div style={sub}>{fmt(emitidasCLP)}</div>
+            <div style={sub}>{sm(emitidasCLP)}</div>
           </div>
-          <div style={{...kpi,background:'#F5F7F9'}}>
+          <div style={{...kpi,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #C77F18'}}>
             <div style={lbl}>Por facturar</div>
             <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:'#C77F18'}}>{porFacturar.length}</span><span style={unidad}>factura{porFacturar.length!==1?'s':''}</span></div>
-            <div style={sub}>{fmt(porFacturarCLP)}</div>
+            <div style={sub}>{sm(porFacturarCLP)}</div>
           </div>
-          <div style={{...kpi,background:'#F5F7F9'}}>
+          <div style={{...kpi,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}>
             <div style={lbl}>Total mes</div>
-            <div style={{...big,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis'}}>{totalUF!=null?fmtUF(totalUF):'—'}</div>
+            <div style={{...big,fontSize:17,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis'}}>{sm(totalCLP)}</div>
             <div style={sub}>{delMes.length} factura{delMes.length!==1?'s':''}</div>
           </div>
         </div>
@@ -1680,14 +1687,24 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [openOficina,setOpenOficina] = useState(false)
+  const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
   return (
     <div>
       <div style={{padding:'20px 20px 0'}}>
-        <div style={{fontSize:11,color:C.muted,fontWeight:500,letterSpacing:.5,marginBottom:2}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</div>
-        <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,marginBottom:2}}>Buenas, {user?.name?.split(' ')[0]}</div>
-        <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Liberona Escala Abogados</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:11,color:C.muted,fontWeight:500,letterSpacing:.5,marginBottom:2}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</div>
+            <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,marginBottom:2}}>Buenas, {user?.name?.split(' ')[0]}</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Liberona Escala Abogados</div>
+          </div>
+          <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0,marginTop:4}}>
+            {['UF','CLP'].map(m=>(
+              <button key={m} onClick={()=>setDashMoneda(m)} style={{padding:'5px 12px',border:'none',background:dashMoneda===m?C.accent:'transparent',color:dashMoneda===m?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{m}</button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Meta anual */}
@@ -1703,15 +1720,14 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {[
-              ['Meta',fmtUF(META_UF),fmt(META_CLP),true,C.accent],
-              ['Costo',costoUF>0?fmtUF(costoUF):'-',costoUF>0?fmt(costoCLP):'-',false,C.overdue],
-              ['Bruto',fmtUF(vendidoBrutoUF),fmt(vendidoBrutoCLP),false,C.accent],
-              ['Neto',fmtUF(vendidoNetoUF),fmt(vendidoNetoCLP),false,C.normal],
-            ].map(([l,v,sub,hl,col])=>(
-              <div key={l} style={{background:hl?'#E6EEF1':'#F5F7F9',border:hl?`1px solid ${C.accent}`:'1px solid transparent',borderRadius:8,padding:'8px 10px'}}>
-                <div style={{fontSize:10,color:hl?C.accent:C.muted,marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
-                <div style={{fontSize:12,fontWeight:700,color:hl?C.accent:col}}>{v}</div>
-                <div style={{fontSize:10,color:hl?C.accent:C.muted,marginTop:1}}>{sub}</div>
+              ['Meta',META_UF,META_CLP,true,C.accent,C.accent],
+              ['Costo',costoUF,costoCLP,false,C.overdue,C.overdue],
+              ['Bruto',vendidoBrutoUF,vendidoBrutoCLP,false,C.accent,'#99ABB4'],
+              ['Neto',vendidoNetoUF,vendidoNetoCLP,false,C.normal,C.normal],
+            ].map(([l,uf,clp,hl,numCol,accCol])=>(
+              <div key={l} style={{background:hl?'#E6EEF1':'#fff',border:`1px solid ${hl?C.accent:C.border}`,borderLeft:`3px solid ${accCol}`,borderRadius:8,padding:'9px 10px'}}>
+                <div style={{fontSize:9,color:C.muted,marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
+                <div style={{fontSize:16,fontWeight:700,color:numCol}}>{(uf<=0&&clp<=0)?'—':(dashMoneda==='UF'?fmtUFk(uf):fmtShort(clp))}</div>
               </div>
             ))}
           </div>
@@ -1720,7 +1736,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
       </div>
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy}/>
-      <CashflowProjection billing={billing}/>
+      <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef}/>
 
       {/* Facturación */}
       <div style={{padding:'16px 20px 16px'}}>
@@ -1729,22 +1745,22 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
         {(()=>{
           const terceros = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
           const netoFirma = facturado - terceros
-          const fmtShort = n => { const a=Math.abs(n||0); if(a>=1000000) return '$'+(a/1000000).toFixed(1).replace('.',',')+'M'; if(a>=1000) return '$'+Math.round(a/1000)+'K'; return '$'+a.toLocaleString('es-CL') }
           const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
-          const cell = {background:'#F5F7F9',borderRadius:10,padding:'10px 9px',minWidth:0,textAlign:'center'}
+          const m = clp => dashMoneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
+          const cell = acc => ({background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${acc}`,borderRadius:8,padding:'9px 9px',minWidth:0})
           const clbl = {fontSize:9,color:C.muted,marginBottom:4,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
-          const cnum = {fontSize:16,fontWeight:700,whiteSpace:'nowrap'}
+          const cnum = {fontSize:17,fontWeight:700,whiteSpace:'nowrap'}
           return (
             <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:terceros>0?8:0}}>
-                <div style={cell} title={fmt(facturado)}><div style={clbl}>Facturado</div><div style={{...cnum,color:C.normal}}>{fmtShort(facturado)}</div></div>
-                <div style={cell} title={fmt(cobrado)}><div style={clbl}>Cobrado</div><div style={{...cnum,color:C.normal}}>{fmtShort(cobrado)}</div></div>
-                <div style={{...cell,textAlign:'center'}}><div style={clbl}>Tasa cobro</div><div style={{...cnum,color:tasaCol}}>{tasaCobro}%</div></div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:terceros>0?6:0}}>
+                <div style={cell(C.normal)} title={fmt(facturado)}><div style={clbl}>Facturado</div><div style={{...cnum,color:C.normal}}>{m(facturado)}</div></div>
+                <div style={cell(C.normal)} title={fmt(cobrado)}><div style={clbl}>Cobrado</div><div style={{...cnum,color:C.normal}}>{m(cobrado)}</div></div>
+                <div style={cell(tasaCol)}><div style={clbl}>Tasa cobro</div><div style={{...cnum,color:tasaCol}}>{tasaCobro}%</div></div>
               </div>
               {terceros>0&&(
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <div style={cell} title={fmt(netoFirma)}><div style={clbl}>Neto firma</div><div style={{...cnum,color:C.accent}}>{fmtShort(netoFirma)}</div></div>
-                  <div style={cell} title={fmt(terceros)}><div style={clbl}>Terceros</div><div style={{...cnum,color:'#C77F18'}}>{fmtShort(terceros)}</div></div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <div style={cell(C.accent)} title={fmt(netoFirma)}><div style={clbl}>Neto firma</div><div style={{...cnum,color:C.accent}}>{m(netoFirma)}</div></div>
+                  <div style={cell('#C77F18')} title={fmt(terceros)}><div style={clbl}>Terceros</div><div style={{...cnum,color:'#C77F18'}}>{m(terceros)}</div></div>
                 </div>
               )}
             </>
@@ -1821,7 +1837,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
         </div>
       )}
 
-      <PorFacturarMes billing={billing}/>
+      <PorFacturarMes billing={billing} moneda={dashMoneda}/>
 
       {tasks?.filter(t=>t.status==='Activo'||t.status==='Terminado').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
