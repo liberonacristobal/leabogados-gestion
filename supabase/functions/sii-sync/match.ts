@@ -136,6 +136,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
           folioActual: b.invoice_no || null, folio: v.folio,
           monto: v.montoTotal, montoApp: b.amount, estado: b.status,
           fechaEmision: v.fechaEmision, tipoDte: v.tipoDte,
+          rut: v.rutReceptor, receptor: v.nombreReceptor,
         })
         console.log(`[sii-sync] folio SII ${v.folio} calza con emitida ${b.invoice_no || 'sin folio'} (${nombreCliente(b)}) -> sugerir correccion`)
       }
