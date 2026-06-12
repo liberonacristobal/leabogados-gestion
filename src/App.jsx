@@ -572,25 +572,11 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const [fCliente,setFCliente] = useState('')
   const [fCat,setFCat] = useState('')
 
-  // Gastos pendientes de rendir (tipo gasto, no rendidos aun)
-  const pendientes = expenses.filter(e=>{
-    if(e.type!=='gasto' || e.rendered_at) return false
-    if(fDesde && e.date && e.date < fDesde) return false
-    if(fHasta && e.date && e.date > fHasta) return false
-    if(fCliente && e.client_id !== fCliente) return false
-    if(fCat && e.category !== fCat) return false
-    return true
-  }).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
-
-  // Gastos ya liquidados (con rendered_at) — para el historial colapsado; mismos filtros que pendientes
-  const liquidados = expenses.filter(e=>{
-    if(e.type!=='gasto' || !e.rendered_at) return false
-    if(fDesde && e.date && e.date < fDesde) return false
-    if(fHasta && e.date && e.date > fHasta) return false
-    if(fCliente && e.client_id !== fCliente) return false
-    if(fCat && e.category !== fCat) return false
-    return true
-  }).sort((a,b)=>(a.rendered_at||'')<(b.rendered_at||'')?1:-1)
+  // Gastos pendientes de liquidar DEL USUARIO (tipo gasto, no rendidos, created_by = me)
+  const misPendientes = expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&e.created_by===me)
+  const pendientes = misPendientes.filter(e=>!fCat||e.category===fCat).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
+  // "Sin liquidar": total pendiente del usuario, independiente del filtro de categoría
+  const sinLiquidar = misPendientes.reduce((a,e)=>a+(e.amount||0),0)
 
   // Caja actual del usuario
   const miCaja = pettyCash.filter(p=>p.user_name===me)
@@ -600,10 +586,16 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
     const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n
   })
 
-  const totalSel = pendientes.filter(e=>selected.has(e.id)).reduce((a,e)=>a+e.amount,0)
+  // Selección estable: se arma sobre TODOS los pendientes del usuario (no se pierde al filtrar por categoría)
+  const seleccionados = misPendientes.filter(e=>selected.has(e.id))
+  const totalSel = seleccionados.reduce((a,e)=>a+(e.amount||0),0)
 
   const fmtCLP = fmtN
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  // Pills de categoría en PENDIENTES: [valor en DB, etiqueta mostrada]
+  const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
+  const catLabel = c => c==='Diario Oficial'?'DO':c==='Registro Civil'?'R. Civil':(c||'Otro')
+  const catBadge = c => c==='CBR'?{bg:'#E4E8EB',color:'#003C50'}:(c==='Notaria'||c==='Diario Oficial')?{bg:'#FFF8E1',color:'#B8860B'}:{bg:'#F5F7F9',color:'#537281'}
 
   // Auto-cierre del mensaje de confirmación post-liquidación
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),7000); return ()=>clearTimeout(t) } },[toast])
@@ -617,7 +609,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       const renderId = crypto.randomUUID()
       const now = new Date().toISOString()
       const periodo = periodoActual()
-      const gastosSel = pendientes.filter(e=>selected.has(e.id))
+      const gastosSel = seleccionados
       const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
       const selIds = new Set(gastosSel.map(e=>e.id))
       const clientesIds = [...new Set(gastosSel.map(e=>e.client_id).filter(Boolean))]
@@ -676,7 +668,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   }
 
   const generatePDF = () => {
-    const gastosSel = pendientes.filter(e=>selected.has(e.id))
+    const gastosSel = seleccionados
     const now = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
     const A='#003C50', A2='#537281', A4='#E4E8EB'
     // Agrupar por cliente
@@ -750,136 +742,77 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F7F8F9',zIndex:10}}>
         <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja Chica</div>
-        <div style={{display:'flex',gap:6,background:'#E4E8EB',borderRadius:8,padding:3}}>
-          {[['liquidar','Liquidar'],['historial','Historial'],['caja','Mi caja']].map(([id,lbl])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'6px 0',borderRadius:6,border:'none',
-              background:tab===id?'#fff':'transparent',color:tab===id?'#003C50':'#537281',
-              fontSize:12,fontWeight:tab===id?600:400,cursor:'pointer'}}>{lbl}</button>
-          ))}
+        <div style={{display:'flex',background:'#F2F2F7',borderRadius:10,padding:3}}>
+          {[['liquidar','PENDIENTES'],['caja','CAJA']].map(([id,lbl])=>{ const on=tab===id; return (
+            <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'7px 0',borderRadius:8,
+              border:on?'0.5px solid rgba(0,0,0,.07)':'0.5px solid transparent',
+              background:on?'#fff':'transparent',color:on?'#1a1a1a':'#537281',
+              fontSize:11,fontWeight:600,letterSpacing:'.05em',cursor:'pointer'}}>{lbl}</button>
+          )})}
         </div>
       </div>
 
       {tab==='liquidar'&&(
-        <div style={{padding:'12px 20px 100px'}}>
-          <div style={{background:'#F4F6F7',borderRadius:8,padding:'10px 12px',marginBottom:10}}>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Período</div>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <input type='date' value={fDesde} onChange={e=>setFDesde(e.target.value)}
-                  style={{flex:1,padding:'5px 7px',borderRadius:6,border:'0.5px solid #D0D5DB',background:'#fff',fontSize:11,boxSizing:'border-box',outline:'none'}}/>
-                <span style={{fontSize:11,color:'#888'}}>→</span>
-                <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)}
-                  style={{flex:1,padding:'5px 7px',borderRadius:6,border:'0.5px solid #D0D5DB',background:'#fff',fontSize:11,boxSizing:'border-box',outline:'none'}}/>
-              </div>
+        <div style={{padding:'0 0 130px'}}>
+          {/* Resumen: saldo de caja + total sin liquidar */}
+          <div style={{display:'flex',gap:8,padding:'2px 14px 10px'}}>
+            <div style={{flex:1,background:'#F5F7F9',borderRadius:10,padding:'9px 11px'}}>
+              <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',letterSpacing:'.02em',textTransform:'uppercase'}}>Saldo caja</div>
+              <div style={{fontSize:15,fontWeight:600,marginTop:2,color:saldoCaja<0?'#E24B4A':'#1D9E75'}}>{fmtCLP(saldoCaja)}</div>
             </div>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Cliente</div>
-              <select value={fCliente} onChange={e=>setFCliente(e.target.value)}
-                style={{width:'100%',padding:'5px 7px',borderRadius:6,border:'0.5px solid #D0D5DB',background:'#fff',fontSize:11,boxSizing:'border-box'}}>
-                <option value=''>Todos los clientes</option>
-                {[...new Set(expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&e.client_id).map(e=>e.client_id))]
-                  .map(cid=>{ const cl=clients.find(c=>c.id===cid); return cl?<option key={cid} value={cid}>{cl.name}</option>:null })}
-              </select>
+            <div style={{flex:1,background:'#F5F7F9',borderRadius:10,padding:'9px 11px'}}>
+              <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',letterSpacing:'.02em',textTransform:'uppercase'}}>Sin liquidar</div>
+              <div style={{fontSize:15,fontWeight:600,marginTop:2,color:'#003C50'}}>{fmtCLP(sinLiquidar)}</div>
             </div>
-            <div>
-              <div style={{fontSize:9,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Tipo de gasto</div>
-              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                {['','Notaria','CBR','Diario Oficial','Registro Civil','Otro'].map(cat=>(
-                  <button key={cat||'todos'} onClick={()=>setFCat(cat)}
-                    style={{padding:'3px 9px',borderRadius:10,fontSize:10,fontWeight:500,cursor:'pointer',
-                      border:'0.5px solid '+(fCat===cat?'#003C50':'#D0D5DB'),
-                      background:fCat===cat?'#003C50':'#fff',
-                      color:fCat===cat?'#fff':'#537281'}}>
-                    {cat||'Todos'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {(fDesde||fHasta||fCliente||fCat)&&(
-              <button onClick={()=>{setFDesde('');setFHasta('');setFCliente('');setFCat('')}}
-                style={{marginTop:8,fontSize:10,color:'#537281',background:'none',border:'none',cursor:'pointer',padding:0}}>
-                × Limpiar filtros
-              </button>
-            )}
           </div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <div style={{fontSize:12,color:'#537281'}}>{pendientes.length} gastos · {fmtCLP(pendientes.reduce((a,e)=>a+e.amount,0))}</div>
-            {selected.size>0&&<div style={{fontSize:12,fontWeight:600,color:'#003C50'}}>{selected.size} sel. · {fmtCLP(totalSel)}</div>}
+          {/* MIS GASTOS + conteo */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'2px 14px 8px'}}>
+            <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase'}}>Mis gastos</span>
+            <span style={{fontSize:11,color:'#537281'}}>{pendientes.length} gasto{pendientes.length!==1?'s':''}</span>
           </div>
-          {pendientes.length===0&&<div style={{color:'#888',textAlign:'center',padding:40}}>No hay gastos pendientes de rendir</div>}
+          {/* Pills de categoría */}
+          <div style={{display:'flex',gap:6,overflowX:'auto',padding:'0 14px 10px'}}>
+            {CAT_PILLS.map(([val,lbl])=>{ const on=fCat===val; return (
+              <button key={val||'todos'} onClick={()=>setFCat(val)} style={{height:24,display:'inline-flex',alignItems:'center',padding:'0 11px',borderRadius:20,fontSize:11,whiteSpace:'nowrap',cursor:'pointer',flexShrink:0,
+                border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?'#003C50':'#fff',color:on?'#fff':'#537281'}}>{lbl}</button>
+            )})}
+          </div>
+          {/* Filas de gasto */}
+          {pendientes.length===0&&<div style={{color:'#99ABB4',textAlign:'center',padding:36,fontSize:13}}>No tienes gastos pendientes de liquidar</div>}
           {pendientes.map(e=>{
             const client=clients.find(cl=>cl.id===e.client_id)
             const isSel=selected.has(e.id)
-            const catBg=CATS[e.category]||CATS['Otro']
+            const bdg=catBadge(e.category)
             return (
-              <div key={e.id} onClick={()=>toggleSelect(e.id)}
-                style={{background:isSel?'#E6F1FB':'#fff',borderRadius:8,padding:'10px 12px',marginBottom:6,
-                  border:`1px solid ${isSel?'#003C50':'#E8E8E8'}`,cursor:'pointer',
-                  display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isSel?'#003C50':'#ccc'}`,
-                  background:isSel?'#003C50':'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  {isSel&&<span style={{color:'#fff',fontSize:11}}>&#10003;</span>}
+              <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',cursor:'pointer',background:isSel?'#F5F7F9':'transparent'}}>
+                <div style={{width:17,height:17,borderRadius:5,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?'#003C50':'#99ABB4'}`,background:isSel?'#003C50':'transparent'}}>
+                  {isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:10,color:'#888',marginTop:2,display:'flex',gap:6,alignItems:'center'}}>
-                    {client&&<span>{client.name}</span>}
-                    {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
-                    {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
-                  </div>
+                  <div style={{fontSize:12,fontWeight:500,color:'#1a1a1a',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
+                  <div style={{fontSize:10,color:'#99ABB4',marginTop:2}}>{e.created_by||me}{e.date?` · ${fmtFechaDMY(e.date)}`:''}{client?` · ${client.name}`:''}</div>
                 </div>
-                <div style={{fontSize:13,fontWeight:700,color:'#E24B4A',flexShrink:0}}>{fmtCLP(e.amount)}</div>
+                <div style={{flexShrink:0,marginLeft:8,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                  <span style={{fontSize:13,fontWeight:500,color:'#E24B4A'}}>{fmtCLP(e.amount)}</span>
+                  {e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,fontWeight:500,background:bdg.bg,color:bdg.color}}>{catLabel(e.category)}</span>}
+                </div>
               </div>
             )
           })}
-
-          {/* Gastos liquidados — historial colapsado (PASO 4) */}
-          {liquidados.length>0&&(
-            <div style={{marginTop:18}}>
-              <div onClick={()=>setOpenLiquidados(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'9px 0',borderTop:'1px solid #E8E8E8'}}>
-                <div style={{fontSize:12,fontWeight:600,color:'#537281'}}>Gastos liquidados · {liquidados.length}</div>
-                <span style={{fontSize:12,color:'#888',transform:openLiquidados?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
-              </div>
-              {openLiquidados&&liquidados.map(e=>{
-                const client=clients.find(cl=>cl.id===e.client_id)
-                const catBg=CATS[e.category]||CATS['Otro']
-                const liqD=e.rendered_at?new Date(e.rendered_at).toLocaleDateString('es-CL'):'—'
-                return (
-                  <div key={e.id} style={{background:'#fff',borderRadius:8,padding:'9px 12px',marginBottom:6,border:'1px solid #EEE',display:'flex',alignItems:'center',gap:10,opacity:.9}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.concept||'—'}</div>
-                      <div style={{fontSize:10,color:'#888',marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                        {client&&<span>{client.name}</span>}
-                        {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
-                        {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
-                        <span style={{color:'#0F6E56',fontWeight:600}}>Liquidado {liqD}</span>
-                      </div>
-                    </div>
-                    <div style={{fontSize:13,fontWeight:700,color:'#888',flexShrink:0}}>{fmtCLP(e.amount)}</div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
+          {/* Barra inferior de liquidación */}
           {selected.size>0&&(
-            <div style={{position:'fixed',bottom:80,left:0,right:0,padding:'0 20px',zIndex:50}}>
-              <div style={{background:'#003C50',borderRadius:12,padding:'12px 16px',display:'flex',gap:8,alignItems:'center',boxShadow:'0 4px 20px rgba(0,60,80,.4)'}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:12,color:'#fff',opacity:.8}}>{selected.size} gasto{selected.size!==1?'s':''} seleccionado{selected.size!==1?'s':''}</div>
-                  <div style={{fontSize:15,fontWeight:700,color:'#fff'}}>{fmtCLP(totalSel)}</div>
-                </div>
-                <button onClick={generatePDF} style={{padding:'8px 14px',borderRadius:8,border:'1px solid rgba(255,255,255,.3)',background:'transparent',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>PDF</button>
-                <button onClick={()=>{ setEnviarA(currentUserEmail||''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{padding:'8px 14px',borderRadius:8,border:'none',background:'#E1F5EE',color:'#0F6E56',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-                  Liquidar caja chica
-                </button>
+            <div style={{position:'fixed',left:0,right:0,bottom:'calc(56px + env(safe-area-inset-bottom,0px))',background:'#003C50',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',zIndex:49}}>
+              <div>
+                <div style={{fontSize:10,color:'rgba(255,255,255,.6)',letterSpacing:'.03em'}}>{selected.size} GASTO{selected.size!==1?'S':''} SELECCIONADO{selected.size!==1?'S':''}</div>
+                <div style={{fontSize:16,fontWeight:600,color:'#fff',marginTop:1}}>{fmtCLP(totalSel)}</div>
               </div>
+              <button onClick={()=>{ setEnviarA(currentUserEmail||''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{height:34,padding:'0 18px',background:'#fff',color:'#003C50',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
             </div>
           )}
         </div>
       )}
 
-      {tab==='historial'&&(
+      {tab==='caja'&&(
         <div style={{padding:'12px 20px 100px'}}>
           {rendiciones.filter(r=>r.user_name===me).length===0&&<div style={{color:'#888',textAlign:'center',padding:40}}>No hay liquidaciones registradas</div>}
           {rendiciones.filter(r=>r.user_name===me).sort((a,b)=>b.created_at>a.created_at?1:-1).map(r=>{
@@ -1000,7 +933,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
 
       {/* Popup de confirmación de liquidación con detalle completo (PASO 2) */}
       {confirmLiq&&(()=>{
-        const gastosSel = pendientes.filter(e=>selected.has(e.id))
+        const gastosSel = seleccionados
         const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
         return (
           <div onClick={()=>!saving&&setConfirmLiq(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
