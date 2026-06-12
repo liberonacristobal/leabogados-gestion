@@ -4261,6 +4261,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
     } catch(err){ alert('Error: '+err.message) }
   }
   const [asignandoRS,setAsignandoRS] = useState(null) // client_id cuyo selector de RS esta abierto
+  const [expandRend,setExpandRend] = useState(null)   // id de la rendición con el detalle desplegado
 
   const balances = useMemo(()=>{
     const m={}
@@ -4377,7 +4378,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
     const rs=showClient?'':rsOfRend(r)
     return (
       <div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start'}}>
+        <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?`${r.periodo} · `:''}{new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
@@ -4386,6 +4387,20 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
           <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
           <div style={{textAlign:'right'}}>{estadoBadge(r)}</div>
         </div>
+        {expandRend===r.id&&(()=>{
+          const gastos=expenses.filter(e=>e.client_render_id===r.id)
+          return <div style={{marginTop:8,padding:'8px 11px',background:'#F7F8F9',borderRadius:8}}>
+            {gastos.length===0?<div style={{fontSize:11,color:C.muted}}>Sin detalle de gastos.</div>:gastos.map((e,i)=>(
+              <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 0',borderBottom:i<gastos.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>
+                <div style={{minWidth:0}}>
+                  <div style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{e.category||'Otro'}{e.subcategory?': '+e.subcategory:''} · {fmtDate(e.date)}</div>
+                </div>
+                <div style={{color:C.overdue,fontWeight:600,whiteSpace:'nowrap'}}>-{fmt(e.amount)}</div>
+              </div>
+            ))}
+          </div>
+        })()}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
           <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>
           <div style={{display:'flex',gap:6}}>
