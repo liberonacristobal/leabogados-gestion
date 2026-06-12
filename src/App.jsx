@@ -3875,7 +3875,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
           ))}
         </div>}
         <div style={{display:'flex',gap:6,marginBottom:8}}>
-          {[['emitidas',`Emitidas (${nEmitidas})`],['programadas',`Programadas (${nProgramadas})`],['pagado',`Pagadas (${nPagadas})`],['all','Todas'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
+          {[['emitidas','Emitidas'],['programadas','Programadas'],['pagado','Pagadas'],['all','Todas'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
