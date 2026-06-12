@@ -3191,22 +3191,23 @@ function SiiSyncModal({onClose,onRefresh}) {
       body:JSON.stringify(body)
     })
     const data = await res.json().catch(()=>({}))
-    if(!res.ok) throw new Error(data.error||('Error '+res.status))
+    if(!res.ok){ const err=new Error(data.error||('Error '+res.status)); err.detalle=data.detalle||''; throw err }
     return data
   }
+  const msgErr = e => e.detalle&&e.detalle!==e.message ? `${e.message} — ${e.detalle}` : e.message
   const sincronizar = async() => {
     setLoading(true); setError(''); setResult(null); setTestMsg('')
     try{
       const data = await llamar({periodo:mes})
       setResult(data)
       if(data.actualizadas?.length&&onRefresh) await onRefresh()
-    }catch(e){ setError(e.message) }
+    }catch(e){ setError(msgErr(e)) }
     setLoading(false)
   }
   const probarAuth = async() => {
     setTestLoading(true); setError(''); setTestMsg('')
     try{ const d=await llamar({action:'test-auth'}); setTestMsg(`${d.mensaje} (ambiente: ${d.ambiente}, token ${d.tokenPreview})`) }
-    catch(e){ setError(e.message) }
+    catch(e){ setError(msgErr(e)) }
     setTestLoading(false)
   }
   const Sec = ({titulo,color,bg,items,render}) => (!items||items.length===0)?null:(
