@@ -1569,7 +1569,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
           <div key={persona}>
             <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderTop:`1px solid #EEF0F2`,cursor:'pointer',userSelect:'none'}}>
               <div style={{width:24,height:24,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
-              <span style={{fontSize:13,fontWeight:500,color:C.text}}>{persona}</span>
+              <span style={{fontSize:13,fontWeight:500,color:C.muted}}>{persona}</span>
               <span style={{fontSize:12,color:C.muted,flex:1}}>{' · '}{porPersona[persona].length}</span>
               <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:isOpen?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:isOpen?-2:2,flexShrink:0}}></span>
             </div>
@@ -1951,7 +1951,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <button onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'10px 14px',background:abierto?'#FAFBFC':'none',border:'none',cursor:'pointer',textAlign:'left'}}>
                   <div style={{width:30,height:30,borderRadius:'50%',background:'#FBE9E7',color:C.overdue,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{iniciales(c.name)}</div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                    <div style={{fontSize:13,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                     <div style={{height:4,background:'#E4E8EB',borderRadius:2,overflow:'hidden',marginTop:4}}><div style={{height:'100%',background:C.overdue,width:`${prop}%`,borderRadius:2}}/></div>
                   </div>
                   <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(d.saldo)}</div>
@@ -2024,7 +2024,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               </div>
               {filas.map((f,i)=>(
                 <div key={f.u} style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'9px 12px',borderBottom:i<filas.length-1?`1px solid ${C.border}`:'none',alignItems:'center'}}>
-                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.u}</div>
+                  <div style={{fontSize:12,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.u}</div>
                   <div style={{fontSize:12,fontWeight:700,color:f.saldo<0?C.overdue:C.normal,textAlign:'right',whiteSpace:'nowrap'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div>
                   <div style={{fontSize:11,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaSinLiq&&<span title='Más de 10 gastos sin liquidar (excl. Notaría)'>(!) </span>}{money(f.sinLiqMonto)} / {f.sinLiqN}</div>
                   <div style={{fontSize:11,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaUlt&&<span title='Más de 7 días sin ingresar un gasto'>(!) </span>}{f.ult?fmtDate(f.ult):'—'}</div>
