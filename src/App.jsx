@@ -5435,6 +5435,22 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
   const presets = [['Hoy',di(0)],['Mañana',di(1)],['En 7 días',di(7)]]
   const isCustomDue = f.due && !presets.some(p=>p[1]===f.due)
 
+  // Clientes recientes (por última tarea creada) y conteo de tareas activas, para el paso de elección.
+  const activosPorCliente = useMemo(()=>{ const m={}; tasks.forEach(t=>{ if(t.status==='Activo'&&t.client_id) m[t.client_id]=(m[t.client_id]||0)+1 }); return m },[tasks])
+  const recientes = useMemo(()=>{
+    const last={}; tasks.forEach(t=>{ if(t.client_id){ const k=t.created_at||''; if(!last[t.client_id]||k>last[t.client_id]) last[t.client_id]=k } })
+    return Object.keys(last).sort((a,b)=>last[b]>last[a]?1:-1).map(id=>clients.find(c=>c.id===id)).filter(Boolean).slice(0,6)
+  },[tasks,clients])
+  const cIni = name => (name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+  const subt = c => { const n=activosPorCliente[c.id]||0; return n>0?`${n} tarea${n!==1?'s':''} activa${n!==1?'s':''}`:(c.type||'—') }
+  const ClientCard = c => (
+    <button key={c.id} onClick={()=>{setSelectedClient(c);setQ('')}} style={{textAlign:'left',border:`0.5px solid ${C.border}`,borderRadius:10,padding:11,display:'flex',flexDirection:'column',gap:7,background:'#fff',cursor:'pointer'}}>
+      <span style={{width:30,height:30,borderRadius:8,background:C.accent,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{cIni(c.name)}</span>
+      <span style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',width:'100%'}}>{c.name}</span>
+      <span style={{fontSize:10,color:C.muted}}>{subt(c)}</span>
+    </button>
+  )
+
   const selBox = {width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13,boxSizing:'border-box',outline:'none',appearance:'none',cursor:'pointer'}
   const pill = on => ({fontSize:12,fontWeight:on?600:500,padding:'6px 12px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#F7F7F7',color:on?C.accent:C.muted,cursor:'pointer'})
   const ReqLabel = ({children}) => <span>{children} <span style={{color:C.overdue}}>*</span></span>
@@ -5473,29 +5489,19 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
       <div style={{padding:'16px 20px'}}>
       {!selectedClient ? (
-        <Fld label='Cliente'>
-          <div style={{position:'relative'}}>
+        <>
+          <Fld label='Cliente'>
             <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Escribe para buscar cliente...' autoFocus/>
-            {matches.length>0&&(
-              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:220,overflowY:'auto'}}>
-                {matches.map(c=>(
-                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);setQ('')}}
-                    style={{padding:'10px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
-                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
-                    onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                    <div style={{fontWeight:500,color:C.text}}>{c.name}</div>
-                    {c.type&&<div style={{fontSize:11,color:C.muted}}>{c.type}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-            {q.length>0&&matches.length===0&&(
-              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',fontSize:13,color:C.muted,marginTop:4}}>
-                Sin resultados para "{q}"
-              </div>
-            )}
-          </div>
-        </Fld>
+          </Fld>
+          {(()=>{ const lista = q.trim()?matches:recientes; return lista.length>0 ? (
+            <>
+              {!q.trim()&&<div style={{fontSize:10,fontWeight:600,letterSpacing:.4,textTransform:'uppercase',color:C.muted,marginBottom:8}}>Recientes</div>}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>{lista.map(ClientCard)}</div>
+            </>
+          ) : (
+            <div style={{fontSize:13,color:C.muted,padding:'4px 0'}}>{q.trim()?`Sin resultados para "${q}"`:'Aún no hay clientes recientes. Escribe para buscar.'}</div>
+          ) })()}
+        </>
       ) : (
         <>
           {yaDelegada&&<DelegBanner/>}
@@ -5614,7 +5620,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
       <div style={{display:'flex',gap:8,marginTop:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        {deleg ? (
+        {selectedClient&&(deleg ? (
           <button disabled={saving||!puedeDelegar} onClick={handleDelegar}
             style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:puedeDelegar?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeDelegar?1:.6}}>
             {saving?<Spin/>:null}{saving?'Delegando...':'Delegar'}
@@ -5624,7 +5630,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
             style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
             {saving?<Spin/>:null}{saving?'Guardando...':(task?'Guardar tarea':'Enviar tarea')}
           </button>
-        )}
+        ))}
       </div>
       </div>
     </>
