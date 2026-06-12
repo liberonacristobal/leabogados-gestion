@@ -3689,7 +3689,7 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, entityIds, expenses, clientEntities, onClose, onRendicionComplete, setExpenses, currentUserName}) {
+function RendicionModal({client, entityIds, expenses, clientEntities, onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar}) {
   const [selected, setSelected] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
@@ -3760,7 +3760,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel, fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp })
   }
 
-  const handleGenerar = async(abrirPDF=false) => {
+  const handleGenerar = async(modo='pdf') => {
     if(!gastosSel.length) return
     setSaving(true)
     try {
@@ -3790,11 +3790,13 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
       if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
-      if(onRendicionComplete) onRendicionComplete({id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',dirigido_a:(atencion||'').trim()||null})
+      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',dirigido_a:(atencion||'').trim()||null}
+      if(onRendicionComplete) onRendicionComplete(rendObj)
       await guardarDirigido()
-      // Abrir el documento de rendici\u00f3n (HTML imprimible aislado) si se pide
-      if(abrirPDF) { const w=window.open('','_blank'); if(w){ w.document.write(generatePDFContent(atencion)); w.document.close() } }
+      // modo 'pdf': abre el documento imprimible. modo 'enviar': encadena al modal de correo.
+      if(modo==='pdf') { const w=window.open('','_blank'); if(w){ w.document.write(generatePDFContent(atencion)); w.document.close() } }
       setSelected(new Set())
+      if(modo==='enviar' && onEnviar) onEnviar(rendObj)
     } catch(e) { alert('Error: '+e.message) }
     setSaving(false)
   }
@@ -3899,9 +3901,13 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
       {/* Botones */}
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={!selected.size||saving} onClick={()=>handleGenerar(true)}
-          style={{flex:2,padding:11,borderRadius:10,border:'none',background:selected.size?C.accent:'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
-          {saving?'Generando...':'↓ PDF + Registrar'}
+        <button disabled={!selected.size||saving} onClick={()=>handleGenerar('pdf')}
+          style={{flex:1.3,padding:11,borderRadius:10,border:`1px solid ${selected.size?C.accent:'#ccc'}`,background:'#fff',color:selected.size?C.accent:'#ccc',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+          {saving?'…':'↓ PDF'}
+        </button>
+        <button disabled={!selected.size||saving} onClick={()=>handleGenerar('enviar')}
+          style={{flex:1.7,padding:11,borderRadius:10,border:'none',background:selected.size?'#1D9E75':'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+          {saving?'Generando…':'Enviar al cliente'}
         </button>
       </div>
     </div>
@@ -4583,7 +4589,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
       {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} onSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
@@ -5731,7 +5737,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         user={user}
         onRendicionSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))}
       />
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setEmailRend(r)}}/></Modal>}
     </>
   )
 
