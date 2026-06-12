@@ -5761,7 +5761,7 @@ function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
               <input value={client.type||'—'} disabled style={{...inp,background:'#F2F2F2',color:C.muted}}/>
             </div>
           </div>
-          {field('Abogado responsable','abogado_responsable')}
+          <div><label style={lbl}>Responsable</label><select value={form.abogado_responsable} onChange={e=>set('abogado_responsable',e.target.value)} style={inp}><option value=''>— Sin asignar —</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(a=><option key={a} value={a}>{a}</option>)}</select></div>
           <div>
             <label style={lbl}>Notas internas</label>
             <textarea value={form.notas_internas} onChange={e=>set('notas_internas',e.target.value)} rows={3} placeholder="Solo visibles para administración" style={{...inp,resize:'vertical',fontFamily:'inherit'}}/>
@@ -6171,7 +6171,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
   const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
   const prospectoN=clients.filter(c=>!c.is_internal&&c.status==='Prospecto').length
   // Responsable de un cliente = responsable de su venta más reciente (campo responsible en sales)
-  const responsableDe = useMemo(()=>{ const m={}; [...sales].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[s.client_id]) m[s.client_id]=s.responsible }); return m },[sales])
+  const responsableDe = useMemo(()=>{ const m={}; clients.forEach(c=>{ if(c.abogado_responsable) m[c.id]=c.abogado_responsable }); [...sales].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[s.client_id]) m[s.client_id]=s.responsible }); return m },[clients,sales])
   const tareasDe = useMemo(()=>{ const m={}; tasks.forEach(t=>{ if(t.client_id&&t.status!=='Terminado') m[t.client_id]=(m[t.client_id]||0)+1 }); return m },[tasks])
   const cl = useMemo(()=>{
     let base = clients
@@ -6510,7 +6510,7 @@ function TasksEditor({clientId,sales}) {
 
 
 function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
-  const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,status:'Activo',ended_at:'',notes:''})
+  const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,abogado_responsable:'',status:'Activo',ended_at:'',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   return (
     <>
@@ -6528,10 +6528,8 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Prospecto','Terminado']}/></Fld>
         {f.status==='Terminado'&&<Fld label='Fecha termino'><Inp type='date' value={f.ended_at||''} onChange={e=>up('ended_at',e.target.value)}/></Fld>}
       </div>
-      <Fld label='Cartera'>
-        <button type='button' onClick={()=>up('erasmo',!f.erasmo)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.erasmo?C.accent:C.border}`,background:f.erasmo?'#E6EEF1':'transparent',color:f.erasmo?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-          {f.erasmo?'Cliente de Erasmo':'Marcar como Erasmo'}
-        </button>
+      <Fld label='Responsable'>
+        <Sel value={f.abogado_responsable||''} onChange={e=>up('abogado_responsable',e.target.value)} options={['Cristóbal','Erasmo','Martín','Martina','Rodrigo']} placeholder='— Sin asignar —'/>
       </Fld>
       <Fld label='Interno (gastos de oficina)'>
         <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.is_internal?C.accent:C.border}`,background:f.is_internal?'#E6EEF1':'transparent',color:f.is_internal?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
