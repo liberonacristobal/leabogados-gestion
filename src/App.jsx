@@ -8537,13 +8537,16 @@ export default function App() {
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
         <div style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <div style={{position:'relative'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:8}}>
-              <span style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())}</span>
-              <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
-              </button>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+              <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
+              <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+                <span style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())}</span>
+                <div style={{width:1,height:18,background:C.border,flexShrink:0}}/>
+                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
+                </button>
+              </div>
             </div>
-            <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
             {menuOpen&&(
               <div style={{position:'absolute',top:40,right:0,width:210,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'4px 0',zIndex:100,boxShadow:'0 8px 24px rgba(0,0,0,.1)'}}>
                 {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'report'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
