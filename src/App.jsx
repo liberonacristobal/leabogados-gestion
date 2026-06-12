@@ -1789,15 +1789,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
   return (
     <div>
-      <div style={{padding:'20px 20px 0'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
-          <div style={{minWidth:0}}>
-            <div style={{fontSize:11,color:C.muted,fontWeight:500,letterSpacing:.5,marginBottom:2}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</div>
-            <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,marginBottom:2}}>Buenas, {user?.name?.split(' ')[0]}</div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Liberona Escala Abogados</div>
-          </div>
-        </div>
-      </div>
 
       {/* Meta anual */}
       <div style={{padding:'0 20px 16px'}}>
@@ -8546,17 +8537,17 @@ export default function App() {
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
         <div style={{padding:'52px 20px 8px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,position:'relative'}}>
-            <div style={{padding:'0 20px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
-              <div style={{display:'flex',alignItems:'center',gap:14,minWidth:0}}>
-                <div style={{height:34,background:'#003C50',borderRadius:7,display:'flex',alignItems:'center',padding:'0 10px',flexShrink:0}}>
-                  <img src={logoBlanco} alt='Liberona Escala' style={{height:18,width:'auto',display:'block'}}/>
+            <div style={{padding:'12px 18px'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:8}}>
+                <img src='/apple-touch-icon.png' alt='LEA' style={{width:38,height:38,borderRadius:8,display:'block',flexShrink:0}}/>
+                <div style={{display:'flex',alignItems:'center',gap:16,flexShrink:0}}>
+                  <span style={{fontSize:12,color:'#99ABB4',whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</span>
+                  <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:'0.5px solid #E4E8EB',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
+                  </button>
                 </div>
-                <div style={{width:1,height:18,background:'#E4E8EB',flexShrink:0}}/>
-                <div style={{fontSize:13,color:'#537281',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>¡Hola, <span style={{color:'#003C50',fontWeight:500}}>{user?.name}</span>!</div>
               </div>
-              <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:'0.5px solid #E4E8EB',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
-              </button>
+              <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1}}>¡Hola, <span style={{color:'#003C50'}}>{user?.name?.split(' ')[0]}</span>!</div>
             </div>
             {menuOpen&&(
               <div style={{position:'absolute',top:52,right:12,width:210,background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:10,padding:'4px 0',zIndex:100}}>
