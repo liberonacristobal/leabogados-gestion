@@ -3473,7 +3473,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
                 </span>
               </>)
             }}/>
-            <Sec k='sin' titulo='Sin registro en la app' color='#854F0B' bg='#FFF8E1' items={result.sinMatch} render={it=>{
+            <Sec k='sin' titulo='Ventas no cargadas' color={C.soon} bg='#FEF6EE' items={result.sinMatch} render={it=>{
               const ya = ingresadas[it.folio]
               return (<>
                 <div style={{minWidth:0,flex:1}}>
@@ -3481,14 +3481,14 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
                   <div style={{fontSize:11,color:C.muted,marginTop:1}}>F° {it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
                 </div>
                 <span style={{display:'flex',alignItems:'center',gap:8,whiteSpace:'nowrap',flexShrink:0}}>
-                  <span style={{fontWeight:600,color:'#854F0B'}}>{fmt(it.monto)}</span>
+                  <span style={{fontWeight:600,color:C.soon}}>{fmt(it.monto)}</span>
                   {ya
                     ? <span style={{fontSize:11,fontWeight:600,color:C.normal}}>{ya.cliente?'Ingresada':'Ingresada · asigna cliente'}</span>
                     : <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'...':'Ingresar'}</button>}
                 </span>
               </>)
             }}/>
-            <Sec k='amb' titulo='Requieren revisión manual' color={C.soon} bg='#FEF6EE' items={result.ambiguas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.rut} · {it.candidatos?.length} candidatos</span><span style={{fontWeight:700,color:C.soon,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec k='amb' titulo='Requieren revisión manual' color='#537281' bg='#EAEEF1' items={result.ambiguas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {fmtRut(it.rut)} · {it.candidatos?.length} candidatos</span><span style={{fontWeight:600,color:'#537281',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
             <Sec k='ya' titulo='Ya registradas' color='#537281' bg='#F5F7F9' items={result.yaRegistradas} render={it=>(<>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{it.receptor||'—'}</div>
