@@ -1812,8 +1812,8 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
 
       {negatives.length>0&&(
         <div style={{padding:'16px 20px 0'}}>
-          <div style={{background:'#FBE9E7',borderRadius:10,padding:'12px 14px',border:'1px solid #f5c6c2'}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.overdue,marginBottom:6}}>Fondos negativos</div>
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Clientes sin fondos</div>
+          <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
             {negatives.map(c=>(
               <div key={c.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:C.text,marginBottom:2}}>
                 <span>{c.name}</span><span style={{fontWeight:600,color:C.overdue}}>{fmt(balances[c.id])}</span>
