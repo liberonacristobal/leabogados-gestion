@@ -4041,10 +4041,11 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
 }
 
 
-function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,onClose,onDelete,saving,user,onAttachChange}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
+  const [selAnt,setSelAnt] = useState(new Set())
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:5,display:'block'}
@@ -4082,6 +4083,43 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
             </div>
           )}
         </div>
+
+        {bill?.id&&(()=>{
+          const antDisp = anticipos.filter(a=>String(a.client_id)===String(f.client_id) && a.estado==='disponible')
+          if(antDisp.length===0) return null
+          const totalDisp = antDisp.reduce((s,a)=>s+(a.monto||0),0)
+          const totalSel = antDisp.filter(a=>selAnt.has(a.id)).reduce((s,a)=>s+(a.monto||0),0)
+          const fmtF = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+          const toggle = id => setSelAnt(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+          const aplicar = () => { const ids=[...selAnt]; if(!ids.length) return; onConsume&&onConsume(ids,bill.id); up('status','Pagado'); setSelAnt(new Set()) }
+          return (
+            <div>
+              <label style={flabel}>Anticipos disponibles</label>
+              <div style={{border:'0.5px solid #C8EAD9',borderRadius:10,overflow:'hidden'}}>
+                <div style={{background:'#E1F5EE',padding:'10px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                  <span style={{display:'flex',alignItems:'center',gap:7,fontSize:12,fontWeight:500,color:'#0F6E56'}}>
+                    <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2'><circle cx='12' cy='12' r='10'/><line x1='12' y1='16' x2='12' y2='12'/><line x1='12' y1='8' x2='12.01' y2='8'/></svg>
+                    Este cliente tiene anticipos sin aplicar
+                  </span>
+                  <span style={{fontSize:12,fontWeight:600,color:C.normal,flexShrink:0}}>{fmt(totalDisp)}</span>
+                </div>
+                {antDisp.map(a=>{ const on=selAnt.has(a.id); return (
+                  <div key={a.id} onClick={()=>toggle(a.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`0.5px solid ${C.border}`,background:'#fff',cursor:'pointer'}}>
+                    <div style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:on?'1.5px solid #003C50':`1.5px solid ${C.border}`,background:on?C.accent:'#fff'}}>
+                      {on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:'#1a1a1a'}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div></div>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,flexShrink:0,background:on?'#E1F5EE':'#F5F7F9',color:on?C.normal:'#99ABB4'}}>{on?'Seleccionado':'Disponible'}</span>
+                  </div>
+                )})}
+                <div style={{background:'#F5F7F9',padding:'9px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                  <span style={{fontSize:11,color:C.muted}}>Aplicar: <b style={{color:'#1a1a1a'}}>{fmt(totalSel)}</b></span>
+                  <button onClick={aplicar} disabled={totalSel<=0} style={{height:26,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:11,fontWeight:500,padding:'0 12px',cursor:totalSel>0?'pointer':'not-allowed',opacity:totalSel>0?1:.6}}>Marcar como pagado</button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         <div>
           <label style={flabel}>Tipo de cobro</label>
@@ -9015,7 +9053,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
