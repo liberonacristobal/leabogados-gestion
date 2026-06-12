@@ -1548,13 +1548,14 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
           <option value='alfabetico'>Orden: alfab\u00e9tico</option>
         </select>
       </div>
-      <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Activas</div>
+      <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+      <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'12px 14px 4px'}}>Activas</div>
       {personas.map(persona=>{
         const [avBg,avColor]=avatarColor(persona)
         const isOpen=!!openPersonas[persona]
         return (
-          <div key={persona} style={{marginBottom:10}}>
-            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer',userSelect:'none',marginBottom:8}}>
+          <div key={persona}>
+            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderTop:`1px solid #EEF0F2`,cursor:'pointer',userSelect:'none'}}>
               <div style={{width:24,height:24,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
               <span style={{fontSize:13,fontWeight:500,color:C.text}}>{persona}</span>
               <span style={{fontSize:12,color:C.muted,flex:1}}>{' · '}{porPersona[persona].length}</span>
@@ -1564,8 +1565,8 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
               const client=clients.find(c=>c.id===t.client_id)
               const bs=badgeStyle(t.due)
               return (
-                <div key={t.id} onClick={()=>onPreview&&onPreview(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,overflow:'hidden',cursor:'pointer'}}>
-                  <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
+                <div key={t.id} onClick={()=>onPreview&&onPreview(t)} style={{borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,borderTop:`1px solid #F1F3F4`,cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'flex-start',padding:'9px 14px',gap:8}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:C.text,lineHeight:1.3}}>{t.title}</div>
                       {(client||t.project||t.subproject)&&(
@@ -1598,16 +1599,16 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         termTasks.forEach(t=>{ const w=t.who||'Sin asignar'; (porPersonaTerm[w]=porPersonaTerm[w]||[]).push(t) })
         const personasTerm = Object.keys(porPersonaTerm).sort()
         return (
-          <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-            <div onClick={()=>setOpenTerminadas(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer',userSelect:'none',marginBottom:openTerminadas?8:0}}>
+          <div style={{borderTop:`1px solid ${C.border}`}}>
+            <div onClick={()=>setOpenTerminadas(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',userSelect:'none'}}>
               <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,flex:1}}>Terminadas · {termTasks.length}</span>
               <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:openTerminadas?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:openTerminadas?-2:2,flexShrink:0}}></span>
             </div>
             {openTerminadas&&personasTerm.map(persona=>{
               const isOpenT=!!openPersonas['__term__'+persona]
               return (
-                <div key={persona} style={{marginBottom:8}}>
-                  <div onClick={()=>setOpenPersonas(prev=>({...prev,['__term__'+persona]:!prev['__term__'+persona]}))} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer',userSelect:'none',marginBottom:isOpenT?8:0}}>
+                <div key={persona}>
+                  <div onClick={()=>setOpenPersonas(prev=>({...prev,['__term__'+persona]:!prev['__term__'+persona]}))} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderTop:`1px solid #EEF0F2`,cursor:'pointer',userSelect:'none'}}>
                     <div style={{width:24,height:24,borderRadius:'50%',background:'#E8E8E8',color:'#888',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
                     <span style={{fontSize:13,fontWeight:500,color:C.muted,flex:1}}>{persona}</span>
                     <span style={{fontSize:12,color:C.muted}}>{' · '}{porPersonaTerm[persona].length}</span>
@@ -1616,8 +1617,8 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
                   {isOpenT&&porPersonaTerm[persona].map(t=>{
                     const client=clients.find(cl=>cl.id===t.client_id)
                     return (
-                      <div key={t.id} onClick={()=>onPreview&&onPreview(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:'3px solid #ccc',overflow:'hidden',opacity:.7,cursor:'pointer'}}>
-                        <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
+                      <div key={t.id} onClick={()=>onPreview&&onPreview(t)} style={{borderLeft:'3px solid #99ABB4',borderTop:`1px solid #F1F3F4`,opacity:.7,cursor:'pointer'}}>
+                        <div style={{display:'flex',alignItems:'flex-start',padding:'9px 14px',gap:8}}>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:13,fontWeight:500,color:C.muted,lineHeight:1.3,textDecoration:'line-through'}}>{t.title}</div>
                             {(client||t.project)&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>
@@ -1635,6 +1636,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
           </div>
         )
       })()}
+      </div>
     </div>
   )
 }
@@ -1782,6 +1784,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
             ))}
           </div>
         </div>
+        <div style={{background:C.card,borderRadius:12,padding:'2px 14px',border:`1px solid ${C.border}`}}>
         {(()=>{
           const byClient = {}
           porCobrar.forEach(b=>{
@@ -1807,6 +1810,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
               </div>
             ))
         })()}
+        </div>
         </>}
       </div>
 
@@ -1889,7 +1893,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
               <span style={{fontSize:12,fontWeight:700,color:C.text,marginLeft:'auto'}}>{fmt(totalMes)}</span>
             </button>
             {openOficina&&(
-              <div style={{marginTop:8}}>
+              <div style={{marginTop:8,background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
                   <input type='month' value={mesOficina} onChange={e=>setMesOficina(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}/>
                   <span style={{fontSize:12,color:C.muted}}>{delMes.length} gasto{delMes.length!==1?'s':''}</span>
