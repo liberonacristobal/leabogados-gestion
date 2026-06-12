@@ -1193,7 +1193,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
     <div style={{padding:'16px 20px 0'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:8,gap:8}}>
         <div>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:.5,textTransform:'uppercase'}}>Cash Flow Forecast</div>
+          <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'0.06em',textTransform:'uppercase'}}>Cash Flow Forecast</div>
           <div style={{fontSize:10,color:'#99ABB4',marginTop:2,textTransform:'uppercase',letterSpacing:.3}}>{fechaTitulo}</div>
         </div>
         <div style={{display:'flex',gap:4,flexShrink:0}}>
@@ -1205,9 +1205,9 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10,marginBottom:12}}>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}><div style={tlabel}>Total</div><div style={{fontSize:17,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalHorizon)}</div></div>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`}}><div style={tlabel}>Emitido</div><div style={{fontSize:17,fontWeight:700,color:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalEmitido)}</div></div>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}><div style={tlabel}>Programado</div><div style={{fontSize:17,fontWeight:700,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalProgramado)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}><div style={tlabel}>Total</div><div style={{fontSize:17,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalHorizon)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`}}><div style={tlabel}>Emitido</div><div style={{fontSize:17,fontWeight:600,color:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalEmitido)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}><div style={tlabel}>Programado</div><div style={{fontSize:17,fontWeight:600,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalProgramado)}</div></div>
         </div>
 
         <div style={{display:'flex',gap:14,fontSize:10,color:'#537281',marginBottom:4}}>
@@ -1300,13 +1300,13 @@ function PorFacturarMes({billing, moneda='CLP'}) {
   const totalCLP = emitidasCLP+porFacturarCLP
   const sm = clp => moneda==='UF' ? (ufState.uf?fmtUFk(clp/ufState.uf):'—') : fmtShort(clp)
   const lbl = {fontSize:11,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}
-  const big = {fontSize:22,fontWeight:700,lineHeight:1,whiteSpace:'nowrap'}
+  const big = {fontSize:22,fontWeight:600,lineHeight:1,whiteSpace:'nowrap'}
   const unidad = {fontSize:11,color:'#99ABB4'}
   const sub = {fontSize:12,color:C.muted,marginTop:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
   const kpi = {minWidth:0,borderRadius:10,padding:'13px 12px'}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>{mesLabel}</div>
+      <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:8}}>{mesLabel}</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8}}>
           <div style={{...kpi,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}>
@@ -1401,7 +1401,7 @@ function VentasPorMes({sales,ufHoy}) {
             const activo = sel===i
             return (
               <div key={i} onClick={()=>setSel(s=>s===i?null:i)} onMouseEnter={()=>setSel(i)} onMouseLeave={()=>setSel(null)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,cursor:v>0?'pointer':'default'}}>
-                <div style={{fontSize:8,fontWeight:700,color:activo?C.accent:C.muted,height:11,lineHeight:'11px',whiteSpace:'nowrap'}}>{compact(m)}</div>
+                <div style={{fontSize:8,fontWeight:600,color:activo?C.accent:C.muted,height:11,lineHeight:'11px',whiteSpace:'nowrap'}}>{compact(m)}</div>
                 <div style={{width:'100%',background:'#E8EEF0',borderRadius:3,height:46,display:'flex',flexDirection:'column',justifyContent:'flex-end',overflow:'hidden'}}>
                   {v>0&&<div style={{width:'100%',background:activo?C.accent:(i===hoy?C.accent:'#7FA0AD'),opacity:activo?1:.95,height:`${Math.round((v/maxVal)*100)}%`,minHeight:2,borderRadius:3,transition:'background .15s'}}/>}
                 </div>
@@ -1413,11 +1413,11 @@ function VentasPorMes({sales,ufHoy}) {
         {recurrentes.length>0&&(
           <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div>
-              <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Ingreso recurrente</div>
+              <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Ingreso recurrente</div>
               <div style={{fontSize:10,color:C.muted,marginTop:1}}>{recurrentes.length} asesoría{recurrentes.length!==1?'s':''} permanente{recurrentes.length!==1?'s':''}</div>
             </div>
             <div style={{textAlign:'right'}}>
-              <div style={{fontSize:16,fontWeight:700,color:C.normal}}>{moneda==='UF'?fmtUF(recUF):fmt(recCLP)}<span style={{fontSize:10,color:C.muted,fontWeight:500}}> /mes</span></div>
+              <div style={{fontSize:16,fontWeight:600,color:C.normal}}>{moneda==='UF'?fmtUF(recUF):fmt(recCLP)}<span style={{fontSize:10,color:C.muted,fontWeight:500}}> /mes</span></div>
             </div>
           </div>
         )}
@@ -1779,7 +1779,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             </div>
             <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',alignItems:'flex-end',flexShrink:0,gap:8}}>
               <div style={{position:'relative'}}>
-                <button onClick={()=>setYearMenu(o=>!o)} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:20,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:700,cursor:'pointer'}}>{selYear}<Chev open={yearMenu}/></button>
+                <button onClick={()=>setYearMenu(o=>!o)} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:20,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>{selYear}<Chev open={yearMenu}/></button>
                 {yearMenu&&(
                   <div style={{position:'absolute',right:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:78}}>
                     {aniosDisponibles.map(y=>(
@@ -1788,7 +1788,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   </div>
                 )}
               </div>
-              {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:'#E1F5EE',color:'#0F6E56',whiteSpace:'nowrap'}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
+              {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'#E1F5EE',color:'#0F6E56',whiteSpace:'nowrap'}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
             </div>
           </div>
           {/* Barra de progreso */}
@@ -1853,8 +1853,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
           const m = clp => dashMoneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
           const cell = acc => ({background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${acc}`,borderRadius:8,padding:'9px 9px',minWidth:0})
-          const clbl = {fontSize:9,color:C.muted,marginBottom:4,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
-          const cnum = {fontSize:17,fontWeight:700,whiteSpace:'nowrap'}
+          const clbl = {fontSize:9,color:'#99ABB4',marginBottom:4,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+          const cnum = {fontSize:17,fontWeight:600,whiteSpace:'nowrap'}
           return (
             <>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:terceros>0?6:0}}>
@@ -1880,7 +1880,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <button onClick={()=>setOpenCobranza(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0}}>
             <span style={{fontSize:10,color:C.muted,transform:openCobranza?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
             <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Cobranza</span>
-            <span style={{fontSize:12,fontWeight:700,color:C.overdue,marginLeft:4}}>{fmt(totalPorCobrar)}</span>
+            <span style={{fontSize:12,fontWeight:600,color:C.overdue,marginLeft:4}}>{fmt(totalPorCobrar)}</span>
           </button>
           <button onClick={()=>setTab('billing')} style={{background:'none',border:'none',color:C.accent,fontSize:12,cursor:'pointer',fontWeight:600}}>Ver todos</button>
         </div>
@@ -1888,13 +1888,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`,marginBottom:10}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <span style={{fontSize:13,color:C.muted}}>Total por cobrar</span>
-            <span style={{fontSize:16,fontWeight:700,color:C.overdue}}>{fmt(totalPorCobrar)}</span>
+            <span style={{fontSize:16,fontWeight:600,color:C.overdue}}>{fmt(totalPorCobrar)}</span>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
             {[['0-30d',fmt(age0_30),C.normal],['31-60d',fmt(age31_60),C.soon],['60d+',fmt(age60p),C.overdue]].map(([l,v,col])=>(
               <div key={l} style={{textAlign:'center',padding:'6px 0',borderRadius:7,background:'#F5F7F9'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{l}</div>
-                <div style={{fontSize:11,fontWeight:700,color:col}}>{v}</div>
+                <div style={{fontSize:11,fontWeight:600,color:col}}>{v}</div>
               </div>
             ))}
           </div>
@@ -1920,7 +1920,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <div style={{fontSize:11,color:C.muted}}>{c.count} factura{c.count!==1?'s':''}{c.vencido>0?` · `+fmt(c.vencido)+' vencido':''}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-                  <div style={{fontSize:13,fontWeight:700,color:c.vencido>0?C.overdue:C.text}}>{fmt(c.total)}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:c.vencido>0?C.overdue:C.text}}>{fmt(c.total)}</div>
                 </div>
               </div>
             ))
@@ -1936,10 +1936,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             {/* Header */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'12px 14px',borderBottom:`1px solid ${C.border}`}}>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:20,fontWeight:700,color:C.overdue,lineHeight:1.1}}>{fmt(totalNeg)}</div>
+                <div style={{fontSize:20,fontWeight:600,color:C.overdue,lineHeight:1.1}}>{fmt(totalNeg)}</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:2}}>{negatives.length} cliente{negatives.length!==1?'s':''} con saldo negativo</div>
               </div>
-              <span style={{fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:10,background:'#FBE9E7',color:C.overdue,whiteSpace:'nowrap',flexShrink:0}}>Requieren fondos</span>
+              <span style={{fontSize:10,fontWeight:600,padding:'3px 9px',borderRadius:10,background:'#FBE9E7',color:C.overdue,whiteSpace:'nowrap',flexShrink:0}}>Requieren fondos</span>
             </div>
             {/* Filas */}
             {negatives.map(c=>{
@@ -1949,12 +1949,12 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               return (
               <div key={c.id} style={{borderBottom:`1px solid ${C.border}`}}>
                 <button onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'10px 14px',background:abierto?'#FAFBFC':'none',border:'none',cursor:'pointer',textAlign:'left'}}>
-                  <div style={{width:30,height:30,borderRadius:'50%',background:'#FBE9E7',color:C.overdue,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{iniciales(c.name)}</div>
+                  <div style={{width:30,height:30,borderRadius:'50%',background:'#FBE9E7',color:C.overdue,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{iniciales(c.name)}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                     <div style={{height:4,background:'#E4E8EB',borderRadius:2,overflow:'hidden',marginTop:4}}><div style={{height:'100%',background:C.overdue,width:`${prop}%`,borderRadius:2}}/></div>
                   </div>
-                  <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(d.saldo)}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(d.saldo)}</div>
                   <Chev open={abierto}/>
                 </button>
                 {abierto&&(
@@ -1976,7 +1976,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                         <span style={{fontWeight:600,color:mv.type==='fondo'?C.normal:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{mv.type==='fondo'?'+':'−'}{fmt(mv.amount).replace('-','')}</span>
                       </div>
                     ))}
-                    <button onClick={()=>setTab('expenses')} style={{marginTop:12,width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Rendir</button>
+                    <button onClick={()=>setTab('expenses')} style={{marginTop:12,width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Rendir</button>
                   </div>
                 )}
               </div>
@@ -2011,7 +2011,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           return {u,saldo,sinLiqMonto,sinLiqN:sinLiq.length,alertaSinLiq:sinLiqNoNotaria>10,ult,alertaUlt:dl!==null&&dl<-7}
         })
         const cols = '1fr 0.85fr 1.1fr 0.78fr'
-        const th = {fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}
+        const th = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4}
         return (
           <div style={{padding:'16px 20px 0'}}>
             <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Gestión Caja Chica</div>
@@ -2025,7 +2025,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               {filas.map((f,i)=>(
                 <div key={f.u} style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'9px 12px',borderBottom:i<filas.length-1?`1px solid ${C.border}`:'none',alignItems:'center'}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.u}</div>
-                  <div style={{fontSize:12,fontWeight:700,color:f.saldo<0?C.overdue:C.normal,textAlign:'right',whiteSpace:'nowrap'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:f.saldo<0?C.overdue:C.normal,textAlign:'right',whiteSpace:'nowrap'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div>
                   <div style={{fontSize:11,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaSinLiq&&<span title='Más de 10 gastos sin liquidar (excl. Notaría)'>(!) </span>}{money(f.sinLiqMonto)} / {f.sinLiqN}</div>
                   <div style={{fontSize:11,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaUlt&&<span title='Más de 7 días sin ingresar un gasto'>(!) </span>}{f.ult?fmtDate(f.ult):'—'}</div>
                 </div>
@@ -2048,7 +2048,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <button onClick={()=>setOpenOficina(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openOficina?8:0}}>
               <span style={{fontSize:10,color:C.muted,transform:openOficina?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
               <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Costos de oficina del mes</span>
-              <span style={{fontSize:12,fontWeight:700,color:C.text,marginLeft:'auto'}}>{fmt(totalMes)}</span>
+              <span style={{fontSize:12,fontWeight:600,color:C.text,marginLeft:'auto'}}>{fmt(totalMes)}</span>
             </button>
             {openOficina&&(
               <div style={{marginTop:8,background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
@@ -2063,11 +2063,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                       <div style={{fontSize:10,color:C.muted,marginTop:1}}>{e.category||'—'}{e.subcategory?`: ${e.subcategory}`:''} · {fmtDate(e.date)}</div>
                     </div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmt(e.amount)}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmt(e.amount)}</div>
                   </div>
                 ))}
                 {delMes.length>0&&(
-                  <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:13,fontWeight:700,color:C.text}}>
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:13,fontWeight:600,color:C.text}}>
                     <span>Total {mesLbl}</span><span>{fmt(totalMes)}</span>
                   </div>
                 )}
