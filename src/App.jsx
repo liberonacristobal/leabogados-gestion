@@ -174,7 +174,7 @@ const Sel = ({value,onChange,options,placeholder}) => (
 )
 const Txt = (p) => <textarea {...p} rows={2} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,resize:'none',boxSizing:'border-box',outline:'none'}}/>
 const Lbl = ({children}) => <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.7,marginBottom:5}}>{children}</div>
-const Fld = ({label,children}) => <div style={{marginBottom:14}}><Lbl>{label}</Lbl>{children}</div>
+const Fld = ({label,children,mb}) => <div className='fld' style={{marginBottom:mb??14}}><Lbl>{label}</Lbl>{children}</div>
 const Spin = () => <div style={{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
 const DriveIcon = ({size=14}) => <svg width={size} height={size} viewBox='0 0 87.3 78' xmlns='http://www.w3.org/2000/svg'><path d='m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z' fill='#0066da'/><path d='m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z' fill='#00ac47'/><path d='m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z' fill='#ea4335'/><path d='m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z' fill='#00832d'/><path d='m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z' fill='#2684fc'/><path d='m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z' fill='#ffba00'/></svg>
 // Logo de marca FirmDesk. variant: primary (tile azul) | mono (F azul sobre claro) | accent (tile verde)
@@ -5479,7 +5479,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
   return (
     <>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
+      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
         <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
           {task?'Editar tarea':'Nueva tarea'}
           {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}
@@ -5487,7 +5487,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
         <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
       </div>
 
-      <div style={{padding:'16px 20px'}}>
+      <div className='qt-body'>
       {!selectedClient ? (
         <>
           <Fld label='Cliente'>
@@ -5505,11 +5505,6 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
       ) : (
         <>
           {yaDelegada&&<DelegBanner/>}
-          {!preClient&&!task&&(
-            <div style={{textAlign:'right',marginBottom:6,marginTop:-4}}>
-              <button onClick={()=>{setSelectedClient(null);setF(p=>({...p,sale_id:'',project:'',subproject:'',entity_id:null}))}} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>Cambiar cliente</button>
-            </div>
-          )}
 
           {multiRS ? (
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -8719,7 +8714,14 @@ export default function App() {
           .fab{right:auto!important;left:50%!important;margin-left:228px}
         }
         .fecha-short{display:none}
-        @media(max-width:560px){ .fecha-full{display:none} .fecha-short{display:inline} }
+        .qt-head{padding:18px 20px 14px}
+        .qt-body{padding:16px 20px}
+        @media(max-width:560px){
+          .fecha-full{display:none} .fecha-short{display:inline}
+          .qt-head{padding:13px 15px 10px}
+          .qt-body{padding:11px 15px}
+          .qt-body .fld{margin-bottom:10px!important}
+        }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
         <div style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
