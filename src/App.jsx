@@ -3171,7 +3171,85 @@ function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir}) {
+// Modal de sincronización con el SII — Fase 1: lee el Registro de Ventas y
+// concilia Programadas -> Pendientes vía la Edge Function sii-sync (solo admin).
+function SiiSyncModal({onClose,onRefresh}) {
+  const hoy = new Date()
+  const [mes,setMes] = useState(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`)
+  const [loading,setLoading] = useState(false)
+  const [testLoading,setTestLoading] = useState(false)
+  const [result,setResult] = useState(null)
+  const [testMsg,setTestMsg] = useState('')
+  const [error,setError] = useState('')
+
+  const llamar = async(body) => {
+    const {data:{session}} = await supabase.auth.getSession()
+    if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
+    const res = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},
+      body:JSON.stringify(body)
+    })
+    const data = await res.json().catch(()=>({}))
+    if(!res.ok) throw new Error(data.error||('Error '+res.status))
+    return data
+  }
+  const sincronizar = async() => {
+    setLoading(true); setError(''); setResult(null); setTestMsg('')
+    try{
+      const data = await llamar({periodo:mes})
+      setResult(data)
+      if(data.actualizadas?.length&&onRefresh) await onRefresh()
+    }catch(e){ setError(e.message) }
+    setLoading(false)
+  }
+  const probarAuth = async() => {
+    setTestLoading(true); setError(''); setTestMsg('')
+    try{ const d=await llamar({action:'test-auth'}); setTestMsg(`${d.mensaje} (ambiente: ${d.ambiente}, token ${d.tokenPreview})`) }
+    catch(e){ setError(e.message) }
+    setTestLoading(false)
+  }
+  const Sec = ({titulo,color,bg,items,render}) => (!items||items.length===0)?null:(
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:10,fontWeight:600,color,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>{titulo} · {items.length}</div>
+      <div style={{background:bg,borderRadius:8,padding:'4px 10px'}}>
+        {items.map((it,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 0',borderBottom:i<items.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>{render(it)}</div>))}
+      </div>
+    </div>
+  )
+  const vacio = result&&!result.actualizadas?.length&&!result.ambiguas?.length&&!result.sinMatch?.length&&!result.errores?.length
+  return (
+    <Modal title='Sincronizar con SII' onClose={onClose} closeOnBackdrop={false}>
+      <div style={{display:'flex',gap:8,alignItems:'flex-end',marginBottom:14}}>
+        <div style={{flex:1}}>
+          <Lbl>Período</Lbl>
+          <input type='month' value={mes} onChange={e=>setMes(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:14,color:C.text,boxSizing:'border-box'}}/>
+        </div>
+        <button onClick={sincronizar} disabled={loading} style={{padding:'10px 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:loading?.6:1,whiteSpace:'nowrap'}}>{loading?'Consultando...':'Sincronizar'}</button>
+      </div>
+      {loading&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 0',justifyContent:'center'}}><Spin/><span style={{fontSize:12,color:C.muted}}>Consultando SII...</span></div>}
+      {error&&<div style={{padding:'9px 12px',borderRadius:8,background:'#FCEBEB',color:C.overdue,fontSize:12,marginBottom:12}}>{error}</div>}
+      {testMsg&&<div style={{padding:'9px 12px',borderRadius:8,background:'#E1F5EE',color:'#0F6E56',fontSize:12,marginBottom:12}}>{testMsg}</div>}
+      {result&&(vacio
+        ? <div style={{textAlign:'center',padding:'18px 0',fontSize:13,color:C.normal,fontWeight:600}}>Todo está al día{result.yaRegistradas>0?` · ${result.yaRegistradas} factura(s) ya estaban registradas`:''}</div>
+        : <>
+            <Sec titulo='Actualizadas a Pendiente' color={C.normal} bg='#E1F5EE' items={result.actualizadas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente} · F° {it.folio}</span><span style={{fontWeight:700,color:C.normal,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec titulo='Requieren revisión manual' color={C.soon} bg='#FEF6EE' items={result.ambiguas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.rut} · {it.candidatos?.length} candidatos</span><span style={{fontWeight:700,color:C.soon,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec titulo='Facturas del SII sin registro en la app' color='#99ABB4' bg='#F5F7F9' items={result.sinMatch} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.rut}</span><span style={{fontWeight:700,color:'#537281',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            {result.errores?.length>0&&<Sec titulo='Errores' color={C.overdue} bg='#FCEBEB' items={result.errores} render={it=>(<><span>F° {it.folio}</span><span style={{fontSize:11,color:C.overdue}}>{it.error}</span></>)}/>}
+            {result.yaRegistradas>0&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{result.yaRegistradas} factura(s) del SII ya estaban registradas en la app.</div>}
+          </>
+      )}
+      <div style={{marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+        <button onClick={probarAuth} disabled={testLoading} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',textDecoration:'underline',padding:0}}>{testLoading?'Probando...':'Probar conexión con el SII'}</button>
+        <span style={{fontSize:10,color:'#99ABB4'}}>Solo lectura: nunca crea ni borra cobros</span>
+      </div>
+    </Modal>
+  )
+}
+
+function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onRefresh}) {
+  const [siiOpen,setSiiOpen] = useState(false)
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -3456,9 +3534,11 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
             {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:descargando?'default':'pointer',opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
             <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button>
+            <button onClick={()=>setSiiOpen(true)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>SII</button>
             <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
           </div>
         </div>
+        {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh}/>}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
           {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
@@ -8110,7 +8190,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
