@@ -26,6 +26,10 @@ const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDi
 const fmtShort = n => { const a=Math.abs(n||0), s=n<0?'-':''; if(a>=1000000) return s+'$'+(a/1000000).toFixed(a>=10000000?0:1).replace('.',',')+'M'; if(a>=1000) return s+'$'+Math.round(a/1000)+'K'; return s+'$'+a.toLocaleString('es-CL') }
 // UF abreviada para KPIs (UF 9.800 / UF 6.309), sin decimales para no recargar.
 const fmtUFk = n => `UF ${Math.round(n||0).toLocaleString('es-CL')}`
+// Categoría legible para rendiciones (documento al cliente). Abreviaturas internas → nombre completo.
+const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c==='Notaría')?'Notaría Lascar':(c||'Otro')
+// Fecha DD-MM-AAAA a partir de un ISO 'AAAA-MM-DD'
+const fmtFechaDMY = d => { if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(d) }
 // Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
 const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => { if(!d) return '—'; return new Date(d+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short'}) }
@@ -112,9 +116,9 @@ function rsBalances(clientId, expenses, entities){
 function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4', TXT='#3D3D3D'
   const saldo = totFondos - totGastos
-  const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg=MUTED,label=cat||'Otro'; if(c.includes('notar')){bg='#E6F1FB';fg=A;label='Notaría'} else if(c.includes('transp')){bg='#E1F5EE';fg='#0F6E56'} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${label}</span>` }
-  const filasGastos = gastos.map(e=>`<tr><td>${e.date||'—'}</td><td>${e.concept||'—'}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600'>${fmtN(e.amount)}</td></tr>`).join('')
-  const filasFondos = fondos.length ? fondos.map(e=>`<tr><td style='width:90px'>${e.date||'—'}</td><td>${e.concept||'Fondo recibido'}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>Sin fondos registrados</td></tr>`
+  const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg=MUTED; if(c.includes('notar')){bg='#E6F1FB';fg=A} else if(c.includes('transp')){bg='#E1F5EE';fg='#0F6E56'} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${RENDCAT(cat)}</span>` }
+  const filasGastos = gastos.map(e=>`<tr><td style='white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'—'}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600;white-space:nowrap'>${fmtN(e.amount)}</td></tr>`).join('')
+  const filasFondos = fondos.length ? fondos.map(e=>`<tr><td style='width:90px;white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'Fondo recibido'}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>Sin fondos registrados</td></tr>`
   let saldoBox=''
   if(saldo<0){ const row=(l,v)=>`<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F1D4D4;font-size:10px'><span style='color:${MUTED}'>${l}</span><span style='font-weight:600;color:${TXT}'>${v}</span></div>`; saldoBox=`<div class='saldo-box' style='border:1px solid #F7C1C1;background:#FCEBEB;border-radius:8px;padding:14px 18px;margin-top:18px'><div style='font-size:11px;font-weight:700;color:${TXT};margin-bottom:10px'>Saldo pendiente — transferir a Liberona Escala</div>${row('Razón social','Liberona Escala Abogados Ltda.')}${row('RUT','77.700.387-9')}${row('Banco','Banco BICE')}${row('N° cuenta corriente','138392-2')}${row('Email confirmación','administracion@leabogados.cl')}</div>` }
   else if(saldo>0){ saldoBox=`<div class='saldo-box' style='border:1px solid #E4E8EB;border-radius:8px;padding:14px 18px;margin-top:18px;font-size:10px;color:${TXT};line-height:1.6'>Le informamos que existe un saldo a su favor de <strong>${fmtN(saldo)}</strong> correspondiente al período ${periodo}. Para proceder con la devolución, le agradeceríamos indicarnos sus datos bancarios a <strong>administracion@leabogados.cl</strong></div>` }
@@ -4394,7 +4398,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
               <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 0',borderBottom:i<gastos.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>
                 <div style={{minWidth:0}}>
                   <div style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{e.category||'Otro'}{e.subcategory?': '+e.subcategory:''} · {fmtDate(e.date)}</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{RENDCAT(e.category)}{e.subcategory?': '+e.subcategory:''} · {fmtFechaDMY(e.date)}</div>
                 </div>
                 <div style={{color:C.overdue,fontWeight:600,whiteSpace:'nowrap'}}>-{fmt(e.amount)}</div>
               </div>
@@ -5338,34 +5342,41 @@ function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
 function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+  // Saldo del cliente (fondos − gastos). Negativo = el cliente debe al Estudio → se incluyen los datos bancarios.
+  const saldoCliente = (expenses||[]).filter(e=>e.client_id===r.client_id).reduce((a,e)=>a+(e.type==='fondo'?(e.amount||0):-(e.amount||0)),0)
+  const debeCliente = saldoCliente < 0
   const [para,setPara] = useState(client?.email||'')
   const [asunto,setAsunto] = useState(`Rendición de gastos ${client?.name||''} — ${r.periodo}`)
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
-    const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#E24B4A">-${fmtN(e.amount)}</td></tr>`).join('')
+    const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4};white-space:nowrap">${fmtFechaDMY(e.date)}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${RENDCAT(e.category)}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#E24B4A;white-space:nowrap">-${fmtN(e.amount)}</td></tr>`).join('')
     return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:700">Rendición de gastos</div><div style="font-size:11px;opacity:.85;margin-top:2px">${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#E24B4A">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
   }
-  const cuerpoCorreo = () => `Estimado/a ${client?.name||'cliente'}:
+  const cuerpoCorreo = () => {
+    const lineas = det.map(e=>`• ${fmtFechaDMY(e.date)} · ${RENDCAT(e.category)}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')
+    const banco = debeCliente ? `
 
-Esperando que se encuentre muy bien, le hacemos llegar la rendición de los gastos incurridos durante el período ${r.periodo||''}, en el marco de la gestión encomendada. En el documento adjunto encontrará el respaldo de cada desembolso.
-
-${det.map(e=>`• ${e.date||'—'} · ${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')}
-
-Total rendido: -${fmtN(r.total)}
-
-Si producto de esta rendición resultara un saldo a su cargo, le agradeceremos efectuar la transferencia a la cuenta que indicamos a continuación, señalando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:
+Producto de esta rendición resulta un saldo a su cargo de ${fmtN(Math.abs(saldoCliente))}. Le agradeceremos efectuar la transferencia a la cuenta que indicamos a continuación, señalando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:
 
   Titular: Liberona Escala Abogados Ltda.
   RUT: 77.700.387-9
   Banco: Banco BICE
-  Cuenta Corriente: 138392-2
+  Cuenta Corriente: 138392-2` : ''
+    return `Estimado/a ${client?.name||'cliente'}:
+
+Esperando que se encuentre muy bien, le hacemos llegar la rendición de los gastos incurridos durante el período ${r.periodo||''}, en el marco de la gestión encomendada. En el documento adjunto encontrará el respaldo de cada desembolso.
+
+${lineas}
+
+Total rendido: -${fmtN(r.total)}${banco}
 
 Cualquier consulta, quedamos a su entera disposición.
 
 Saludos cordiales,
 ${user?.name||''}
 Liberona Escala Abogados`
+  }
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
     const texto = cuerpoCorreo()
@@ -5376,7 +5387,7 @@ Liberona Escala Abogados`
       const token = await driveToken()
       if(token){
         try{
-          const pdf = await rendicionPdfBase64(r, client, det, user)
+          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente))
           await sendGmailWithPdf(token, {to:para.trim(), subject:asunto, bodyText:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(_){ /* sin scope gmail.send (403) u otro: caemos al fallback */ }
@@ -6145,40 +6156,46 @@ async function driveToken(){
 //    (agregar a supabase.js cuando esté habilitado en Google Cloud Console). Sin ese scope,
 //    la API devuelve 403 y el modal cae al fallback de Gmail compose (sin adjunto). ──
 // PDF de la rendición (jsPDF) → base64 sin el prefijo dataURL
-async function rendicionPdfBase64(r, client, det, user){
+async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldoMonto=0){
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const doc = new jsPDF({unit:'pt', format:'letter'})
   const W = doc.internal.pageSize.getWidth()
-  doc.setFillColor(0,60,80); doc.rect(0,0,W,72,'F')
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15)
+  doc.setFillColor(0,60,80); doc.rect(0,0,W,74,'F')
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16)
   doc.text('Rendición de gastos', 40, 34)
   doc.setFont('helvetica','normal'); doc.setFontSize(10)
-  doc.text(`${client?.name||''} · ${r.periodo||''}`, 40, 52)
+  doc.text(`${client?.name||''} · ${r.periodo||''}`, 40, 54)
   doc.setFont('helvetica','bold'); doc.setFontSize(12)
-  doc.text('LIBERONA ESCALA ABOGADOS', W-40, 42, {align:'right'})
-  let y = 104
-  doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(9)
-  doc.text('FECHA', 40, y); doc.text('CATEGORÍA', 130, y); doc.text('DESCRIPCIÓN', 250, y); doc.text('MONTO', W-40, y, {align:'right'})
-  y += 6; doc.setDrawColor(228,232,235); doc.line(40,y,W-40,y); y += 17
-  doc.setFont('helvetica','normal'); doc.setFontSize(10)
+  doc.text('LIBERONA ESCALA ABOGADOS', W-40, 44, {align:'right'})
+  let y = 108
+  doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8.5)
+  doc.text('FECHA', 40, y); doc.text('DETALLE', 135, y); doc.text('MONTO', W-40, y, {align:'right'})
+  y += 8; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(40,y,W-40,y); y += 18
   ;(det||[]).forEach(e=>{
-    doc.setTextColor(61,61,61)
-    doc.text(String(e.date||'—'), 40, y)
-    doc.text(((e.category||'Otro')+(e.subcategory?': '+e.subcategory:'')).slice(0,22), 130, y)
-    doc.text(String(e.concept||'—').slice(0,30), 250, y)
-    doc.setTextColor(226,75,74); doc.text('-'+fmtN(e.amount), W-40, y, {align:'right'})
-    y += 16
-    if(y > 720){ doc.addPage(); y = 60 }
+    doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(61,61,61)
+    doc.text(fmtFechaDMY(e.date), 40, y)
+    doc.text(String(e.concept||'—').slice(0,46), 135, y)
+    doc.setFont('helvetica','bold'); doc.setTextColor(226,75,74)
+    doc.text('-'+fmtN(e.amount), W-40, y, {align:'right'})
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(83,114,129)
+    doc.text((RENDCAT(e.category)+(e.subcategory?': '+e.subcategory:'')).slice(0,58), 135, y+12)
+    y += 27
+    if(y > 700){ doc.addPage(); y = 60 }
   })
-  y += 4; doc.setDrawColor(83,114,129); doc.line(40,y,W-40,y); y += 18
-  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('TOTAL RENDIDO', 40, y)
+  doc.setDrawColor(83,114,129); doc.setLineWidth(1.5); doc.line(40,y,W-40,y); y += 20
+  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('TOTAL RENDIDO', 40, y)
   doc.setTextColor(226,75,74); doc.text('-'+fmtN(r.total), W-40, y, {align:'right'})
-  y += 32
-  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Datos para transferencia (si resulta un saldo a su cargo)', 40, y); y += 16
-  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(83,114,129)
-  ;['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl'].forEach(l=>{ doc.text(l,40,y); y += 14 })
-  y += 16; doc.setTextColor(61,61,61); doc.setFontSize(10)
-  doc.text('Atentamente,', 40, y); y += 14
+  // Datos bancarios SOLO si el cliente debe al Estudio (saldo a su cargo)
+  if(debeCliente){
+    y += 36
+    doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(10.5)
+    doc.text(`Saldo a su cargo: ${fmtN(saldoMonto)}`, 40, y); y += 18
+    doc.setFontSize(9.5); doc.text('Transferir a:', 40, y); y += 15
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(83,114,129)
+    ;['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl'].forEach(l=>{ doc.text(l,40,y); y += 14 })
+  }
+  y += 22; doc.setTextColor(61,61,61); doc.setFont('helvetica','normal'); doc.setFontSize(10)
+  doc.text('Atentamente,', 40, y); y += 15
   doc.setFont('helvetica','bold'); doc.text(user?.name||'', 40, y); y += 14
   doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
   return doc.output('datauristring').split(',')[1]
