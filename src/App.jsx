@@ -3276,14 +3276,28 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
     catch(e){ setError(msgErr(e)) }
     setTestLoading(false)
   }
-  const Sec = ({titulo,color,bg,items,render}) => (!items||items.length===0)?null:(
-    <div style={{marginBottom:12}}>
-      <div style={{fontSize:10,fontWeight:600,color,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>{titulo} · {items.length}</div>
-      <div style={{background:bg,borderRadius:8,padding:'4px 10px'}}>
-        {items.map((it,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 0',borderBottom:i<items.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>{render(it)}</div>))}
-      </div>
-    </div>
+  const [cerradas,setCerradas] = useState(()=>new Set(['ya']))   // 'Ya registradas' colapsada por defecto
+  const toggleSec = k => setCerradas(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})
+  const Caret = ({abierta,color}) => (
+    <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:abierta?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>
+      <path d='M3 2 L7 5 L3 8' fill='none' stroke={color} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round'/>
+    </svg>
   )
+  const Sec = ({k,titulo,color,bg,items,render}) => {
+    if(!items||items.length===0) return null
+    const abierta = !cerradas.has(k)
+    return (
+      <div style={{marginBottom:10}}>
+        <button onClick={()=>toggleSec(k)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',background:'none',border:'none',padding:'0 0 6px 0',cursor:'pointer',textAlign:'left'}}>
+          <Caret abierta={abierta} color={color}/>
+          <span style={{fontSize:10,fontWeight:700,color,textTransform:'uppercase',letterSpacing:.4}}>{titulo} ({items.length})</span>
+        </button>
+        {abierta&&<div style={{background:bg,borderRadius:8,padding:'2px 10px'}}>
+          {items.map((it,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:i<items.length-1?'1px solid rgba(0,0,0,0.05)':'none',fontSize:12}}>{render(it)}</div>))}
+        </div>}
+      </div>
+    )
+  }
   const vacio = result&&!result.actualizadas?.length&&!result.corregirFolio?.length&&!result.ambiguas?.length&&!result.sinMatch?.length&&!result.errores?.length
   return (
     <Modal title='Sincronizar con SII' onClose={onClose} closeOnBackdrop={false}>
@@ -3298,10 +3312,10 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
       {error&&<div style={{padding:'9px 12px',borderRadius:8,background:'#FCEBEB',color:C.overdue,fontSize:12,marginBottom:12}}>{error}</div>}
       {testMsg&&<div style={{padding:'9px 12px',borderRadius:8,background:'#E1F5EE',color:'#0F6E56',fontSize:12,marginBottom:12}}>{testMsg}</div>}
       {result&&(vacio
-        ? <div style={{textAlign:'center',padding:'18px 0',fontSize:13,color:C.normal,fontWeight:600}}>Todo está al día{result.yaRegistradas>0?` · ${result.yaRegistradas} factura(s) ya estaban registradas`:''}</div>
+        ? <div style={{textAlign:'center',padding:'18px 0',fontSize:13,color:C.normal,fontWeight:600}}>Todo está al día{result.yaRegistradas?.length?` · ${result.yaRegistradas.length} factura(s) ya estaban registradas`:''}</div>
         : <>
-            <Sec titulo='Actualizadas a Pendiente' color={C.normal} bg='#E1F5EE' items={result.actualizadas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente} · F° {it.folio}</span><span style={{fontWeight:700,color:C.normal,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
-            <Sec titulo='Corregir número de folio' color={C.accent} bg='#E6EEF1' items={result.corregirFolio} render={it=>{
+            <Sec k='act' titulo='Actualizadas a Pendiente' color='#0F6E56' bg='#E1F5EE' items={result.actualizadas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente} · F° {it.folio}</span><span style={{fontWeight:700,color:'#0F6E56',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec k='fol' titulo='Corregir número de folio' color={C.accent} bg='#E6EEF1' items={result.corregirFolio} render={it=>{
               const ya = corregidas[it.billingId]
               return (<>
                 <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente} · {it.folioActual?`F° ${it.folioActual} → ${it.folio}`:`asignar F° ${it.folio}`}</span>
@@ -3313,26 +3327,26 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
                 </span>
               </>)
             }}/>
-            <Sec titulo='Requieren revisión manual' color={C.soon} bg='#FEF6EE' items={result.ambiguas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.rut} · {it.candidatos?.length} candidatos</span><span style={{fontWeight:700,color:C.soon,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
-            <Sec titulo='Facturas del SII sin registro en la app' color='#99ABB4' bg='#F5F7F9' items={result.sinMatch} render={it=>{
+            <Sec k='sin' titulo='Sin registro en la app' color='#854F0B' bg='#FFF8E1' items={result.sinMatch} render={it=>{
               const ya = ingresadas[it.folio]
               return (<>
                 <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.receptor||it.rut}</span>
                 <span style={{display:'flex',alignItems:'center',gap:8,whiteSpace:'nowrap',flexShrink:0}}>
-                  <span style={{fontWeight:700,color:'#537281'}}>{fmt(it.monto)}</span>
+                  <span style={{fontWeight:700,color:'#854F0B'}}>{fmt(it.monto)}</span>
                   {ya
                     ? <span style={{fontSize:11,fontWeight:700,color:C.normal}}>{ya.cliente?'Ingresada':'Ingresada · asigna cliente'}</span>
                     : <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:700,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'...':'Ingresar'}</button>}
                 </span>
               </>)
             }}/>
-            {result.errores?.length>0&&<Sec titulo='Errores' color={C.overdue} bg='#FCEBEB' items={result.errores} render={it=>(<><span>F° {it.folio}</span><span style={{fontSize:11,color:C.overdue}}>{it.error}</span></>)}/>}
-            {result.yaRegistradas>0&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{result.yaRegistradas} factura(s) del SII ya estaban registradas en la app.</div>}
+            <Sec k='amb' titulo='Requieren revisión manual' color={C.soon} bg='#FEF6EE' items={result.ambiguas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.rut} · {it.candidatos?.length} candidatos</span><span style={{fontWeight:700,color:C.soon,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec k='ya' titulo='Ya registradas' color='#537281' bg='#F5F7F9' items={result.yaRegistradas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {it.receptor||it.rut}</span><span style={{fontWeight:700,color:'#537281',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
+            <Sec k='err' titulo='Errores' color={C.overdue} bg='#FCEBEB' items={result.errores} render={it=>(<><span>F° {it.folio}</span><span style={{fontSize:11,color:C.overdue}}>{it.error}</span></>)}/>
           </>
       )}
       <div style={{marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
         <button onClick={probarAuth} disabled={testLoading} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',textDecoration:'underline',padding:0}}>{testLoading?'Probando...':'Probar conexión con el SII'}</button>
-        <span style={{fontSize:10,color:'#99ABB4'}}>La sincronización solo lee · "Ingresar" crea el cobro</span>
+        <span style={{fontSize:10,color:'#99ABB4'}}>La sincronización solo lee · las acciones las confirmas tú</span>
       </div>
     </Modal>
   )
