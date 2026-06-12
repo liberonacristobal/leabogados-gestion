@@ -806,7 +806,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 <div style={{fontSize:10,color:'rgba(255,255,255,.6)',letterSpacing:'.03em'}}>{selected.size} GASTO{selected.size!==1?'S':''} SELECCIONADO{selected.size!==1?'S':''}</div>
                 <div style={{fontSize:16,fontWeight:600,color:'#fff',marginTop:1}}>{fmtCLP(totalSel)}</div>
               </div>
-              <button onClick={()=>{ setEnviarA(currentUserEmail||''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{height:34,padding:'0 18px',background:'#fff',color:'#003C50',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
+              <button onClick={()=>{ setEnviarA(''); setCc(''); setConfirmLiq(true) }} disabled={saving} style={{height:34,padding:'0 18px',background:'#fff',color:'#003C50',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
             </div>
           )}
         </div>
@@ -931,57 +931,42 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         </div>
       )}
 
-      {/* Popup de confirmación de liquidación con detalle completo (PASO 2) */}
+      {/* Modal de liquidación (PP-12 commit 2): detalle compacto + PDF / Correo / Confirmar */}
       {confirmLiq&&(()=>{
         const gastosSel = seleccionados
         const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
+        const secBtn = {height:40,borderRadius:8,background:'#F5F7F9',color:'#003C50',border:'0.5px solid #E4E8EB',fontSize:12,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6}
         return (
-          <div onClick={()=>!saving&&setConfirmLiq(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:'16px 16px 0 0',width:'100%',maxWidth:560,maxHeight:'90vh',display:'flex',flexDirection:'column',boxSizing:'border-box'}}>
-              <div style={{padding:'18px 20px 12px',borderBottom:'1px solid #E8E8E8'}}>
-                <div style={{fontSize:15,fontWeight:700,color:'#003C50'}}>Resumen de liquidación</div>
-                <div style={{fontSize:12,color:'#537281',marginTop:2}}>{me} · {periodoActual()}</div>
+          <div onClick={()=>!saving&&setConfirmLiq(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:340,maxHeight:'85vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'15px 16px'}}>
+                <span style={{fontSize:15,fontWeight:600,color:'#003C50'}}>Liquidar caja chica</span>
+                <button onClick={()=>!saving&&setConfirmLiq(false)} style={{background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:0}}>
+                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+                </button>
               </div>
-              <div style={{overflowY:'auto',padding:'12px 20px'}}>
-                <div style={{border:'1px solid #E8E8E8',borderRadius:8,overflow:'hidden'}}>
-                  <div style={{display:'grid',gridTemplateColumns:'58px 1fr 74px',background:'#003C50',color:'#fff',fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,padding:'6px 10px'}}>
-                    <div>Fecha</div><div>Concepto · Cliente · Cat.</div><div style={{textAlign:'right'}}>Monto</div>
+              <div style={{overflowY:'auto',padding:'0 16px'}}>
+                {gastosSel.map(e=>(
+                  <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'0.5px solid #E4E8EB'}}>
+                    <span style={{fontSize:12,color:'#537281',maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</span>
+                    <span style={{fontSize:12,fontWeight:500,color:'#1a1a1a',flexShrink:0}}>{fmtCLP(e.amount)}</span>
                   </div>
-                  {gastosSel.map((e,i)=>{
-                    const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'
-                    return (
-                      <div key={e.id} style={{display:'grid',gridTemplateColumns:'58px 1fr 74px',padding:'7px 10px',fontSize:11,background:i%2?'#F7F8F9':'#fff',borderTop:'1px solid #EEE'}}>
-                        <div style={{color:'#888'}}>{e.date||'—'}</div>
-                        <div style={{minWidth:0}}>
-                          <div style={{color:'#3D3D3D',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-                          <div style={{color:'#888',fontSize:10}}>{cn}{e.category?' · '+e.category:''}</div>
-                        </div>
-                        <div style={{textAlign:'right',fontWeight:600,color:'#E24B4A'}}>{fmtCLP(e.amount)}</div>
-                      </div>
-                    )
-                  })}
-                  <div style={{display:'flex',justifyContent:'space-between',padding:'8px 10px',background:'#E4E8EB',fontWeight:700,fontSize:12,color:'#003C50'}}>
-                    <span>TOTAL · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span><span>{fmtCLP(totalLiq)}</span>
-                  </div>
-                </div>
-                <div style={{marginTop:14}}>
-                  <div style={{fontSize:10,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Envío por correo (opcional)</div>
-                  <div style={{marginBottom:8}}>
-                    <label style={{fontSize:11,color:'#537281',display:'block',marginBottom:3}}>Enviar a</label>
-                    <input value={enviarA} onChange={e=>setEnviarA(e.target.value)} placeholder='correo@...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:11,color:'#537281',display:'block',marginBottom:3}}>CC</label>
-                    <input value={cc} onChange={e=>setCc(e.target.value)} placeholder='(opcional)' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
-                  </div>
-                </div>
+                ))}
               </div>
-              <div style={{padding:'12px 20px 18px',borderTop:'1px solid #E8E8E8',display:'flex',flexDirection:'column',gap:8}}>
-                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={{padding:12,borderRadius:10,border:'none',background:'#003C50',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?.6:1}}>{saving?'Procesando...':'Enviar y liquidar'}</button>
-                <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setConfirmLiq(false)} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #E8E8E8',background:'#fff',color:'#888',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                  <button onClick={()=>handleLiquidar(false)} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #1D9E75',background:'transparent',color:'#0F6E56',fontSize:13,fontWeight:700,cursor:'pointer'}}>Solo liquidar</button>
-                </div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#F5F7F9',borderRadius:10,padding:'10px 13px',margin:'12px 16px'}}>
+                <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.04em',textTransform:'uppercase'}}>Total · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
+                <span style={{fontSize:15,fontWeight:600,color:'#003C50'}}>{fmtCLP(totalLiq)}</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,padding:'0 16px 16px'}}>
+                <button onClick={generatePDF} disabled={saving} style={secBtn}>
+                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>PDF
+                </button>
+                <button onClick={()=>handleLiquidar(true)} disabled={saving} style={secBtn}>
+                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><polyline points='3 7 12 13 21 7'/></svg>Correo
+                </button>
+                <button onClick={()=>handleLiquidar(false)} disabled={saving} style={{gridColumn:'span 2',height:44,borderRadius:10,background:'#003C50',color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:7,opacity:saving?.6:1}}>
+                  {saving?<Spin/>:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}{saving?'Procesando...':'Confirmar liquidación'}
+                </button>
               </div>
             </div>
           </div>
