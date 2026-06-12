@@ -8538,14 +8538,11 @@ export default function App() {
         <div style={{padding:'52px 20px 8px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,position:'relative'}}>
             <div style={{padding:'12px 18px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:8}}>
-                <img src='/apple-touch-icon.png' alt='LEA' style={{width:38,height:38,borderRadius:8,display:'block',flexShrink:0}}/>
-                <div style={{display:'flex',alignItems:'center',gap:16,flexShrink:0}}>
-                  <span style={{fontSize:12,color:'#99ABB4',whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</span>
-                  <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:'0.5px solid #E4E8EB',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
-                  </button>
-                </div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:16,marginBottom:10}}>
+                <span style={{fontSize:12,color:'#99ABB4',whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</span>
+                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:'0.5px solid #E4E8EB',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
+                </button>
               </div>
               <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1}}>¡Hola, <span style={{color:'#003C50'}}>{user?.name?.split(' ')[0]}</span>!</div>
             </div>
