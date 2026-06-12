@@ -6320,11 +6320,13 @@ function EntitiesEditor({clientId}) {
     if(!confirm('Eliminar?')) return
     try{await deleteClientEntity(id);setList(p=>p.filter(x=>x.id!==id))}catch(e){alert(e.message)}
   }
+  const huerfanas = (allEntities||[]).filter(e=>!e.client_id)
+  const asignar=async(ent)=>{ setBusy(true); try{ const saved=await upsertClientEntity({id:ent.id,client_id:clientId,name:ent.name,rut:ent.rut}); setList(p=>sortN([...(p||[]),saved])); setAll(p=>p.filter(x=>x.id!==ent.id)) }catch(e){alert('Error: '+e.message)} setBusy(false) }
   const inS={padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:13,boxSizing:'border-box',outline:'none'}
   const iconBtn=col=>({width:30,height:30,flexShrink:0,borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:col,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'})
   return (
     <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
-      <Lbl>Entidades facturables</Lbl>
+      <Lbl>Razones sociales</Lbl>
       {list===null&&<div style={{fontSize:12,color:C.muted}}>Cargando...</div>}
       {list?.map(e=>(
         <div key={e.id} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
@@ -6347,6 +6349,20 @@ function EntitiesEditor({clientId}) {
           )}
         </div>
       ))}
+      {huerfanas.length>0&&(
+        <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Sin cliente asignado · {huerfanas.length}</div>
+          {huerfanas.map(e=>(
+            <div key={e.id} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>
+                {e.rut&&<div style={{fontSize:11,color:C.muted}}>{e.rut}</div>}
+              </div>
+              <button onClick={()=>asignar(e)} disabled={busy} style={{padding:'5px 11px',borderRadius:7,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:busy?'not-allowed':'pointer',flexShrink:0}}>+ Asignar</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{marginTop:8}}>
         <div style={{display:'flex',gap:6,position:'relative'}}>
           <div style={{flex:1,minWidth:0,position:'relative'}}>
@@ -6372,151 +6388,24 @@ function EntitiesEditor({clientId}) {
   )
 }
 
-// ─── TASKS EDITOR (dentro de ficha cliente) ───────────────────────────────────
-function TasksEditor({clientId,sales}) {
-  const [tasks,setTasks] = useState(null)
-  const [form,setForm] = useState(null)
-  const [busy,setBusy] = useState(false)
-  const [showProjects,setShowProjects] = useState(false)
-  const [showSubprojects,setShowSubprojects] = useState(false)
-  const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
-
-  useEffect(()=>{
-    let ok=true
-    supabase.from('tasks').select('*').eq('client_id',clientId).order('due',{ascending:true,nullsFirst:false})
-      .then(({data})=>ok&&setTasks(data||[]))
-    return ()=>{ok=false}
-  },[clientId])
-
-  const existingProjects = useMemo(()=>{
-    const fromTasks = [...new Set((tasks||[]).filter(t=>t.project).map(t=>t.project))]
-    const fromSales = (sales||[]).filter(s=>s.client_id===clientId&&s.title).map(s=>s.title)
-    return [...new Set([...fromSales,...fromTasks])].sort()
-  },[tasks,sales,clientId])
-
-  const save = async()=>{
-    if(!form.title?.trim()) return
-    setBusy(true)
-    try{
-      const p={...form,client_id:clientId,sale_id:form.sale_id||null,project:form.project||null}
-      const{data,error}=await supabase.from('tasks').upsert(p).select().single()
-      if(error)throw error
-      setTasks(p=>form.id?p.map(x=>x.id===data.id?data:x):[...p,data])
-      // Alerta email solo en tarea NUEVA con quien asignado
-      if(!form.id && data.who){
-        const client=clients?.find(c=>c.id===data.client_id)
-        fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
-          body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.name||'el estudio'})
-        }).catch(()=>{})
-      }
-      setForm(null)
-    }catch(e){alert('Error: '+e.message)}
-    setBusy(false)
-  }
-
-  const toggle = async(t)=>{
-    const status=t.status==='Terminado'?'Activo':'Terminado'
-    const prev=t.status
-    const completed_at = status==='Terminado' ? (t.completed_at||new Date().toISOString()) : null
-    setTasks(p=>p.map(x=>x.id===t.id?{...x,status,completed_at}:x))
-    const {error}=await supabase.from('tasks').update({status,completed_at}).eq('id',t.id)
-    if(error){ alert('No se pudo actualizar la tarea: '+error.message); setTasks(p=>p.map(x=>x.id===t.id?{...x,status:prev,completed_at:t.completed_at}:x)) }
-  }
-
-  const del = async(id)=>{
-    if(!confirm('Eliminar tarea?')) return
-    const {error}=await supabase.from('tasks').delete().eq('id',id)
-    if(error){ alert('No se pudo eliminar la tarea: '+error.message); return }
-    setTasks(p=>p.filter(x=>x.id!==id))
-  }
-
-  const active = tasks?.filter(t=>t.status!=='Terminado')||[]
-  const done   = tasks?.filter(t=>t.status==='Terminado')||[]
-  const grouped = {}
-  active.forEach(t=>{ const k=t.project||'__none__'; if(!grouped[k])grouped[k]=[]; grouped[k].push(t) })
-
-  return (
-    <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <Lbl>Tareas</Lbl>
-        <button onClick={()=>setForm({title:'',who:'Cristóbal',due:'',status:'Activo',note:'',project:''})} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Agregar</button>
-      </div>
-      {tasks===null&&<div style={{fontSize:12,color:C.muted}}>Cargando...</div>}
-      {tasks?.length===0&&!form&&<div style={{fontSize:12,color:C.muted}}>Sin tareas.</div>}
-
-      {form&&(
-        <div style={{background:'#fff',borderRadius:8,padding:12,marginBottom:10,border:`1px solid ${C.border}`}}>
-          <input value={form.title||''} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder='Descripción...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:13,marginBottom:8,boxSizing:'border-box'}}/>
-          <div style={{position:'relative',marginBottom:8}}>
-            <input value={form.project||''} onChange={e=>setForm(p=>({...p,project:e.target.value}))} onFocus={()=>setShowProjects(true)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} placeholder='Proyecto (opcional)...' style={{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}}/>
-            {showProjects&&existingProjects.length>0&&(
-              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,boxShadow:'0 4px 12px rgba(0,0,0,.10)',zIndex:100,marginTop:2,maxHeight:150,overflowY:'auto'}}>
-                {existingProjects.filter(p=>!form.project||p.toLowerCase().includes(form.project.toLowerCase())).map((p,i)=>(
-                  <div key={i} onMouseDown={()=>setForm(f=>({...f,project:p}))} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:12,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <select value={form.who||'Cristóbal'} onChange={e=>setForm(p=>({...p,who:e.target.value}))} style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7'}}>{WHO.map(w=><option key={w} value={w}>{w}</option>)}</select>
-            <input type='date' value={form.due||''} onChange={e=>setForm(p=>({...p,due:e.target.value}))} style={{padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7'}}/>
-          </div>
-          <input value={form.note||''} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder='Nota (opcional)...' style={{width:'100%',padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:12,marginBottom:8,boxSizing:'border-box'}}/>
-          <div style={{display:'flex',gap:6}}>
-            <button onClick={()=>setForm(null)} style={{flex:1,padding:'7px',borderRadius:7,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer'}}>Cancelar</button>
-            <button onClick={save} disabled={busy||!form.title?.trim()} style={{flex:2,padding:'7px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>{busy?'Guardando...':'Guardar'}</button>
-          </div>
-        </div>
-      )}
-
-      {Object.keys(grouped).map(key=>{
-        const isProject = key!=='__none__'
-        return (
-          <div key={key} style={{marginBottom:10}}>
-            {isProject&&<div style={{fontSize:11,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:4,paddingLeft:2}}>{key}</div>}
-            {grouped[key].map(t=>(
-              <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-                <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.accent}`,background:'transparent',cursor:'pointer',flexShrink:0,marginTop:1}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
-                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>
-                    <span>{t.who||'—'}</span>
-                    {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-                    {t.note&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontStyle:'italic'}}>{t.note}</span></>}
-                  </div>
-                </div>
-                <button onClick={()=>setForm({...t})} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',flexShrink:0}}>ed</button>
-                <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:C.overdue,fontSize:12,cursor:'pointer',flexShrink:0}}>x</button>
-              </div>
-            ))}
-          </div>
-        )
-      })}
-
-      {done.length>0&&(
-        <div style={{marginTop:8}}>
-          <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Completadas ({done.length})</div>
-          {done.map(t=>(
-            <div key={t.id} style={{display:'flex',gap:8,alignItems:'center',padding:'5px 0'}}>
-              <button onClick={()=>toggle(t)} style={{width:18,height:18,borderRadius:4,border:`2px solid ${C.done}`,background:C.done,cursor:'pointer',flexShrink:0,fontSize:10,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>v</button>
-              <div style={{flex:1,fontSize:12,color:C.muted,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
-              <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>x</button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-
 function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,abogado_responsable:'',status:'Activo',ended_at:'',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const stColor=f.status==='Terminado'?C.overdue:f.status==='Prospecto'?C.soon:C.normal
+  const ini=INICIALES_RESP[f.abogado_responsable]
   return (
     <>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+        <div style={{width:48,height:48,flexShrink:0,borderRadius:12,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700}}>{(f.name||'?').charAt(0).toUpperCase()}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:16,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name?.trim()||'Nuevo cliente'}</div>
+          <div style={{display:'flex',gap:6,marginTop:5,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,fontWeight:600,color:stColor,background:stColor+'1A',padding:'2px 9px',borderRadius:20}}>{f.status||'Activo'}</span>
+            {ini&&<span style={{fontSize:11,fontWeight:600,color:C.muted,background:C.border,padding:'2px 9px',borderRadius:20,letterSpacing:'.3px'}}>{ini}</span>}
+            {f.is_internal&&<span style={{fontSize:11,fontWeight:600,color:C.muted,background:C.border,padding:'2px 9px',borderRadius:20}}>Interno</span>}
+          </div>
+        </div>
+      </div>
       <Fld label='Nombre'><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='RUT'><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
@@ -6540,8 +6429,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
         </button>
       </Fld>
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
-      {client?.id?<EntitiesEditor clientId={client.id}/>:<div style={{fontSize:11,color:C.muted,marginBottom:14}}>Guarda el cliente para agregar entidades facturables.</div>}
-      {client?.id&&<TasksEditor clientId={client.id} sales={sales}/>}
+      {client?.id?<EntitiesEditor clientId={client.id}/>:<div style={{fontSize:11,color:C.muted,marginBottom:14}}>Guarda el cliente para agregar razones sociales.</div>}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
