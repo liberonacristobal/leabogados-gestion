@@ -5035,7 +5035,7 @@ function FichaTabs({tab,setTab,role}){
 // Tab "Contacto" de la ficha (reutilizado admin/limited): identificación + datos de
 // contacto (edición inline en clients) + personas de contacto (CRUD en tabla contacts)
 function ContactoTab({client, entities, onSaveFields}) {
-  const fields = ['rut','nombre_fantasia','giro','tipo_entidad','email','telefono','direccion','comuna','sitio_web']
+  const fields = ['rut']
   const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
   const [form,setForm] = useState(fromClient())
   const [savingF,setSavingF] = useState(false)
@@ -5103,20 +5103,11 @@ function ContactoTab({client, entities, onSaveFields}) {
         {sTitle('Identificación')}
         <div style={{display:'grid',gap:10}}>
           <div>
-            <label style={lbl}>Razón social</label>
+            <label style={lbl}>Nombre cliente</label>
             <input value={client.name||'—'} disabled style={{...inp,background:'#F2F2F2',color:C.muted}}/>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Para cambiarla, usa "Editar".</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Para cambiarlo, usa "Editar".</div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            {field('RUT','rut','12.345.678-9')}
-            <div>
-              <label style={lbl}>Tipo de entidad</label>
-              <input value={form.tipo_entidad} onChange={e=>set('tipo_entidad',e.target.value)} list="tipos-entidad" placeholder="SpA, Ltda., ..." style={inp}/>
-              <datalist id="tipos-entidad">{['Persona natural','SpA','Ltda.','S.A.','EIRL','Cooperativa','Fundación/Corporación','Otra'].map(o=><option key={o} value={o}/>)}</datalist>
-            </div>
-          </div>
-          {field('Nombre de fantasía','nombre_fantasia','Nombre comercial')}
-          {field('Giro','giro','Actividad económica')}
+          {field('RUT','rut','12.345.678-9')}
         </div>
         {entities&&entities.length>0&&(
           <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
@@ -5129,22 +5120,6 @@ function ContactoTab({client, entities, onSaveFields}) {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Datos de contacto */}
-      <div style={card}>
-        {sTitle('Datos de contacto')}
-        <div style={{display:'grid',gap:10}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            {field('Email','email','correo@...')}
-            {field('Teléfono','telefono','+56 9 ...')}
-          </div>
-          {field('Dirección','direccion')}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            {field('Comuna','comuna')}
-            {field('Sitio web','sitio_web','https://')}
-          </div>
-        </div>
       </div>
 
       {dirty&&(
@@ -5211,7 +5186,7 @@ function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
   emitidas.forEach(b=>{ const y=(b.issued_at||'').slice(0,4)||'—'; (porAnio[y]=porAnio[y]||[]).push(b) })
   const anios = Object.keys(porAnio).sort((a,b)=>b.localeCompare(a))
 
-  const fields = ['condicion_pago','moneda_preferida','banco','numero_cuenta','abogado_responsable','notas_internas']
+  const fields = ['abogado_responsable','notas_internas']
   const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
   const [form,setForm] = useState(fromClient())
   const [savingF,setSavingF] = useState(false)
@@ -5269,38 +5244,6 @@ function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
             </div>
           )
         })}
-      </div>
-
-      {/* Razones sociales asociadas */}
-      {entities&&entities.length>0&&(
-        <div style={card}>
-          {sTitle('Razones sociales asociadas')}
-          {entities.map(e=>(
-            <div key={e.id} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:`1px solid ${C.border}`}}>
-              <span style={{fontSize:12,color:C.text}}>{e.name||'—'}</span>
-              <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Datos de facturación */}
-      <div style={card}>
-        {sTitle('Datos de facturación')}
-        <div style={{display:'grid',gap:10}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            {field('Condición de pago','condicion_pago','Contado, 30 días...')}
-            <div>
-              <label style={lbl}>Moneda preferida</label>
-              <input value={form.moneda_preferida} onChange={e=>set('moneda_preferida',e.target.value)} list="monedas" placeholder="CLP, UF, USD" style={inp}/>
-              <datalist id="monedas">{['CLP','UF','USD'].map(o=><option key={o} value={o}/>)}</datalist>
-            </div>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            {field('Banco','banco')}
-            {field('N° de cuenta','numero_cuenta')}
-          </div>
-        </div>
       </div>
 
       {/* Relación con el estudio */}
