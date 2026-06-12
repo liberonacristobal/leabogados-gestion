@@ -6159,7 +6159,8 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
     } catch(e) { alert('Error: '+e.message) }
   }
   const [sFilter,setSFilter] = useState('Activo')
-  const [misClientesOn,setMisClientesOn] = useState(false)
+  const [respSel,setRespSel] = useState(()=>new Set())
+  const toggleResp = r => setRespSel(p=>{const n=new Set(p);n.has(r)?n.delete(r):n.add(r);return n})
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const [rendicionClient,setRendicionClient] = useState(null)
@@ -6172,6 +6173,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
   const prospectoN=clients.filter(c=>!c.is_internal&&c.status==='Prospecto').length
   // Responsable de un cliente = responsable de su venta más reciente (campo responsible en sales)
   const responsableDe = useMemo(()=>{ const m={}; clients.forEach(c=>{ if(c.abogado_responsable) m[c.id]=c.abogado_responsable }); [...sales].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[s.client_id]) m[s.client_id]=s.responsible }); return m },[clients,sales])
+  const responsables = useMemo(()=>[...new Set(Object.values(responsableDe))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es')),[responsableDe])
   const tareasDe = useMemo(()=>{ const m={}; tasks.forEach(t=>{ if(t.client_id&&t.status!=='Terminado') m[t.client_id]=(m[t.client_id]||0)+1 }); return m },[tasks])
   const cl = useMemo(()=>{
     let base = clients
@@ -6179,9 +6181,9 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
     else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
     else if(sFilter==='Prospecto') base=base.filter(c=>c.status==='Prospecto')
     if(q.trim()) base=base.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
-    if(misClientesOn){ const me=(user?.name||'').trim().toLowerCase(); base=base.filter(c=>(responsableDe[c.id]||'').trim().toLowerCase()===me) }
+    if(respSel.size>0) base=base.filter(c=>respSel.has(responsableDe[c.id]))
     return [...base].sort((a,b)=>{ const ta=tareasDe[a.id]||0,tb=tareasDe[b.id]||0; if((ta>0)!==(tb>0)) return tb>0?1:-1; return tb-ta })
-  },[clients,sFilter,q,misClientesOn,responsableDe,tareasDe,user])
+  },[clients,sFilter,q,respSel,responsableDe,tareasDe])
   const balances = useMemo(()=>{
     const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) }); return m
   },[expenses])
@@ -6228,17 +6230,16 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
         {sFilter ? (
-          <div style={{display:'flex',gap:6,marginBottom:4}}>
-            <button onClick={()=>{setSFilter(null);setMisClientesOn(false)}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]}</button>
-            <button onClick={()=>setMisClientesOn(v=>!v)} style={{height:30,padding:'0 13px',borderRadius:8,border:`0.5px solid ${misClientesOn?'#99ABB4':'#E4E8EB'}`,background:misClientesOn?'#E4E8EB':'#fff',color:misClientesOn?'#003C50':'#537281',fontSize:12,fontWeight:misClientesOn?600:500,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-              <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>
-              Mis clientes
-            </button>
+          <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
+            <button onClick={()=>{setSFilter(null);setRespSel(new Set())}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]}</button>
+            {responsables.map(r=>{ const on=respSel.has(r); return (
+              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{minWidth:30,height:30,padding:'0 8px',borderRadius:8,border:`0.5px solid ${on?'#99ABB4':'#E4E8EB'}`,background:on?'#E4E8EB':'#fff',color:on?'#003C50':'#537281',fontSize:12,fontWeight:on?600:500,cursor:'pointer'}}>{r.charAt(0).toUpperCase()}</button>
+            )})}
           </div>
         ) : (
           <div style={{display:'flex',gap:6,marginBottom:4}}>
             {[['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>(
-              <button key={v} onClick={()=>{setSFilter(v);setMisClientesOn(false)}} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+              <button key={v} onClick={()=>{setSFilter(v);setRespSel(new Set())}} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
             ))}
           </div>
         )}
@@ -6253,7 +6254,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
           const balance=balances[c.id]||0
           const tareasC=tareasDe[c.id]||0
           return (
-            <div key={c.id} onClick={()=>setSelected(c)} style={{background:C.card,borderRadius:misClientesOn&&tareasC>0?'0 10px 10px 0':10,padding:'13px 16px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:misClientesOn&&tareasC>0?'2.5px solid #B8860B':`3px solid ${ended?C.done:hasOverdue?C.overdue:C.accent}`,opacity:ended?.7:1,cursor:'pointer'}}
+            <div key={c.id} onClick={()=>setSelected(c)} style={{background:C.card,borderRadius:respSel.size>0&&tareasC>0?'0 10px 10px 0':10,padding:'13px 16px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:respSel.size>0&&tareasC>0?'2.5px solid #B8860B':`3px solid ${ended?C.done:hasOverdue?C.overdue:C.accent}`,opacity:ended?.7:1,cursor:'pointer'}}
               onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.09)'}
               onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
