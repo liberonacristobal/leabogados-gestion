@@ -5948,7 +5948,7 @@ function ContactoTab({client, entities, onSaveFields}) {
 
 // Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
-function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
+function FinancieroTab({client, clientBilling, entities, anticipos=[], billing=[], onNuevoAnticipo, onSaveFields}) {
   const real = (clientBilling||[]).filter(b=>b.billing_type!=='reembolso')
   const facturado = real.filter(b=>b.issued_at).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
@@ -6048,6 +6048,51 @@ function FinancieroTab({client, clientBilling, entities, onSaveFields}) {
           <button onClick={guardar} disabled={savingF} style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:savingF?.6:1}}>{savingF?'Guardando...':'Guardar cambios'}</button>
         </div>
       )}
+
+      {/* Anticipos (PP-15 commit 2) */}
+      {(()=>{
+        const antDisp = anticipos.filter(a=>a.estado==='disponible')
+        const totalDisp = antDisp.reduce((s,a)=>s+(a.monto||0),0)
+        const antSorted = [...anticipos].sort((a,b)=>((a.estado==='disponible'?0:1)-(b.estado==='disponible'?0:1))||(b.fecha||'').localeCompare(a.fecha||''))
+        const fmtF = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+        return (
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:600,marginBottom:10}}>Anticipos</div>
+            {antDisp.length>0&&(
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#F5F7F9',borderRadius:10,padding:'14px 16px',marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:600}}>Anticipos disponibles</div>
+                  <div style={{fontSize:24,fontWeight:500,color:C.normal,marginTop:3}}>{fmt(totalDisp)}</div>
+                  <div style={{fontSize:11,color:'#99ABB4',marginTop:2}}>{antDisp.length} pago{antDisp.length!==1?'s':''} pendiente{antDisp.length!==1?'s':''} de facturar</div>
+                </div>
+                <button onClick={()=>onNuevoAnticipo&&onNuevoAnticipo()} style={{height:30,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>+ Registrar</button>
+              </div>
+            )}
+            {antSorted.length===0?(
+              <div style={{fontSize:12,color:'#99ABB4',padding:'2px 0'}}>Sin anticipos. <span onClick={()=>onNuevoAnticipo&&onNuevoAnticipo()} style={{color:C.accent,cursor:'pointer',fontWeight:600}}>+ Registrar</span></div>
+            ):(<>
+              <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.4px',fontWeight:600,marginBottom:4}}>Detalle</div>
+              {antSorted.map(a=>{ const disp=a.estado==='disponible'; const folio=billing.find(b=>String(b.id)===String(a.billing_id))?.invoice_no; return (
+                <div key={a.id} style={{display:'flex',gap:12,alignItems:'center',padding:'11px 0',borderBottom:`0.5px solid ${C.border}`}}>
+                  <div style={{width:36,height:36,borderRadius:10,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:disp?'#E1F5EE':'#F5F7F9'}}>
+                    {disp
+                      ? <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg>
+                      : <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{fmt(a.monto)}</div>
+                    <div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>F° {folio}</span>}
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?'#E1F5EE':'#F5F7F9',color:disp?C.normal:'#99ABB4'}}>{disp?'Disponible':'Consumido'}</span>
+                  </div>
+                </div>
+              )})}
+            </>)}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -6134,7 +6179,7 @@ Liberona Escala Abogados`
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState('resumen')
   const ufState = useUF()
@@ -6413,14 +6458,14 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
-      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
+      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields}/>}
       {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
 
-function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete}) {
+function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete}) {
 
   const handleAnularRendicion = async(r) => {
     if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
@@ -6472,6 +6517,8 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         expenses={expenses}
         tasks={tasks}
         clientEntities={clientEntities}
+        anticipos={anticipos}
+        onNuevoAnticipo={onNuevoAnticipo}
         onEdit={c=>{onEdit(c)}}
         onClose={()=>setSelected(null)}
         onAddTask={()=>onAddTask(selected)}
@@ -8957,7 +9004,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
           </div>
         )}
         {userRole==='limited'&&tab==='tasks'&&(
