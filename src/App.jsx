@@ -1142,8 +1142,8 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
   const _mesesES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
   const _hoy=new Date()
   const fechaTitulo=`Proyección al ${_diasES[_hoy.getDay()]} ${_hoy.getDate()} de ${_mesesES[_hoy.getMonth()]} de ${_hoy.getFullYear()}`
-  const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due)
-  const programadas = billing.filter(b=>b.status==='Programada'&&b.due)
+  const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due&&b.billing_type!=='reembolso')
+  const programadas = billing.filter(b=>b.status==='Programada'&&b.due&&b.billing_type!=='reembolso')
 
   const months = useMemo(()=>{
     const result = []
@@ -1759,7 +1759,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   // --- Aging de cartera ---
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const [top5Open,setTop5Open] = useState(false)
-  const agingData = useMemo(()=>computeAgingCartera(billing, clientesMap),[billing,clientesMap])
+  const agingData = useMemo(()=>computeAgingCartera(billing.filter(b=>b.billing_type!=='reembolso'), clientesMap),[billing,clientesMap])
 
   // --- Clientes sin fondos: detalle por cliente ---
   const [expSinFondos,setExpSinFondos] = useState(null)
@@ -3595,7 +3595,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
   const [emitEnt,setEmitEnt] = useState('')                // entity_id elegido en "Ya emitida"
   const [descExcel,setDescExcel] = useState(false)
 
-  const bb = billing
+  const bb = billing.filter(b=>b.billing_type!=='reembolso')   // Facturación excluye reembolsos de gastos
   const isProg = filter==='programadas'
   // En Programadas la fecha relevante es el vencimiento (due); en el resto, la emisión (issued_at)
   const dateField = b => isProg ? b.due : b.issued_at
@@ -7821,7 +7821,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
 
     // ── COBRANZA
     if(sections.cobranza){
-      const bb=filterByPeriod(billing,'issued_at')
+      const bb=filterByPeriod(billing,'issued_at').filter(b=>b.billing_type!=='reembolso')
       const pending=bb.filter(b=>b.status==='Pendiente').reduce((a,b)=>a+(b.amount||0),0)
       const overdue=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
       const paid=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
