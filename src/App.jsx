@@ -1330,8 +1330,7 @@ function PorFacturarMes({billing, moneda='CLP'}) {
   )
 }
 
-function VentasPorMes({sales,ufHoy}) {
-  const [moneda,setMoneda] = useState('UF') // UF | CLP
+function VentasPorMes({sales,ufHoy,moneda='CLP'}) {
   const yr = currentYear
   const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   const data = useMemo(()=>{
@@ -1379,14 +1378,7 @@ function VentasPorMes({sales,ufHoy}) {
 
   return (
     <div style={{padding:'0 20px 16px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Ventas por mes {yr}</div>
-        <div style={{display:'flex',gap:4}}>
-          {['UF','CLP'].map(v=>(
-            <button key={v} onClick={()=>setMoneda(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${moneda===v?C.accent:C.border}`,background:moneda===v?'#E6EEF1':'transparent',color:moneda===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{v}</button>
-          ))}
-        </div>
-      </div>
+      <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Ventas por mes {yr}</div>
       <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:8}}>
           <div style={{fontSize:11,color:C.muted}}>Total {yr}: <strong style={{color:C.text,fontSize:13}}>{moneda==='UF'?fmtUF(totalUF):fmt(totalCLP)}</strong></div>
@@ -1751,11 +1743,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,marginBottom:2}}>Buenas, {user?.name?.split(' ')[0]}</div>
             <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Liberona Escala Abogados</div>
           </div>
-          <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0,marginTop:4}}>
-            {['UF','CLP'].map(m=>(
-              <button key={m} onClick={()=>setDashMoneda(m)} style={{padding:'5px 12px',border:'none',background:dashMoneda===m?C.accent:'transparent',color:dashMoneda===m?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{m}</button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -1840,7 +1827,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy}/>
+      <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda}/>
       <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef}/>
 
       {/* Facturación */}
