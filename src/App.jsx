@@ -1694,7 +1694,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
 
       {/* Meta anual */}
       <div style={{padding:'0 20px 16px'}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Meta {yr} · UF {META_UF.toLocaleString('es-CL')} · {fmt(META_CLP)}</div>
+        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Meta {yr}</div>
         <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
           <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
             <div style={{fontSize:22,fontWeight:700,color:pctMeta>=100?C.normal:C.accent}}>{pctMeta}%</div>
@@ -1705,14 +1705,15 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {[
-              ['Bruto',fmtUF(vendidoBrutoUF),fmt(vendidoBrutoCLP),'#F5F7F9',C.accent],
-              ['Costo',costoUF>0?fmtUF(costoUF):'-',costoUF>0?fmt(costoCLP):'-','#F5F7F9',C.overdue],
-              ['Neto',fmtUF(vendidoNetoUF),fmt(vendidoNetoCLP),'#F5F7F9',C.normal],
-            ].map(([l,v,sub,bg,col])=>(
-              <div key={l} style={{background:bg,borderRadius:8,padding:'8px 10px'}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
-                <div style={{fontSize:12,fontWeight:700,color:col}}>{v}</div>
-                <div style={{fontSize:10,color:C.muted,marginTop:1}}>{sub}</div>
+              ['Meta',fmtUF(META_UF),fmt(META_CLP),true,C.accent],
+              ['Costo',costoUF>0?fmtUF(costoUF):'-',costoUF>0?fmt(costoCLP):'-',false,C.overdue],
+              ['Bruto',fmtUF(vendidoBrutoUF),fmt(vendidoBrutoCLP),false,C.accent],
+              ['Neto',fmtUF(vendidoNetoUF),fmt(vendidoNetoCLP),false,C.normal],
+            ].map(([l,v,sub,hl,col])=>(
+              <div key={l} style={{background:hl?'#E6EEF1':'#F5F7F9',border:hl?`1px solid ${C.accent}`:'1px solid transparent',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{fontSize:10,color:hl?C.accent:C.muted,marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
+                <div style={{fontSize:12,fontWeight:700,color:hl?C.accent:col}}>{v}</div>
+                <div style={{fontSize:10,color:hl?C.accent:C.muted,marginTop:1}}>{sub}</div>
               </div>
             ))}
           </div>
