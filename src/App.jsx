@@ -1962,7 +1962,7 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
   const totalCerradas = activadasFiltradas.length + rechazadasFiltradas.length
   const conversionPct = totalCerradas>0 ? (activadasFiltradas.length/totalCerradas*100) : 0
   const conDesc = activadasFiltradas.filter(s=>s.proposal_amount_uf&&s.amount_uf&&parseFloat(s.proposal_amount_uf)>parseFloat(s.amount_uf))
-  const descuentoProm = conDesc.length>0 ? conDesc.reduce((a,s)=>a+(parseFloat(s.proposal_amount_uf)-parseFloat(s.amount_uf))/parseFloat(s.proposal_amount_uf),0)/conDesc.length*100 : 0
+  const descuentoProm = (()=>{ const v=conDesc.filter(s=>(parseFloat(s.proposal_amount_uf)||0)>0); return v.length? v.reduce((a,s)=>{const p=parseFloat(s.proposal_amount_uf)||0; return a+(p-(parseFloat(s.amount_uf)||0))/p},0)/v.length*100 : 0 })()
   const valorRechazadoUF = rechazadasFiltradas.reduce((a,s)=>a+(parseFloat(s.proposal_amount_uf||s.amount_uf)||0),0)
 
   const statusPillBg = st => st==='Activo'?C.accent:st==='Propuesta'?'#537281':st==='Borrador'?'#E8CC6A':st==='Rechazada'?C.overdue:st==='Terminado'?C.done:'#C77F18'
@@ -2245,7 +2245,21 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
       const resp = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':import.meta.env.VITE_ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1000,system:'Eres un extractor de datos de propuestas de servicios legales. Extrae SOLO los siguientes campos en JSON, sin texto adicional, sin markdown, sin backticks: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }',messages:[{role:'user',content:text.slice(0,10000)}]})
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,system:`Eres un experto extractor de datos de propuestas y contratos de servicios legales en Chile. Lee TODO el documento y devuelve SOLO un JSON (sin markdown ni backticks) con estos campos. Reglas:
+- Si un dato no está explícito pero se infiere con certeza, infiérelo; si no, usa "" o null. No inventes.
+- cliente_nombre: cliente/contraparte a quien se dirige la propuesta (persona o empresa).
+- cliente_rut: RUT chileno formato 12.345.678-9 si aparece.
+- razon_social: razón social facturable si difiere del nombre del cliente.
+- contactos: nombres, cargos y/o emails de contactos mencionados (texto).
+- area: área legal (Corporativo, Tributario, Laboral, Litigios, Inmobiliario, etc.).
+- proyecto: título o descripción breve del encargo.
+- moneda: "UF" o "CLP" según en qué se expresan los honorarios.
+- honorario_total: monto total SOLO como número (sin símbolos ni separadores de miles; usa punto decimal si hay decimales).
+- forma_cobro: cómo se cobra (único, mensual, por cuotas, por etapas, éxito, mixto, etc.).
+- n_cuotas: número de cuotas si aplica (entero) o null.
+- tipo_honorario_badges: lista de etiquetas como "fijo","variable","éxito","mensual","por hora".
+- notas: condiciones relevantes (reajuste, vigencia, gastos, IVA, hitos, etc.).
+Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }`,messages:[{role:'user',content:text.slice(0,40000)}]})
       })
       if(!resp.ok) throw new Error('Error API '+resp.status)
       const apiData = await resp.json()
@@ -7728,9 +7742,19 @@ export default function App() {
       ?'Este gasto ya fue incluido en una rendición enviada al cliente.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?'
       :'¿Eliminar este registro?'
     if(!confirm(msg)) return
-    await supabase.from('expenses').delete().eq('id',id)
+    const {error}=await supabase.from('expenses').delete().eq('id',id)
+    if(error){ alert('No se pudo eliminar: '+error.message); return }
+    // Si estaba en una rendición, ajustar su total y contador para no descuadrarla
+    if(exp?.client_render_id){
+      const r=(rendiciones||[]).find(x=>x.id===exp.client_render_id)
+      if(r){
+        const nuevoTotal=(r.total||0)-(exp.amount||0), nuevoN=Math.max(0,(r.n_gastos||0)-1)
+        await supabase.from('rendiciones').update({total:nuevoTotal,n_gastos:nuevoN}).eq('id',r.id)
+        setRendiciones(p=>p.map(x=>x.id===r.id?{...x,total:nuevoTotal,n_gastos:nuevoN}:x))
+      }
+    }
     setExpenses(p=>p.filter(x=>x.id!==id));setModal(null)
-  },[expenses])
+  },[expenses,rendiciones])
 
   const handleSaveTask=useCallback(async(f)=>{
     setSaving(true)
