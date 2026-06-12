@@ -76,6 +76,9 @@ const currentMonth = new Date().getMonth()+1
 const ddItem = { padding:'9px 14px', fontSize:13, color:'#3D3D3D', cursor:'pointer', display:'flex', alignItems:'center', gap:8, borderRadius:6, margin:'0 4px' }
 // Iniciales nombre+apellido de cada responsable (mismas de su correo)
 const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina':'MP','Rodrigo':'RD'}
+// Responsables de una tarea: usa assignees (multi); si no hay, cae a who (tareas antiguas).
+const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
+const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -204,17 +207,17 @@ const TrashIcon = ({color}) => (
 const BanIcon = ({size=15,color}) => (
   <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke={color||C.overdue} strokeWidth='2' strokeLinecap='round'><circle cx='12' cy='12' r='9'/><line x1='5.6' y1='5.6' x2='18.4' y2='18.4'/></svg>
 )
-const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight}) => (
+const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeader=false}) => (
   <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
     <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,paddingBottom:24}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:1}}>
+      {!hideHeader&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:1}}>
         <span style={{fontSize:16,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>{title}</span>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           {titleRight}
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
         </div>
-      </div>
-      <div style={{padding:'18px 20px'}}>{children}</div>
+      </div>}
+      <div style={{padding:hideHeader?'0':'18px 20px'}}>{children}</div>
     </div>
   </div>
 )
@@ -1085,7 +1088,7 @@ function TasksByPerson({tasks,clients}) {
   return (
     <div>
       {WHO_LIST.map(who=>{
-        const mine = active.filter(t=>t.who===who)
+        const mine = active.filter(t=>isAssignee(t,who))
           .sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
         if(mine.length===0) return null
         const overdueN = mine.filter(t=>urgency(t.due,t.status)==='overdue').length
@@ -1487,7 +1490,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   const [openTerminadas,setOpenTerminadas] = useState(false)
   const activas = tasks.filter(t=>t.status==='Activo')
   const porPersona = {}
-  activas.forEach(t=>{ const w=t.who||'Sin asignar'; (porPersona[w]=porPersona[w]||[]).push(t) })
+  activas.forEach(t=>{ const ws=taskAssignees(t); (ws.length?ws:['Sin asignar']).forEach(w=>{ (porPersona[w]=porPersona[w]||[]).push(t) }) })
   const nombreCliente = id => clients.find(c=>c.id===id)?.name || ''
   const cmp = (a,b) => {
     if(sortBy==='vencimiento'){
@@ -1603,7 +1606,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         const termTasks = tasks.filter(t=>t.status==='Terminado')
         if(!termTasks.length) return null
         const porPersonaTerm = {}
-        termTasks.forEach(t=>{ const w=t.who||'Sin asignar'; (porPersonaTerm[w]=porPersonaTerm[w]||[]).push(t) })
+        termTasks.forEach(t=>{ const ws=taskAssignees(t); (ws.length?ws:['Sin asignar']).forEach(w=>{ (porPersonaTerm[w]=porPersonaTerm[w]||[]).push(t) }) })
         const personasTerm = Object.keys(porPersonaTerm).sort()
         return (
           <div style={{borderTop:`1px solid ${C.border}`}}>
@@ -5354,13 +5357,17 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,onSave,onClose
 
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preDue,user,task}) {
+function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onClose,saving,preClient,preDue,user,task}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient || (task ? clients.find(c=>c.id===task.client_id)||null : null))
   // preDue: fecha precargada (string 'YYYY-MM-DD') al crear desde el calendario
-  const [f,setF] = useState(task ? {id:task.id,title:task.title||'',who:task.who||'Cristóbal',due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by} : {title:'',who:'Cristóbal',due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
+  const initAssignees = task ? (task.assignees?.length?task.assignees:(task.who?[task.who]:[])) : [user?.name||'Cristóbal']
+  const [f,setF] = useState(task
+    ? {id:task.id,title:task.title||'',assignees:initAssignees,entity_id:task.entity_id||null,due:task.due||'',status:task.status||'Activo',note:task.note||'',sale_id:task.sale_id||'',project:task.project||'',subproject:task.subproject||'',assigned_by:task.assigned_by}
+    : {title:'',assignees:initAssignees,entity_id:null,due:(typeof preDue==='string'?preDue:'')||'',status:'Activo',note:'',sale_id:'',project:'',subproject:''})
   const [showProjects,setShowProjects] = useState(false)
-  const [showSubprojects,setShowSubprojects] = useState(false)
+  const [subNew,setSubNew] = useState(false)
+  const [showDate,setShowDate] = useState(false)
   const [draftId,setDraftId] = useState(null)
   const draftRef = useRef(null)       // id de la tarea borrador (creada al adjuntar en tarea nueva)
   const committedRef = useRef(false)  // true si se guardó vía "Guardar" (no borrar al cerrar)
@@ -5368,11 +5375,25 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
   // Si el modal se cierra sin guardar y existe un borrador, se elimina (sin huérfanos)
   useEffect(()=>()=>{ if(draftRef.current && !committedRef.current){ supabase.from('tasks').delete().eq('id',draftRef.current) } },[])
 
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
+  const toggleResp = w => setF(p=>{ const a=p.assignees||[]; return {...p, assignees: a.includes(w)?a.filter(x=>x!==w):[...a,w]} })
+
+  // Razones sociales del cliente. Con 1, se asume; con 2+, el usuario elige (principal = la primera).
+  const clientEnts = useMemo(()=>(clientEntities||[]).filter(e=>e.client_id===selectedClient?.id),[clientEntities,selectedClient])
+  const multiRS = clientEnts.length>1
+  // Al elegir/cambiar cliente, fija la RS por defecto (primera) si la actual no aplica.
+  useEffect(()=>{
+    if(!selectedClient) return
+    setF(p=>{ if(p.entity_id&&clientEnts.some(e=>e.id===p.entity_id)) return p; return {...p, entity_id: clientEnts[0]?.id||null} })
+  },[selectedClient,clientEnts])
+
   // Crea la tarea silenciosamente (sin cerrar el modal ni avisar) para habilitar el uploader
   const ensureTaskId = async() => {
     if(task?.id) return task.id
     if(draftRef.current) return draftRef.current
-    const payload = {title:f.title||'',who:f.who||'Cristóbal',due:f.due||null,status:f.status||'Activo',note:f.note||'',sale_id:f.sale_id||null,project:f.project||null,subproject:f.subproject||null,client_id:selectedClient?.id||null,assigned_by:f.assigned_by||user?.name||null}
+    const asg = f.assignees?.length?f.assignees:[user?.name||'Cristóbal']
+    const payload = {title:f.title||'',who:asg[0],assignees:asg,entity_id:f.entity_id||null,due:f.due||null,status:f.status||'Activo',note:f.note||'',sale_id:f.sale_id||null,project:f.project?.trim()||null,subproject:f.subproject?.trim()||null,client_id:selectedClient?.id||null,assigned_by:f.assigned_by||user?.name||null}
     const {data,error} = await supabase.from('tasks').insert(payload).select().single()
     if(error) throw error
     draftRef.current = data.id; setDraftId(data.id)
@@ -5380,11 +5401,9 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
   }
   const handleGuardar = () => {
     committedRef.current = true
-    onSave({...f, id: task?.id||draftRef.current||undefined, client_id:selectedClient.id, project:f.project||null, subproject:f.subproject||null, _isNew: !task?.id})
+    const asg = f.assignees?.length?f.assignees:[user?.name||'Cristóbal']
+    onSave({...f, assignees:asg, who:asg[0], entity_id:f.entity_id||null, id: task?.id||draftRef.current||undefined, client_id:selectedClient.id, project:f.project?.trim()||null, subproject:f.subproject?.trim()||null, _isNew: !task?.id})
   }
-
-  const up=(k,v)=>setF(p=>({...p,[k]:v}))
-  const WHO = ['Cristóbal','Martín','Erasmo','Rodrigo','Martina']
 
   const matches = useMemo(()=>{
     if(!q.trim()) return []
@@ -5401,13 +5420,32 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
 
   const clientSubprojects = useMemo(()=>{
     if(!selectedClient) return []
-    return [...new Set(tasks.filter(t=>t.client_id===selectedClient.id&&t.subproject).map(t=>t.subproject))].sort()
-  },[tasks,selectedClient])
+    const base = tasks.filter(t=>t.client_id===selectedClient.id&&t.subproject).map(t=>t.subproject)
+    return [...new Set([...base, ...(f.subproject?[f.subproject]:[])])].sort()
+  },[tasks,selectedClient,f.subproject])
 
-  const clientSales = sales.filter(s=>s.client_id===selectedClient?.id&&s.status==='Activo')
+  // Plazos rápidos (fecha local YYYY-MM-DD)
+  const di = n => { const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+  const presets = [['Hoy',di(0)],['Mañana',di(1)],['En 7 días',di(7)]]
+  const isCustomDue = f.due && !presets.some(p=>p[1]===f.due)
+
+  const selBox = {width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:13,boxSizing:'border-box',outline:'none',appearance:'none',cursor:'pointer'}
+  const pill = on => ({fontSize:12,fontWeight:on?600:500,padding:'6px 12px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#F7F7F7',color:on?C.accent:C.muted,cursor:'pointer'})
+  const ReqLabel = ({children}) => <span>{children} <span style={{color:C.overdue}}>*</span></span>
+
+  const canSave = selectedClient && f.title?.trim() && f.project?.trim() && (!multiRS || f.subproject?.trim()) && (f.assignees?.length>0)
 
   return (
     <>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
+        <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
+          {task?'Editar tarea':'Nueva tarea'}
+          {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}
+        </span>
+        <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
+      </div>
+
+      <div style={{padding:'16px 20px'}}>
       {!selectedClient ? (
         <Fld label='Cliente'>
           <div style={{position:'relative'}}>
@@ -5433,89 +5471,100 @@ function QuickTaskForm({clients,sales,tasks,onSave,onClose,saving,preClient,preD
           </div>
         </Fld>
       ) : (
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.border}`}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
-            {selectedClient.type&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.type}</div>}
-          </div>
-          <button onClick={()=>{setSelectedClient(null);setF(p=>({...p,sale_id:'',project:''}))}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
-        </div>
-      )}
-
-      {selectedClient&&(
         <>
-          <Fld label='Tarea'><textarea value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Descripción de la tarea...' autoFocus rows={3} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/></Fld>
+          {!preClient&&!task&&(
+            <div style={{textAlign:'right',marginBottom:6,marginTop:-4}}>
+              <button onClick={()=>{setSelectedClient(null);setF(p=>({...p,sale_id:'',project:'',subproject:'',entity_id:null}))}} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>Cambiar cliente</button>
+            </div>
+          )}
 
-          <Fld label='Proyecto (opcional)'>
-            <div style={{position:'relative'}}>
-              <Inp
-                value={f.project||''}
-                onChange={e=>up('project',e.target.value)}
-                onFocus={()=>setShowProjects(true)}
-                onBlur={()=>setTimeout(()=>setShowProjects(false),150)}
-                placeholder={clientProjects.length>0?'Selecciona o escribe nuevo proyecto...':'Escribe el nombre del proyecto...'}
-              />
-              {showProjects&&clientProjects.length>0&&(
-                <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
-                  {clientProjects.filter(p=>!f.project||p.toLowerCase().includes(f.project.toLowerCase())).map((p,i)=>(
-                    <div key={i} onMouseDown={()=>up('project',p)}
-                      style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
-                      onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                      {p}
+          {multiRS ? (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <Fld label='Razón social'>
+                <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value)} style={selBox}>
+                  {clientEnts.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </Fld>
+              <Fld label={<ReqLabel>Proyecto</ReqLabel>}>
+                <div style={{position:'relative'}}>
+                  <Inp value={f.project||''} onChange={e=>up('project',e.target.value)} onFocus={()=>setShowProjects(true)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} placeholder={clientProjects.length>0?'Elige o escribe...':'Nombre del proyecto...'}/>
+                  {showProjects&&clientProjects.length>0&&(
+                    <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
+                      {clientProjects.filter(p=>!f.project||p.toLowerCase().includes(f.project.toLowerCase())).map((p,i)=>(
+                        <div key={i} onMouseDown={()=>up('project',p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
+                      ))}
                     </div>
-                  ))}
-                  <div style={{padding:'7px 14px',fontSize:11,color:C.muted,fontStyle:'italic',borderTop:`1px solid ${C.border}`}}>
-                    O escribe un proyecto nuevo
+                  )}
+                </div>
+              </Fld>
+            </div>
+          ) : (
+            <Fld label={<ReqLabel>Proyecto</ReqLabel>}>
+              <div style={{position:'relative'}}>
+                <Inp value={f.project||''} onChange={e=>up('project',e.target.value)} onFocus={()=>setShowProjects(true)} onBlur={()=>setTimeout(()=>setShowProjects(false),150)} placeholder={clientProjects.length>0?'Elige uno existente o escribe uno nuevo...':'Nombre del proyecto...'}/>
+                {showProjects&&clientProjects.length>0&&(
+                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
+                    {clientProjects.filter(p=>!f.project||p.toLowerCase().includes(f.project.toLowerCase())).map((p,i)=>(
+                      <div key={i} onMouseDown={()=>up('project',p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
+                    ))}
                   </div>
+                )}
+              </div>
+            </Fld>
+          )}
+
+          {multiRS&&(
+            <Fld label={<ReqLabel>Subproyecto</ReqLabel>}>
+              {subNew ? (
+                <div style={{display:'flex',gap:6}}>
+                  <Inp value={f.subproject||''} onChange={e=>up('subproject',e.target.value)} placeholder='Nombre del subproyecto...' autoFocus/>
+                  <button onClick={()=>{up('subproject','');setSubNew(false)}} style={{padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer',flexShrink:0}}>x</button>
+                </div>
+              ) : (
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {clientSubprojects.map(s=>(<button key={s} onClick={()=>up('subproject',s)} style={pill(f.subproject===s)}>{s}</button>))}
+                  <button onClick={()=>{up('subproject','');setSubNew(true)}} style={{fontSize:12,padding:'6px 12px',borderRadius:20,border:`1px dashed ${C.done}`,background:'#fff',color:C.muted,cursor:'pointer'}}>+ Nuevo</button>
                 </div>
               )}
+            </Fld>
+          )}
+
+          <Fld label='Descripción de la tarea'><textarea value={f.title} onChange={e=>up('title',e.target.value)} placeholder='Describe la tarea...' rows={3} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/></Fld>
+
+          <Fld label='Responsables'>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {WHO.map(w=>{ const on=(f.assignees||[]).includes(w); return (
+                <button key={w} onClick={()=>toggleResp(w)} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:on?600:500,padding:'5px 11px 5px 5px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#F7F7F7',color:on?C.accent:C.muted,cursor:'pointer'}}>
+                  <span style={{width:22,height:22,borderRadius:'50%',background:on?C.accent:C.done,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[w]||w.slice(0,2).toUpperCase()}</span>{w}
+                </button>
+              )})}
             </div>
           </Fld>
 
-          <Fld label='Subproyecto (opcional)'>
-            <div style={{position:'relative'}}>
-              <Inp
-                value={f.subproject||''}
-                onChange={e=>up('subproject',e.target.value)}
-                onFocus={()=>setShowSubprojects(true)}
-                onBlur={()=>setTimeout(()=>setShowSubprojects(false),150)}
-                placeholder={clientSubprojects.length>0?'Selecciona o escribe subproyecto...':'Ej: Contrato arriendo, Juicio laboral...'}
-              />
-              {showSubprojects&&clientSubprojects.length>0&&(
-                <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
-                  {clientSubprojects.filter(p=>!f.subproject||p.toLowerCase().includes(f.subproject.toLowerCase())).map((p,i)=>(
-                    <div key={i} onMouseDown={()=>up('subproject',p)}
-                      style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
-                      onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                      {p}
-                    </div>
-                  ))}
-                  <div style={{padding:'7px 14px',fontSize:11,color:C.muted,fontStyle:'italic',borderTop:`1px solid ${C.border}`}}>
-                    O escribe un subproyecto nuevo
-                  </div>
-                </div>
-              )}
+          <Fld label='Plazo'>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+              {presets.map(([lbl,iso])=>(<button key={iso} onClick={()=>{up('due',iso);setShowDate(false)}} style={pill(f.due===iso)}>{lbl}</button>))}
+              <button onClick={()=>setShowDate(true)} style={pill(isCustomDue||showDate)}>Otra fecha</button>
+              {(showDate||isCustomDue)&&<Inp type='date' value={f.due} onChange={e=>up('due',e.target.value)} style={{width:160}}/>}
             </div>
           </Fld>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            <Fld label='Responsable'><Sel value={f.who} onChange={e=>up('who',e.target.value)} options={WHO}/></Fld>
-            <Fld label='Plazo'><Inp type='date' value={f.due} onChange={e=>up('due',e.target.value)}/></Fld>
-          </div>
+
+          {(task?.id||selectedClient)&&(
+            <div style={{marginTop:4}}>
+              <Attachments table='task_attachments' idField='task_id' entityId={task?.id||draftId} ensureEntityId={ensureTaskId} folderKind='tareas'
+                namePrefix={`${selectedClient?.name||'Sin cliente'} · ${f.title||'Tarea'}`} user={user}/>
+            </div>
+          )}
         </>
       )}
 
-      {(task?.id||selectedClient)&&(
-        <Attachments table='task_attachments' idField='task_id' entityId={task?.id||draftId} ensureEntityId={ensureTaskId} folderKind='tareas'
-          namePrefix={`${selectedClient?.name||clients.find(c=>c.id===task?.client_id)?.name||'Sin cliente'} · ${f.title||task?.title||'Tarea'}`} user={user}/>
-      )}
-      <div style={{display:'flex',gap:8,marginTop:4}}>
+      <div style={{display:'flex',gap:8,marginTop:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!selectedClient||!f.title.trim()} onClick={handleGuardar}
-          style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!f.title.trim())?.6:1}}>
-          {saving?<Spin/>:null}{saving?'Guardando...':'Guardar tarea'}
+        <button disabled={saving||!canSave} onClick={handleGuardar}
+          style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
+          {saving?<Spin/>:null}{saving?'Guardando...':(task?'Guardar tarea':'Enviar tarea')}
         </button>
+      </div>
       </div>
     </>
   )
@@ -6109,7 +6158,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
                       <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
-                        <span>{t.who||'—'}</span>
+                        <span>{taskAssignees(t).join(', ')||'—'}</span>
                         {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
                         {t.note&&<><span>·</span><span style={{fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</span></>}
                       </div>
@@ -6130,7 +6179,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
                     <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
-                      <span>{t.who||'—'}</span>
+                      <span>{taskAssignees(t).join(', ')||'—'}</span>
                       {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
                     </div>
                   </div>
@@ -7514,7 +7563,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
       const WHO=['Cristóbal','Martín','Martina','Erasmo','Rodrigo']
       html+=`<div class="section page-break"><div class="section-title">Tareas Activas</div>`
       WHO.forEach(who=>{
-        const mine=activeTasks.filter(t=>t.who===who).sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
+        const mine=activeTasks.filter(t=>isAssignee(t,who)).sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
         if(!mine.length) return
         html+=`<div class="who-section"><div class="who-title">${who} · ${mine.length} tarea${mine.length!==1?'s':''}</div>
         <table><thead><tr><th>Cliente</th><th>Proyecto</th><th>Tarea</th><th>Plazo</th><th>Estado</th></tr></thead><tbody>`
@@ -7614,7 +7663,7 @@ function printTasks(tasks, clients, filterLabel) {
       <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${client?.name||'—'}</td>
       <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${t.project||'—'}</td>
       <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;${urgent}">${due}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${t.who||'—'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${taskAssignees(t).join(', ')||'—'}</td>
     </tr>`
   }).join('')
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -7676,7 +7725,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
       <div style={{fontSize:16,fontWeight:600,color:C.text,lineHeight:1.3,marginBottom:14}}>{task.title}</div>
       {contexto&&<Row label='Cliente · Proyecto'>{contexto}</Row>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Row label='Responsable'>{task.who||'—'}</Row>
+        <Row label='Responsable'>{taskAssignees(task).join(', ')||'—'}</Row>
         {task.assigned_by&&<Row label='Asignó'>{task.assigned_by}</Row>}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -7754,7 +7803,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   // Proyectos dependientes del cliente filtrado: solo los del/los cliente(s) que matchean el texto buscado
   const clientIdsFiltro = new Set((filterClient ? clients.filter(c=>c.name?.toLowerCase().includes(filterClient.toLowerCase())) : []).map(c=>c.id))
   const proyectosCliente = filterClient
-    ? [...new Set(tasks.filter(t=>clientIdsFiltro.has(t.client_id)&&t.project&&(t.who===me||t.assigned_by===me)).map(t=>t.project))].sort()
+    ? [...new Set(tasks.filter(t=>clientIdsFiltro.has(t.client_id)&&t.project&&(isAssignee(t,me)||t.assigned_by===me)).map(t=>t.project))].sort()
     : []
   const projDisabled = !filterClient || proyectosCliente.length===0
 
@@ -7767,7 +7816,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   })
   const terminadasAll = tasks.filter(t=>{
     if(t.status!=='Terminado') return false
-    if(t.who!==me && t.assigned_by!==me) return false
+    if(!isAssignee(t,me) && t.assigned_by!==me) return false
     if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
     if(filterProject && t.project!==filterProject) return false
     return true
@@ -7776,8 +7825,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const archivadas = terminadasAll.filter(t=>isTaskArchived(t)).sort((a,b)=>((b.completed_at||b.created_at||'')>(a.completed_at||a.created_at||'')?1:-1))
 
   // Mis tareas: las asignadas a mi. Tareas que asigne: yo las cree para otros.
-  const mias = base.filter(t=>t.who===me)
-  const asignadas = base.filter(t=>t.assigned_by===me && t.who!==me)
+  const mias = base.filter(t=>isAssignee(t,me))
+  const asignadas = base.filter(t=>t.assigned_by===me && !isAssignee(t,me))
 
   // Orden por urgencia: vencimiento más cercano primero, sin fecha al final
   const porUrgencia = arr => [...arr].sort((a,b)=>(daysLeft(a.due)??99999)-(daysLeft(b.due)??99999))
@@ -7799,7 +7848,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 {t.subproject&&<span>{(client||t.project)?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Sub.</span>{' '}{t.subproject}</span>}
               </div>
             )}
-            {showWho&&t.who&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,marginTop:3,display:'inline-block'}}>{t.who}</span>}
+            {showWho&&taskAssignees(t).length>0&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,marginTop:3,display:'inline-block'}}>{taskAssignees(t).join(', ')}</span>}
           </div>
           {!done&&(
             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
@@ -7905,7 +7954,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 {dias.map((dia,i)=>{
                   const iso=fmtISO(dia)
                   const esHoy=iso===fmtISO(hoy)
-                  const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado'&&(t.who===me||t.assigned_by===me))
+                  const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado'&&(isAssignee(t,me)||t.assigned_by===me))
                   return (
                     <div key={i} onClick={()=>onAddTask(iso)} title='Nueva tarea este día' style={{minHeight:90,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`,cursor:'pointer'}}>
                       <div style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.muted,textTransform:'uppercase'}}>{DIAS[i]}</div>
@@ -7913,7 +7962,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                       {tareasDelDia.length===0&&<div style={{fontSize:8,color:'#bbb',fontStyle:'italic'}}>—</div>}
                       {tareasDelDia.map(t=>{
                         const cl=clients.find(x=>x.id===t.client_id)
-                        const asignadaPorMi = t.who!==me && t.assigned_by===me
+                        const asignadaPorMi = !isAssignee(t,me) && t.assigned_by===me
                         return (
                           <div key={t.id}
                             onClick={(e)=>{e.stopPropagation(); if(longPressFired.current){longPressFired.current=false;return} setPreview(t)}}
@@ -8008,7 +8057,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             {cl&&<Row l='Cliente' v={cl.name}/>}
             {hoverTask.project&&<Row l='Proyecto' v={hoverTask.project}/>}
             {hoverTask.subproject&&<Row l='Subproyecto' v={hoverTask.subproject}/>}
-            <Row l='Responsable' v={hoverTask.who||'—'}/>
+            <Row l='Responsable' v={taskAssignees(hoverTask).join(', ')||'—'}/>
             <Row l='Vence' v={hoverTask.due?fmtDate(hoverTask.due):'Sin fecha'}/>
             <Row l='Estado' v={hoverTask.status||'—'}/>
           </div>
@@ -8655,7 +8704,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal title={modal.data?.id?'Editar tarea':'Nueva tarea'} onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
+        {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>{handleSaveTask({...t,status:'Terminado'});setModal(null)}}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
