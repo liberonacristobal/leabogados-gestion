@@ -79,6 +79,9 @@ const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina'
 // Responsables de una tarea: usa assignees (multi); si no hay, cae a who (tareas antiguas).
 const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
 const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
+// "En mi lista": soy responsable o me delegaron la tarea (los delegados también la ven).
+const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
+const ADMIN_NAMES = ['Cristóbal','Erasmo']
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -5357,7 +5360,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,onSave,onClose
 
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onClose,saving,preClient,preDue,user,task}) {
+function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onClose,saving,preClient,preDue,user,task}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient || (task ? clients.find(c=>c.id===task.client_id)||null : null))
   // preDue: fecha precargada (string 'YYYY-MM-DD') al crear desde el calendario
@@ -5368,6 +5371,9 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onClose,saving
   const [showProjects,setShowProjects] = useState(false)
   const [subNew,setSubNew] = useState(false)
   const [showDate,setShowDate] = useState(false)
+  const [deleg,setDeleg] = useState(false)        // switch "Delegar"
+  const [delegTo,setDelegTo] = useState([])       // a quién se delega (multi)
+  const [delegDue,setDelegDue] = useState('')     // nuevo plazo de la delegación
   const [draftId,setDraftId] = useState(null)
   const draftRef = useRef(null)       // id de la tarea borrador (creada al adjuntar en tarea nueva)
   const committedRef = useRef(false)  // true si se guardó vía "Guardar" (no borrar al cerrar)
@@ -5435,6 +5441,29 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onClose,saving
 
   const canSave = selectedClient && f.title?.trim() && f.project?.trim() && (!multiRS || f.subproject?.trim()) && (f.assignees?.length>0)
 
+  // Roles para el flujo de delegación
+  const me = user?.name || ''
+  const esEdicion = !!task?.id
+  const soyAsignador = esEdicion && task.assigned_by===me
+  const soyResponsable = esEdicion && isAssignee(task,me)
+  const isAdmin = ADMIN_NAMES.includes(me)
+  const puedeEditar = !esEdicion || soyAsignador || isAdmin   // crea, o edita por ser quien asignó / admin
+  const yaDelegada = esEdicion && ((task.delegated_to||[]).length>0)
+
+  // Regla dura: el nuevo plazo no puede exceder el original + 3 días.
+  const addDaysISO = (iso,n)=>{ if(!iso) return ''; const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+n); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}` }
+  const maxDelegDue = task?.due ? addDaysISO(task.due,3) : ''
+  const delegDueOk = !!delegDue && (!maxDelegDue || delegDue<=maxDelegDue)
+  const puedeDelegar = deleg && delegTo.length>0 && delegDueOk
+  const toggleDelegTo = w => setDelegTo(a=>a.includes(w)?a.filter(x=>x!==w):[...a,w])
+  const handleDelegar = () => { committedRef.current=true; onDelegate(task,{to:delegTo,due:delegDue}) }
+
+  const DelegBanner = () => (
+    <div style={{fontSize:12,color:'#854F0B',background:'#FAEEDA',borderRadius:8,padding:'9px 11px',marginBottom:14}}>
+      <span style={{fontWeight:600}}>{task.delegated_by}</span> la delegó a <span style={{fontWeight:600}}>{(task.delegated_to||[]).join(', ')}</span>{task.delegated_due?` · vence ${task.delegated_due}`:''}
+    </div>
+  )
+
   return (
     <>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
@@ -5470,8 +5499,9 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onClose,saving
             )}
           </div>
         </Fld>
-      ) : (
+      ) : puedeEditar ? (
         <>
+          {yaDelegada&&<DelegBanner/>}
           {!preClient&&!task&&(
             <div style={{textAlign:'right',marginBottom:6,marginTop:-4}}>
               <button onClick={()=>{setSelectedClient(null);setF(p=>({...p,sale_id:'',project:'',subproject:'',entity_id:null}))}} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>Cambiar cliente</button>
@@ -5556,14 +5586,64 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onClose,saving
             </div>
           )}
         </>
+      ) : (
+        <>
+          {/* Vista del responsable que recibió la tarea: la ve tal cual y puede delegarla */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:14,color:C.text,fontWeight:500,lineHeight:1.4}}>{f.title}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:7,display:'flex',gap:10,flexWrap:'wrap'}}>
+              {f.project&&<span><span style={{opacity:.7}}>Proyecto:</span> {f.project}</span>}
+              {f.subproject&&<span><span style={{opacity:.7}}>Subproyecto:</span> {f.subproject}</span>}
+              {f.due&&<span><span style={{opacity:.7}}>Plazo:</span> {f.due}</span>}
+            </div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}><span style={{opacity:.7}}>Responsable:</span> {taskAssignees(task).join(', ')}{task.assigned_by?` · asignó ${task.assigned_by}`:''}</div>
+          </div>
+
+          {yaDelegada&&<DelegBanner/>}
+
+          {soyResponsable&&(
+            <>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 0',borderTop:`1px solid ${C.border}`,marginBottom:deleg?12:0}}>
+                <div style={{fontSize:13,color:C.accent,fontWeight:500}}>Delegar</div>
+                <button onClick={()=>setDeleg(v=>!v)} style={{width:42,height:24,borderRadius:20,background:deleg?C.accent:C.border,position:'relative',border:'none',cursor:'pointer',flexShrink:0,padding:0}}>
+                  <span style={{position:'absolute',top:2,left:deleg?20:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
+                </button>
+              </div>
+              {deleg&&(
+                <>
+                  <Fld label='Delegar a'>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {WHO.filter(w=>w!==me).map(w=>{ const on=delegTo.includes(w); return (
+                        <button key={w} onClick={()=>toggleDelegTo(w)} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:on?600:500,padding:'5px 11px 5px 5px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#F7F7F7',color:on?C.accent:C.muted,cursor:'pointer'}}>
+                          <span style={{width:22,height:22,borderRadius:'50%',background:on?C.accent:C.done,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[w]||w.slice(0,2).toUpperCase()}</span>{w}
+                        </button>
+                      )})}
+                    </div>
+                  </Fld>
+                  <Fld label='Nuevo plazo'>
+                    <Inp type='date' value={delegDue} max={maxDelegDue||undefined} onChange={e=>setDelegDue(e.target.value)} style={{width:170}}/>
+                    {maxDelegDue&&<div style={{fontSize:11,color:delegDue&&!delegDueOk?C.overdue:C.muted,marginTop:5}}>Máximo {maxDelegDue} (plazo original + 3 días){delegDue&&!delegDueOk?' — excede el límite':''}</div>}
+                  </Fld>
+                </>
+              )}
+            </>
+          )}
+        </>
       )}
 
       <div style={{display:'flex',gap:8,marginTop:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!canSave} onClick={handleGuardar}
-          style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
-          {saving?<Spin/>:null}{saving?'Guardando...':(task?'Guardar tarea':'Enviar tarea')}
-        </button>
+        {puedeEditar ? (
+          <button disabled={saving||!canSave} onClick={handleGuardar}
+            style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
+            {saving?<Spin/>:null}{saving?'Guardando...':(task?'Guardar tarea':'Enviar tarea')}
+          </button>
+        ) : (
+          <button disabled={saving||!puedeDelegar} onClick={handleDelegar}
+            style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:puedeDelegar?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeDelegar?1:.6}}>
+            {saving?<Spin/>:null}{saving?'Delegando...':'Delegar'}
+          </button>
+        )}
       </div>
       </div>
     </>
@@ -7728,6 +7808,11 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
         <Row label='Responsable'>{taskAssignees(task).join(', ')||'—'}</Row>
         {task.assigned_by&&<Row label='Asignó'>{task.assigned_by}</Row>}
       </div>
+      {(task.delegated_to||[]).length>0&&(
+        <div style={{fontSize:12,color:'#854F0B',background:'#FAEEDA',borderRadius:8,padding:'8px 11px',margin:'2px 0 10px'}}>
+          <span style={{fontWeight:600}}>{task.delegated_by}</span> la delegó a <span style={{fontWeight:600}}>{(task.delegated_to||[]).join(', ')}</span>{task.delegated_due?` · vence ${task.delegated_due}`:''}
+        </div>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Row label='Plazo'><span style={{fontWeight:600,color:plazoCol}}>{plazoTxt}</span></Row>
         <Row label='Estado'>{task.status||'—'}</Row>
@@ -7803,7 +7888,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   // Proyectos dependientes del cliente filtrado: solo los del/los cliente(s) que matchean el texto buscado
   const clientIdsFiltro = new Set((filterClient ? clients.filter(c=>c.name?.toLowerCase().includes(filterClient.toLowerCase())) : []).map(c=>c.id))
   const proyectosCliente = filterClient
-    ? [...new Set(tasks.filter(t=>clientIdsFiltro.has(t.client_id)&&t.project&&(isAssignee(t,me)||t.assigned_by===me)).map(t=>t.project))].sort()
+    ? [...new Set(tasks.filter(t=>clientIdsFiltro.has(t.client_id)&&t.project&&(enMiLista(t,me)||t.assigned_by===me)).map(t=>t.project))].sort()
     : []
   const projDisabled = !filterClient || proyectosCliente.length===0
 
@@ -7816,7 +7901,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   })
   const terminadasAll = tasks.filter(t=>{
     if(t.status!=='Terminado') return false
-    if(!isAssignee(t,me) && t.assigned_by!==me) return false
+    if(!enMiLista(t,me) && t.assigned_by!==me) return false
     if(filterClient && !clients.find(c=>c.id===t.client_id)?.name?.toLowerCase().includes(filterClient.toLowerCase())) return false
     if(filterProject && t.project!==filterProject) return false
     return true
@@ -7825,8 +7910,8 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const archivadas = terminadasAll.filter(t=>isTaskArchived(t)).sort((a,b)=>((b.completed_at||b.created_at||'')>(a.completed_at||a.created_at||'')?1:-1))
 
   // Mis tareas: las asignadas a mi. Tareas que asigne: yo las cree para otros.
-  const mias = base.filter(t=>isAssignee(t,me))
-  const asignadas = base.filter(t=>t.assigned_by===me && !isAssignee(t,me))
+  const mias = base.filter(t=>enMiLista(t,me))
+  const asignadas = base.filter(t=>t.assigned_by===me && !enMiLista(t,me))
 
   // Orden por urgencia: vencimiento más cercano primero, sin fecha al final
   const porUrgencia = arr => [...arr].sort((a,b)=>(daysLeft(a.due)??99999)-(daysLeft(b.due)??99999))
@@ -7849,6 +7934,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
               </div>
             )}
             {showWho&&taskAssignees(t).length>0&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,marginTop:3,display:'inline-block'}}>{taskAssignees(t).join(', ')}</span>}
+            {(t.delegated_to||[]).length>0&&<div style={{fontSize:10,color:'#854F0B',background:'#FAEEDA',borderRadius:6,padding:'2px 7px',marginTop:4,display:'inline-block'}}>Delegada a {(t.delegated_to||[]).join(', ')}{t.delegated_due?` · vence ${fmtVenceShort(t.delegated_due)}`:''}</div>}
           </div>
           {!done&&(
             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
@@ -7954,7 +8040,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 {dias.map((dia,i)=>{
                   const iso=fmtISO(dia)
                   const esHoy=iso===fmtISO(hoy)
-                  const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado'&&(isAssignee(t,me)||t.assigned_by===me))
+                  const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado'&&(enMiLista(t,me)||t.assigned_by===me))
                   return (
                     <div key={i} onClick={()=>onAddTask(iso)} title='Nueva tarea este día' style={{minHeight:90,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`,cursor:'pointer'}}>
                       <div style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.muted,textTransform:'uppercase'}}>{DIAS[i]}</div>
@@ -8451,6 +8537,27 @@ export default function App() {
     setSaving(false)
   },[user])
 
+  // Delegar: el responsable traspasa la tarea a otra(s) persona(s) con un nuevo plazo.
+  // NO cambia who/assignees (sigue siendo responsable ante quien la asignó); solo registra
+  // delegated_to/by/due/at y avisa por correo a los delegados.
+  const handleDelegateTask=useCallback(async(taskObj,{to,due})=>{
+    setSaving(true)
+    try{
+      const patch={ delegated_to:to, delegated_by:user?.name||null, delegated_due:due||null, delegated_at:new Date().toISOString(), updated_at:new Date().toISOString() }
+      const{data,error}=await supabase.from('tasks').update(patch).eq('id',taskObj.id).select().single()
+      if(error)throw error
+      setTasks(p=>p.map(x=>x.id===data.id?data:x))
+      const client=clients.find(c=>c.id===data.client_id)
+      fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
+        body:JSON.stringify({task:{...data,client_name:client?.name||'',who:(to||[]).join(', ')},assignedBy:user?.name||'el estudio'})
+      }).catch(()=>{})
+      setModal(null)
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(false)
+  },[user,clients])
+
   const handleSaveClient=useCallback(async(f)=>{
     setSaving(true)
     try{
@@ -8704,7 +8811,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
+        {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>{handleSaveTask({...t,status:'Terminado'});setModal(null)}}/></Modal>}
         {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
