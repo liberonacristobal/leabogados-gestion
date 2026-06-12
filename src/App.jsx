@@ -1724,35 +1724,30 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
       <CashflowProjection billing={billing}/>
 
       {/* Facturación */}
-      <div style={{padding:'0 20px 16px'}}>
+      <div style={{padding:'16px 20px 16px'}}>
         <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Facturación {yr}</div>
         <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
         {(()=>{
           const terceros = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
           const netoFirma = facturado - terceros
+          const fmtShort = n => { const a=Math.abs(n||0); if(a>=1000000) return '$'+(a/1000000).toFixed(1).replace('.',',')+'M'; if(a>=1000) return '$'+Math.round(a/1000)+'K'; return '$'+a.toLocaleString('es-CL') }
+          const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
+          const cell = {background:'#F5F7F9',borderRadius:10,padding:'10px 9px',minWidth:0}
+          const clbl = {fontSize:9,color:C.muted,marginBottom:4,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+          const cnum = {fontSize:16,fontWeight:700,whiteSpace:'nowrap'}
           return (
             <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:terceros>0?8:0}}>
-                {[['Facturado (bruto)',fmt(facturado),C.normal],['Cobrado',fmt(cobrado),C.normal]].map(([l,v,col])=>(
-                  <div key={l} style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
-                    <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
-                    <div style={{fontSize:15,fontWeight:700,color:col}}>{v}</div>
-                  </div>
-                ))}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:terceros>0?8:0}}>
+                <div style={cell} title={fmt(facturado)}><div style={clbl}>Facturado</div><div style={{...cnum,color:C.normal}}>{fmtShort(facturado)}</div></div>
+                <div style={cell} title={fmt(cobrado)}><div style={clbl}>Cobrado</div><div style={{...cnum,color:C.normal}}>{fmtShort(cobrado)}</div></div>
+                <div style={cell}><div style={clbl}>Tasa cobro</div><div style={{...cnum,color:tasaCol}}>{tasaCobro}%</div></div>
               </div>
               {terceros>0&&(
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <div style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
-                    <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Neto firma</div>
-                    <div style={{fontSize:15,fontWeight:700,color:C.accent}}>{fmt(netoFirma)}</div>
-                  </div>
-                  <div style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
-                    <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Terceros</div>
-                    <div style={{fontSize:15,fontWeight:700,color:'#C77F18'}}>{fmt(terceros)}</div>
-                  </div>
+                  <div style={cell} title={fmt(netoFirma)}><div style={clbl}>Neto firma</div><div style={{...cnum,color:C.accent}}>{fmtShort(netoFirma)}</div></div>
+                  <div style={cell} title={fmt(terceros)}><div style={clbl}>Terceros</div><div style={{...cnum,color:'#C77F18'}}>{fmtShort(terceros)}</div></div>
                 </div>
               )}
-              {facturado>0&&<div style={{fontSize:12,color:C.muted,textAlign:'right',marginTop:8}}>Tasa de cobro: <span style={{fontWeight:700,color:tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue}}>{tasaCobro}%</span></div>}
             </>
           )
         })()}
