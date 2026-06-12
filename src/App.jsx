@@ -3567,7 +3567,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoAnticipo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [anulando,setAnulando] = useState(null)        // factura en flujo de baja
   const [motivoBaja,setMotivoBaja] = useState('')
@@ -3866,20 +3866,21 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
+        {filter!=='anticipos'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
           {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
               <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
             </div>
           ))}
-        </div>
+        </div>}
         <div style={{display:'flex',gap:6,marginBottom:8}}>
-          {[['emitidas',`Emitidas (${nEmitidas})`],['programadas',`Programadas (${nProgramadas})`],['pagado',`Pagadas (${nPagadas})`],['all','Todas'],['checklist','Checklist']].map(([v,l])=>(
+          {[['emitidas',`Emitidas (${nEmitidas})`],['programadas',`Programadas (${nProgramadas})`],['pagado',`Pagadas (${nPagadas})`],['all','Todas'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
-        {filter!=='checklist'&&<>
+        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} onNuevo={onNuevoAnticipo}/>}
+        {filter!=='checklist'&&filter!=='anticipos'&&<>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:4}}>
           <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12}}>
@@ -4143,6 +4144,159 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
         </button>
       </div>
     </>
+  )
+}
+
+// ─── ANTICIPO FORM (modal Nuevo anticipo, PP-15) ──────────────────────────────
+function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preClient}) {
+  const hoy = new Date().toISOString().slice(0,10)
+  const [f,setF] = useState({client_id:preClient?.id||'',sale_id:'',proyecto:'',entity_id:'',monto:'',fecha:hoy,nota:''})
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const cliente = clients.find(c=>String(c.id)===String(f.client_id))
+  const clientSales = (sales||[]).filter(s=>s.client_id===f.client_id&&s.title)
+  const clientEnts = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
+  const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
+  const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#1a1a1a',background:'#fff',outline:'none',boxSizing:'border-box'}
+  const sel={...inp,appearance:'none'}
+  const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+  const fmtCLP0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const pill = on => ({fontSize:12,padding:'5px 12px',borderRadius:20,cursor:'pointer',border:on?'1px solid #003C50':`0.5px solid ${C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
+  const canSave = f.client_id && f.proyecto?.trim() && (parseInt(f.monto)||0)>0
+  const guardar = () => onSave({...f, entity_id:f.entity_id||null})
+  return (
+    <>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Nuevo anticipo</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+        </button>
+      </div>
+      <div style={{padding:'16px 20px 20px'}}>
+        <div style={{marginBottom:13}}>
+          <label style={flabel}>Cliente</label>
+          {preClient ? (
+            <div style={{display:'flex',alignItems:'center',gap:9,height:42,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'0 11px'}}>
+              <span style={{width:26,height:26,borderRadius:7,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>{cIni(cliente?.name)}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{cliente?.name||'Cliente'}</span>
+            </div>
+          ) : (
+            <select value={f.client_id} onChange={e=>{up('client_id',e.target.value);up('sale_id','');up('proyecto','');up('entity_id','')}} style={{...sel,height:42,borderRadius:10}}>
+              <option value=''>— Selecciona cliente —</option>
+              {[...clients].filter(c=>c.status!=='Terminado').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+        </div>
+
+        {f.client_id&&(
+          <div style={{marginBottom:13}}>
+            <label style={flabel}>Proyecto <span style={{color:C.overdue}}>*</span></label>
+            {clientSales.length>0?(
+              <select value={f.sale_id||''} onChange={e=>{ const s=clientSales.find(x=>String(x.id)===e.target.value); up('sale_id',s?.id||''); up('proyecto',s?.title||'') }} style={sel}>
+                <option value=''>— Selecciona proyecto —</option>
+                {clientSales.map(s=><option key={s.id} value={s.id}>{s.title}{s.status==='Propuesta'?' (propuesta)':''}</option>)}
+              </select>
+            ):(
+              <input value={f.proyecto||''} onChange={e=>up('proyecto',e.target.value)} placeholder='Nombre del proyecto...' style={inp}/>
+            )}
+          </div>
+        )}
+
+        <div style={{display:'grid',gridTemplateColumns:'1.25fr 1fr 1fr',gap:8,marginBottom:13}}>
+          <div>
+            <label style={flabel}>Razón social</label>
+            {clientEnts.length>0?(
+              <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value)} style={{...sel,fontSize:12,padding:'0 8px'}}>
+                <option value=''>—</option>
+                {clientEnts.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            ):<div style={{...inp,display:'flex',alignItems:'center',color:'#99ABB4',fontSize:12}}>—</div>}
+          </div>
+          <div><label style={flabel}>Monto</label><input type='number' value={f.monto} onChange={e=>up('monto',e.target.value)} placeholder='0' style={inp}/></div>
+          <div><label style={flabel}>Fecha</label><input type='date' value={f.fecha} onChange={e=>up('fecha',e.target.value)} style={{...inp,fontSize:12,padding:'0 8px'}}/></div>
+        </div>
+
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:13}}>
+          {[100000,300000,500000,1000000].map(m=>(<button key={m} onClick={()=>up('monto',String(m))} style={pill(String(m)===f.monto)}>{fmtCLP0(m)}</button>))}
+        </div>
+
+        <div style={{marginBottom:18}}>
+          <label style={flabel}>Nota <span style={{textTransform:'none',letterSpacing:0,color:'#99ABB4'}}>· opcional</span></label>
+          <textarea value={f.nota} onChange={e=>up('nota',e.target.value)} placeholder='Ej: abono inicial del retainer / provisión de gastos…' style={{width:'100%',minHeight:74,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:'#1a1a1a',outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+        </div>
+
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar anticipo'}</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── ANTICIPOS PANEL (tab Anticipos en Facturación, PP-15) ────────────────────
+function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],onNuevo}) {
+  const [fil,setFil] = useState('disponible')
+  const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
+  const disponibles = anticipos.filter(a=>a.estado==='disponible')
+  const consumidos = anticipos.filter(a=>a.estado==='consumido')
+  const totalDisp = disponibles.reduce((s,a)=>s+(a.monto||0),0)
+  const totalCons = consumidos.reduce((s,a)=>s+(a.monto||0),0)
+  const nClientesDisp = new Set(disponibles.map(a=>a.client_id)).size
+  const lista = fil==='disponible'?disponibles:fil==='consumido'?consumidos:anticipos
+  const grupos = {}
+  lista.forEach(a=>{ (grupos[a.client_id]=grupos[a.client_id]||[]).push(a) })
+  const cliName = id => clients.find(c=>String(c.id)===String(id))?.name||'Sin cliente'
+  const rsName = a => clientEntities.find(x=>String(x.id)===String(a.entity_id))?.name||''
+  const folioDe = a => billing.find(b=>String(b.id)===String(a.billing_id))?.invoice_no
+  const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+  const flabel = {fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase'}
+  return (
+    <div>
+      <div style={{display:'flex',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+        <div style={{flex:1,padding:'14px 16px'}}>
+          <div style={flabel}>Disponible</div>
+          <div style={{fontSize:22,fontWeight:500,letterSpacing:'-.5px',color:C.normal,marginTop:3}}>{fmtCLP0(totalDisp)}</div>
+          <div style={{fontSize:11,color:'#99ABB4',marginTop:2}}>en {nClientesDisp} cliente{nClientesDisp!==1?'s':''}</div>
+        </div>
+        <div style={{flex:1,padding:'14px 16px',borderLeft:`0.5px solid ${C.border}`}}>
+          <div style={flabel}>Consumido</div>
+          <div style={{fontSize:22,fontWeight:500,letterSpacing:'-.5px',color:C.muted,marginTop:3}}>{fmtCLP0(totalCons)}</div>
+          <div style={{fontSize:11,color:'#99ABB4',marginTop:2}}>histórico total</div>
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+        <div style={{display:'flex',gap:6}}>
+          {[['disponible','Disponibles'],['consumido','Consumidos'],['todos','Todos']].map(([v,l])=>{ const on=fil===v; return (
+            <button key={v} onClick={()=>setFil(v)} style={{height:26,padding:'0 11px',borderRadius:8,fontSize:11,cursor:'pointer',border:on?'none':`0.5px solid ${C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button>
+          )})}
+        </div>
+        <button onClick={()=>onNuevo&&onNuevo()} style={{height:30,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>+ Anticipo</button>
+      </div>
+      {lista.length===0&&<div style={{textAlign:'center',color:'#99ABB4',fontSize:13,padding:30}}>No hay anticipos {fil==='disponible'?'disponibles':fil==='consumido'?'consumidos':'registrados'}</div>}
+      {Object.keys(grupos).map(cid=>{
+        const arr=grupos[cid]
+        const totCli=arr.filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
+        const rs=arr.map(rsName).find(Boolean)||''
+        return (
+          <div key={cid} style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#F5F7F9',padding:'8px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+              <div><div style={{fontSize:12,fontWeight:600,color:C.accent}}>{cliName(cid)}</div>{rs&&<div style={{fontSize:11,color:'#99ABB4'}}>{rs}</div>}</div>
+              <div style={{textAlign:'right'}}><div style={flabel}>Disponible</div><div style={{fontSize:14,fontWeight:600,color:C.normal}}>{fmtCLP0(totCli)}</div></div>
+            </div>
+            {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); return (
+              <div key={a.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:'#1a1a1a'}}>{fmtD(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}</div>{a.nota&&<div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
+                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                  {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>F° {folio}</span>}
+                  <span style={{fontSize:13,fontWeight:500,color:disp?C.normal:C.muted}}>{fmtCLP0(a.monto)}</span>
+                  <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?'#E1F5EE':'#F5F7F9',color:disp?C.normal:'#99ABB4'}}>{disp?'Disponible':'Consumido'}</span>
+                </div>
+              </div>
+            )})}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -8222,6 +8376,7 @@ export default function App() {
   const [billing,setBilling]=useState([])
   const [expenses,setExpenses]=useState([])
   const [tasks,setTasks]=useState([])
+  const [anticipos,setAnticipos]=useState([])
   const [pettyCash,setPettyCash]=useState([])
   const [rendiciones,setRendiciones]=useState([])
   const [expenseAttachments,setExpenseAttachments]=useState([])
@@ -8292,7 +8447,8 @@ export default function App() {
       supabase.from('client_entities').select('*').then(({data})=>data||[]),
       supabase.from('expense_attachments').select('id,expense_id').then(({data})=>data||[]),
       supabase.from('billing_attachments').select('id,billing_id').then(({data})=>data||[]),
-    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba)})
+      supabase.from('anticipos').select('*').order('fecha',{ascending:false}).then(({data})=>data||[]),
+    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
@@ -8597,6 +8753,32 @@ export default function App() {
     setSaving(false)
   },[clients,clientEntities])
 
+  // Anticipos (PP-15): crear un anticipo disponible
+  const handleSaveAnticipo=useCallback(async(f)=>{
+    setSaving(true)
+    try{
+      const payload={client_id:f.client_id,monto:parseInt(f.monto)||0,fecha:f.fecha||new Date().toISOString().slice(0,10),nota:f.nota||null,proyecto:f.proyecto||null,sale_id:f.sale_id||null,estado:'disponible',created_by:user?.name||null}
+      const {data,error}=await supabase.from('anticipos').insert(payload).select().single()
+      if(error)throw error
+      setAnticipos(p=>[data,...p])
+      setModal(null)
+    }catch(e){alert('Error: '+e.message)}
+    setSaving(false)
+  },[user])
+
+  // Anticipos (PP-15 commit 3): aplicar anticipos a una factura → consumidos + factura Pagada
+  const handleConsumeAnticipos=useCallback(async(ids,billingId)=>{
+    if(!ids?.length) return
+    try{
+      const { error } = await supabase.from('anticipos').update({estado:'consumido',billing_id:billingId}).in('id',ids)
+      if(error)throw error
+      setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'consumido',billing_id:billingId}:a))
+      const { data, error:be } = await supabase.from('billing').update({status:'Pagado',updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
+      if(be)throw be
+      setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
+    }catch(e){alert('Error: '+e.message)}
+  },[clients])
+
   const handleDeleteBilling=useCallback(async(id)=>{
     if(!confirm('¿Eliminar este cobro?')) return
     try{
@@ -8770,7 +8952,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
@@ -8787,6 +8969,7 @@ export default function App() {
 
         {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,padding:'18px 20px 24px',boxSizing:'border-box'}}>
