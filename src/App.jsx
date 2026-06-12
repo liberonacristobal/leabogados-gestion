@@ -492,7 +492,7 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
         <input value={name} onChange={e=>{setName(e.target.value);setShowConfirm(false)}} placeholder='Nombre completo...' autoFocus
           style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #E8E8E8',background:'#F7F7F7',fontSize:14,boxSizing:'border-box',outline:'none'}}/>
         {similares.length>0&&(
-          <div style={{marginTop:8,padding:'10px 12px',borderRadius:8,background:'#FAEEDA',border:'1px solid #EF9F27'}}>
+          <div style={{marginTop:8,padding:'10px 12px',borderRadius:8,background:'#FAEEDA',border:'1px solid #C77F18'}}>
             <div style={{fontSize:11,fontWeight:700,color:'#C77F18',marginBottom:6}}>{'\u26a0\ufe0f'} Clientes similares encontrados:</div>
             {similares.map(s=>(
               <div key={s.id} style={{fontSize:12,color:'#C77F18',padding:'2px 0'}}>{s.name}{s.type?` · ${s.type}`:''}</div>
@@ -1303,7 +1303,7 @@ function PorFacturarMes({billing}) {
         </div>
         <div style={{...kpi,background:'#FFF8E1'}}>
           <div style={lbl}>Por facturar</div>
-          <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:'#B8860B'}}>{porFacturar.length}</span><span style={unidad}>factura{porFacturar.length!==1?'s':''}</span></div>
+          <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:'#C77F18'}}>{porFacturar.length}</span><span style={unidad}>factura{porFacturar.length!==1?'s':''}</span></div>
           <div style={sub}>{fmt(porFacturarCLP)}</div>
         </div>
         <div style={{...kpi,background:'#E6F1FB'}}>
@@ -1524,7 +1524,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
       'Martina':         ['#EEEDFE','#534AB7'],
       'Rodrigo':         ['#FAEEDA','#C77F18']
     }
-    return map[name] || ['#F1EFE8','#5F5E5A']
+    return map[name] || ['#F1EFE8','#537281']
   }
   const togglePersona = name => setOpenPersonas(prev=>({...prev,[name]:!prev[name]}))
   const badgeStyle = due => {
@@ -2896,7 +2896,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
                     />
                   </div>
                   {panelHon>0&&panelCosto>0&&<div style={{fontSize:12,color:C.muted,marginBottom:10}}>= {moneda==='UF'?fmtUF(panelCosto):fmt(Math.round(panelCosto))} · neto firma <strong style={{color:C.text}}>{moneda==='UF'?fmtUF(panelHon-panelCosto):fmt(Math.round(panelHon-panelCosto))}</strong></div>}
-                  {newVig&&(()=>{const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=newVig+'-01').length;return progN>0?<div style={{fontSize:11,color:'#856404',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',marginBottom:8,lineHeight:1.4}}>Se recalcularán <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}.</div>:null})()}
+                  {newVig&&(()=>{const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=newVig+'-01').length;return progN>0?<div style={{fontSize:11,color:'#C77F18',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',marginBottom:8,lineHeight:1.4}}>Se recalcularán <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}.</div>:null})()}
                 </>
               )}
               {modMode==='cambiar'&&(
@@ -2946,7 +2946,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
                       <Fld label='Costo (opc.)'><Inp type='number' value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder='0'/></Fld>
                     </div>
                   )}
-                  {newVig&&newFmt&&(()=>{const vigDate=newVig+'-01';const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=vigDate).length;return <div style={{fontSize:11,color:'#856404',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',margin:'8px 0',lineHeight:1.4}}>Reemplaza <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}. Las emitidas/pagadas no se tocan.</div>})()}
+                  {newVig&&newFmt&&(()=>{const vigDate=newVig+'-01';const progN=(billing||[]).filter(b=>b.sale_id===sale.id&&b.status==='Programada'&&b.due&&b.due>=vigDate).length;return <div style={{fontSize:11,color:'#C77F18',background:'#FFFBF0',border:'0.5px solid #F0D88A',borderRadius:8,padding:'8px 10px',margin:'8px 0',lineHeight:1.4}}>Reemplaza <strong>{progN}</strong> factura{progN!==1?'s':''} programada{progN!==1?'s':''} desde {newVig}. Las emitidas/pagadas no se tocan.</div>})()}
                 </>
               )}
             </div>
@@ -7418,7 +7418,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
           const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
           const GREEN={num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0',label:C.muted}
-          const ORANGE={num:'#E08A2B',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C77F18'}
+          const ORANGE={num:'#C77F18',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C77F18'}
           const RED={num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5',label:C.muted}
           const saldoSch = saldo<0 ? RED : saldo<=50000 ? ORANGE : GREEN
           const sinLiqNoNotaria = porLiquidar.filter(e=>e.category!=='Notaria').length
