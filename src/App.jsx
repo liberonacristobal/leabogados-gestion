@@ -1712,6 +1712,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     return {year,bruto,costo,neto,meta,pct}
   }
   const m = metricasAnio(selYear)
+  const fmtMon = v => dashMoneda==='UF' ? (ufRef>0?fmtUFk(Math.round(v/ufRef)):'—') : fmtShort(v)
   const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year)])].sort((a,b)=>b-a)
   const prevM = metricasAnio(selYear-1)
   const tendenciaPP = (targets.some(t=>t.year===selYear-1) && prevM.bruto>0) ? (m.pct - prevM.pct) : null
@@ -1748,7 +1749,24 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Meta anual */}
       <div style={{padding:'0 20px 16px'}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Revenue target {selYear}</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{display:'flex',alignItems:'center',position:'relative'}}>
+            <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Revenue target</span>
+            <button onClick={()=>setYearMenu(o=>!o)} style={{marginLeft:5,display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:10,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:'0.06em'}}>{selYear}<span style={{fontSize:9,color:'#99ABB4'}}>{'▾'}</span></button>
+            {yearMenu&&(
+              <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
+                {aniosDisponibles.map(y=>(
+                  <button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 14px',border:'none',background:y===selYear?'#E6EEF1':'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?600:500,cursor:'pointer'}}>{y}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{display:'flex',gap:4}}>
+            {['UF','CLP'].map(v=>{ const on=dashMoneda===v; return (
+              <button key={v} onClick={()=>setDashMoneda(v)} style={{padding:'3px 10px',borderRadius:6,border:on?`1.5px solid ${C.accent}`:'0.5px solid #E4E8EB',background:'#fff',color:on?C.accent:'#537281',fontSize:11,fontWeight:on?600:500,cursor:'pointer'}}>{v}</button>
+            )})}
+          </div>
+        </div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
           {/* Header: 3 columnas */}
           <div style={{display:'flex',alignItems:'stretch',padding:'14px 16px',gap:14}}>
@@ -1760,23 +1778,15 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               {[['Meta',m.meta,'#1a1a1a'],['Vendido',m.bruto,C.accent],['Restante',Math.max(0,m.meta-m.bruto),'#537281']].map(([l,v,col])=>(
                 <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
                   <span style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>{l}</span>
-                  <span style={{fontSize:13,fontWeight:500,color:col}}>{fmtShort(v)}</span>
+                  <span style={{fontSize:13,fontWeight:500,color:col}}>{fmtMon(v)}</span>
                 </div>
               ))}
             </div>
-            <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',alignItems:'flex-end',flexShrink:0,gap:8}}>
-              <div style={{position:'relative'}}>
-                <button onClick={()=>setYearMenu(o=>!o)} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:20,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>{selYear}<Chev open={yearMenu}/></button>
-                {yearMenu&&(
-                  <div style={{position:'absolute',right:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:78}}>
-                    {aniosDisponibles.map(y=>(
-                      <button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'right',padding:'7px 14px',border:'none',background:y===selYear?'#E6EEF1':'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?700:500,cursor:'pointer'}}>{y}</button>
-                    ))}
-                  </div>
-                )}
+            {tendenciaPP!==null&&(
+              <div style={{display:'flex',alignItems:'center',flexShrink:0}}>
+                <div style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'#E1F5EE',color:'#0F6E56',whiteSpace:'nowrap'}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>
               </div>
-              {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'#E1F5EE',color:'#0F6E56',whiteSpace:'nowrap'}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
-            </div>
+            )}
           </div>
           {/* Barra de progreso */}
           <div style={{height:5,background:'#E4E8EB',overflow:'hidden'}}>
@@ -1791,7 +1801,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             ].map(([l,v,col,sub])=>(
               <div key={l} style={{background:'#f5f7f9',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:3}}>{l}</div>
-                <div style={{fontSize:16,fontWeight:500,color:col}}>{fmtShort(v)}</div>
+                <div style={{fontSize:16,fontWeight:500,color:col}}>{fmtMon(v)}</div>
                 <div style={{fontSize:10,color:'#537281',marginTop:1}}>{sub}</div>
               </div>
             ))}
@@ -1816,7 +1826,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     <span style={{fontSize:12,fontWeight:500,color:col}}>{y}</span>
                     <div style={{height:5,background:'#E4E8EB',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,my.pct)}%`,borderRadius:3}}/></div>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:'#1a1a1a'}}>{fmtShort(my.neto)}</div>
+                      <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:'#1a1a1a'}}>{fmtMon(my.neto)}</div>
                       <div style={{fontSize:10,color:'#537281'}}>{esActual?`${pctMetaNeto}% · en curso`:`${pctMetaNeto}% meta`}</div>
                     </div>
                   </div>
