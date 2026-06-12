@@ -198,6 +198,9 @@ const Switch = ({on,onToggle,disabled}) => (
 const TrashIcon = ({color}) => (
   <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={color||'#537281'} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/></svg>
 )
+const BanIcon = ({size=15,color}) => (
+  <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke={color||C.overdue} strokeWidth='2' strokeLinecap='round'><circle cx='12' cy='12' r='9'/><line x1='5.6' y1='5.6' x2='18.4' y2='18.4'/></svg>
+)
 const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight}) => (
   <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
     <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,paddingBottom:24}}>
@@ -1671,7 +1674,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
 
-  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso'&&b.status!=='Programada').reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso'&&!['Programada','Anulada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
   const tasaCobro = facturado>0 ? Math.round((cobrado/facturado)*100) : 0
 
@@ -3352,8 +3355,13 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
+  const [anulando,setAnulando] = useState(null)        // factura en flujo de baja
+  const [motivoBaja,setMotivoBaja] = useState('')
+  const [obsBaja,setObsBaja] = useState('')
+  const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
+  const confirmarBaja = async() => { if(!motivoBaja||!anulando) return; await onAnular(anulando,motivoBaja,obsBaja); setAnulando(null); setMotivoBaja(''); setObsBaja('') }
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -3585,13 +3593,15 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                         {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600,flexShrink:0}}>Reembolso</span>}
+                        {b.status==='Anulada'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600,flexShrink:0}}>Anulada</span>}
                       </div>
-                      <div style={{fontSize:12,color:C.text,fontWeight:500,marginTop:2}}>{b.concept||'—'}</div>
+                      <div style={{fontSize:12,color:C.text,fontWeight:500,marginTop:2,textDecoration:b.status==='Anulada'?'line-through':'none'}}>{b.concept||'—'}</div>
                     </div>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,marginLeft:8}}>
                     <div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
                     <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',fontSize:11,color:C.muted,cursor:'pointer'}}>Editar</button>
+                    {!['Pagado','Anulada'].includes(b.status)&&onAnular&&<button onClick={()=>{setAnulando(b);setMotivoBaja('');setObsBaja('')}} title='Dar de baja' style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',cursor:'pointer',display:'flex',alignItems:'center'}}><BanIcon size={14} color={C.overdue}/></button>}
                   </div>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -3605,7 +3615,9 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
                       {b.status==='Pagado'&&b.paid_at&&<span style={{fontSize:10,color:C.normal,fontWeight:600}}>Pagado {fmtDate(b.paid_at)}</span>}
                     </>)}
                   </div>
-                  {b.status==='Programada'?(
+                  {b.status==='Anulada'?(
+                    <span style={{fontSize:10,color:C.muted}}>Baja{b.anulada_por?` · ${b.anulada_por}`:''}{b.anulada_at?` · ${fmtDate(b.anulada_at.slice(0,10))}`:''}</span>
+                  ):b.status==='Programada'?(
                     selected.size===0&&(
                     <button onClick={()=>marcarEmitida(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:`1px solid ${C.accent}`,cursor:'pointer',background:'transparent',color:C.accent,fontSize:11,fontWeight:700}}>
                       Ya emitida
@@ -3683,6 +3695,27 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
         )}
       </div>
 
+      {anulando&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:520,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+            <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Dar de baja factura</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{anulando.concept||'—'} · {fmt(anulando.amount)}</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FBE9E7',color:C.overdue,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color={C.overdue}/>Esta acción no se puede deshacer</div>
+            <Lbl>Motivo</Lbl>
+            <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
+              {MOTIVOS_BAJA.map(m=>(
+                <button key={m} onClick={()=>setMotivoBaja(m)} style={{textAlign:'left',padding:'8px 11px',borderRadius:8,border:`1.5px solid ${motivoBaja===m?C.overdue:C.border}`,background:motivoBaja===m?'#FBE9E7':'transparent',color:motivoBaja===m?C.overdue:C.text,fontSize:12,fontWeight:motivoBaja===m?700:500,cursor:'pointer'}}>{m}</button>
+              ))}
+            </div>
+            <Lbl>Observaciones (opcional)</Lbl>
+            <textarea value={obsBaja} onChange={e=>setObsBaja(e.target.value)} rows={2} placeholder='Detalle adicional...' style={{width:'100%',padding:'8px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:13,color:C.text,boxSizing:'border-box',resize:'vertical',marginBottom:14,fontFamily:'inherit'}}/>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{setAnulando(null);setMotivoBaja('');setObsBaja('')}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={confirmarBaja} disabled={!motivoBaja} style={{flex:2,padding:11,borderRadius:10,border:'none',background:motivoBaja?C.overdue:'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>Confirmar baja</button>
+            </div>
+          </div>
+        </div>
+      )}
       {payingId&&(
         <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:520,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
@@ -8246,6 +8279,16 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  // Dar de baja (anular) una factura: registra motivo, quién y cuándo. No se puede deshacer.
+  const handleAnularFactura=useCallback(async(bill,motivo,obs)=>{
+    try{
+      const patch={status:'Anulada', motivo_baja:obs?.trim()?`${motivo} — ${obs.trim()}`:motivo, anulada_por:user?.name||user?.email||null, anulada_at:new Date().toISOString(), updated_at:new Date().toISOString()}
+      const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
+      if(error) throw error
+      setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
+    }catch(e){alert('No se pudo dar de baja: '+e.message)}
+  },[user])
+
   const handleRendicionComplete=useCallback(async(r)=>{
     setRendiciones(p=>[r,...p])
     if(!r.total||r.total<=0) return
@@ -8299,7 +8342,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
