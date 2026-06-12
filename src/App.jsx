@@ -6159,6 +6159,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
     } catch(e) { alert('Error: '+e.message) }
   }
   const [sFilter,setSFilter] = useState('Activo')
+  const [misClientesOn,setMisClientesOn] = useState(false)
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const [rendicionClient,setRendicionClient] = useState(null)
@@ -6169,14 +6170,18 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
   const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
   const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
   const prospectoN=clients.filter(c=>!c.is_internal&&c.status==='Prospecto').length
+  // Responsable de un cliente = responsable de su venta más reciente (campo responsible en sales)
+  const responsableDe = useMemo(()=>{ const m={}; [...sales].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[s.client_id]) m[s.client_id]=s.responsible }); return m },[sales])
+  const tareasDe = useMemo(()=>{ const m={}; tasks.forEach(t=>{ if(t.client_id&&t.status!=='Terminado') m[t.client_id]=(m[t.client_id]||0)+1 }); return m },[tasks])
   const cl = useMemo(()=>{
     let base = clients
     if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
     else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
     else if(sFilter==='Prospecto') base=base.filter(c=>c.status==='Prospecto')
     if(q.trim()) base=base.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
-    return base
-  },[clients,sFilter,q])
+    if(misClientesOn){ const me=(user?.name||'').trim().toLowerCase(); base=base.filter(c=>(responsableDe[c.id]||'').trim().toLowerCase()===me) }
+    return [...base].sort((a,b)=>{ const ta=tareasDe[a.id]||0,tb=tareasDe[b.id]||0; if((ta>0)!==(tb>0)) return tb>0?1:-1; return tb-ta })
+  },[clients,sFilter,q,misClientesOn,responsableDe,tareasDe,user])
   const balances = useMemo(()=>{
     const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) }); return m
   },[expenses])
@@ -6222,7 +6227,21 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
         </div>
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
-        <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN} prospectoN={prospectoN}/>
+        {sFilter ? (
+          <div style={{display:'flex',gap:6,marginBottom:4}}>
+            <button onClick={()=>{setSFilter(null);setMisClientesOn(false)}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]}</button>
+            <button onClick={()=>setMisClientesOn(v=>!v)} style={{height:30,padding:'0 13px',borderRadius:8,border:`0.5px solid ${misClientesOn?'#99ABB4':'#E4E8EB'}`,background:misClientesOn?'#E4E8EB':'#fff',color:misClientesOn?'#003C50':'#537281',fontSize:12,fontWeight:misClientesOn?600:500,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+              <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>
+              Mis clientes
+            </button>
+          </div>
+        ) : (
+          <div style={{display:'flex',gap:6,marginBottom:4}}>
+            {[['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>(
+              <button key={v} onClick={()=>{setSFilter(v);setMisClientesOn(false)}} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{padding:'10px 20px 100px'}}>
         {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}
@@ -6232,13 +6251,14 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,onTogg
           const cp=billing.filter(b=>b.client_id===c.id&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+(b.amount||0),0)
           const hasOverdue=billing.some(b=>b.client_id===c.id&&b.status==='Vencido')
           const balance=balances[c.id]||0
+          const tareasC=tareasDe[c.id]||0
           return (
-            <div key={c.id} onClick={()=>setSelected(c)} style={{background:C.card,borderRadius:10,padding:'13px 16px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${ended?C.done:hasOverdue?C.overdue:C.accent}`,opacity:ended?.7:1,cursor:'pointer'}}
+            <div key={c.id} onClick={()=>setSelected(c)} style={{background:C.card,borderRadius:misClientesOn&&tareasC>0?'0 10px 10px 0':10,padding:'13px 16px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:misClientesOn&&tareasC>0?'2.5px solid #B8860B':`3px solid ${ended?C.done:hasOverdue?C.overdue:C.accent}`,opacity:ended?.7:1,cursor:'pointer'}}
               onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.09)'}
               onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>{c.name}{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:'#F0F0F0',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4}}>Interno</span>}</div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>{c.name}{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:'#F0F0F0',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4}}>Interno</span>}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:'#B8860B',background:'#FFF8E1',borderRadius:20,padding:'1px 8px'}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
                 </div>
                 <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`1px solid ${ended?C.border:C.normal}`,background:ended?'#ECECEC':'transparent',color:ended?C.muted:C.normal,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminar'}</button>
