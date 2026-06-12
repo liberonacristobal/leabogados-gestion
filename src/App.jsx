@@ -53,14 +53,12 @@ async function reconcileProgramada(clientId, amount, issuedAt){
     if(!clientId || !amount) return
     const {data} = await supabase.from('billing').select('id,due').eq('client_id',clientId).eq('amount',amount).eq('status','Programada')
     if(!data || !data.length) return
-    const cands = issuedAt ? data.filter(b=>!b.due || b.due<=issuedAt) : data
+    // Solo cuotas con due dentro de ±45 días de la emisión: evita borrar una programada lejana
+    // de otra venta del mismo cliente que casualmente tiene el mismo monto.
+    if(!issuedAt) return
+    const cands = data.filter(b=>b.due && Math.abs(new Date(b.due)-new Date(issuedAt))/86400000 <= 45)
     if(!cands.length) return
-    // Con múltiples candidatos, elegir el cuyo due esté más cerca de issuedAt
-    const best = cands.length===1 ? cands[0] : cands.reduce((a,b)=>{
-      const da = a.due&&issuedAt ? Math.abs(new Date(a.due)-new Date(issuedAt)) : Infinity
-      const db = b.due&&issuedAt ? Math.abs(new Date(b.due)-new Date(issuedAt)) : Infinity
-      return da<=db ? a : b
-    })
+    const best = cands.reduce((a,b)=> Math.abs(new Date(a.due)-new Date(issuedAt)) <= Math.abs(new Date(b.due)-new Date(issuedAt)) ? a : b)
     await supabase.from('billing').delete().eq('id',best.id)
   }catch(_){}
 }
@@ -3737,13 +3735,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
       const renderId = crypto.randomUUID()
       const now = new Date().toISOString()
       const nowLabel = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
-      // Marcar gastos como rendidos
-      for(const e of gastosSel) {
-        await supabase.from('expenses').update({client_rendered_at:now,client_render_id:renderId}).eq('id',e.id)
-      }
-      // Registrar rendicion (atribuida al usuario logueado, no hardcodeada)
+      // Registrar la rendición PRIMERO: si falla, no marcamos gastos (evita gastos huérfanos)
       const rendUser = currentUserName || 'admin'
-      await supabase.from('rendiciones').insert({
+      const {error:rendErr} = await supabase.from('rendiciones').insert({
         id: renderId,
         user_name: rendUser,
         client_id: client.id,
@@ -3754,6 +3748,14 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
         tipo: 'cliente',
         dirigido_a: (atencion||'').trim()||null
       })
+      if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
+      // Marcar gastos como rendidos, avisando si alguno falla
+      let falloMarca = 0
+      for(const e of gastosSel) {
+        const {error} = await supabase.from('expenses').update({client_rendered_at:now,client_render_id:renderId}).eq('id',e.id)
+        if(error) falloMarca++
+      }
+      if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
       if(onRendicionComplete) onRendicionComplete({id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',dirigido_a:(atencion||'').trim()||null})
@@ -7594,7 +7596,8 @@ export default function App() {
         )
         if(ok){
           if(programadas.length>0){
-            await supabase.from('billing').delete().in('id', programadas.map(b=>b.id))
+            const {error:delErr} = await supabase.from('billing').delete().in('id', programadas.map(b=>b.id))
+            if(delErr) throw new Error('No se pudieron eliminar las cuotas programadas anteriores (no se crearon las nuevas para evitar duplicados): '+delErr.message)
           }
           await insertarCuotas()
         }
@@ -7653,7 +7656,9 @@ export default function App() {
         const nuevoHon = parseFloat(t.honorario)||0
         if(oldHon>0){
           const scale = nuevoHon/oldHon
-          for(const b of prog){ await supabase.from('billing').update({amount:Math.round((b.amount||0)*scale), updated_at:new Date().toISOString()}).eq('id',b.id) }
+          let falloRecalc=0
+          for(const b of prog){ const {error}=await supabase.from('billing').update({amount:Math.round((b.amount||0)*scale), updated_at:new Date().toISOString()}).eq('id',b.id); if(error) falloRecalc++ }
+          if(falloRecalc>0) alert(`Atención: ${falloRecalc} de ${prog.length} cuota(s) programada(s) no se recalcularon. Revísalas.`)
           const {data:nb}=await getBilling(); if(nb) setBilling(nb)
         } else {
           alert('El tramo se guardó, pero no se pudo determinar el honorario anterior; las programadas no se recalcularon. Revísalas manualmente.')
@@ -7667,9 +7672,11 @@ export default function App() {
     try{
       const {data:rec,error}=await supabase.from('sale_tariff_history').insert({sale_id:sale.id,honorario:newHon||null,costo:newCosto||null,currency:sale.moneda||'UF',vigente_desde:vigDate,motivo:motivo||(`Cambio a cobro ${newFmt}`),created_by:user?.name||null}).select().single()
       if(error)throw error
-      await supabase.from('billing').delete().eq('sale_id',sale.id).eq('status','Programada').is('invoice_no',null).gte('due',vigDate)
+      const {error:delFmtErr} = await supabase.from('billing').delete().eq('sale_id',sale.id).eq('status','Programada').is('invoice_no',null).gte('due',vigDate)
+      if(delFmtErr) throw new Error('No se pudieron eliminar las cuotas programadas anteriores (no se crearon las nuevas para evitar duplicados): '+delFmtErr.message)
       for(const c of nuevasCuotas){
-        await supabase.from('billing').insert({client_id:sale.client_id,sale_id:sale.id,entity_id:sale.entity_id||null,concept:c.concept,amount:c.amount,status:'Programada',due:c.due,billing_type:'honorarios'})
+        const {error:insFmtErr} = await supabase.from('billing').insert({client_id:sale.client_id,sale_id:sale.id,entity_id:sale.entity_id||null,concept:c.concept,amount:c.amount,status:'Programada',due:c.due,billing_type:'honorarios'})
+        if(insFmtErr) throw new Error('Error al crear una cuota nueva: '+insFmtErr.message)
       }
       const {data:nb}=await getBilling();if(nb)setBilling(nb)
       return rec
@@ -7952,8 +7959,8 @@ export default function App() {
         {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
-        {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={()=>{}} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal title={modal.data?.id?'Editar tarea':'Nueva tarea'} onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} onSave={handleSaveTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
