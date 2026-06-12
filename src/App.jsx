@@ -5276,64 +5276,92 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   )
 }
 
-function FondoForm({clients,expenses,clientEntities,onSave,onClose,saving,preClient}) {
-  const [q,setQ] = useState('')
+function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,preClient}) {
+  const hoy = new Date().toISOString().slice(0,10)
   const [selectedClient,setSelectedClient] = useState(preClient||null)
-  const [amount,setAmount] = useState('')
-  const [concept,setConcept] = useState('')
-  const [date,setDate] = useState(new Date().toISOString().slice(0,10))
-  const rsList = useMemo(()=>{ if(!selectedClient) return []; return (clientEntities||[]).filter(e=>e.client_id===selectedClient.id) },[clientEntities,selectedClient])
-  const [entityId,setEntityId] = useState('')
-  useEffect(()=>{ setEntityId(rsList.length===1?rsList[0].id:'') },[rsList])
-  const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
-  const balance = selectedClient ? (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===selectedClient.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })() : null
+  const [f,setF] = useState({sale_id:'',project:'',entity_id:'',amount:'',date:hoy,concept:''})
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const clientEnts = useMemo(()=>selectedClient?(clientEntities||[]).filter(e=>e.client_id===selectedClient.id):[],[clientEntities,selectedClient])
+  const clientSales = useMemo(()=>selectedClient?(sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title):[],[sales,selectedClient])
+  useEffect(()=>{ setF(p=>({...p, entity_id: clientEnts.length===1?clientEnts[0].id:(clientEnts.some(e=>e.id===p.entity_id)?p.entity_id:'')})) },[clientEnts])
+  const balance = selectedClient ? expenses.reduce((b,e)=> e.client_id===selectedClient.id ? b+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) : b, 0) : null
+  const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+  const fmtCLP0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
+  const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#1a1a1a',background:'#fff',outline:'none',boxSizing:'border-box'}
+  const sel={...inp,appearance:'none'}
+  const pill = on => ({fontSize:12,padding:'5px 12px',borderRadius:20,cursor:'pointer',border:on?'1px solid #003C50':`0.5px solid ${C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
+  const canSave = selectedClient && (parseInt(f.amount)||0)>0 && f.project?.trim() && (clientEnts.length===0 || f.entity_id)
+  const guardar = () => onSave({client_id:selectedClient.id,type:'fondo',amount:parseInt(f.amount),concept:f.concept,date:f.date,category:'Fondo',entity_id:f.entity_id||null,project:f.project?.trim()||null,sale_id:f.sale_id||null})
   return (
     <>
-      {!selectedClient?(
-        <Fld label='Cliente'>
-          <div style={{position:'relative'}}>
-            <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' autoFocus/>
-            {matches.length>0&&(
-              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:220,overflowY:'auto'}}>
-                {matches.map(c=>(
-                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);setQ('')}} style={{padding:'10px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
-                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
-                    onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                    <div style={{fontWeight:500}}>{c.name}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </Fld>
-      ):(
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.border}`}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
-            {balance!==null&&<div style={{fontSize:11,color:balance<0?C.overdue:C.normal}}>Saldo actual: {fmt(balance)}</div>}
-          </div>
-          <button onClick={()=>setSelectedClient(null)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
-        </div>
-      )}
-      {selectedClient&&(
-        <>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            <Fld label='Monto (CLP)'><Inp type='number' value={amount} onChange={e=>setAmount(e.target.value)} placeholder='0' autoFocus/></Fld>
-            <Fld label='Fecha'><Inp type='date' value={date} onChange={e=>setDate(e.target.value)}/></Fld>
-          </div>
-          <Fld label='Descripción'><Inp value={concept} onChange={e=>setConcept(e.target.value)} placeholder='Ej: Provisión fondos abril...'/></Fld>
-          {rsList.length>1&&(
-            <Fld label='Razón social'>
-              <select value={entityId} onChange={e=>setEntityId(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
-            </Fld>
-          )}
-        </>
-      )}
-      <div style={{display:'flex',gap:8,marginTop:4}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!selectedClient||!amount} onClick={()=>onSave({client_id:selectedClient.id,type:'fondo',amount:parseInt(amount),concept,date,category:'Fondo',entity_id:entityId||null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!selectedClient||!amount)?.6:1}}>
-          {saving?<Spin/>:null}{saving?'Guardando...':'Guardar fondo'}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar fondo{selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
+      </div>
+      <div style={{padding:'16px 20px 20px'}}>
+        {!selectedClient ? (
+          <div style={{marginBottom:14}}>
+            <label style={flabel}>Cliente</label>
+            <select value='' onChange={e=>setSelectedClient(clients.find(c=>String(c.id)===e.target.value)||null)} style={{...sel,height:42,borderRadius:10}}>
+              <option value=''>— Selecciona cliente —</option>
+              {[...clients].filter(c=>c.status!=='Terminado').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        ) : (
+          <>
+            <div style={{marginBottom:13}}>
+              <label style={flabel}>Cliente</label>
+              <div style={{display:'flex',alignItems:'center',gap:9,height:42,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'0 11px'}}>
+                <span style={{width:26,height:26,borderRadius:7,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>{cIni(selectedClient.name)}</span>
+                <span style={{flex:1,fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{selectedClient.name}</span>
+                {balance!==null&&<span style={{fontSize:11,color:balance<0?C.overdue:C.normal}}>Saldo actual {fmt(balance)}</span>}
+              </div>
+            </div>
+
+            <div style={{marginBottom:13}}>
+              <label style={flabel}>Proyecto <span style={{color:C.overdue}}>*</span></label>
+              {clientSales.length>0?(
+                <select value={f.sale_id||''} onChange={e=>{ const s=clientSales.find(x=>String(x.id)===e.target.value); up('sale_id',s?.id||''); up('project',s?.title||'') }} style={sel}>
+                  <option value=''>— Selecciona proyecto —</option>
+                  {clientSales.map(s=><option key={s.id} value={s.id}>{s.title}{s.status==='Propuesta'?' (propuesta)':''}</option>)}
+                </select>
+              ):(
+                <input value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Nombre del proyecto...' style={inp}/>
+              )}
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1.25fr 1fr 1fr',gap:8,marginBottom:13}}>
+              <div>
+                <label style={flabel}>Razón social{clientEnts.length>0&&<span style={{color:C.overdue}}> *</span>}</label>
+                {clientEnts.length>0?(
+                  <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value)} style={{...sel,fontSize:12,padding:'0 8px'}}>
+                    <option value=''>—</option>
+                    {clientEnts.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                ):<div style={{...inp,display:'flex',alignItems:'center',color:'#99ABB4',fontSize:12}}>—</div>}
+              </div>
+              <div><label style={flabel}>Monto</label><input type='number' value={f.amount} onChange={e=>up('amount',e.target.value)} placeholder='0' style={inp}/></div>
+              <div><label style={flabel}>Fecha</label><input type='date' value={f.date} onChange={e=>up('date',e.target.value)} style={{...inp,fontSize:12,padding:'0 8px'}}/></div>
+            </div>
+
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:13}}>
+              {[100000,300000,500000,1000000].map(m=>(<button key={m} onClick={()=>up('amount',String(m))} style={pill(String(m)===f.amount)}>{fmtCLP0(m)}</button>))}
+            </div>
+
+            <div style={{marginBottom:18}}>
+              <label style={flabel}>Descripción <span style={{textTransform:'none',letterSpacing:0,color:'#99ABB4'}}>· opcional</span></label>
+              <textarea value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Ej: provisión de fondos abril…' style={{width:'100%',minHeight:60,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:'#1a1a1a',outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+            </div>
+          </>
+        )}
+
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar fondo'}</button>
+        </div>
       </div>
     </>
   )
@@ -9080,7 +9108,7 @@ export default function App() {
         )}
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
-        {modal?.type==='fondo'&&<Modal title='Registrar fondo recibido' onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
