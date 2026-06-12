@@ -324,7 +324,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
 
           <div style={{marginBottom:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>Gastos y Fondos</div>
+              <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Gastos y Fondos</div>
               <div style={{display:'flex',gap:6}}>
                 <button onClick={()=>onAddFondo(cl)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid #E8E8E8',background:'#fff',color:'#1D9E75',fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
                 <button onClick={()=>onAddGasto(cl)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Gasto</button>
@@ -365,7 +365,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
             if(!rends.length) return null
             return (
               <div style={{marginBottom:20}}>
-                <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D',marginBottom:8}}>Rendiciones realizadas</div>
+                <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Rendiciones realizadas</div>
                 {rends.map(r=>{
                   const isOpen=openRend===r.id
                   const det=expenses.filter(e=>e.client_render_id===r.id).sort((a,b)=>b.date>a.date?1:-1)
@@ -405,7 +405,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
 
           <div style={{marginBottom:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>Tareas</div>
+              <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Tareas</div>
               <button onClick={()=>onAddTask(cl)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
             </div>
             {clientTasks.length===0&&<div style={{fontSize:12,color:'#888'}}>Sin tareas activas</div>}
@@ -1181,18 +1181,18 @@ function CashflowProjection({billing}) {
   const badge = {fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,whiteSpace:'nowrap'}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,gap:8}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:600,color:C.accent,letterSpacing:.3,textTransform:'uppercase'}}>Cash Flow Forecast</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:'uppercase',letterSpacing:.3}}>{fechaTitulo}</div>
-          </div>
-          <div style={{display:'flex',gap:4,flexShrink:0}}>
-            {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
-              <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:'#99ABB4',fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
-            ))}
-          </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:8,gap:8}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:.5,textTransform:'uppercase'}}>Cash Flow Forecast</div>
+          <div style={{fontSize:10,color:'#99ABB4',marginTop:2,textTransform:'uppercase',letterSpacing:.3}}>{fechaTitulo}</div>
         </div>
+        <div style={{display:'flex',gap:4,flexShrink:0}}>
+          {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
+            <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:'#99ABB4',fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10,marginBottom:12}}>
           <div style={tcell}><div style={tlabel}>Total</div><div style={{fontSize:15,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(totalHorizon)}</div></div>
@@ -1690,16 +1690,11 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
 
       {/* Meta anual */}
       <div style={{padding:'0 20px 16px'}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Meta {yr} · UF {META_UF.toLocaleString('es-CL')} · {fmt(META_CLP)}</div>
         <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
-            <div>
-              <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:2}}>Meta {yr}</div>
-              <div style={{fontSize:11,color:C.muted}}>UF {META_UF.toLocaleString('es-CL')} · {fmt(META_CLP)}</div>
-            </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{fontSize:22,fontWeight:700,color:pctMeta>=100?C.normal:C.accent}}>{pctMeta}%</div>
-              <div style={{fontSize:10,color:C.muted}}>completado</div>
-            </div>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
+            <div style={{fontSize:22,fontWeight:700,color:pctMeta>=100?C.normal:C.accent}}>{pctMeta}%</div>
+            <div style={{fontSize:11,color:C.muted}}>completado</div>
           </div>
           <div style={{height:8,borderRadius:4,background:'#E8EEF0',marginBottom:12,overflow:'hidden'}}>
             <div style={{height:'100%',borderRadius:4,background:pctMeta>=100?C.normal:C.accent,width:`${pctMeta}%`,transition:'width .5s ease'}}/>
