@@ -1854,7 +1854,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
           <div style={{padding:'16px 20px 0'}}>
             <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Gestión Caja Chica</div>
             <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-              <div style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'8px 12px',borderBottom:`1px solid ${C.border}`,background:'#F7F8F9'}}>
+              <div style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'8px 12px',borderBottom:`1px solid ${C.border}`,background:'#F5F7F9'}}>
                 <div style={th}>Usuario</div>
                 <div style={{...th,textAlign:'right'}}>Saldo caja</div>
                 <div style={{...th,textAlign:'right'}}>Sin liquidar</div>
