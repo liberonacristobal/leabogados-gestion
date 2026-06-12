@@ -1654,7 +1654,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
 }
 
 
-function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,onEditTask,onCompleteTask,onPreviewTask}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,setTab,user,onEditTask,onCompleteTask,onPreviewTask}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -1727,6 +1727,20 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const ufTxt = ufState.uf ? `UF ${ufFecha} · $${Math.round(ufState.uf).toLocaleString('es-CL')}` : ''
   const Chev = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
   const HistIcon = () => <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg>
+
+  // --- Clientes sin fondos: detalle por cliente ---
+  const [expSinFondos,setExpSinFondos] = useState(null)
+  const totalNeg = negatives.reduce((a,c)=>a+(balances[c.id]||0),0)
+  const maxDeficit = Math.max(1, ...negatives.map(c=>Math.abs(balances[c.id]||0)))
+  const iniciales = (name) => (name||'?').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()
+  const datosCliente = (c) => {
+    const evs = expenses.filter(e=>e.client_id===c.id)
+    const fondos = evs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+    const gastos = evs.filter(e=>e.type==='gasto').reduce((a,e)=>a+(e.amount||0),0)
+    const movs = [...evs].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,3)
+    const rs = clientEntities.filter(e=>e.client_id===c.id)
+    return {fondos,gastos,saldo:fondos-gastos,movs,rs}
+  }
 
   return (
     <div>
@@ -1917,13 +1931,56 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
 
       {negatives.length>0&&(
         <div style={{padding:'16px 20px 0'}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Clientes sin fondos</div>
-          <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
-            {negatives.map(c=>(
-              <div key={c.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:C.text,marginBottom:2}}>
-                <span>{c.name}</span><span style={{fontWeight:600,color:C.overdue}}>{fmt(balances[c.id])}</span>
+          <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Clientes sin fondos</div>
+          <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+            {/* Header */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'12px 14px',borderBottom:`1px solid ${C.border}`}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:20,fontWeight:700,color:C.overdue,lineHeight:1.1}}>{fmt(totalNeg)}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{negatives.length} cliente{negatives.length!==1?'s':''} con saldo negativo</div>
               </div>
-            ))}
+              <span style={{fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:10,background:'#FBE9E7',color:C.overdue,whiteSpace:'nowrap',flexShrink:0}}>Requieren fondos</span>
+            </div>
+            {/* Filas */}
+            {negatives.map(c=>{
+              const d = datosCliente(c)
+              const abierto = expSinFondos===c.id
+              const prop = Math.min(100, Math.abs(d.saldo)/maxDeficit*100)
+              return (
+              <div key={c.id} style={{borderBottom:`1px solid ${C.border}`}}>
+                <button onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'10px 14px',background:abierto?'#FAFBFC':'none',border:'none',cursor:'pointer',textAlign:'left'}}>
+                  <div style={{width:30,height:30,borderRadius:'50%',background:'#FBE9E7',color:C.overdue,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{iniciales(c.name)}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                    <div style={{height:4,background:'#E4E8EB',borderRadius:2,overflow:'hidden',marginTop:4}}><div style={{height:'100%',background:C.overdue,width:`${prop}%`,borderRadius:2}}/></div>
+                  </div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(d.saldo)}</div>
+                  <Chev open={abierto}/>
+                </button>
+                {abierto&&(
+                  <div style={{padding:'2px 14px 14px'}}>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:12}}>
+                      {[['Fondos',fmt(d.fondos),C.normal],['Gastos',fmt(d.gastos),C.text],['Saldo',fmt(d.saldo),C.overdue],['RS',String(d.rs.length||'—'),C.muted]].map(([l,v,col])=>(
+                        <div key={l} style={{background:'#f5f7f9',borderRadius:8,padding:'7px 8px'}}>
+                          <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:2}}>{l}</div>
+                          <div style={{fontSize:13,fontWeight:600,color:col}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:5}}>Últimos movimientos</div>
+                    {d.movs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin movimientos</div>}
+                    {d.movs.map(mv=>(
+                      <div key={mv.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid #F0F2F4`,fontSize:12}}>
+                        <span style={{color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{mv.date?fmtFechaDMY(mv.date):'—'}</span>
+                        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{mv.concept||(mv.type==='fondo'?'Fondo':'Gasto')}</span>
+                        <span style={{fontWeight:600,color:mv.type==='fondo'?C.normal:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{mv.type==='fondo'?'+':'−'}{fmt(mv.amount).replace('-','')}</span>
+                      </div>
+                    ))}
+                    <button onClick={()=>setTab('expenses')} style={{marginTop:12,width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Rendir</button>
+                  </div>
+                )}
+              </div>
+            )})}
           </div>
         </div>
       )}
@@ -8424,7 +8481,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
