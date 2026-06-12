@@ -5444,10 +5444,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
   // Roles para el flujo de delegación
   const me = user?.name || ''
   const esEdicion = !!task?.id
-  const soyAsignador = esEdicion && task.assigned_by===me
-  const soyResponsable = esEdicion && isAssignee(task,me)
-  const isAdmin = ADMIN_NAMES.includes(me)
-  const puedeEditar = !esEdicion || soyAsignador || isAdmin   // crea, o edita por ser quien asignó / admin
+  const soyResponsable = esEdicion && isAssignee(task,me)   // el responsable puede editar Y delegar
   const yaDelegada = esEdicion && ((task.delegated_to||[]).length>0)
 
   // Regla dura: el nuevo plazo no puede exceder el original + 3 días.
@@ -5499,7 +5496,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
             )}
           </div>
         </Fld>
-      ) : puedeEditar ? (
+      ) : (
         <>
           {yaDelegada&&<DelegBanner/>}
           {!preClient&&!task&&(
@@ -5585,23 +5582,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
                 namePrefix={`${selectedClient?.name||'Sin cliente'} · ${f.title||'Tarea'}`} user={user}/>
             </div>
           )}
-        </>
-      ) : (
-        <>
-          {/* Vista del responsable que recibió la tarea: la ve tal cual y puede delegarla */}
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:14,color:C.text,fontWeight:500,lineHeight:1.4}}>{f.title}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:7,display:'flex',gap:10,flexWrap:'wrap'}}>
-              {f.project&&<span><span style={{opacity:.7}}>Proyecto:</span> {f.project}</span>}
-              {f.subproject&&<span><span style={{opacity:.7}}>Subproyecto:</span> {f.subproject}</span>}
-              {f.due&&<span><span style={{opacity:.7}}>Plazo:</span> {f.due}</span>}
-            </div>
-            <div style={{fontSize:11,color:C.muted,marginTop:4}}><span style={{opacity:.7}}>Responsable:</span> {taskAssignees(task).join(', ')}{task.assigned_by?` · asignó ${task.assigned_by}`:''}</div>
-          </div>
-
-          {yaDelegada&&<DelegBanner/>}
-
-          {soyResponsable&&(
+          {esEdicion&&soyResponsable&&(
             <>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 0',borderTop:`1px solid ${C.border}`,marginBottom:deleg?12:0}}>
                 <div style={{fontSize:13,color:C.accent,fontWeight:500}}>Delegar</div>
@@ -5633,15 +5614,15 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
       <div style={{display:'flex',gap:8,marginTop:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        {puedeEditar ? (
-          <button disabled={saving||!canSave} onClick={handleGuardar}
-            style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
-            {saving?<Spin/>:null}{saving?'Guardando...':(task?'Guardar tarea':'Enviar tarea')}
-          </button>
-        ) : (
+        {deleg ? (
           <button disabled={saving||!puedeDelegar} onClick={handleDelegar}
             style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:puedeDelegar?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeDelegar?1:.6}}>
             {saving?<Spin/>:null}{saving?'Delegando...':'Delegar'}
+          </button>
+        ) : (
+          <button disabled={saving||!canSave} onClick={handleGuardar}
+            style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
+            {saving?<Spin/>:null}{saving?'Guardando...':(task?'Guardar tarea':'Enviar tarea')}
           </button>
         )}
       </div>
