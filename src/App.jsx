@@ -5323,18 +5323,50 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
     const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#E24B4A">-${fmtN(e.amount)}</td></tr>`).join('')
     return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:700">Rendición de gastos</div><div style="font-size:11px;opacity:.85;margin-top:2px">${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#E24B4A">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
   }
+  const cuerpoCorreo = () => `Estimado/a ${client?.name||'cliente'}:
+
+En cumplimiento de nuestro compromiso de mantener una gestión transparente de los fondos asociados a su asunto, adjuntamos la rendición de gastos correspondiente al período ${r.periodo||''}, con el detalle y respaldo de cada partida.
+
+${det.map(e=>`• ${e.date||'—'} · ${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')}
+
+TOTAL RENDIDO: -${fmtN(r.total)}
+
+Si producto de esta rendición resultara un saldo a su cargo, agradeceremos su transferencia a la siguiente cuenta, indicando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:
+
+  Titular: Liberona Escala Abogados Ltda.
+  RUT: 77.700.387-9
+  Banco: Banco BICE
+  Cuenta Corriente: 138392-2
+
+Ante cualquier duda sobre las partidas rendidas, con gusto las revisamos con usted.
+
+Atentamente,
+${user?.name||''}
+Liberona Escala Abogados`
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
-    const texto = 'Estimado cliente,\n\nAdjunto la rendición de gastos.\n\n'+det.map(e=>`${e.date||'—'} · ${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')+`\n\nTOTAL RENDIDO: -${fmtN(r.total)}\n\nAtentamente,\n${user?.name||''}\nLiberona Escala Abogados`
-    // Abrir el correo dentro del gesto del usuario: un await previo bloquea la apertura en Safari/iOS
-    const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
-    const win=window.open(gmailUrl,'_blank')
-    if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+    const texto = cuerpoCorreo()
     setSending(true)
     try{
+      // Envío directo con PDF adjunto vía Gmail API (si el token tiene el scope gmail.send)
+      let conAdjunto = false
+      const token = await driveToken()
+      if(token){
+        try{
+          const pdf = await rendicionPdfBase64(r, client, det, user)
+          await sendGmailWithPdf(token, {to:para.trim(), subject:asunto, bodyText:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
+          conAdjunto = true
+        }catch(_){ /* sin scope gmail.send (403) u otro: caemos al fallback */ }
+      }
+      if(!conAdjunto){
+        const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+        const win=window.open(gmailUrl,'_blank')
+        if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+      }
       const now = new Date().toISOString()
       await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
       onSent && onSent(r.id, now)
+      if(conAdjunto) alert('Rendición enviada al cliente con el PDF adjunto.')
       onClose()
     }catch(e){ alert('Error: '+e.message) }
     setSending(false)
@@ -6084,6 +6116,67 @@ async function driveToken(){
   let t=localStorage.getItem('drive_token')
   if(!t){ try{ t=await getDriveToken() }catch(_){} }
   return t||null
+}
+
+// ── GMAIL API: enviar rendición con PDF adjunto. Requiere el scope gmail.send en el login
+//    (agregar a supabase.js cuando esté habilitado en Google Cloud Console). Sin ese scope,
+//    la API devuelve 403 y el modal cae al fallback de Gmail compose (sin adjunto). ──
+// PDF de la rendición (jsPDF) → base64 sin el prefijo dataURL
+async function rendicionPdfBase64(r, client, det, user){
+  const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
+  const doc = new jsPDF({unit:'pt', format:'letter'})
+  const W = doc.internal.pageSize.getWidth()
+  doc.setFillColor(0,60,80); doc.rect(0,0,W,72,'F')
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15)
+  doc.text('Rendición de gastos', 40, 34)
+  doc.setFont('helvetica','normal'); doc.setFontSize(10)
+  doc.text(`${client?.name||''} · ${r.periodo||''}`, 40, 52)
+  doc.setFont('helvetica','bold'); doc.setFontSize(12)
+  doc.text('LIBERONA ESCALA ABOGADOS', W-40, 42, {align:'right'})
+  let y = 104
+  doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(9)
+  doc.text('FECHA', 40, y); doc.text('CATEGORÍA', 130, y); doc.text('DESCRIPCIÓN', 250, y); doc.text('MONTO', W-40, y, {align:'right'})
+  y += 6; doc.setDrawColor(228,232,235); doc.line(40,y,W-40,y); y += 17
+  doc.setFont('helvetica','normal'); doc.setFontSize(10)
+  ;(det||[]).forEach(e=>{
+    doc.setTextColor(61,61,61)
+    doc.text(String(e.date||'—'), 40, y)
+    doc.text(((e.category||'Otro')+(e.subcategory?': '+e.subcategory:'')).slice(0,22), 130, y)
+    doc.text(String(e.concept||'—').slice(0,30), 250, y)
+    doc.setTextColor(226,75,74); doc.text('-'+fmtN(e.amount), W-40, y, {align:'right'})
+    y += 16
+    if(y > 720){ doc.addPage(); y = 60 }
+  })
+  y += 4; doc.setDrawColor(83,114,129); doc.line(40,y,W-40,y); y += 18
+  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('TOTAL RENDIDO', 40, y)
+  doc.setTextColor(226,75,74); doc.text('-'+fmtN(r.total), W-40, y, {align:'right'})
+  y += 32
+  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Datos para transferencia (si resulta un saldo a su cargo)', 40, y); y += 16
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(83,114,129)
+  ;['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl'].forEach(l=>{ doc.text(l,40,y); y += 14 })
+  y += 16; doc.setTextColor(61,61,61); doc.setFontSize(10)
+  doc.text('Atentamente,', 40, y); y += 14
+  doc.setFont('helvetica','bold'); doc.text(user?.name||'', 40, y); y += 14
+  doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
+  return doc.output('datauristring').split(',')[1]
+}
+// Construye el MIME multipart y lo envía con la API de Gmail
+async function sendGmailWithPdf(token, {to, subject, bodyText, pdfBase64, pdfName}){
+  const b64 = s => btoa(unescape(encodeURIComponent(s)))
+  const boundary = 'lea_'+Date.now()
+  const mime = [
+    `To: ${to}`, `Subject: =?UTF-8?B?${b64(subject)}?=`, 'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
+    `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), '',
+    `--${boundary}`, `Content-Type: application/pdf; name="${pdfName}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${pdfName}"`, '', pdfBase64, '',
+    `--${boundary}--`
+  ].join('\r\n')
+  const raw = btoa(unescape(encodeURIComponent(mime))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{
+    method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'}, body: JSON.stringify({raw})
+  })
+  if(!res.ok){ const err=new Error('Gmail API '+res.status); err.code=res.status; throw err }
+  return res.json()
 }
 // Busca subcarpeta por nombre dentro de parentId; si no existe, la crea. Devuelve su id.
 async function driveFindOrCreateFolder(token, parentId, name){
