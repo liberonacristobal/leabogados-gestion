@@ -1646,6 +1646,52 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
 }
 
 
+// Aging de cartera: clasifica las cuentas por cobrar (Pendiente/Vencido) por días de
+// vencimiento sobre `due` (la app no tiene due_date/fecha; `due` ya es emisión + 30d).
+function computeAgingCartera(billingRows, clientesMap){
+  const COL = { current:'#1D9E75', warning:'#B8860B', overdue:'#E24B4A' }
+  const BG  = { current:'#E1F5EE', warning:'#FFF8E1', overdue:'#FCEBEB' }
+  const LBL = { current:'Al día', warning:'31-60 días', overdue:'Vencido +60' }
+  const pend = (billingRows||[]).filter(b=>b.status==='Pendiente'||b.status==='Vencido')
+  const diasVenc = b => { const dl=daysLeft(b.due); return dl===null?null:-dl }
+  const bucketDe = b => { const dv=diasVenc(b); if(dv===null) return 'current'; if(dv>60) return 'overdue'; if(dv>30) return 'warning'; return 'current' }
+  const total = pend.reduce((a,b)=>a+(b.amount||0),0)
+  const pct = m => total>0?Math.round(m/total*100):0
+  const sumB = k => pend.filter(b=>bucketDe(b)===k).reduce((a,b)=>a+(b.amount||0),0)
+  const cur=sumB('current'), war=sumB('warning'), over=sumB('overdue')
+  const buckets = { current:{monto:cur,pct:pct(cur)}, warning:{monto:war,pct:pct(war)}, overdue:{monto:over,pct:pct(over)} }
+
+  // Delta: pendiente actual vs total facturado el mes anterior (por created_at)
+  const now = new Date()
+  const ym = (y,m)=>`${y}-${String(m).padStart(2,'0')}`
+  const mesAnt = now.getMonth()===0 ? ym(now.getFullYear()-1,12) : ym(now.getFullYear(),now.getMonth())
+  const totMesAnt = (billingRows||[]).filter(b=>(b.created_at||'').startsWith(mesAnt)).reduce((a,b)=>a+(b.amount||0),0)
+  const delta = { monto: totMesAnt>0?(total-totMesAnt):0, pct: totMesAnt>0?Math.round((total-totMesAnt)/totMesAnt*100):0 }
+
+  // DSO ponderado por monto
+  const dsoRaw = total>0 ? pend.reduce((a,b)=>a+(b.amount||0)*(diasVenc(b)||0),0)/total : 0
+  const dso = Math.max(0, Math.round(dsoRaw))
+
+  // Top 5 por cliente, con el tramo más crítico del cliente
+  const byClient = {}
+  pend.forEach(b=>{
+    const cid=b.client_id||'__none__'
+    const nombre=(clientesMap&&clientesMap[cid])||b.receptor_name||'Sin cliente'
+    if(!byClient[cid]) byClient[cid]={id:cid,nombre,facturas:0,monto:0,rank:0}
+    byClient[cid].monto+=(b.amount||0); byClient[cid].facturas+=1
+    const k=bucketDe(b), r=k==='overdue'?3:k==='warning'?2:1
+    if(r>byClient[cid].rank) byClient[cid].rank=r
+  })
+  const keyDe = r => r===3?'overdue':r===2?'warning':'current'
+  const top5 = Object.values(byClient).sort((a,b)=>b.monto-a.monto).slice(0,5).map(c=>{
+    const k=keyDe(c.rank)
+    const iniciales=(c.nombre||'?').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()
+    return { id:c.id, nombre:c.nombre, facturas:c.facturas, monto:c.monto, bucketLabel:LBL[k], bucketColor:COL[k], bucketBg:BG[k], iniciales }
+  })
+  const mayor = top5[0] || {nombre:'—',monto:0}
+  return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
+}
+
 function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,setTab,user,onEditTask,onCompleteTask,onPreviewTask}) {
   const yr = currentYear
   const bb = billing
@@ -1720,6 +1766,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const ufTxt = ufState.uf ? `UF ${ufFecha} · $${Math.round(ufState.uf).toLocaleString('es-CL')}` : ''
   const Chev = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
   const HistIcon = () => <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg>
+
+  // --- Aging de cartera ---
+  const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
+  const [top5Open,setTop5Open] = useState(false)
+  const agingData = useMemo(()=>computeAgingCartera(billing, clientesMap),[billing,clientesMap])
 
   // --- Clientes sin fondos: detalle por cliente ---
   const [expSinFondos,setExpSinFondos] = useState(null)
@@ -1871,59 +1922,70 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      {/* Cobranza */}
+      {/* Aging de cartera */}
       <div style={{padding:'0 20px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-          <button onClick={()=>setOpenCobranza(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0}}>
-            <span style={{fontSize:10,color:C.muted,transform:openCobranza?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-            <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Cobranza</span>
-            <span style={{fontSize:12,fontWeight:600,color:C.overdue,marginLeft:4}}>{fmt(totalPorCobrar)}</span>
-          </button>
-          <button onClick={()=>setTab('billing')} style={{background:'none',border:'none',color:C.accent,fontSize:12,cursor:'pointer',fontWeight:600}}>Ver todos</button>
-        </div>
-        {openCobranza&&<>
-        <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`,marginBottom:10}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-            <span style={{fontSize:13,color:C.muted}}>Total por cobrar</span>
-            <span style={{fontSize:16,fontWeight:600,color:C.overdue}}>{fmt(totalPorCobrar)}</span>
+        <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:11,color:'#99ABB4',fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase'}}>Aging de cartera</div>
+              <div style={{fontSize:26,fontWeight:500,color:'#003C50',lineHeight:1.1,marginTop:2}}>{fmt(agingData.total)}</div>
+            </div>
+            {agingData.delta.monto!==0&&(
+              <div style={{textAlign:'right',flexShrink:0}}>
+                <div style={{fontSize:11,color:'#99ABB4',fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase'}}>vs. mes anterior</div>
+                <div style={{fontSize:13,fontWeight:500,color:'#537281',marginTop:2}}>{agingData.delta.monto>0?'+':''}{fmt(agingData.delta.monto)}</div>
+              </div>
+            )}
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
-            {[['0-30d',fmt(age0_30),C.normal],['31-60d',fmt(age31_60),C.soon],['60d+',fmt(age60p),C.overdue]].map(([l,v,col])=>(
-              <div key={l} style={{textAlign:'center',padding:'6px 0',borderRadius:7,background:'#F5F7F9'}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{l}</div>
-                <div style={{fontSize:11,fontWeight:600,color:col}}>{v}</div>
+          <div style={{height:6,borderRadius:3,display:'flex',overflow:'hidden',background:'#E4E8EB',marginBottom:12}}>
+            <div style={{width:`${agingData.buckets.current.pct}%`,background:'#1D9E75'}}/>
+            <div style={{width:`${agingData.buckets.warning.pct}%`,background:'#B8860B'}}/>
+            <div style={{width:`${agingData.buckets.overdue.pct}%`,background:'#E24B4A'}}/>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:12}}>
+            {[['Al día',agingData.buckets.current,'#1D9E75'],['31-60 días',agingData.buckets.warning,'#B8860B'],['+60 días',agingData.buckets.overdue,'#E24B4A']].map(([l,bk,col])=>(
+              <div key={l} style={{background:'#F5F7F9',borderRadius:0,borderLeft:`3px solid ${col}`,padding:'10px 12px'}}>
+                <div style={{fontSize:11,color:'#99ABB4'}}>{l}</div>
+                <div style={{fontSize:13,fontWeight:500,color:bk.monto===0?'#99ABB4':col}}>{fmt(bk.monto)}</div>
+                <div style={{fontSize:11,color:'#99ABB4'}}>{bk.pct}%</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:14}}>
+            <div style={{background:'#F5F7F9',borderRadius:8,padding:'10px 12px'}}>
+              <div style={{fontSize:11,color:'#99ABB4'}}>DSO</div>
+              <div style={{fontSize:16,fontWeight:500,color:'#003C50'}}>~{Math.round(Math.max(0,agingData.dso))} días</div>
+            </div>
+            <div style={{background:'#F5F7F9',borderRadius:8,padding:'10px 12px',minWidth:0}}>
+              <div style={{fontSize:11,color:'#99ABB4'}}>Mayor exposición</div>
+              <div style={{fontSize:13,fontWeight:500,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{agingData.mayorExposicion.nombre}</div>
+              <div style={{fontSize:11,color:'#537281'}}>{fmt(agingData.mayorExposicion.monto)}</div>
+            </div>
+            <div style={{background:'#F5F7F9',borderRadius:8,padding:'10px 12px'}}>
+              <div style={{fontSize:11,color:'#99ABB4'}}>Concentración top 1</div>
+              <div style={{fontSize:16,fontWeight:500,color:'#003C50'}}>{agingData.concentracionTop1Pct.toFixed(1)}%</div>
+            </div>
+          </div>
+          <div style={{borderTop:'0.5px solid #E4E8EB',paddingTop:10}}>
+            <button onClick={()=>setTop5Open(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',background:'none',border:'none',padding:'4px 0',cursor:'pointer'}}>
+              <span style={{fontSize:11,color:'#99ABB4',fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase'}}>Top 5 clientes</span>
+              <span style={{fontSize:14,color:'#99ABB4',transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>{'▾'}</span>
+            </button>
+            {top5Open&&agingData.top5.map((c,i)=>(
+              <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<agingData.top5.length-1?'0.5px solid #E4E8EB':'none'}}>
+                <div style={{width:30,height:30,borderRadius:'50%',background:'#E4E8EB',color:'#537281',fontSize:10,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{c.iniciales}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</div>
+                  <div style={{fontSize:11,color:'#99ABB4'}}>{c.facturas} factura{c.facturas!==1?'s':''}</div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                  <span style={{fontSize:13,fontWeight:500,color:'#003C50'}}>{fmt(c.monto)}</span>
+                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:3,background:c.bucketBg,color:c.bucketColor,whiteSpace:'nowrap'}}>{c.bucketLabel}</span>
+                </div>
               </div>
             ))}
           </div>
         </div>
-        <div style={{background:C.card,borderRadius:12,padding:'2px 14px',border:`1px solid ${C.border}`}}>
-        {(()=>{
-          const byClient = {}
-          porCobrar.forEach(b=>{
-            const cid = b.client_id||'__none__'
-            const cname = clients.find(c=>c.id===cid)?.name||'Sin cliente'
-            if(!byClient[cid]) byClient[cid]={name:cname,total:0,vencido:0,count:0}
-            byClient[cid].total += (b.amount||0)
-            byClient[cid].count += 1
-            if(b.status==='Vencido') byClient[cid].vencido += (b.amount||0)
-          })
-          return Object.values(byClient)
-            .sort((a,b)=>b.total-a.total)
-            .slice(0,5)
-            .map(c=>(
-              <div key={c.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{c.count} factura{c.count!==1?'s':''}{c.vencido>0?` · `+fmt(c.vencido)+' vencido':''}</div>
-                </div>
-                <div style={{textAlign:'right',flexShrink:0,marginLeft:12}}>
-                  <div style={{fontSize:13,fontWeight:600,color:c.vencido>0?C.overdue:C.text}}>{fmt(c.total)}</div>
-                </div>
-              </div>
-            ))
-        })()}
-        </div>
-        </>}
       </div>
 
       {negatives.length>0&&(
