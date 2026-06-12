@@ -3221,8 +3221,10 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
     else { setPayingId(b.id); setPayDate(new Date().toISOString().slice(0,10)) }
   }
   const confirmPago = async() => { await onStatusChange(payingId,'Pagado',payDate); setPayingId(null) }
-  const marcarEmitida = async(b) => { if(confirm('¿Confirmas que la factura ya se emitió? Se quitará de programadas.')) await onDelete(b.id) }
-  const marcarEmitidasBulk = async() => { const ids=[...selected]; if(ids.length&&confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Se quitarán de programadas.`)){ await onDelete(ids); clearSel() } }
+  // Unificado a "convertir": la cuota programada pasa a emitida (Pendiente de cobro), no se borra.
+  const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
+  const marcarEmitida = async(b) => { if(confirm('¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.')) await emitirConRS(b) }
+  const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
 
   const [descargando,setDescargando] = useState(false)
   const descargarProgramadas = async() => {
@@ -3466,7 +3468,7 @@ function BillingView({billing,clients,sales,clientEntities,onStatusChange,onDele
         {(openClients.size>0||(isProg&&selected.size>0))&&(
           <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
             {isProg&&selected.size>0&&(
-              <button onClick={marcarEmitidasBulk} style={{padding:'4px 12px',borderRadius:8,border:`1px solid ${C.overdue}`,background:C.overdue,color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer'}}>Marcar {selected.size} emitida{selected.size!==1?'s':''}</button>
+              <button onClick={marcarEmitidasBulk} style={{padding:'4px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer'}}>Marcar {selected.size} emitida{selected.size!==1?'s':''}</button>
             )}
             {isProg&&selected.size>0&&(
               <button onClick={clearSel} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Deseleccionar</button>
