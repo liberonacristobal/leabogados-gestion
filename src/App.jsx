@@ -8752,7 +8752,7 @@ export default function App() {
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
           </div>
         )}
-        {actualRole==='limited'&&tab==='tasks'&&(
+        {userRole==='limited'&&tab==='tasks'&&(
           <button className='fab' onClick={()=>setModal({type:'task',data:null})} aria-label='Nueva tarea' style={{position:'fixed',bottom:'calc(70px + env(safe-area-inset-bottom,0px))',right:16,width:52,height:52,borderRadius:'50%',background:C.accent,border:'none',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,boxShadow:'0 6px 18px rgba(0,60,80,.35)',cursor:'pointer'}}>
             <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
           </button>
