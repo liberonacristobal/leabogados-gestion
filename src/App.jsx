@@ -3929,19 +3929,35 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
           </div>
         </div>
       )}
-      {payingId&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
-          <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:520,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
-            <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Confirmar pago</div>
-            <div style={{fontSize:13,color:C.muted,marginBottom:14}}>Fecha en que se recibió el pago:</div>
-            <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',marginBottom:14}}/>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setPayingId(null)} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={confirmPago} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Confirmar pagado</button>
+      {payingId&&(()=>{ const pb=billing.find(b=>String(b.id)===String(payingId))||{}; return (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+          <div style={{background:'#fff',borderRadius:16,width:'min(90vw, 340px)',overflow:'hidden'}}>
+            <div style={{padding:'18px 20px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <span style={{fontSize:11,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em'}}>CONFIRMAR PAGO</span>
+              <button onClick={()=>setPayingId(null)} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+              </button>
+            </div>
+            <div style={{padding:'12px 20px 16px',borderBottom:`0.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:26,fontWeight:500,color:'#1a1a1a',letterSpacing:'-.5px'}}>{fmt(pb.amount)}</div>
+                <div style={{fontSize:12,color:'#99ABB4',marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pb.concept||'—'}{pb.invoice_no?` · F° ${pb.invoice_no}`:''}</div>
+              </div>
+              <div style={{width:40,height:40,borderRadius:12,background:'#E1F5EE',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
+              </div>
+            </div>
+            <div style={{padding:'14px 20px 10px'}}>
+              <label style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',marginBottom:6,display:'block'}}>FECHA DE PAGO</label>
+              <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)} style={{width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#1a1a1a',outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{padding:'6px 20px 20px',display:'flex',gap:8}}>
+              <button onClick={()=>setPayingId(null)} style={{flex:1,height:40,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={confirmPago} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer'}}>Confirmar pago</button>
             </div>
           </div>
         </div>
-      )}
+      )})()}
 
       <div style={{padding:'10px 20px 100px'}}>
         {filter==='checklist' ? (
