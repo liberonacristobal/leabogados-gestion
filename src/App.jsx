@@ -15,8 +15,8 @@ import logoBlanco from './le-logo-blanco.png'
 
 const FONT = "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
 const C = {
-  bg:'#F5F5F5',surface:'#FFFFFF',card:'#FFFFFF',border:'#E4E4E4',text:'#3D3D3D',muted:'#8A8A8A',
-  accent:'#003C50',overdue:'#C2382B',urgent:'#C2382B',soon:'#C77F18',normal:'#2E7D55',done:'#A8A8A8',
+  bg:'#F5F5F5',surface:'#FFFFFF',card:'#FFFFFF',border:'#E4E8EB',text:'#3D3D3D',muted:'#537281',
+  accent:'#003C50',overdue:'#E24B4A',urgent:'#E24B4A',soon:'#C77F18',normal:'#1D9E75',done:'#A8A8A8',
 }
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—'
@@ -145,7 +145,7 @@ const DaysBadge = ({due,status}) => {
 const AreaChip = ({area}) => {
   const bg={Corporativo:'#E3EEF3',Tributario:'#F2E9DE',Laboral:'#F2E9DE',Otro:'#ECECEC'}
   if(!area) return null
-  return <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:bg[area]||'#ECECEC',color:'#56616B',fontWeight:600,whiteSpace:'nowrap'}}>{area}</span>
+  return <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:bg[area]||'#ECECEC',color:'#537281',fontWeight:600,whiteSpace:'nowrap'}}>{area}</span>
 }
 const Pill = ({label,bg,color,small}) => <span style={{display:'inline-block',padding:small?'1px 7px':'2px 9px',borderRadius:20,fontSize:small?10:11,fontWeight:600,color:color||'#fff',background:bg||C.accent,whiteSpace:'nowrap'}}>{label}</span>
 const Inp = (p) => <input {...p} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none',...p.style}}/>
@@ -160,13 +160,35 @@ const Lbl = ({children}) => <div style={{fontSize:11,fontWeight:600,color:C.mute
 const Fld = ({label,children}) => <div style={{marginBottom:14}}><Lbl>{label}</Lbl>{children}</div>
 const Spin = () => <div style={{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
 const DriveIcon = ({size=14}) => <svg width={size} height={size} viewBox='0 0 87.3 78' xmlns='http://www.w3.org/2000/svg'><path d='m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z' fill='#0066da'/><path d='m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z' fill='#00ac47'/><path d='m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z' fill='#ea4335'/><path d='m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z' fill='#00832d'/><path d='m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z' fill='#2684fc'/><path d='m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z' fill='#ffba00'/></svg>
+// Logo de marca FirmDesk. variant: primary (tile azul) | mono (F azul sobre claro) | accent (tile verde)
+const FirmDeskMark = ({size=40,variant='primary'}) => {
+  const tile = variant==='accent'?'#1D9E75':variant==='mono'?'#FFFFFF':'#003C50'
+  const letter = variant==='primary'?'#F2F2F0':variant==='accent'?'#FFFFFF':'#003C50'
+  const desk = variant==='accent'?'#003C50':'#1D9E75'
+  return (
+    <svg width={size} height={size} viewBox='0 0 56 56' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='FirmDesk'>
+      <rect x={variant==='mono'?0.5:0} y={variant==='mono'?0.5:0} width={variant==='mono'?55:56} height={variant==='mono'?55:56} rx='15' fill={tile} stroke={variant==='mono'?'#E4E2DD':'none'}/>
+      <rect x='20' y='14' width='5' height='25' fill={letter}/>
+      <rect x='20' y='14' width='18' height='5' fill={letter}/>
+      <rect x='20' y='23.5' width='12' height='5' fill={letter}/>
+      <rect x='16' y='40' width='24' height='4' rx='2' fill={desk}/>
+    </svg>
+  )
+}
+// Lockup horizontal marca + wordmark FirmDesk
+const FirmDeskLockup = ({mark=30,font=19,gap=10}) => (
+  <span style={{display:'inline-flex',alignItems:'center',gap}}>
+    <FirmDeskMark size={mark}/>
+    <span style={{fontFamily:"'Hanken Grotesk',system-ui,sans-serif",fontSize:font,fontWeight:600,letterSpacing:-.5,color:C.accent,lineHeight:1}}>Firm<span style={{color:'#1D9E75'}}>Desk</span></span>
+  </span>
+)
 const Switch = ({on,onToggle,disabled}) => (
   <button type='button' disabled={disabled} onClick={disabled?undefined:onToggle} style={{width:34,height:20,borderRadius:10,border:'none',background:on?'#1D9E75':'#CBD5DB',position:'relative',cursor:disabled?'not-allowed':'pointer',padding:0,flexShrink:0,transition:'background .15s',opacity:disabled?.7:1}}>
     <span style={{position:'absolute',top:2,left:on?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
   </button>
 )
 const TrashIcon = ({color}) => (
-  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={color||'#8A8A8A'} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/></svg>
+  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={color||'#537281'} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/></svg>
 )
 const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight}) => (
   <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&closeOnBackdrop&&onClose()}>
@@ -254,7 +276,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
         onMouseLeave={e=>e.currentTarget.style.borderColor='#E8E8E8'}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{cl.name}</div>
-          <div style={{fontSize:11,fontWeight:600,color:saldo<0?'#A32D2D':'#0F6E56'}}>{saldo!==0?(saldo<0?'-':'+')+'$'+Math.abs(saldo).toLocaleString('es-CL'):''}</div>
+          <div style={{fontSize:11,fontWeight:600,color:saldo<0?'#E24B4A':'#0F6E56'}}>{saldo!==0?(saldo<0?'-':'+')+'$'+Math.abs(saldo).toLocaleString('es-CL'):''}</div>
         </div>
         {cl.type&&<div style={{fontSize:11,color:'#888',marginTop:2}}>{cl.type}</div>}
       </div>
@@ -317,7 +339,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
               </div>
               <div style={{background:saldo<0?'#FBE9E7':'#E4F1EA',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:'#888',marginBottom:2}}>SALDO</div>
-                <div style={{fontSize:12,fontWeight:700,color:saldo<0?'#A32D2D':'#0F6E56'}}>${saldo.toLocaleString('es-CL')}</div>
+                <div style={{fontSize:12,fontWeight:700,color:saldo<0?'#E24B4A':'#0F6E56'}}>${saldo.toLocaleString('es-CL')}</div>
               </div>
             </div>
             {clientExpenses.slice(0,8).map(e=>{
@@ -326,7 +348,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
               return (
                 <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:'1px solid #E8E8E8'}}>
                   <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
-                    {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,flexShrink:0}}>{e.category}</span>}
+                    {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                     {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:'#1D9E75',fontWeight:600,flexShrink:0}}>Fondo</span>}
                     <span style={{fontSize:12,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                   </div>
@@ -363,7 +385,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
                           {det.map(e=>(
                             <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #F0F0F0'}}>
                               <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
-                                {e.category&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:CATS[e.category]||CATS['Otro'],color:'#56616B',fontWeight:600,flexShrink:0}}>{e.category}</span>}
+                                {e.category&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:CATS[e.category]||CATS['Otro'],color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                                 <span style={{fontSize:12,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                               </div>
                               <div style={{fontSize:11,color:'#888',flexShrink:0,marginLeft:8}}>{e.date}</div>
@@ -494,8 +516,8 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
 
       {showConfirm&&(
         <div style={{padding:'12px 14px',borderRadius:8,background:'#FCEBEB',border:'1px solid #E24B4A',marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:700,color:'#A32D2D',marginBottom:4}}>{'\u00bf'}Confirmas que este cliente NO es un duplicado?</div>
-          <div style={{fontSize:11,color:'#A32D2D'}}>Hay clientes con nombres similares. Si es un cliente nuevo, confirma para continuar.</div>
+          <div style={{fontSize:12,fontWeight:700,color:'#E24B4A',marginBottom:4}}>{'\u00bf'}Confirmas que este cliente NO es un duplicado?</div>
+          <div style={{fontSize:11,color:'#E24B4A'}}>Hay clientes con nombres similares. Si es un cliente nuevo, confirma para continuar.</div>
         </div>
       )}
 
@@ -682,8 +704,8 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       const tot=gastos.reduce((a,e)=>a+e.amount,0)
       html+=`<div class='section-title'>${cname} — ${fmtN(tot)}</div>
       <table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`
-      gastos.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#C2382B'>-${fmtN(e.amount)}</td></tr>` })
-      html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cname.toUpperCase()}</td><td style='text-align:right;color:#C2382B'>-${fmtN(tot)}</td></tr></tfoot></table>`
+      gastos.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` })
+      html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cname.toUpperCase()}</td><td style='text-align:right;color:#E24B4A'>-${fmtN(tot)}</td></tr></tfoot></table>`
     })
     html+=`<div class='footer'><span>Liberona Escala Abogados · leabogados.cl</span><span>${me} · ${now}</span><span>CONFIDENCIAL</span></div>
     <button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button>
@@ -782,7 +804,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                   <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.concept||'—'}</div>
                   <div style={{fontSize:10,color:'#888',marginTop:2,display:'flex',gap:6,alignItems:'center'}}>
                     {client&&<span>{client.name}</span>}
-                    {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                    {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
                     {e.date&&<span>{e.date}</span>}
                   </div>
                 </div>
@@ -808,7 +830,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                       <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.concept||'—'}</div>
                       <div style={{fontSize:10,color:'#888',marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                         {client&&<span>{client.name}</span>}
-                        {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                        {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
                         {e.date&&<span>{e.date}</span>}
                         <span style={{color:'#0F6E56',fontWeight:600}}>Liquidado {liqD}</span>
                       </div>
@@ -869,7 +891,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                           <div style={{fontSize:12,color:'#3D3D3D',fontWeight:500}}>{e.concept||'—'}</div>
                           <div style={{fontSize:10,color:'#888',marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
                             {cl&&<span>{cl.name}</span>}
-                            {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                            {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
                             {e.date&&<span>{fmtD(e.date)}</span>}
                           </div>
                         </div>
@@ -884,7 +906,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                       const porCliente={}
                       gastosR.forEach(e=>{ const cn=clients.find(x=>x.id===e.client_id)?.name||'Sin cliente'; if(!porCliente[cn])porCliente[cn]=[]; porCliente[cn].push(e) })
                       let html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Liquidación — ${r.user_name} — ${r.periodo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;color:#3D3D3D;font-size:11px}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}.firma{font-size:16px;font-weight:700}.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.kpi{background:${A4};border-radius:6px;padding:10px 12px}.kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600}.kpi-value{font-size:15px;font-weight:700;color:${A}}table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:16px}thead tr{background:${A};color:#fff}thead th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase}tbody tr:nth-child(even){background:${A4}}tbody td{padding:6px 10px;border-bottom:1px solid ${A4}}tfoot tr{background:${A4};font-weight:700}tfoot td{padding:7px 10px;border-top:2px solid ${A2}}.section-title{font-size:12px;font-weight:700;color:${A};border-bottom:2px solid ${A};padding-bottom:4px;margin:16px 0 10px}.footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='header'><div><div class='firma'>Liberona Escala Abogados</div><div style='font-size:9px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Liquidación de Caja Chica</div><div style='font-size:11px;opacity:.8;margin-top:2px'>${r.user_name} · ${r.periodo}</div></div></div><div class='kpi-row'><div class='kpi'><div class='kpi-label'>Gastos</div><div class='kpi-value'>${gastosR.length}</div></div><div class='kpi'><div class='kpi-label'>Clientes</div><div class='kpi-value'>${Object.keys(porCliente).length}</div></div><div class='kpi'><div class='kpi-label'>Total</div><div class='kpi-value'>${fmtN(r.total)}</div></div></div>`
-                      Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+e.amount,0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#C2382B'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#C2382B'>-${fmtN(tot)}</td></tr></tfoot></table>` })
+                      Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+e.amount,0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#E24B4A'>-${fmtN(tot)}</td></tr></tfoot></table>` })
                       html+=`<div class='footer'><span>Liberona Escala Abogados</span><span>${r.user_name} · ${r.periodo}</span><span>CONFIDENCIAL</span></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / PDF</button></body></html>`
                       const w=window.open('','_blank'); w.document.write(html); w.document.close()
                     }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #003C50',background:'transparent',color:'#003C50',fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Descargar PDF</button>
@@ -915,8 +937,8 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       {tab==='caja'&&(
         <div style={{padding:'12px 20px 100px'}}>
           <div style={{background:saldoCaja>0?'#E1F5EE':'#FBE9E7',borderRadius:10,padding:'14px 16px',marginBottom:16,border:`1px solid ${saldoCaja>0?'#1D9E75':'#E24B4A'}`}}>
-            <div style={{fontSize:11,color:saldoCaja>0?'#0F6E56':'#A32D2D',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:4}}>Saldo disponible</div>
-            <div style={{fontSize:24,fontWeight:700,color:saldoCaja>0?'#0F6E56':'#A32D2D'}}>{fmtCLP(saldoCaja)}</div>
+            <div style={{fontSize:11,color:saldoCaja>0?'#0F6E56':'#E24B4A',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:4}}>Saldo disponible</div>
+            <div style={{fontSize:24,fontWeight:700,color:saldoCaja>0?'#0F6E56':'#E24B4A'}}>{fmtCLP(saldoCaja)}</div>
           </div>
           <div style={{fontSize:12,fontWeight:600,color:'#3D3D3D',marginBottom:8}}>Registrar nueva entrega de caja</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
@@ -1229,7 +1251,7 @@ function CashflowProjection({billing}) {
                     <td style={{padding:'8px 4px',borderBottom:'1px solid #F1F1F1',color:C.text}}>{m.labelFull}</td>
                     <td style={{padding:'8px 4px',borderBottom:'1px solid #F1F1F1'}}>
                       <span style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                        {m.overdue>0&&<span style={{...badge,background:'#FCEBEB',color:'#A32D2D'}}>Vencido</span>}
+                        {m.overdue>0&&<span style={{...badge,background:'#FCEBEB',color:'#E24B4A'}}>Vencido</span>}
                         {emitNoVenc>0&&<span style={{...badge,background:'#E4E8EB',color:'#003C50'}}>Emitido</span>}
                         {m.programado>0&&<span style={{...badge,background:'#F1F1F1',color:'#537281'}}>Programado</span>}
                         {m.total===0&&<span style={{fontSize:11,color:'#99ABB4'}}>—</span>}
@@ -1506,7 +1528,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   const badgeStyle = due => {
     const d = daysLeft(due)
     if(d===null) return {bg:'#F1F1F1',col:'#888'}
-    if(d<0)  return {bg:'#FCEBEB',col:'#A32D2D'}
+    if(d<0)  return {bg:'#FCEBEB',col:'#E24B4A'}
     if(d<=1) return {bg:'#FAEEDA',col:'#854F0B'}
     if(d<=7) return {bg:'#FAEEDA',col:'#854F0B'}
     return {bg:'#F1F1F1',col:'#888'}
@@ -1953,8 +1975,8 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:20,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva venta</button>
-            <button onClick={onAddPropuesta} style={{padding:'6px 14px',borderRadius:20,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva propuesta</button>
+            <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva venta</button>
+            <button onClick={onAddPropuesta} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva propuesta</button>
           </div>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8,marginTop:10,flexWrap:'wrap'}}>
@@ -3814,7 +3836,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
                 <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.concept||'—'}</div>
                 <div style={{fontSize:10,color:'#888',marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
                   {e.date&&<span>{e.date}</span>}
-                  {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                  {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
                 </div>
               </div>
               <div style={{fontSize:12,fontWeight:700,color:'#E24B4A',flexShrink:0}}>{fmtN(e.amount)}</div>
@@ -4266,7 +4288,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
-              {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
+              {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
               {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>Rendido</span>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
@@ -5360,8 +5382,8 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
-    const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#C2382B">-${fmtN(e.amount)}</td></tr>`).join('')
-    return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:15px;font-weight:700">Liberona Escala Abogados</div><div style="font-size:11px;opacity:.85;margin-top:2px">Rendición de gastos · ${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="LE" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#C2382B">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
+    const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#E24B4A">-${fmtN(e.amount)}</td></tr>`).join('')
+    return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:15px;font-weight:700">Liberona Escala Abogados</div><div style="font-size:11px;opacity:.85;margin-top:2px">Rendición de gastos · ${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="LE" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#E24B4A">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
   }
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
@@ -5567,7 +5589,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             return (
               <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
                 <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
-                  {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#56616B',fontWeight:600,flexShrink:0}}>{e.category}</span>}
+                  {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                   {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600,flexShrink:0}}>Fondo</span>}
                   {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600,flexShrink:0}}>Rendido</span>}
                   <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
@@ -6846,8 +6868,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
   tfoot td{padding:7px 10px;border-top:2px solid ${A3}}
   .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700}
   .badge-pending{background:#E3EEF3;color:${A}}
-  .badge-overdue{background:#FBE9E7;color:#C2382B}
-  .badge-paid{background:#E4F1EA;color:#2E7D55}
+  .badge-overdue{background:#FBE9E7;color:#E24B4A}
+  .badge-paid{background:#E4F1EA;color:#1D9E75}
   .badge-area{background:${A4};color:${A2}}
   .who-section{margin-bottom:16px}
   .who-title{font-size:11px;font-weight:700;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding:4px 0;border-bottom:1px solid ${A4}}
@@ -6880,8 +6902,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         <div class="section-title">Ventas</div>
         <div class="kpi-grid">
           <div class="kpi"><div class="kpi-label">Bruto</div><div class="kpi-value">${fmtUFN(brutoUF)}</div></div>
-          <div class="kpi"><div class="kpi-label">Costo terceros</div><div class="kpi-value" style="color:#C2382B">${costoUF>0?fmtUFN(costoUF):'—'}</div></div>
-          <div class="kpi"><div class="kpi-label">Neto</div><div class="kpi-value" style="color:#2E7D55">${fmtUFN(netoUF)}</div></div>
+          <div class="kpi"><div class="kpi-label">Costo terceros</div><div class="kpi-value" style="color:#E24B4A">${costoUF>0?fmtUFN(costoUF):'—'}</div></div>
+          <div class="kpi"><div class="kpi-label">Neto</div><div class="kpi-value" style="color:#1D9E75">${fmtUFN(netoUF)}</div></div>
         </div>
         <div style="margin-bottom:16px;padding:10px 14px;background:${A4};border-radius:6px">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
@@ -6895,9 +6917,9 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         ss.forEach(s=>{
           const c=clients.find(x=>x.id===s.client_id)
           const neto=(parseFloat(s.amount_uf)||0)-(parseFloat(s.cost_uf)||0)
-          html+=`<tr><td>${c?.name||'—'}</td><td>${s.title||'—'}</td><td><span class="badge badge-area">${s.area||'—'}</span></td><td>${s.status||'—'}</td><td style="text-align:right">${fmtUFN(s.amount_uf)}</td><td style="text-align:right;color:#C2382B">${s.cost_uf>0?fmtUFN(s.cost_uf):'—'}</td><td style="text-align:right;color:#2E7D55;font-weight:600">${fmtUFN(neto)}</td></tr>`
+          html+=`<tr><td>${c?.name||'—'}</td><td>${s.title||'—'}</td><td><span class="badge badge-area">${s.area||'—'}</span></td><td>${s.status||'—'}</td><td style="text-align:right">${fmtUFN(s.amount_uf)}</td><td style="text-align:right;color:#E24B4A">${s.cost_uf>0?fmtUFN(s.cost_uf):'—'}</td><td style="text-align:right;color:#1D9E75;font-weight:600">${fmtUFN(neto)}</td></tr>`
         })
-        html+=`</tbody><tfoot><tr><td colspan="4">TOTAL</td><td style="text-align:right">${fmtUFN(brutoUF)}</td><td style="text-align:right;color:#C2382B">${fmtUFN(costoUF)}</td><td style="text-align:right;color:#2E7D55">${fmtUFN(netoUF)}</td></tr></tfoot></table>`
+        html+=`</tbody><tfoot><tr><td colspan="4">TOTAL</td><td style="text-align:right">${fmtUFN(brutoUF)}</td><td style="text-align:right;color:#E24B4A">${fmtUFN(costoUF)}</td><td style="text-align:right;color:#1D9E75">${fmtUFN(netoUF)}</td></tr></tfoot></table>`
       } else {
         html+=`<p style="color:${A3};font-style:italic;text-align:center;padding:16px">Sin ventas en este período</p>`
       }
@@ -6914,8 +6936,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         <div class="section-title">Cobranza</div>
         <div class="kpi-grid">
           <div class="kpi"><div class="kpi-label">Por cobrar</div><div class="kpi-value">${fmtN(pending)}</div></div>
-          <div class="kpi"><div class="kpi-label">Vencido</div><div class="kpi-value" style="color:#C2382B">${fmtN(overdue)}</div></div>
-          <div class="kpi"><div class="kpi-label">Cobrado</div><div class="kpi-value" style="color:#2E7D55">${fmtN(paid)}</div></div>
+          <div class="kpi"><div class="kpi-label">Vencido</div><div class="kpi-value" style="color:#E24B4A">${fmtN(overdue)}</div></div>
+          <div class="kpi"><div class="kpi-label">Cobrado</div><div class="kpi-value" style="color:#1D9E75">${fmtN(paid)}</div></div>
         </div>`
       if(bb.length>0){
         html+=`<table><thead><tr><th>Cliente</th><th>Concepto</th><th>N° Factura</th><th>Emisión</th><th>Estado</th><th style="text-align:right">Monto</th><th>Antigüedad</th></tr></thead><tbody>`
@@ -6924,7 +6946,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
           const dias=b.due?Math.round((new Date()-new Date(b.due+'T12:00'))/86400000):null
           const badgeClass=b.status==='Pagado'?'badge-paid':b.status==='Vencido'?'badge-overdue':'badge-pending'
           const diasStr=dias!==null&&dias>0?`${dias}d vencido`:dias!==null&&dias<0?`${Math.abs(dias)}d restantes`:'—'
-          html+=`<tr><td>${c?.name||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.concept||'—'}</td><td style="font-family:monospace">${b.invoice_no||'—'}</td><td>${b.issued_at||'—'}</td><td><span class="badge ${badgeClass}">${b.status}</span></td><td style="text-align:right;font-weight:600">${fmtN(b.amount)}</td><td style="color:${dias>0?'#C2382B':A2}">${diasStr}</td></tr>`
+          html+=`<tr><td>${c?.name||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.concept||'—'}</td><td style="font-family:monospace">${b.invoice_no||'—'}</td><td>${b.issued_at||'—'}</td><td><span class="badge ${badgeClass}">${b.status}</span></td><td style="text-align:right;font-weight:600">${fmtN(b.amount)}</td><td style="color:${dias>0?'#E24B4A':A2}">${diasStr}</td></tr>`
         })
         html+=`</tbody><tfoot><tr><td colspan="5">TOTAL</td><td style="text-align:right">${fmtN(pending+overdue+paid)}</td><td></td></tr></tfoot></table>`
       } else {
@@ -6944,7 +6966,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
       clientsWithMovs.forEach(c=>{
         const b=balances[c.id]
         const sal=b.fondos-b.gastos
-        html+=`<tr><td>${c.name}</td><td style="text-align:right;color:#2E7D55">${fmtN(b.fondos)}</td><td style="text-align:right;color:#C2382B">${fmtN(b.gastos)}</td><td style="text-align:right;font-weight:700;color:${sal<0?'#C2382B':'#2E7D55'}">${fmtN(sal)}</td></tr>`
+        html+=`<tr><td>${c.name}</td><td style="text-align:right;color:#1D9E75">${fmtN(b.fondos)}</td><td style="text-align:right;color:#E24B4A">${fmtN(b.gastos)}</td><td style="text-align:right;font-weight:700;color:${sal<0?'#E24B4A':'#1D9E75'}">${fmtN(sal)}</td></tr>`
       })
       html+=`</tbody></table></div>`
     }
@@ -6962,7 +6984,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         mine.forEach(t=>{
           const c=clients.find(x=>x.id===t.client_id)
           const u=urgency(t.due,t.status)
-          const color=u==='overdue'?'#C2382B':u==='urgent'?'#C77F18':u==='soon'?'#C77F18':'#2E7D55'
+          const color=u==='overdue'?'#E24B4A':u==='urgent'?'#C77F18':u==='soon'?'#C77F18':'#1D9E75'
           const dias=t.due?daysLeft(t.due):null
           const diasStr=dias!==null?(dias<0?`${Math.abs(dias)}d vencido`:dias===0?'hoy':`${dias}d`):''
           html+=`<tr><td>${c?.name||'—'}</td><td>${t.project||'—'}</td><td>${t.title}</td><td>${t.due||'—'}</td><td style="color:${color};font-weight:600">${diasStr}</td></tr>`
@@ -7049,7 +7071,7 @@ function printTasks(tasks, clients, filterLabel) {
   const rows = tasks.map(t=>{
     const client = clients.find(c=>c.id===t.client_id)
     const due = t.due ? new Date(t.due+'T00:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : '—'
-    const urgent = t.due && daysLeft(t.due)<0 ? 'color:#C2382B;font-weight:600' : ''
+    const urgent = t.due && daysLeft(t.due)<0 ? 'color:#E24B4A;font-weight:600' : ''
     return `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:12px">${t.title}</td>
       <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${client?.name||'—'}</td>
@@ -7223,7 +7245,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const porUrgencia = arr => [...arr].sort((a,b)=>(daysLeft(a.due)??99999)-(daysLeft(b.due)??99999))
 
   const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
-  const bsCard = due => { const d=daysLeft(due); if(d===null) return {bg:'#F1F1F1',col:'#888'}; if(d<0) return {bg:'#FCEBEB',col:'#A32D2D'}; if(d<=1) return {bg:'#FAEEDA',col:'#854F0B'}; if(d<=7) return {bg:'#FAEEDA',col:'#854F0B'}; return {bg:'#F1F1F1',col:'#888'} }
+  const bsCard = due => { const d=daysLeft(due); if(d===null) return {bg:'#F1F1F1',col:'#888'}; if(d<0) return {bg:'#FCEBEB',col:'#E24B4A'}; if(d<=1) return {bg:'#FAEEDA',col:'#854F0B'}; if(d<=7) return {bg:'#FAEEDA',col:'#854F0B'}; return {bg:'#F1F1F1',col:'#888'} }
   const Card = ({t,showWho,done}) => {
     const client=clients.find(c=>c.id===t.client_id)
     const bs=bsCard(t.due)
@@ -7423,7 +7445,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                           <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                           <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                             {cl&&<span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:130}}>{cl.name}</span>}
-                            {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:CAT_BG[e.category]||CAT_BG['Otro'],color:'#56616B',fontWeight:600,fontSize:9}}>{e.category}</span>}
+                            {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:CAT_BG[e.category]||CAT_BG['Otro'],color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
                             <span>{fmtFecha(e.date)}</span>
                           </div>
                         </div>
