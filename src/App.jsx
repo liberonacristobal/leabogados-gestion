@@ -567,6 +567,9 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const [newMonto,setNewMonto] = useState('')
   const [newFecha,setNewFecha] = useState(new Date().toISOString().slice(0,10))
   const [newNota,setNewNota] = useState('')
+  const [newDeliveredBy,setNewDeliveredBy] = useState('Cristóbal')
+  const [showNuevaCaja,setShowNuevaCaja] = useState(false)
+  const [cajaOtra,setCajaOtra] = useState(false)
   const [fDesde,setFDesde] = useState('')
   const [fHasta,setFHasta] = useState('')
   const [fCliente,setFCliente] = useState('')
@@ -657,12 +660,14 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         user_name: me,
         amount: parseInt(newMonto),
         delivered_at: newFecha,
+        delivered_by: newDeliveredBy||null,
         notes: newNota||null
       }).select().single()
       if(error) throw error
       setPettyCash(p=>[data,...p])
       setNewMonto(''); setNewNota('')
       setNewFecha(new Date().toISOString().slice(0,10))
+      setShowNuevaCaja(false)
     } catch(e) { alert('Error: '+e.message) }
     setSaving(false)
   }
@@ -812,124 +817,112 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         </div>
       )}
 
-      {tab==='caja'&&(
-        <div style={{padding:'12px 20px 100px'}}>
-          {rendiciones.filter(r=>r.user_name===me).length===0&&<div style={{color:'#888',textAlign:'center',padding:40}}>No hay liquidaciones registradas</div>}
-          {rendiciones.filter(r=>r.user_name===me).sort((a,b)=>b.created_at>a.created_at?1:-1).map(r=>{
-            const isOpen = openRendicion===r.id
-            const gastosR = expenses.filter(e=>e.render_id===r.id)
-            const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
-            return (
-            <div key={r.id} style={{background:'#fff',borderRadius:8,marginBottom:8,border:'1px solid #E8E8E8',overflow:'hidden'}}>
-              <div onClick={()=>setOpenRendicion(isOpen?null:r.id)} style={{padding:'12px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{r.periodo}</div>
-                  <div style={{fontSize:11,color:'#888',marginTop:2}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {r.n_clientes} cliente{r.n_clientes!==1?'s':''}</div>
-                  <div style={{fontSize:10,color:'#aaa',marginTop:3}}>{new Date(r.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      {tab==='caja'&&(()=>{
+        const misRend = rendiciones.filter(r=>r.user_name===me).sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1)
+        const totalLiquidado = misRend.reduce((a,r)=>a+(r.total||0),0)
+        const cajasOrd = [...miCaja].sort((a,b)=>(b.delivered_at||'')>(a.delivered_at||'')?1:-1)
+        const totalRecibido = cajasOrd.reduce((a,p)=>a+(p.amount||0),0)
+        const secLbl = {fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase'}
+        const totRow = (lbl,val)=>(<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#F5F7F9',borderRadius:8,padding:'8px 11px',marginTop:8}}><span style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.02em',textTransform:'uppercase'}}>{lbl}</span><span style={{fontSize:12,fontWeight:600,color:'#003C50'}}>{fmtCLP(val)}</span></div>)
+        const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+        return (
+        <div style={{padding:'4px 0 100px'}}>
+          {/* KPIs */}
+          <div style={{display:'flex',gap:8,padding:'4px 14px 10px'}}>
+            <div style={{flex:1,background:'#F5F7F9',borderRadius:10,padding:10,textAlign:'center'}}>
+              <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',letterSpacing:'.02em',whiteSpace:'nowrap'}}>SALDO</div>
+              <div style={{fontSize:15,fontWeight:600,marginTop:3,color:saldoCaja<0?'#E24B4A':'#1D9E75'}}>{fmtCLP(saldoCaja)}</div>
+              <div style={{fontSize:8,fontWeight:600,letterSpacing:'.04em',marginTop:1,textTransform:'uppercase',color:saldoCaja<0?'#E24B4A':'#99ABB4'}}>{saldoCaja<0?'Te debemos':'Disponible'}</div>
+            </div>
+            <div style={{flex:1,background:'#F5F7F9',borderRadius:10,padding:10,textAlign:'center'}}>
+              <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',letterSpacing:'.02em',whiteSpace:'nowrap'}}>LIQUIDADO</div>
+              <div style={{fontSize:15,fontWeight:600,marginTop:3,color:'#537281'}}>{fmtCLP(totalLiquidado)}</div>
+              <div style={{fontSize:8,fontWeight:600,letterSpacing:'.04em',marginTop:1,textTransform:'uppercase',color:'#99ABB4'}}>Histórico</div>
+            </div>
+          </div>
+          {/* CAJAS ENTREGADAS */}
+          <div style={{borderTop:'0.5px solid #F5F7F9',padding:'11px 14px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
+              <span style={secLbl}>Cajas entregadas</span>
+              <button onClick={()=>{ setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy('Cristóbal'); setShowNuevaCaja(true) }} style={{height:26,padding:'0 12px',border:'none',borderRadius:8,background:'#003C50',color:'#fff',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Nueva Caja</button>
+            </div>
+            {cajasOrd.length===0&&<div style={{fontSize:12,color:'#99ABB4',padding:'4px 0'}}>Aún no hay cajas registradas.</div>}
+            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; return (
+              <div key={p.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'0.5px solid #F5F7F9'}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:500,color:'#1a1a1a'}}>{fmtCLP(p.amount)}</div>
+                  <div style={{fontSize:10,color:'#99ABB4',marginTop:1}}>Entregado por {p.delivered_by||'—'}{p.delivered_at?` · ${fmtD(p.delivered_at)}`:''}</div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{fontSize:14,fontWeight:700,color:'#E24B4A'}}>-{fmtCLP(r.total)}</div>
-                  <span style={{fontSize:12,color:'#888',transform:isOpen?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
-                </div>
+                <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,flexShrink:0,background:activa?'#E1F5EE':'#F5F7F9',color:activa?'#1D9E75':'#99ABB4'}}>{activa?'Activa':'Cerrada'}</span>
               </div>
-              {isOpen&&(
-                <div style={{borderTop:'1px solid #E8E8E8',padding:'10px 14px'}}>
-                  {gastosR.length===0&&<div style={{fontSize:12,color:'#888',textAlign:'center',padding:'8px 0'}}>Sin detalle disponible</div>}
-                  {gastosR.map(e=>{
-                    const cl=clients.find(x=>x.id===e.client_id)
-                    const catBg={'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Otro':'#ECECEC'}[e.category]||'#ECECEC'
-                    return (
-                      <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid #F4F4F4'}}>
+            )})}
+            {cajasOrd.length>0&&totRow('Total recibido',totalRecibido)}
+          </div>
+          {/* LIQUIDACIONES */}
+          <div style={{borderTop:'0.5px solid #E4E8EB',marginTop:4,padding:'11px 14px'}}>
+            <div style={{marginBottom:9}}><span style={secLbl}>Liquidaciones</span></div>
+            {misRend.length===0&&<div style={{fontSize:12,color:'#99ABB4',padding:'4px 0'}}>Aún no hay liquidaciones.</div>}
+            {misRend.map(r=>{
+              const isOpen=openRendicion===r.id
+              const gastosR=expenses.filter(e=>e.render_id===r.id)
+              return (
+              <div key={r.id} style={{borderBottom:'0.5px solid #F5F7F9'}}>
+                <div onClick={()=>setOpenRendicion(isOpen?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',cursor:'pointer'}}>
+                  <div><div style={{fontSize:12,fontWeight:500,color:'#1a1a1a'}}>{r.periodo}</div><div style={{fontSize:10,color:'#99ABB4',marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:12,fontWeight:500,color:'#537281'}}>{fmtCLP(r.total)}</span>
+                    <span style={{fontSize:11,color:'#99ABB4',transform:isOpen?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
+                  </div>
+                </div>
+                {isOpen&&(
+                  <div style={{padding:'2px 0 10px'}}>
+                    {gastosR.length===0&&<div style={{fontSize:12,color:'#99ABB4',padding:'4px 0'}}>Sin detalle disponible</div>}
+                    {gastosR.map(e=>{ const cl=clients.find(x=>x.id===e.client_id); return (
+                      <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0'}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,color:'#3D3D3D',fontWeight:500}}>{e.concept||'—'}</div>
-                          <div style={{fontSize:10,color:'#888',marginTop:1,display:'flex',gap:5,alignItems:'center'}}>
-                            {cl&&<span>{cl.name}</span>}
-                            {e.category&&<span style={{padding:'1px 5px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,fontSize:9}}>{e.category}</span>}
-                            {e.date&&<span>{fmtD(e.date)}</span>}
-                          </div>
+                          <div style={{fontSize:12,color:'#1a1a1a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                          <div style={{fontSize:10,color:'#99ABB4',marginTop:1}}>{cl?cl.name+' · ':''}{e.date?fmtD(e.date):''}{e.category?' · '+catLabel(e.category):''}</div>
                         </div>
-                        <div style={{fontSize:12,fontWeight:700,color:'#E24B4A',flexShrink:0}}>-{fmtCLP(e.amount)}</div>
+                        <div style={{fontSize:12,fontWeight:500,color:'#E24B4A',flexShrink:0}}>{fmtCLP(e.amount)}</div>
                       </div>
-                    )
-                  })}
-                  <div style={{display:'flex',gap:8,marginTop:10}}>
-                    <button onClick={()=>{
-                      const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
-                      const A='#003C50',A2='#537281',A4='#E4E8EB'
-                      const porCliente={}
-                      gastosR.forEach(e=>{ const cn=clients.find(x=>x.id===e.client_id)?.name||'Sin cliente'; if(!porCliente[cn])porCliente[cn]=[]; porCliente[cn].push(e) })
-                      let html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Liquidación — ${r.user_name} — ${r.periodo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;color:#3D3D3D;font-size:11px}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}.firma{font-size:16px;font-weight:700}.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.kpi{background:${A4};border-radius:6px;padding:10px 12px}.kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600}.kpi-value{font-size:15px;font-weight:700;color:${A}}table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:16px}thead tr{background:${A};color:#fff}thead th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase}tbody tr:nth-child(even){background:${A4}}tbody td{padding:6px 10px;border-bottom:1px solid ${A4}}tfoot tr{background:${A4};font-weight:700}tfoot td{padding:7px 10px;border-top:2px solid ${A2}}.section-title{font-size:12px;font-weight:700;color:${A};border-bottom:2px solid ${A};padding-bottom:4px;margin:16px 0 10px}.footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='header'><div><div class='firma'>Liberona Escala Abogados</div><div style='font-size:9px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Liquidación de Caja Chica</div><div style='font-size:11px;opacity:.8;margin-top:2px'>${r.user_name} · ${r.periodo}</div></div></div><div class='kpi-row'><div class='kpi'><div class='kpi-label'>Gastos</div><div class='kpi-value'>${gastosR.length}</div></div><div class='kpi'><div class='kpi-label'>Clientes</div><div class='kpi-value'>${Object.keys(porCliente).length}</div></div><div class='kpi'><div class='kpi-label'>Total</div><div class='kpi-value'>${fmtN(r.total)}</div></div></div>`
-                      Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+e.amount,0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#E24B4A'>-${fmtN(tot)}</td></tr></tfoot></table>` })
-                      html+=`<div class='footer'><span>Liberona Escala Abogados</span><span>${r.user_name} · ${r.periodo}</span><span>CONFIDENCIAL</span></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / PDF</button></body></html>`
-                      const w=window.open('','_blank'); w.document.write(html); w.document.close()
-                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #003C50',background:'transparent',color:'#003C50',fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Descargar PDF</button>
-                    <button onClick={()=>{
-                      const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
-                      const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
-                      const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
-                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>Enviar por correo</button>
-                    <button onClick={async()=>{
-                      if(!confirm('¿Anular esta liquidación? Los gastos vuelven a la pestaña Liquidar como pendientes.')) return
-                      try {
-                        await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
-                        await supabase.from('rendiciones').delete().eq('id',r.id)
-                        if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
-                        if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
-                        setOpenRendicion(null)
-                      } catch(err) { alert('Error: '+err.message) }
-                    }} style={{flex:1,padding:'7px 0',borderRadius:7,border:'1px solid #E24B4A',background:'transparent',color:'#E24B4A',fontSize:11,fontWeight:600,cursor:'pointer'}}>Anular</button>
+                    )})}
+                    <div style={{display:'flex',gap:8,marginTop:10}}>
+                      <button onClick={()=>{
+                        const now=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
+                        const A='#003C50',A2='#537281',A4='#E4E8EB'
+                        const porCliente={}
+                        gastosR.forEach(e=>{ const cn=clients.find(x=>x.id===e.client_id)?.name||'Sin cliente'; if(!porCliente[cn])porCliente[cn]=[]; porCliente[cn].push(e) })
+                        let html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Liquidación — ${r.user_name} — ${r.periodo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;color:#3D3D3D;font-size:11px}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}.firma{font-size:16px;font-weight:700}.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.kpi{background:${A4};border-radius:6px;padding:10px 12px}.kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600}.kpi-value{font-size:15px;font-weight:700;color:${A}}table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:16px}thead tr{background:${A};color:#fff}thead th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase}tbody tr:nth-child(even){background:${A4}}tbody td{padding:6px 10px;border-bottom:1px solid ${A4}}tfoot tr{background:${A4};font-weight:700}tfoot td{padding:7px 10px;border-top:2px solid ${A2}}.section-title{font-size:12px;font-weight:700;color:${A};border-bottom:2px solid ${A};padding-bottom:4px;margin:16px 0 10px}.footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='header'><div><div class='firma'>Liberona Escala Abogados</div><div style='font-size:9px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Liquidación de Caja Chica</div><div style='font-size:11px;opacity:.8;margin-top:2px'>${r.user_name} · ${r.periodo}</div></div></div><div class='kpi-row'><div class='kpi'><div class='kpi-label'>Gastos</div><div class='kpi-value'>${gastosR.length}</div></div><div class='kpi'><div class='kpi-label'>Clientes</div><div class='kpi-value'>${Object.keys(porCliente).length}</div></div><div class='kpi'><div class='kpi-label'>Total</div><div class='kpi-value'>${fmtN(r.total)}</div></div></div>`
+                        Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+e.amount,0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#E24B4A'>-${fmtN(tot)}</td></tr></tfoot></table>` })
+                        html+=`<div class='footer'><span>Liberona Escala Abogados</span><span>${r.user_name} · ${r.periodo}</span><span>CONFIDENCIAL</span></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / PDF</button></body></html>`
+                        const w=window.open('','_blank'); w.document.write(html); w.document.close()
+                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:'#F5F7F9',color:'#003C50',fontSize:11,fontWeight:500,cursor:'pointer'}}>PDF</button>
+                      <button onClick={()=>{
+                        const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
+                        const b2=encodeURIComponent('Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
+                        const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
+                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:'#F5F7F9',color:'#537281',fontSize:11,fontWeight:500,cursor:'pointer'}}>Correo</button>
+                      <button onClick={async()=>{
+                        if(!confirm('¿Anular esta liquidación? Los gastos vuelven a Pendientes.')) return
+                        try {
+                          await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
+                          await supabase.from('rendiciones').delete().eq('id',r.id)
+                          if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
+                          if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
+                          setOpenRendicion(null)
+                        } catch(err) { alert('Error: '+err.message) }
+                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E24B4A',background:'transparent',color:'#E24B4A',fontSize:11,fontWeight:500,cursor:'pointer'}}>Anular</button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-            )
-          })}
-        </div>
-      )}
-
-      {tab==='caja'&&(
-        <div style={{padding:'12px 20px 100px'}}>
-          <div style={{background:saldoCaja>0?'#E1F5EE':'#FBE9E7',borderRadius:10,padding:'14px 16px',marginBottom:16,border:`1px solid ${saldoCaja>0?'#1D9E75':'#E24B4A'}`}}>
-            <div style={{fontSize:11,color:saldoCaja>0?'#0F6E56':'#E24B4A',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:4}}>Saldo disponible</div>
-            <div style={{fontSize:24,fontWeight:700,color:saldoCaja>0?'#0F6E56':'#E24B4A'}}>{fmtCLP(saldoCaja)}</div>
+                )}
+              </div>
+              )
+            })}
+            {misRend.length>0&&totRow('Total liquidado',totalLiquidado)}
           </div>
-          <div style={{fontSize:12,fontWeight:600,color:'#3D3D3D',marginBottom:8}}>Registrar nueva entrega de caja</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <div>
-              <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Monto (CLP)</div>
-              <input value={newMonto} onChange={e=>setNewMonto(e.target.value)} type='number' placeholder='0'
-                style={{width:'100%',padding:'9px 11px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/> 
-            </div>
-            <div>
-              <div style={{fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Fecha entrega</div>
-              <input value={newFecha} onChange={e=>setNewFecha(e.target.value)} type='date'
-                style={{width:'100%',padding:'9px 11px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none'}}/> 
-            </div>
-          </div>
-          <input value={newNota} onChange={e=>setNewNota(e.target.value)} placeholder='Nota (opcional)'
-            style={{width:'100%',padding:'9px 11px',borderRadius:7,border:'1px solid #E8E8E8',fontSize:13,boxSizing:'border-box',outline:'none',marginBottom:8}}/> 
-          <button onClick={handleNuevaCaja} disabled={saving||!newMonto}
-            style={{width:'100%',padding:11,borderRadius:10,border:'none',background:'#003C50',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!newMonto?.6:1}}>
-            {saving?'Guardando...':'Registrar entrega'}
-          </button>
-          {miCaja.length>0&&(
-            <div style={{marginTop:16}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#888',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Historial de entregas</div>
-              {miCaja.sort((a,b)=>b.delivered_at>a.delivered_at?1:-1).map(p=>(
-                <div key={p.id} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #E8E8E8'}}>
-                  <div>
-                    <div style={{fontSize:12,color:'#3D3D3D',fontWeight:500}}>{p.delivered_at}</div>
-                    {p.notes&&<div style={{fontSize:11,color:'#888'}}>{p.notes}</div>}
-                  </div>
-                  <div style={{fontSize:13,fontWeight:700,color:p.rendered_at?'#888':'#0F6E56'}}>
-                    {fmtCLP(p.amount)}{p.rendered_at?' (rendido)':''}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-      )}
+        )
+      })()}
 
       {/* Modal de liquidación (PP-12 commit 2): detalle compacto + PDF / Correo / Confirmar */}
       {confirmLiq&&(()=>{
@@ -967,6 +960,69 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 <button onClick={()=>handleLiquidar(false)} disabled={saving} style={{gridColumn:'span 2',height:44,borderRadius:10,background:'#003C50',color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:7,opacity:saving?.6:1}}>
                   {saving?<Spin/>:<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}{saving?'Procesando...':'Confirmar liquidación'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Modal Nueva Caja Chica (PP-12 commit 3) — diseño moderno, sin mensaje amarillo */}
+      {showNuevaCaja&&(()=>{
+        const hoyISO = new Date().toISOString().slice(0,10)
+        const hoySel = !cajaOtra && newFecha===hoyISO
+        const lbl = {fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:7}
+        const fpill = on => ({fontSize:12,padding:'6px 12px',borderRadius:20,cursor:'pointer',border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?'#E6EEF1':'#fff',color:on?'#003C50':'#537281',fontWeight:on?600:400})
+        return (
+          <div onClick={()=>!saving&&setShowNuevaCaja(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px 16px'}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:360,padding:'18px 20px 20px',maxHeight:'85vh',overflowY:'auto'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+                <span style={{fontSize:16,fontWeight:600,color:'#003C50'}}>Nueva caja chica <span style={{color:'#99ABB4',fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:'#537281',fontWeight:600}}>{me}</span></span>
+                <button onClick={()=>!saving&&setShowNuevaCaja(false)} style={{background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:0}}>
+                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+                </button>
+              </div>
+
+              <div style={{marginBottom:16}}>
+                <div style={lbl}>Monto</div>
+                <div style={{display:'flex',alignItems:'center',gap:6,background:'#F5F7F9',border:'0.5px solid #E4E8EB',borderRadius:10,padding:'12px 14px'}}>
+                  <span style={{fontSize:20,fontWeight:500,color:'#99ABB4'}}>$</span>
+                  <input value={newMonto} onChange={e=>setNewMonto(e.target.value.replace(/\D/g,''))} inputMode='numeric' placeholder='0' style={{flex:1,border:'none',background:'none',fontSize:22,fontWeight:600,color:'#1a1a1a',outline:'none',width:'100%'}}/>
+                </div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>
+                  {[50000,100000,150000,200000].map(m=>{ const on=String(m)===newMonto; return (
+                    <button key={m} onClick={()=>setNewMonto(String(m))} style={fpill(on)}>{fmtCLP(m)}</button>
+                  )})}
+                </div>
+              </div>
+
+              <div style={{marginBottom:16}}>
+                <div style={lbl}>Entregado por</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  {['Cristóbal','Erasmo'].map(n=>{ const on=newDeliveredBy===n; return (
+                    <button key={n} onClick={()=>setNewDeliveredBy(n)} style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:12,fontWeight:on?600:400,padding:'6px 13px 6px 6px',borderRadius:20,border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?'#E6EEF1':'#fff',color:on?'#003C50':'#537281',cursor:'pointer'}}>
+                      <span style={{width:24,height:24,borderRadius:'50%',background:on?'#003C50':'#99ABB4',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[n]||n.slice(0,2).toUpperCase()}</span>{n}
+                    </button>
+                  )})}
+                </div>
+              </div>
+
+              <div style={{marginBottom:16}}>
+                <div style={lbl}>Fecha</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                  <button onClick={()=>{setNewFecha(hoyISO);setCajaOtra(false)}} style={fpill(hoySel)}>Hoy</button>
+                  <button onClick={()=>setCajaOtra(true)} style={fpill(cajaOtra)}>Otra fecha</button>
+                  {cajaOtra&&<input type='date' value={newFecha} onChange={e=>setNewFecha(e.target.value)} style={{height:34,border:'0.5px solid #E4E8EB',borderRadius:8,fontSize:12,padding:'0 10px',color:'#1a1a1a',outline:'none'}}/>}
+                </div>
+              </div>
+
+              <div style={{marginBottom:18}}>
+                <div style={lbl}>Nota <span style={{textTransform:'none',letterSpacing:0,color:'#99ABB4'}}>· opcional</span></div>
+                <input value={newNota} onChange={e=>setNewNota(e.target.value)} placeholder='Ej: cubre saldo + caja del mes' style={{width:'100%',height:38,border:'0.5px solid #E4E8EB',borderRadius:8,fontSize:13,padding:'0 12px',color:'#1a1a1a',background:'#fff',outline:'none',boxSizing:'border-box'}}/>
+              </div>
+
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>setShowNuevaCaja(false)} disabled={saving} style={{flex:1,height:44,borderRadius:10,border:'0.5px solid #E4E8EB',background:'#fff',color:'#537281',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button onClick={handleNuevaCaja} disabled={saving||!newMonto} style={{flex:2,height:44,borderRadius:10,border:'none',background:'#003C50',color:'#fff',fontSize:13,fontWeight:600,cursor:newMonto?'pointer':'not-allowed',opacity:(saving||!newMonto)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{saving?<Spin/>:null}{saving?'Guardando...':'Registrar caja'}</button>
               </div>
             </div>
           </div>
