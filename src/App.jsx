@@ -5325,22 +5325,22 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   }
   const cuerpoCorreo = () => `Estimado/a ${client?.name||'cliente'}:
 
-En cumplimiento de nuestro compromiso de mantener una gestión transparente de los fondos asociados a su asunto, adjuntamos la rendición de gastos correspondiente al período ${r.periodo||''}, con el detalle y respaldo de cada partida.
+Esperando que se encuentre muy bien, le hacemos llegar la rendición de los gastos incurridos durante el período ${r.periodo||''}, en el marco de la gestión encomendada. En el documento adjunto encontrará el respaldo de cada desembolso.
 
 ${det.map(e=>`• ${e.date||'—'} · ${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')}
 
-TOTAL RENDIDO: -${fmtN(r.total)}
+Total rendido: -${fmtN(r.total)}
 
-Si producto de esta rendición resultara un saldo a su cargo, agradeceremos su transferencia a la siguiente cuenta, indicando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:
+Si producto de esta rendición resultara un saldo a su cargo, le agradeceremos efectuar la transferencia a la cuenta que indicamos a continuación, señalando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:
 
   Titular: Liberona Escala Abogados Ltda.
   RUT: 77.700.387-9
   Banco: Banco BICE
   Cuenta Corriente: 138392-2
 
-Ante cualquier duda sobre las partidas rendidas, con gusto las revisamos con usted.
+Cualquier consulta, quedamos a su entera disposición.
 
-Atentamente,
+Saludos cordiales,
 ${user?.name||''}
 Liberona Escala Abogados`
   const enviar = async() => {
