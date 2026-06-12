@@ -8535,19 +8535,17 @@ export default function App() {
         }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
-        <div style={{padding:'52px 20px 8px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
-          <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,position:'relative'}}>
-            <div style={{padding:'12px 18px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:16,marginBottom:10}}>
-                <span style={{fontSize:12,color:'#99ABB4',whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</span>
-                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:'0.5px solid #E4E8EB',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
-                </button>
-              </div>
-              <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1}}>¡Hola, <span style={{color:'#003C50'}}>{user?.name?.split(' ')[0]}</span>!</div>
+        <div style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
+          <div style={{position:'relative'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:16,marginBottom:10}}>
+              <span style={{fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}</span>
+              <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
+              </button>
             </div>
+            <div style={{fontSize:26,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
             {menuOpen&&(
-              <div style={{position:'absolute',top:52,right:12,width:210,background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:10,padding:'4px 0',zIndex:100}}>
+              <div style={{position:'absolute',top:40,right:0,width:210,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'4px 0',zIndex:100,boxShadow:'0 8px 24px rgba(0,0,0,.1)'}}>
                 {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'report'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><line x1='9' y1='13' x2='15' y2='13'/><line x1='9' y1='17' x2='13' y2='17'/></svg>
                   Generar reporte
