@@ -4235,6 +4235,25 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
     } catch(e) { alert('Error: '+e.message) }
   }
+  // Anula la rendición de UN gasto: lo desvincula y ajusta el total/contador de su rendición (la elimina si queda en 0).
+  const anularGastoRendido = async(e, ev) => {
+    ev.stopPropagation()
+    if(!confirm(`¿Anular la rendición de "${e.concept||'este gasto'}"? Volverá a quedar disponible para rendir.`)) return
+    const renderId = e.client_render_id
+    try {
+      const {error} = await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('id',e.id)
+      if(error) throw error
+      if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,client_rendered_at:null,client_render_id:null}:x))
+      if(renderId){
+        const r=(rendiciones||[]).find(x=>x.id===renderId)
+        if(r){
+          const nuevoN=Math.max(0,(r.n_gastos||0)-1), nuevoTotal=(r.total||0)-(e.amount||0)
+          if(nuevoN<=0){ await supabase.from('rendiciones').delete().eq('id',renderId); if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==renderId)) }
+          else { await supabase.from('rendiciones').update({total:nuevoTotal,n_gastos:nuevoN}).eq('id',renderId); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===renderId?{...x,total:nuevoTotal,n_gastos:nuevoN}:x)) }
+        }
+      }
+    } catch(err){ alert('Error: '+err.message) }
+  }
   const [asignandoRS,setAsignandoRS] = useState(null) // client_id cuyo selector de RS esta abierto
 
   const balances = useMemo(()=>{
@@ -4325,7 +4344,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
-              {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600}}>Rendido</span>}
+              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>Rendido <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -4388,28 +4407,11 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const selStyle = {padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:12,boxSizing:'border-box',outline:'none',width:'100%'}
   const fichaHistorial = selectedClient ? (
     <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
-      <div onClick={()=>setShowHistorialFicha(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
-        <span style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Historial de rendiciones</span>
-        <span style={{fontSize:13,color:'#99ABB4',transform:showHistorialFicha?'rotate(180deg)':'none',transition:'transform .15s'}}>▾</span>
-      </div>
-      {showHistorialFicha&&(
-        <div style={{marginTop:12}}>
-          <div style={{display:'flex',gap:6,marginBottom:12}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Desde</div>
-              <input type='month' value={hFichaDesde} onChange={e=>setHFichaDesde(e.target.value)} style={{...selStyle}}/>
-            </div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Hasta</div>
-              <input type='month' value={hFichaHasta} onChange={e=>setHFichaHasta(e.target.value)} style={{...selStyle}}/>
-            </div>
-          </div>
-          {(()=>{
-            const rends=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&r.client_id===selectedClient.id&&(!hFichaDesde||r.created_at?.slice(0,7)>=hFichaDesde)&&(!hFichaHasta||r.created_at?.slice(0,7)<=hFichaHasta)).sort((a,b)=>b.created_at>a.created_at?1:-1)
-            return renderHistorialTable(rends,false)
-          })()}
-        </div>
-      )}
+      <div style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Historial de rendiciones</div>
+      {(()=>{
+        const rends=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&r.client_id===selectedClient.id).sort((a,b)=>b.created_at>a.created_at?1:-1)
+        return renderHistorialTable(rends,false)
+      })()}
     </div>
   ) : null
 
