@@ -8100,6 +8100,9 @@ export default function App() {
   const [modal,setModal]=useState(null)
   const [menuOpen,setMenuOpen]=useState(false)
   useEffect(()=>{ const handler=()=>setMenuOpen(false); document.addEventListener('click',handler); return ()=>document.removeEventListener('click',handler) },[])
+  const _hoyHdr = new Date()
+  const fechaFull = _hoyHdr.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())
+  const fechaShort = `${_hoyHdr.getDate()} ${MESES_ABR[_hoyHdr.getMonth()].toLowerCase()} ${_hoyHdr.getFullYear()}`
   const saleUploadRef = useRef(null)
   const saleDriveRef = useRef(null)
 
@@ -8551,6 +8554,8 @@ export default function App() {
           .shell{max-width:600px;margin:0 auto;box-shadow:0 0 0 1px ${C.border},0 12px 50px rgba(0,0,0,.08);min-height:100vh}
           .fab{right:auto!important;left:50%!important;margin-left:228px}
         }
+        .fecha-short{display:none}
+        @media(max-width:560px){ .fecha-full{display:none} .fecha-short{display:inline} }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
         <div style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
@@ -8558,7 +8563,8 @@ export default function App() {
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
               <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-                <span style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())}</span>
+                <span className='fecha-full' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaFull}</span>
+                <span className='fecha-short' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaShort}</span>
                 <div style={{width:1,height:18,background:C.border,flexShrink:0}}/>
                 <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
