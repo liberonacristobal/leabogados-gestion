@@ -35,7 +35,7 @@ export interface ResultadoMatch {
   ambiguas: any[]
   sinMatch: any[]
   errores: any[]
-  yaRegistradas: number
+  yaRegistradas: any[]
 }
 
 export async function conciliar(ventas: VentaSII[], periodo: string): Promise<ResultadoMatch> {
@@ -76,13 +76,13 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   }
   const nombreCliente = (b: any) => clientes.find((c: any) => c.id === b.client_id)?.name || 'Sin cliente'
 
-  const resultado: ResultadoMatch = { actualizadas: [], corregirFolio: [], ambiguas: [], sinMatch: [], errores: [], yaRegistradas: 0 }
+  const resultado: ResultadoMatch = { actualizadas: [], corregirFolio: [], ambiguas: [], sinMatch: [], errores: [], yaRegistradas: [] }
   const progUsadas = new Set<string>()
   const emitUsadas = new Set<string>()
 
   for (const v of ventas) {
     if (foliosExistentes.has(String(v.folio))) {
-      resultado.yaRegistradas++
+      resultado.yaRegistradas.push({ folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal })
       continue
     }
     const rutV = normalizarRut(v.rutReceptor)

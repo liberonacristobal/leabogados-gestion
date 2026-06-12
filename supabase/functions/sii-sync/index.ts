@@ -92,7 +92,7 @@ serve(async (req) => {
     console.log(
       `[sii-sync] ${periodo}: ${ventas.length} facturas SII | ` +
       `${resultado.actualizadas.length} actualizadas, ${resultado.ambiguas.length} ambiguas, ` +
-      `${resultado.sinMatch.length} sin match, ${resultado.yaRegistradas} ya registradas, ` +
+      `${resultado.sinMatch.length} sin match, ${resultado.yaRegistradas.length} ya registradas, ` +
       `${resultado.errores.length} errores`
     )
     return json({ periodo, ambiente, totalSII: ventas.length, ...resultado })
