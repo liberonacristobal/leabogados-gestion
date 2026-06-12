@@ -6388,6 +6388,117 @@ function EntitiesEditor({clientId}) {
   )
 }
 
+// ─── CONTACTS EDITOR (colapsable, dentro de la ficha) ─────────────────────────
+// Personas de contacto del cliente con CRUD manual y exportación a .vcf (vCard).
+// El .vcf es la unica via de llevar contactos a la libreta del iPhone (Safari iOS
+// no expone la libreta para importar; ver memoria). Al abrir un .vcf, iOS ofrece
+// "Agregar a Contactos".
+const vEsc = s => String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;')
+const vCard = (c,org) => [
+  'BEGIN:VCARD','VERSION:3.0',
+  `N:${vEsc(c.nombre)};;;;`,`FN:${vEsc(c.nombre)}`,
+  org?`ORG:${vEsc(org)}`:null, c.cargo?`TITLE:${vEsc(c.cargo)}`:null,
+  c.email?`EMAIL;TYPE=INTERNET:${vEsc(c.email)}`:null,
+  c.telefono?`TEL;TYPE=CELL:${vEsc(c.telefono)}`:null,
+  'END:VCARD',
+].filter(Boolean).join('\r\n')
+const descargarVCF = (texto,nombreArchivo) => {
+  const blob=new Blob([texto],{type:'text/vcard;charset=utf-8'})
+  const url=URL.createObjectURL(blob)
+  const a=document.createElement('a'); a.href=url; a.download=nombreArchivo
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+function ContactsEditor({clientId,clientName}) {
+  const [contacts,setContacts]=useState(null)
+  const [open,setOpen]=useState(false)
+  const [showAdd,setShowAdd]=useState(false)
+  const [edit,setEdit]=useState(null)
+  const [cForm,setCForm]=useState({nombre:'',cargo:'',email:'',telefono:''})
+  const [busy,setBusy]=useState(false)
+  useEffect(()=>{
+    let ok=true
+    supabase.from('contacts').select('*').eq('client_id',clientId).order('created_at')
+      .then(({data,error})=>{ if(ok&&!error) setContacts(data||[]); else if(ok) setContacts([]) })
+    return ()=>{ok=false}
+  },[clientId])
+  const reset=()=>{ setCForm({nombre:'',cargo:'',email:'',telefono:''}); setShowAdd(false); setEdit(null) }
+  const startEdit=c=>{ setEdit(c); setCForm({nombre:c.nombre||'',cargo:c.cargo||'',email:c.email||'',telefono:c.telefono||''}); setShowAdd(true) }
+  const guardar=async()=>{
+    if(!cForm.nombre.trim()) return; setBusy(true)
+    try{
+      if(edit){
+        const {data,error}=await supabase.from('contacts').update({...cForm,nombre:cForm.nombre.trim()}).eq('id',edit.id).select().single()
+        if(error)throw error; setContacts(p=>p.map(x=>x.id===data.id?data:x))
+      }else{
+        const {data,error}=await supabase.from('contacts').insert({client_id:clientId,...cForm,nombre:cForm.nombre.trim()}).select().single()
+        if(error)throw error; setContacts(p=>[...(p||[]),data])
+      }
+      reset()
+    }catch(e){alert('Error: '+e.message)}
+    setBusy(false)
+  }
+  const eliminar=async c=>{
+    if(!confirm(`¿Eliminar a ${c.nombre}?`)) return
+    const {error}=await supabase.from('contacts').delete().eq('id',c.id)
+    if(error){alert('Error: '+error.message);return}
+    setContacts(p=>p.filter(x=>x.id!==c.id))
+  }
+  const initials=n=>(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+  const slug=s=>(s||'contacto').trim().replace(/\s+/g,'-').replace(/[^\w\-]/g,'').toLowerCase()
+  const exportarUno=c=>descargarVCF(vCard(c,clientName),`${slug(c.nombre)}.vcf`)
+  const exportarTodos=()=>descargarVCF((contacts||[]).map(c=>vCard(c,clientName)).join('\r\n'),`${slug(clientName)}-contactos.vcf`)
+  const inp={width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',color:C.text}
+  const n=contacts?.length||0
+  return (
+    <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+        <Lbl>Contactos{n>0?` · ${n}`:''}</Lbl>
+        <span style={{marginLeft:'auto',color:C.muted,fontSize:12,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
+      </div>
+      {open&&(
+        <div style={{marginTop:8}}>
+          {contacts===null&&<div style={{fontSize:12,color:C.muted}}>Cargando...</div>}
+          {contacts!==null&&n===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin contactos registrados.</div>}
+          {(contacts||[]).map(c=>(
+            <div key={c.id} style={{display:'flex',gap:9,alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+              <div style={{width:32,height:32,borderRadius:'50%',background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
+                {(c.email||c.telefono)&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[c.email,c.telefono].filter(Boolean).join(' · ')}</div>}
+              </div>
+              <button onClick={()=>exportarUno(c)} title='Exportar (.vcf)' style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 4px',flexShrink:0}}>Exportar</button>
+              <button onClick={()=>startEdit(c)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:11,padding:'2px 4px',flexShrink:0}}>Editar</button>
+              <button onClick={()=>eliminar(c)} style={{background:'none',border:'none',color:C.overdue,cursor:'pointer',fontSize:11,padding:'2px 4px',flexShrink:0}}>×</button>
+            </div>
+          ))}
+          {showAdd?(
+            <div style={{marginTop:10,padding:12,borderRadius:10,background:'#fff',border:`1px solid ${C.border}`}}>
+              <div style={{display:'grid',gap:8}}>
+                <input autoFocus value={cForm.nombre} onChange={e=>setCForm(f=>({...f,nombre:e.target.value}))} placeholder='Nombre *' style={inp}/>
+                <input value={cForm.cargo} onChange={e=>setCForm(f=>({...f,cargo:e.target.value}))} placeholder='Cargo' style={inp}/>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <input value={cForm.email} onChange={e=>setCForm(f=>({...f,email:e.target.value}))} placeholder='Email' style={inp}/>
+                  <input value={cForm.telefono} onChange={e=>setCForm(f=>({...f,telefono:e.target.value}))} placeholder='Teléfono' style={inp}/>
+                </div>
+                <div style={{display:'flex',gap:8,marginTop:2}}>
+                  <button onClick={reset} disabled={busy} style={{flex:1,padding:8,borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={guardar} disabled={busy||!cForm.nombre.trim()} style={{flex:2,padding:8,borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(busy||!cForm.nombre.trim())?.6:1}}>{busy?'Guardando...':(edit?'Guardar':'Agregar')}</button>
+                </div>
+              </div>
+            </div>
+          ):(
+            <div style={{display:'flex',gap:8,marginTop:10}}>
+              <button onClick={()=>{setEdit(null);setCForm({nombre:'',cargo:'',email:'',telefono:''});setShowAdd(true)}} style={{flex:1,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Agregar contacto</button>
+              {n>1&&<button onClick={exportarTodos} style={{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Exportar todos</button>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,abogado_responsable:'',status:'Activo',ended_at:'',notes:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
@@ -6430,6 +6541,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
       </Fld>
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
       {client?.id?<EntitiesEditor clientId={client.id}/>:<div style={{fontSize:11,color:C.muted,marginBottom:14}}>Guarda el cliente para agregar razones sociales.</div>}
+      {client?.id&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
