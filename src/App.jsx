@@ -1246,7 +1246,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
 
         <div onClick={()=>setOpenDetalle(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
           <span style={{fontSize:11,color:C.muted,transform:openDetalle?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
-          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Detalle</span>
+          <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Detalle</span>
         </div>
         {openDetalle&&(
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,marginTop:8}}>
@@ -1380,7 +1380,7 @@ function VentasPorMes({sales,ufHoy}) {
   return (
     <div style={{padding:'0 20px 16px'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Ventas por mes {yr}</div>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Ventas por mes {yr}</div>
         <div style={{display:'flex',gap:4}}>
           {['UF','CLP'].map(v=>(
             <button key={v} onClick={()=>setMoneda(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${moneda===v?C.accent:C.border}`,background:moneda===v?'#E6EEF1':'transparent',color:moneda===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{v}</button>
@@ -1552,7 +1552,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Tareas del estudio</div>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Tareas del estudio</div>
         <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'#F7F7F7',color:C.text}}>
           <option value='encargo'>Orden: fecha de encargo</option>
           <option value='vencimiento'>Orden: fecha de vencimiento</option>
@@ -1561,7 +1561,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         </select>
       </div>
       <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-      <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,padding:'12px 14px 4px'}}>Activas</div>
+      <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',padding:'12px 14px 4px'}}>Activas</div>
       {personas.map(persona=>{
         const [avBg,avColor]=avatarColor(persona)
         const isOpen=!!openPersonas[persona]
@@ -1613,7 +1613,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         return (
           <div style={{borderTop:`1px solid ${C.border}`}}>
             <div onClick={()=>setOpenTerminadas(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',userSelect:'none'}}>
-              <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,flex:1}}>Terminadas · {termTasks.length}</span>
+              <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>Terminadas · {termTasks.length}</span>
               <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:openTerminadas?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:openTerminadas?-2:2,flexShrink:0}}></span>
             </div>
             {openTerminadas&&personasTerm.map(persona=>{
@@ -1845,7 +1845,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Facturación */}
       <div style={{padding:'16px 20px 16px'}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Facturación {yr}</div>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Facturación {yr}</div>
         <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
         {(()=>{
           const terceros = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
@@ -1879,7 +1879,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <button onClick={()=>setOpenCobranza(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0}}>
             <span style={{fontSize:10,color:C.muted,transform:openCobranza?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-            <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Cobranza</span>
+            <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Cobranza</span>
             <span style={{fontSize:12,fontWeight:700,color:C.overdue,marginLeft:4}}>{fmt(totalPorCobrar)}</span>
           </button>
           <button onClick={()=>setTab('billing')} style={{background:'none',border:'none',color:C.accent,fontSize:12,cursor:'pointer',fontWeight:600}}>Ver todos</button>
@@ -2014,7 +2014,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const th = {fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}
         return (
           <div style={{padding:'16px 20px 0'}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Gestión Caja Chica</div>
+            <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Gestión Caja Chica</div>
             <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
               <div style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'8px 12px',borderBottom:`1px solid ${C.border}`,background:'#F5F7F9'}}>
                 <div style={th}>Usuario</div>
@@ -2047,7 +2047,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{padding:'16px 20px 0'}}>
             <button onClick={()=>setOpenOficina(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openOficina?8:0}}>
               <span style={{fontSize:10,color:C.muted,transform:openOficina?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-              <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Costos de oficina del mes</span>
+              <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Costos de oficina del mes</span>
               <span style={{fontSize:12,fontWeight:700,color:C.text,marginLeft:'auto'}}>{fmt(totalMes)}</span>
             </button>
             {openOficina&&(
