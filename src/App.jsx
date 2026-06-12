@@ -4046,73 +4046,99 @@ function BillingForm({bill,clients,clientEntities,onSave,onClose,onDelete,saving
   const [nuevaRS,setNuevaRS] = useState(false)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
+  const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:5,display:'block'}
+  const inp={width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#1a1a1a',background:'#fff',outline:'none',boxSizing:'border-box'}
+  const sel={...inp,appearance:'none'}
+  const txt={width:'100%',height:64,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'8px 11px',color:'#1a1a1a',background:'#fff',outline:'none',resize:'none',fontFamily:'inherit',boxSizing:'border-box'}
+  const estados=(()=>{ const base=['Pendiente','Pagado','Anulado']; return (f.status&&!base.includes(f.status))?[f.status,...base]:base })()
   return (
     <>
-      <Fld label='Cliente'>
-        {f.client_id ? (
-          <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',boxSizing:'border-box'}}>
-            <span style={{flex:1,fontSize:14,color:C.text,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span>
-            <button type='button' onClick={()=>{up('client_id','');setClientQuery('')}} style={{border:'none',background:'transparent',color:C.muted,fontSize:13,cursor:'pointer',fontWeight:600}}>Cambiar</button>
+      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
+        <span style={{fontSize:15,fontWeight:500,color:'#1a1a1a'}}>{bill?.id?'Editar cobro':'Nuevo cobro'}</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+        </button>
+      </div>
+      <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:14}}>
+        <div>
+          <label style={flabel}>Cliente</label>
+          {f.client_id ? (
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'0 11px'}}>
+              <span style={{fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span>
+              <button type='button' onClick={()=>{up('client_id','');setClientQuery('')}} style={{border:'none',background:'none',color:C.accent,fontSize:12,fontWeight:500,cursor:'pointer'}}>Cambiar</button>
+            </div>
+          ) : (
+            <div>
+              <input value={clientQuery} onChange={e=>setClientQuery(e.target.value)} placeholder='Buscar cliente por nombre...' style={inp}/>
+              {clientQuery.trim()&&(
+                <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff'}}>
+                  {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
+                    <div key={c.id} onClick={()=>{up('client_id',c.id);setClientQuery('')}} style={{padding:'9px 11px',fontSize:13,color:'#1a1a1a',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
+                  ))}
+                  {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).length===0&&<div style={{padding:'9px 11px',fontSize:13,color:C.muted}}>Sin resultados</div>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label style={flabel}>Tipo de cobro</label>
+          <div style={{display:'flex',background:'#F2F2F7',borderRadius:9,padding:3,gap:2}}>
+            {[['honorarios','Honorarios'],['reembolso','Reembolso gastos']].map(([v,l])=>{ const on=f.billing_type===v; return (
+              <button key={v} type='button' onClick={()=>up('billing_type',v)} style={{flex:1,border:on?'0.5px solid rgba(0,0,0,.08)':'0.5px solid transparent',borderRadius:7,padding:'8px 0',background:on?'#fff':'transparent',color:on?'#1a1a1a':'#537281',fontSize:12,cursor:'pointer'}}>{l}</button>
+            )})}
           </div>
-        ) : (
+        </div>
+
+        <div><label style={flabel}>Concepto</label><input value={f.concept||''} onChange={e=>up('concept',e.target.value)} placeholder='Descripción del cobro...' style={inp}/></div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div><label style={flabel}>Monto total (CLP)</label><input type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0' style={inp}/></div>
+          <div><label style={flabel}>De terceros (CLP)</label><input type='number' value={f.monto_terceros||''} onChange={e=>up('monto_terceros',e.target.value)} placeholder='0' style={inp}/></div>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div><label style={flabel}>Estado</label><select value={f.status||'Pendiente'} onChange={e=>up('status',e.target.value)} style={sel}>{estados.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+          <div><label style={flabel}>N° Factura</label><input value={f.invoice_no||''} onChange={e=>up('invoice_no',e.target.value)} placeholder='367...' style={inp}/></div>
+        </div>
+
+        {f.client_id&&(
           <div>
-            <input value={clientQuery} onChange={e=>setClientQuery(e.target.value)} placeholder='Buscar cliente por nombre...' style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}/>
-            {clientQuery.trim() && (
-              <div style={{maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff'}}>
-                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
-                  <div key={c.id} onClick={()=>{up('client_id',c.id);setClientQuery('')}} style={{padding:'9px 12px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`1px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F2F2F2'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
-                ))}
-                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).length===0 && <div style={{padding:'9px 12px',fontSize:13,color:C.muted}}>Sin resultados</div>}
+            <label style={flabel}>Razón social</label>
+            {!nuevaRS&&rsList.length>0?(
+              <select value={f.receptor_rut||''} onChange={e=>{
+                if(e.target.value==='__nueva__'){setNuevaRS(true);up('receptor_name','');up('receptor_rut','')}
+                else{const ce=rsList.find(x=>x.rut===e.target.value);up('receptor_name',ce?.name||'');up('receptor_rut',ce?.rut||'')}
+              }} style={sel}>
+                <option value=''>— Sin especificar —</option>
+                {rsList.map(e=><option key={e.id} value={e.rut||e.name}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
+                <option value='__nueva__'>+ Nueva razón social...</option>
+              </select>
+            ):(
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                <input value={f.receptor_name||''} onChange={e=>up('receptor_name',e.target.value)} placeholder='Nombre / razón social' style={inp}/>
+                <input value={f.receptor_rut||''} onChange={e=>up('receptor_rut',e.target.value)} placeholder='RUT (76.xxx.xxx-x)' style={inp}/>
+                {rsList.length>0&&<button type='button' onClick={()=>{setNuevaRS(false);up('receptor_name','');up('receptor_rut','')}} style={{alignSelf:'flex-start',background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:500,cursor:'pointer'}}>← Elegir de las existentes</button>}
               </div>
             )}
           </div>
         )}
-      </Fld>
-      <Fld label='Tipo de cobro'>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {[['honorarios','Honorarios'],['reembolso','Reembolso gastos']].map(([v,l])=>(
-            <button key={v} type='button' onClick={()=>up('billing_type',v)} style={{padding:'9px',borderRadius:8,border:`2px solid ${f.billing_type===v?C.accent:C.border}`,background:f.billing_type===v?'#E6EEF1':'transparent',color:f.billing_type===v?C.accent:C.muted,fontSize:12,fontWeight:700,cursor:'pointer'}}>{l}</button>
-          ))}
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div><label style={flabel}>Emisión</label><input type='date' value={f.issued_at||''} onChange={e=>up('issued_at',e.target.value)} style={inp}/></div>
+          <div><label style={flabel}>Vencimiento</label><input type='date' value={f.due||''} onChange={e=>up('due',e.target.value)} style={inp}/></div>
+          {f.status==='Pagado'&&<div><label style={flabel}>Fecha de pago</label><input type='date' value={f.paid_at||''} onChange={e=>up('paid_at',e.target.value)} style={inp}/></div>}
         </div>
-      </Fld>
-      <Fld label='Concepto'><Inp value={f.concept||''} onChange={e=>up('concept',e.target.value)} placeholder='Descripcion del cobro...'/></Fld>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Monto total (CLP)'><Inp type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0'/></Fld>
-        <Fld label='De terceros (CLP)'><Inp type='number' value={f.monto_terceros||''} onChange={e=>up('monto_terceros',e.target.value)} placeholder='0'/></Fld>
-        <Fld label='Estado'><Sel value={f.status||'Pendiente'} onChange={e=>up('status',e.target.value)} options={['Propuesta','Pendiente','Pagado','Vencido','Anulado']}/></Fld>
-        <Fld label='N Factura'><Inp value={f.invoice_no||''} onChange={e=>up('invoice_no',e.target.value)} placeholder='367...'/></Fld>
+
+        <div><label style={flabel}>Notas</label><textarea value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...' style={txt}/></div>
+
+        {bill?.id&&user&&<div><label style={flabel}>Archivos</label><Attachments table='billing_attachments' idField='billing_id' entityId={bill.id} folderKind='facturas' namePrefix={`${clients.find(c=>String(c.id)===String(f.client_id))?.name||''} · ${f.concept||'Cobro'}`} user={user} onChange={onAttachChange}/></div>}
       </div>
-      {f.client_id&&(
-        <Fld label='Razón social'>
-          {!nuevaRS&&rsList.length>0?(
-            <select value={f.receptor_rut||''} onChange={e=>{
-              if(e.target.value==='__nueva__'){setNuevaRS(true);up('receptor_name','');up('receptor_rut','')}
-              else{const ce=rsList.find(x=>x.rut===e.target.value);up('receptor_name',ce?.name||'');up('receptor_rut',ce?.rut||'')}
-            }} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:14,boxSizing:'border-box'}}>
-              <option value=''>— Sin especificar —</option>
-              {rsList.map(e=><option key={e.id} value={e.rut||e.name}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
-              <option value='__nueva__'>+ Nueva razón social...</option>
-            </select>
-          ):(
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              <Inp value={f.receptor_name||''} onChange={e=>up('receptor_name',e.target.value)} placeholder='Nombre / razón social'/>
-              <Inp value={f.receptor_rut||''} onChange={e=>up('receptor_rut',e.target.value)} placeholder='RUT (76.xxx.xxx-x)'/>
-              {rsList.length>0&&<button type='button' onClick={()=>{setNuevaRS(false);up('receptor_name','');up('receptor_rut','')}} style={{alignSelf:'flex-start',background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>← Elegir de las existentes</button>}
-            </div>
-          )}
-        </Fld>
-      )}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Emision'><Inp type='date' value={f.issued_at||''} onChange={e=>up('issued_at',e.target.value)}/></Fld>
-        <Fld label='Vencimiento'><Inp type='date' value={f.due||''} onChange={e=>up('due',e.target.value)}/></Fld>
-        {f.status==='Pagado'&&<Fld label='Fecha de pago'><Inp type='date' value={f.paid_at||''} onChange={e=>up('paid_at',e.target.value)}/></Fld>}
-      </div>
-      <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>
-      {bill?.id&&user&&<Attachments table='billing_attachments' idField='billing_id' entityId={bill.id} folderKind='facturas' namePrefix={`${clients.find(c=>String(c.id)===String(f.client_id))?.name||''} · ${f.concept||'Cobro'}`} user={user} onChange={onAttachChange}/>}
-      <div style={{display:'flex',gap:8,marginTop:4}}>
-        {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
+      <div style={{display:'flex',gap:8,alignItems:'center',padding:'12px 18px',borderTop:`0.5px solid ${C.border}`}}>
+        {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{height:36,padding:'0 14px',borderRadius:8,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:500,cursor:'pointer'}}>Eliminar</button>}
+        <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
+        <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave(f)} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -6878,7 +6904,7 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
       ))}
       <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
       <button onClick={()=>inputRef.current?.click()} disabled={busy} style={{marginTop:8,padding:'7px 12px',borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',gap:6}}>
-        {busy?<Spin/>:null}{busy?'Subiendo...':'+ Adjuntar archivo'}
+        {busy?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>}{busy?'Subiendo...':'Adjuntar archivo'}
       </button>
       <div style={{fontSize:10,color:C.muted,marginTop:4}}>Máx. 15 MB · se guarda en Drive (Respaldo Gastos APP)</div>
     </div>
@@ -8760,7 +8786,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='billing'&&<Modal title={modal.data?.id?'Editar cobro':'Nuevo cobro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,padding:'18px 20px 24px',boxSizing:'border-box'}}>
