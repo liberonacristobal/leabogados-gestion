@@ -599,11 +599,12 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
   const catLabel = c => c==='Diario Oficial'?'DO':c==='Registro Civil'?'R. Civil':(c||'Otro')
   const catBadge = c => c==='CBR'?{bg:'#E4E8EB',color:'#003C50'}:(c==='Notaria'||c==='Diario Oficial')?{bg:'#FFF8E1',color:'#B8860B'}:{bg:'#F5F7F9',color:'#537281'}
-  // KPI cards (compartidas PENDIENTES/CAJA): blancas con borde, centradas, cifra grande, responsivas
-  const kpiCard = {flex:1,minWidth:0,background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:10,padding:'12px 8px',textAlign:'center'}
-  const kpiLbl = {fontSize:9,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',whiteSpace:'nowrap'}
-  const kpiVal = {fontSize:20,fontWeight:700,marginTop:4,whiteSpace:'nowrap',lineHeight:1.1}
-  const kpiSub = {fontSize:8,fontWeight:600,letterSpacing:'.05em',marginTop:2,textTransform:'uppercase'}
+  // KPI cards (compartidas PENDIENTES/CAJA): mismo formato que Facturación — fondo con tinte de
+  // color según el dato, label mayúscula muted, cifra bold del color. El bg se pasa por tarjeta.
+  const kpiCard = {flex:1,minWidth:0,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}
+  const kpiLbl = {fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,whiteSpace:'nowrap'}
+  const kpiVal = {fontSize:15,fontWeight:700,whiteSpace:'nowrap',lineHeight:1.15}
+  const kpiSub = {fontSize:8,fontWeight:600,letterSpacing:.4,marginTop:1,textTransform:'uppercase'}
 
   // Auto-cierre del mensaje de confirmación post-liquidación
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),7000); return ()=>clearTimeout(t) } },[toast])
@@ -766,13 +767,13 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'0 0 130px'}}>
           {/* Resumen: saldo de caja + total sin liquidar */}
           <div style={{display:'flex',gap:8,padding:'2px 14px 10px'}}>
-            <div style={kpiCard}>
+            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E4F1EA'}}>
               <div style={kpiLbl}>Saldo caja</div>
-              <div style={{...kpiVal,color:saldoCaja<0?'#E24B4A':'#1D9E75'}}>{fmtCLP(saldoCaja)}</div>
+              <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
             </div>
-            <div style={kpiCard}>
+            <div style={{...kpiCard,background:'#E3EEF3'}}>
               <div style={kpiLbl}>Sin liquidar</div>
-              <div style={{...kpiVal,color:'#003C50'}}>{fmtCLP(sinLiquidar)}</div>
+              <div style={{...kpiVal,color:C.accent}}>{fmtCLP(sinLiquidar)}</div>
             </div>
           </div>
           {/* MIS GASTOS + conteo */}
@@ -834,15 +835,15 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'4px 0 100px'}}>
           {/* KPIs */}
           <div style={{display:'flex',gap:8,padding:'4px 14px 10px'}}>
-            <div style={kpiCard}>
+            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E4F1EA'}}>
               <div style={kpiLbl}>Saldo</div>
-              <div style={{...kpiVal,color:saldoCaja<0?'#E24B4A':'#1D9E75'}}>{fmtCLP(saldoCaja)}</div>
-              <div style={{...kpiSub,color:saldoCaja<0?'#E24B4A':'#99ABB4'}}>{saldoCaja<0?'Te debemos':'Disponible'}</div>
+              <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
+              <div style={{...kpiSub,color:saldoCaja<0?C.overdue:C.muted}}>{saldoCaja<0?'Te debemos':'Disponible'}</div>
             </div>
-            <div style={kpiCard}>
+            <div style={{...kpiCard,background:'#E4E8EB'}}>
               <div style={kpiLbl}>Liquidado</div>
-              <div style={{...kpiVal,color:'#537281'}}>{fmtCLP(totalLiquidado)}</div>
-              <div style={{...kpiSub,color:'#99ABB4'}}>Histórico</div>
+              <div style={{...kpiVal,color:C.muted}}>{fmtCLP(totalLiquidado)}</div>
+              <div style={{...kpiSub,color:C.muted}}>Histórico</div>
             </div>
           </div>
           {/* CAJAS ENTREGADAS */}
