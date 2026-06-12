@@ -73,6 +73,7 @@ async function reconcileProgramada(clientId, amount, issuedAt){
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
+const ddItem = { padding:'9px 14px', fontSize:13, color:'#3D3D3D', cursor:'pointer', display:'flex', alignItems:'center', gap:8, borderRadius:6, margin:'0 4px' }
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -8088,6 +8089,8 @@ export default function App() {
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
   const [modal,setModal]=useState(null)
+  const [menuOpen,setMenuOpen]=useState(false)
+  useEffect(()=>{ const handler=()=>setMenuOpen(false); document.addEventListener('click',handler); return ()=>document.removeEventListener('click',handler) },[])
   const saleUploadRef = useRef(null)
   const saleDriveRef = useRef(null)
 
@@ -8541,13 +8544,47 @@ export default function App() {
         }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'52px 20px 4px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
-          <button onClick={signOut} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',fontWeight:500}}>{user?.name} · Salir</button>
-          <div style={{display:'flex',gap:6}}>
-            {userRole==='admin'&&<button onClick={()=>setModal({type:'users'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Usuarios</button>}
-            {userRole==='admin'&&<button onClick={()=>setModal({type:'report'})} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>↓ Reporte</button>}
-            {actualRole==='admin'&&userRole==='admin'&&<button onClick={()=>{setUserRole('limited');setTab('tasks')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F4F6F7',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Vista Team</button>}
-            {actualRole==='admin'&&userRole==='limited'&&<button onClick={()=>{setUserRole('admin');setTab('dashboard')}} style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>← Vista Admin</button>}
+        <div style={{padding:'52px 20px 8px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
+          <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,position:'relative'}}>
+            <div style={{padding:'0 20px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+              <div style={{display:'flex',alignItems:'center',gap:14,minWidth:0}}>
+                <div style={{height:34,background:'#003C50',borderRadius:7,display:'flex',alignItems:'center',padding:'0 10px',flexShrink:0}}>
+                  <img src={logoBlanco} alt='Liberona Escala' style={{height:18,width:'auto',display:'block'}}/>
+                </div>
+                <div style={{width:1,height:18,background:'#E4E8EB',flexShrink:0}}/>
+                <div style={{fontSize:13,color:'#537281',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>¡Hola, <span style={{color:'#003C50',fontWeight:500}}>{user?.name}</span>!</div>
+              </div>
+              <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:'0.5px solid #E4E8EB',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
+              </button>
+            </div>
+            {menuOpen&&(
+              <div style={{position:'absolute',top:52,right:12,width:210,background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:10,padding:'4px 0',zIndex:100}}>
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'report'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><line x1='9' y1='13' x2='15' y2='13'/><line x1='9' y1='17' x2='13' y2='17'/></svg>
+                  Generar reporte
+                </div>}
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'users'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
+                  Gestión de usuarios
+                </div>}
+                {actualRole==='admin'&&(userRole==='admin'
+                  ? <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('limited');setTab('tasks')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                      <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
+                      Vista Team
+                    </div>
+                  : <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('admin');setTab('dashboard')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                      <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
+                      Vista Admin
+                    </div>
+                )}
+                <div style={{height:'0.5px',background:'#E4E8EB',margin:'4px 0'}}/>
+                <div style={{...ddItem,color:'#E24B4A'}} onClick={()=>{setMenuOpen(false);signOut()}} onMouseEnter={e=>e.currentTarget.style.background='#FEF2F2'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#E24B4A' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/><polyline points='16 17 21 12 16 7'/><line x1='21' y1='12' x2='9' y2='12'/></svg>
+                  Cerrar sesión
+                </div>
+              </div>
+            )}
           </div>
         </div>
         {loading?(
