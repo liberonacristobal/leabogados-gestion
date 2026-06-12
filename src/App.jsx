@@ -1733,7 +1733,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
           const netoFirma = facturado - terceros
           const fmtShort = n => { const a=Math.abs(n||0); if(a>=1000000) return '$'+(a/1000000).toFixed(1).replace('.',',')+'M'; if(a>=1000) return '$'+Math.round(a/1000)+'K'; return '$'+a.toLocaleString('es-CL') }
           const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
-          const cell = {background:'#F5F7F9',borderRadius:10,padding:'10px 9px',minWidth:0}
+          const cell = {background:'#F5F7F9',borderRadius:10,padding:'10px 9px',minWidth:0,textAlign:'center'}
           const clbl = {fontSize:9,color:C.muted,marginBottom:4,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
           const cnum = {fontSize:16,fontWeight:700,whiteSpace:'nowrap'}
           return (
@@ -2181,7 +2181,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
         const token = await driveToken()
         const PROPUESTAS_FOLDER = '1MQg9_q0l20mjB-LftuYQywTE4T81Kxf3'
         const cutoff = new Date(Date.now()-15*24*60*60*1000).toISOString()
-        const q = encodeURIComponent(`'${PROPUESTAS_FOLDER}' in ancestors and modifiedTime>'${cutoff}' and trashed=false and (mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')`)
+        const q = encodeURIComponent(`'${PROPUESTAS_FOLDER}' in parents and modifiedTime>'${cutoff}' and trashed=false and (mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')`)
         const data = await driveGet(token,`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=50`)
         setPropDriveFiles(data.files||[])
       } catch(e) {
@@ -4544,47 +4544,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
         </div>
       )}
 
-      {/* Barra inferior: Total a rendir + Rendir al cliente (vista 1 RS) */}
-      {selectedClient&&!multiRS&&(()=>{
-        const gastosPend = filtered.filter(e=>e.type==='gasto'&&!e.client_rendered_at)
-        const total = gastosPend.reduce((a,e)=>a+(e.amount||0),0)
-        return (
-          <div style={{position:'fixed',bottom:64,left:0,right:0,padding:'0 20px',zIndex:40}}>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,boxShadow:'0 4px 16px rgba(0,0,0,.12)'}}>
-              {gastosPend.length>0?<>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4}}>Total a rendir</div>
-                  <div style={{fontSize:15,fontWeight:700,color:C.text}}>{fmt(total)}</div>
-                </div>
-                <button onClick={()=>{setRendEntityIds(selEnts[0]?[selEnts[0].id]:[]);setRendicionClient(selectedClient)}} style={{padding:'10px 16px',borderRadius:10,border:'none',background:'#1D9E75',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Rendir al cliente</button>
-              </>:<div style={{flex:1,fontSize:12,color:C.muted,textAlign:'center'}}>Sin gastos por rendir</div>}
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* Barra inferior 2+ RS: RS seleccionadas + monto + Rendir */}
-      {selectedClient&&multiRS&&(()=>{
-        const selIds=[...selRS]
-        const selNames=selEnts.filter(e=>selRS.has(e.id)).map(e=>e.name)
-        const gastosPend=filtered.filter(e=>e.type==='gasto'&&!e.client_rendered_at&&selRS.has(e.entity_id))
-        const total=gastosPend.reduce((a,e)=>a+(e.amount||0),0)
-        return (
-          <div style={{position:'fixed',bottom:64,left:0,right:0,padding:'0 20px',zIndex:40}}>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,boxShadow:'0 4px 16px rgba(0,0,0,.12)'}}>
-              {selIds.length===0
-                ? <div style={{flex:1,fontSize:12,color:C.muted,textAlign:'center'}}>Selecciona una razón social para rendir</div>
-                : <>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selNames.length===1?selNames[0]:`${selNames.length} razones sociales`}</div>
-                      <div style={{fontSize:15,fontWeight:700,color:C.text}}>{fmt(total)}</div>
-                    </div>
-                    <button disabled={gastosPend.length===0} onClick={()=>{setRendEntityIds(selIds);setRendicionClient(selectedClient)}} style={{padding:'10px 16px',borderRadius:10,border:'none',background:gastosPend.length?'#1D9E75':'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:gastosPend.length?'pointer':'not-allowed'}}>Rendir al cliente</button>
-                  </>}
-            </div>
-          </div>
-        )
-      })()}
+      {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
       {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName}/></Modal>}
@@ -5384,17 +5344,20 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
     const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.date||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#E24B4A">-${fmtN(e.amount)}</td></tr>`).join('')
-    return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:15px;font-weight:700">Liberona Escala Abogados</div><div style="font-size:11px;opacity:.85;margin-top:2px">Rendición de gastos · ${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="LE" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#E24B4A">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
+    return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:700">Rendición de gastos</div><div style="font-size:11px;opacity:.85;margin-top:2px">${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#E24B4A">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
   }
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
+    const texto = 'Estimado cliente,\n\nAdjunto la rendición de gastos.\n\n'+det.map(e=>`${e.date||'—'} · ${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')+`\n\nTOTAL RENDIDO: -${fmtN(r.total)}\n\nAtentamente,\n${user?.name||''}\nLiberona Escala Abogados`
+    // Abrir el correo dentro del gesto del usuario: un await previo bloquea la apertura en Safari/iOS
+    const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+    const win=window.open(gmailUrl,'_blank')
+    if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
     setSending(true)
     try{
-      const texto = 'Estimado cliente,\n\nAdjunto la rendición de gastos.\n\n'+det.map(e=>`${e.date||'—'} · ${e.category||'Otro'}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('\n')+`\n\nTOTAL RENDIDO: -${fmtN(r.total)}\n\nAtentamente,\n${user?.name||''}\nLiberona Escala Abogados`
       const now = new Date().toISOString()
       await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
       onSent && onSent(r.id, now)
-      const link=document.createElement('a'); link.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`; document.body.appendChild(link); link.click(); document.body.removeChild(link)
       onClose()
     }catch(e){ alert('Error: '+e.message) }
     setSending(false)
