@@ -6990,7 +6990,8 @@ function printTasks(tasks, clients, filterLabel) {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Tareas pendientes</title>
   <style>
-    body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:24px;color:#1a1a1a}
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+    body{font-family:'DM Sans',Helvetica,Arial,sans-serif;margin:0;padding:24px;color:#3D3D3D}
     h1{font-size:18px;font-weight:700;color:#003C50;margin:0 0 4px}
     .sub{font-size:11px;color:#999;margin-bottom:20px}
     table{width:100%;border-collapse:collapse}
