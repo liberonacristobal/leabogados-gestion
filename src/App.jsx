@@ -1697,6 +1697,37 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
   const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
+  // --- META anual: metas por año (annual_targets) + selector + histórico ---
+  const [targets,setTargets] = useState([])
+  const [selYear,setSelYear] = useState(currentYear)
+  const [yearMenu,setYearMenu] = useState(false)
+  const [histOpen,setHistOpen] = useState(false)
+  useEffect(()=>{
+    supabase.from('annual_targets').select('*').order('year',{ascending:false}).then(({data})=>{
+      const rows = (data&&data.length)?[...data]:[]
+      if(!rows.some(t=>t.year===currentYear)) rows.unshift({year:currentYear,target_amount:META_CLP,currency:'CLP'})
+      setTargets(rows)
+    })
+  },[])
+  // Métricas de un año desde sales (vendido), misma fórmula que el cálculo central
+  const metricasAnio = (year) => {
+    const sy = sales.filter(s=>s.year===year&&!['Borrador','Propuesta','Rechazada'].includes(s.status))
+    const bruto = Math.round(sy.reduce((a,s)=>a+clpDeVenta(s),0))
+    const costo = Math.round(sy.reduce((a,s)=>a+(((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))*ufRef)+((s.moneda==='CLP'&&s.cost_clp)?((parseFloat(s.cost_clp)||0)*(esRec(s)?12:1)):0),0))
+    const neto = bruto - costo
+    const meta = Number(targets.find(t=>t.year===year)?.target_amount) || (year===currentYear?META_CLP:0)
+    const pct = meta>0 ? Math.round((bruto/meta)*100) : 0
+    return {year,bruto,costo,neto,meta,pct}
+  }
+  const m = metricasAnio(selYear)
+  const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year)])].sort((a,b)=>b-a)
+  const prevM = metricasAnio(selYear-1)
+  const tendenciaPP = (targets.some(t=>t.year===selYear-1) && prevM.bruto>0) ? (m.pct - prevM.pct) : null
+  const ufFecha = ufState.asOf ? new Date(ufState.asOf+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}) : ''
+  const ufTxt = ufState.uf ? `UF ${ufFecha} · $${Math.round(ufState.uf).toLocaleString('es-CL')}` : ''
+  const Chev = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
+  const HistIcon = () => <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg>
+
   return (
     <div>
       <div style={{padding:'20px 20px 0'}}>
@@ -1716,29 +1747,82 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
 
       {/* Meta anual */}
       <div style={{padding:'0 20px 16px'}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Meta {yr}</div>
-        <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-          <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}>
-            <div style={{fontSize:22,fontWeight:700,color:pctMeta>=100?C.normal:C.accent}}>{pctMeta}%</div>
-            <div style={{fontSize:11,color:C.muted}}>completado</div>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Revenue target {selYear}</div>
+        <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+          {/* Header: 3 columnas */}
+          <div style={{display:'flex',alignItems:'stretch',padding:'14px 16px',gap:14}}>
+            <div style={{display:'flex',flexDirection:'column',justifyContent:'center',paddingRight:14,borderRight:`1px solid ${C.border}`}}>
+              <div style={{fontSize:32,fontWeight:600,color:C.accent,lineHeight:1}}>{m.pct}%</div>
+              <div style={{fontSize:12,color:'#537281',marginTop:2}}>completado</div>
+            </div>
+            <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:5,minWidth:0}}>
+              {[['Meta',m.meta,'#1a1a1a'],['Vendido',m.bruto,C.accent],['Restante',Math.max(0,m.meta-m.bruto),'#537281']].map(([l,v,col])=>(
+                <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                  <span style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>{l}</span>
+                  <span style={{fontSize:13,fontWeight:500,color:col}}>{fmtShort(v)}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',alignItems:'flex-end',flexShrink:0,gap:8}}>
+              <div style={{position:'relative'}}>
+                <button onClick={()=>setYearMenu(o=>!o)} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:20,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:700,cursor:'pointer'}}>{selYear}<Chev open={yearMenu}/></button>
+                {yearMenu&&(
+                  <div style={{position:'absolute',right:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:78}}>
+                    {aniosDisponibles.map(y=>(
+                      <button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'right',padding:'7px 14px',border:'none',background:y===selYear?'#E6EEF1':'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?700:500,cursor:'pointer'}}>{y}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:'#E1F5EE',color:'#0F6E56',whiteSpace:'nowrap'}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
+            </div>
           </div>
-          <div style={{height:8,borderRadius:4,background:'#E8EEF0',marginBottom:12,overflow:'hidden'}}>
-            <div style={{height:'100%',borderRadius:4,background:pctMeta>=100?C.normal:C.accent,width:`${pctMeta}%`,transition:'width .5s ease'}}/>
+          {/* Barra de progreso */}
+          <div style={{height:5,background:'#E4E8EB',overflow:'hidden'}}>
+            <div style={{height:'100%',background:C.accent,width:`${Math.min(100,m.pct)}%`,borderRadius:3,transition:'width .5s ease'}}/>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {/* KPIs */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,padding:'12px 16px'}}>
             {[
-              ['Meta',META_UF,META_CLP,true,C.accent,C.accent],
-              ['Costo',costoUF,costoCLP,false,C.overdue,C.overdue],
-              ['Bruto',vendidoBrutoUF,vendidoBrutoCLP,false,C.accent,'#99ABB4'],
-              ['Neto',vendidoNetoUF,vendidoNetoCLP,false,C.normal,C.normal],
-            ].map(([l,uf,clp,hl,numCol,accCol])=>(
-              <div key={l} style={{background:hl?'#E6EEF1':'#fff',border:`1px solid ${hl?C.accent:C.border}`,borderLeft:`3px solid ${accCol}`,borderRadius:8,padding:'9px 10px'}}>
-                <div style={{fontSize:9,color:C.muted,marginBottom:3,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
-                <div style={{fontSize:16,fontWeight:700,color:numCol}}>{(uf<=0&&clp<=0)?'—':(dashMoneda==='UF'?fmtUFk(uf):fmtShort(clp))}</div>
+              ['Bruto',m.bruto,'#1a1a1a','vendido'],
+              ['Costo',m.costo,C.overdue,`${m.bruto>0?Math.round(m.costo/m.bruto*100):0}% del bruto`],
+              ['Neto',m.neto,'#0F6E56',`margen ${m.bruto>0?Math.round(m.neto/m.bruto*100):0}%`],
+            ].map(([l,v,col,sub])=>(
+              <div key={l} style={{background:'#f5f7f9',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:3}}>{l}</div>
+                <div style={{fontSize:16,fontWeight:500,color:col}}>{fmtShort(v)}</div>
+                <div style={{fontSize:10,color:'#537281',marginTop:1}}>{sub}</div>
               </div>
             ))}
           </div>
-          <div style={{marginTop:10,display:'flex',justifyContent:'flex-end'}}><UFStamp {...ufState}/></div>
+          {/* Trigger años anteriores */}
+          <div style={{borderTop:`1px solid ${C.border}`}}>
+            <button onClick={()=>setHistOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',gap:8}}>
+              <span style={{display:'flex',alignItems:'center',gap:6,color:'#99ABB4',fontSize:10,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}><HistIcon/>Años anteriores</span>
+              <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,color:'#537281'}}>
+                {ufTxt&&<span style={{fontSize:11,fontWeight:600}}>{ufTxt}</span>}
+                <Chev open={histOpen}/>
+              </span>
+            </button>
+            {histOpen&&(
+              <div style={{padding:'0 16px 14px'}}>
+                <div style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,paddingBottom:4}}>
+                  <span>Año</span><span>Avance</span><span style={{textAlign:'right'}}>Neto · % meta</span>
+                </div>
+                {aniosDisponibles.map(y=>{ const my=metricasAnio(y); const esActual=y===currentYear; const col=esActual?C.accent:'#537281'; const pctMetaNeto=my.meta>0?Math.round(my.neto/my.meta*100):0
+                  return (
+                  <div key={y} style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,alignItems:'center',padding:'7px 0',borderTop:'1px solid #F0F2F4'}}>
+                    <span style={{fontSize:12,fontWeight:500,color:col}}>{y}</span>
+                    <div style={{height:5,background:'#E4E8EB',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,my.pct)}%`,borderRadius:3}}/></div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:'#1a1a1a'}}>{fmtShort(my.neto)}</div>
+                      <div style={{fontSize:10,color:'#537281'}}>{esActual?`${pctMetaNeto}% · en curso`:`${pctMetaNeto}% meta`}</div>
+                    </div>
+                  </div>
+                )})}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
