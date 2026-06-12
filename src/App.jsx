@@ -1740,7 +1740,7 @@ function Dashboard({sales,billing,clients,expenses,tasks,pettyCash,setTab,user,o
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:terceros>0?8:0}}>
                 <div style={cell} title={fmt(facturado)}><div style={clbl}>Facturado</div><div style={{...cnum,color:C.normal}}>{fmtShort(facturado)}</div></div>
                 <div style={cell} title={fmt(cobrado)}><div style={clbl}>Cobrado</div><div style={{...cnum,color:C.normal}}>{fmtShort(cobrado)}</div></div>
-                <div style={cell}><div style={clbl}>Tasa cobro</div><div style={{...cnum,color:tasaCol}}>{tasaCobro}%</div></div>
+                <div style={{...cell,textAlign:'center'}}><div style={clbl}>Tasa cobro</div><div style={{...cnum,color:tasaCol}}>{tasaCobro}%</div></div>
               </div>
               {terceros>0&&(
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
