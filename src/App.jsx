@@ -3368,16 +3368,28 @@ function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
 
 // Modal de sincronización con el SII — Fase 1: lee el Registro de Ventas y
 // concilia Programadas -> Pendientes vía la Edge Function sii-sync (solo admin).
+// Tres puntos pulsantes mientras el SII responde
+function SiiDots(){
+  const [a,setA] = useState(0)
+  useEffect(()=>{ const id=setInterval(()=>setA(x=>(x+1)%3),280); return ()=>clearInterval(id) },[])
+  return <div style={{display:'flex',gap:6,justifyContent:'center',padding:'22px 20px'}}>{[0,1,2].map(i=>(<div key={i} style={{width:7,height:7,borderRadius:'50%',background:'#003C50',opacity:a===i?1:.15,transition:'opacity .15s'}}/>))}</div>
+}
+const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const MESES_LG = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
 function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   const hoy = new Date()
   const [mes,setMes] = useState(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`)
   const [loading,setLoading] = useState(false)
-  const [testLoading,setTestLoading] = useState(false)
   const [result,setResult] = useState(null)
-  const [testMsg,setTestMsg] = useState('')
   const [error,setError] = useState('')
   const [ingresando,setIngresando] = useState(null)        // folio en curso
   const [ingresadas,setIngresadas] = useState(()=>({}))    // folio -> {cliente|null}
+  const [yaOpen,setYaOpen] = useState(false)
+  const [yy,mm] = mes.split('-').map(Number)
+  const mesLabel = `${MESES_ABR[mm-1]} ${yy}`
+  const mesLargo = `${MESES_LG[mm-1]} ${yy}`
+  const cambiarMes = d => { const dt=new Date(yy,mm-1+d,1); setMes(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`) }
 
   // Resuelve el cliente de una factura huerfana igual que la carga de PDFs:
   // RUT en vinculos aprendidos -> nombre en vinculos -> RUT en clientes -> nombre en clientes.
@@ -3424,6 +3436,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
     }
     setIngresando(null)
   }
+  const ingresarTodas = async() => { for(const it of (result?.sinMatch||[])){ if(!ingresadas[it.folio]) await ingresarHuerfana(it) } }
 
   const [corrigiendo,setCorrigiendo] = useState(null)        // billingId en curso
   const [corregidas,setCorregidas] = useState(()=>({}))      // billingId -> true
@@ -3459,7 +3472,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   }
   const msgErr = e => e.detalle&&e.detalle!==e.message ? `${e.message} — ${e.detalle}` : e.message
   const sincronizar = async() => {
-    setLoading(true); setError(''); setResult(null); setTestMsg('')
+    setLoading(true); setError(''); setResult(null)
     try{
       const data = await llamar({periodo:mes})
       setResult(data)
@@ -3467,97 +3480,102 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
     }catch(e){ setError(msgErr(e)) }
     setLoading(false)
   }
-  const probarAuth = async() => {
-    setTestLoading(true); setError(''); setTestMsg('')
-    try{ const d=await llamar({action:'test-auth'}); setTestMsg(`${d.mensaje} (ambiente: ${d.ambiente}, token ${d.tokenPreview})`) }
-    catch(e){ setError(msgErr(e)) }
-    setTestLoading(false)
-  }
-  const [cerradas,setCerradas] = useState(()=>new Set(['ya']))   // 'Ya registradas' colapsada por defecto
-  const toggleSec = k => setCerradas(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})
-  const Caret = ({abierta,color}) => (
-    <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:abierta?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>
-      <path d='M3 2 L7 5 L3 8' fill='none' stroke={color} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round'/>
-    </svg>
-  )
-  const Sec = ({k,titulo,color,bg,items,render}) => {
-    if(!items||items.length===0) return null
-    const abierta = !cerradas.has(k)
-    return (
-      <div style={{marginBottom:10}}>
-        <button onClick={()=>toggleSec(k)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',background:'none',border:'none',padding:'0 0 6px 0',cursor:'pointer',textAlign:'left'}}>
-          <Caret abierta={abierta} color={color}/>
-          <span style={{fontSize:10,fontWeight:700,color,textTransform:'uppercase',letterSpacing:.4}}>{titulo} ({items.length})</span>
-        </button>
-        {abierta&&<div style={{background:bg,borderRadius:8,padding:'2px 10px'}}>
-          {items.map((it,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:i<items.length-1?'1px solid rgba(0,0,0,0.05)':'none',fontSize:12}}>{render(it)}</div>))}
-        </div>}
-      </div>
-    )
-  }
   const vacio = result&&!result.actualizadas?.length&&!result.corregirFolio?.length&&!result.ambiguas?.length&&!result.sinMatch?.length&&!result.errores?.length
+  const reg = result?.yaRegistradas||[]
+  const Hdr = ({label,color,bg,border,right}) => (
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 20px',background:bg,borderBottom:`0.5px solid ${border||'#E4E8EB'}`}}>
+      <span style={{fontSize:11,fontWeight:600,color,textTransform:'uppercase',letterSpacing:'0.05em'}}>{label}</span>
+      {right}
+    </div>
+  )
+  const Fila = ({children}) => <div style={{display:'flex',alignItems:'center',padding:'11px 20px',borderBottom:'0.5px solid #E4E8EB'}}>{children}</div>
+  const CheckVerde = () => <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><polyline points='20 6 9 17 4 12'/></svg>
   return (
-    <Modal title='Sincronizar con SII' onClose={onClose} closeOnBackdrop={false}>
-      <div style={{display:'flex',gap:8,alignItems:'flex-end',marginBottom:14}}>
-        <div style={{flex:1}}>
-          <Lbl>Período</Lbl>
-          <input type='month' value={mes} onChange={e=>setMes(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F7F7F7',fontSize:14,color:C.text,boxSizing:'border-box'}}/>
+    <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'#fff',borderRadius:14,maxWidth:480,width:'100%',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'16px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:1}}>
+          <span style={{fontSize:15,fontWeight:500,color:'#1a1a1a'}}>Sincronizar SII</span>
+          <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:'0.5px solid #E4E8EB',background:'none',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round'><line x1='6' y1='6' x2='18' y2='18'/><line x1='18' y1='6' x2='6' y2='18'/></svg>
+          </button>
         </div>
-        <button onClick={sincronizar} disabled={loading} style={{padding:'10px 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:loading?.6:1,whiteSpace:'nowrap'}}>{loading?'Consultando...':'Sincronizar'}</button>
-      </div>
-      {loading&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 0',justifyContent:'center'}}><Spin/><span style={{fontSize:12,color:C.muted}}>Consultando SII...</span></div>}
-      {error&&<div style={{padding:'9px 12px',borderRadius:8,background:'#FCEBEB',color:C.overdue,fontSize:12,marginBottom:12}}>{error}</div>}
-      {testMsg&&<div style={{padding:'9px 12px',borderRadius:8,background:'#E1F5EE',color:'#0F6E56',fontSize:12,marginBottom:12}}>{testMsg}</div>}
-      {result&&(vacio
-        ? <div style={{textAlign:'center',padding:'18px 0',fontSize:13,color:C.normal,fontWeight:600}}>Todo está al día{result.yaRegistradas?.length?` · ${result.yaRegistradas.length} factura(s) ya estaban registradas`:''}</div>
-        : <>
-            <Sec k='act' titulo='Actualizadas a Pendiente' color='#0F6E56' bg='#E1F5EE' items={result.actualizadas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente} · F° {it.folio}</span><span style={{fontWeight:700,color:'#0F6E56',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
-            <Sec k='fol' titulo='Corregir número de folio' color={C.accent} bg='#E6EEF1' items={result.corregirFolio} render={it=>{
-              const ya = corregidas[it.billingId]
-              return (<>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{it.receptor||it.cliente||'—'}</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>{it.folioActual?<>F° {it.folioActual} <span style={{color:C.accent,fontWeight:600}}>→ {it.folio}</span></>:`Asignar F° ${it.folio}`}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+        <div style={{display:'flex',gap:10,padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB'}}>
+          <div style={{display:'flex',border:'0.5px solid #E4E8EB',borderRadius:8,overflow:'hidden',flex:1,height:36}}>
+            <button onClick={()=>cambiarMes(-1)} style={{width:32,border:'none',background:'none',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg></button>
+            <span style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{mesLabel}</span>
+            <button onClick={()=>cambiarMes(1)} style={{width:32,border:'none',background:'none',color:'#537281',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='9 18 15 12 9 6'/></svg></button>
+          </div>
+          <button onClick={sincronizar} disabled={loading} style={{height:36,padding:'0 18px',background:loading?'#99ABB4':'#003C50',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:500,cursor:loading?'default':'pointer',whiteSpace:'nowrap'}}>{loading?'Consultando…':'Sincronizar'}</button>
+        </div>
+        {error&&<div style={{padding:'10px 20px',fontSize:12,color:C.overdue,background:'#FCEBEB'}}>{error}</div>}
+        {loading&&<SiiDots/>}
+        {result&&!loading&&<>
+          {vacio
+            ? <div style={{display:'flex',gap:12,padding:'16px 20px',alignItems:'center'}}>
+                <div style={{width:32,height:32,borderRadius:'50%',background:'#E1F5EE',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><CheckVerde/></div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:'#1D9E75'}}>{mesLargo} al día</div>
+                  <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>{reg.length} factura{reg.length!==1?'s':''} ya registrada{reg.length!==1?'s':''}</div>
                 </div>
-                <span style={{display:'flex',alignItems:'center',gap:8,whiteSpace:'nowrap',flexShrink:0}}>
-                  <span style={{fontWeight:600,color:C.accent}}>{fmt(it.monto)}</span>
-                  {ya
-                    ? <span style={{fontSize:11,fontWeight:600,color:C.normal}}>Corregido</span>
-                    : <button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',opacity:corrigiendo===it.billingId?.5:1}}>{corrigiendo===it.billingId?'...':'Corregir'}</button>}
-                </span>
-              </>)
-            }}/>
-            <Sec k='sin' titulo='Ventas no cargadas' color={C.soon} bg='#FEF6EE' items={result.sinMatch} render={it=>{
-              const ya = ingresadas[it.folio]
-              return (<>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{it.receptor||'—'}</div>
-                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>F° {it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
-                </div>
-                <span style={{display:'flex',alignItems:'center',gap:8,whiteSpace:'nowrap',flexShrink:0}}>
-                  <span style={{fontWeight:600,color:C.soon}}>{fmt(it.monto)}</span>
-                  {ya
-                    ? <span style={{fontSize:11,fontWeight:600,color:C.normal}}>{ya.cliente?'Ingresada':'Ingresada · asigna cliente'}</span>
-                    : <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'...':'Ingresar'}</button>}
-                </span>
-              </>)
-            }}/>
-            <Sec k='amb' titulo='Requieren revisión manual' color='#537281' bg='#EAEEF1' items={result.ambiguas} render={it=>(<><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {it.folio} · {fmtRut(it.rut)} · {it.candidatos?.length} candidatos</span><span style={{fontWeight:600,color:'#537281',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></>)}/>
-            <Sec k='ya' titulo='Ya registradas' color='#537281' bg='#F5F7F9' items={result.yaRegistradas} render={it=>(<>
-              <div style={{minWidth:0,flex:1}}>
-                <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{it.receptor||'—'}</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:1}}>F° {it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
               </div>
-              <span style={{fontWeight:600,color:'#537281',whiteSpace:'nowrap',flexShrink:0}}>{fmt(it.monto)}</span>
-            </>)}/>
-            <Sec k='err' titulo='Errores' color={C.overdue} bg='#FCEBEB' items={result.errores} render={it=>(<><span>F° {it.folio}</span><span style={{fontSize:11,color:C.overdue}}>{it.error}</span></>)}/>
-          </>
-      )}
-      <div style={{marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-        <button onClick={probarAuth} disabled={testLoading} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',textDecoration:'underline',padding:0}}>{testLoading?'Probando...':'Probar conexión con el SII'}</button>
-        <span style={{fontSize:10,color:'#99ABB4'}}>La sincronización solo lee · las acciones las confirmas tú</span>
+            : <>
+                {result.actualizadas?.length>0&&<>
+                  <Hdr label='Conciliadas' color='#0F6E56' bg='#EFFAF5'/>
+                  {result.actualizadas.map((it,i)=><Fila key={i}><div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:500,color:'#1a1a1a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente}</div><div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>F° {it.folio}</div></div><span style={{fontSize:13,fontWeight:500,color:'#1a1a1a',marginLeft:'auto',marginRight:8,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span><CheckVerde/></Fila>)}
+                </>}
+                {result.corregirFolio?.length>0&&<>
+                  <Hdr label='Corregir folio' color={C.accent} bg='#EEF4F7'/>
+                  {result.corregirFolio.map((it,i)=>{ const ya=corregidas[it.billingId]; return <Fila key={i}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:500,color:'#1a1a1a',textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||it.cliente||'—'}</div>
+                      <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>{it.folioActual?`F° ${it.folioActual} → ${it.folio}`:`Asignar F° ${it.folio}`}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:500,color:'#1a1a1a',marginLeft:'auto',marginRight:12,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>
+                    {ya?<span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>Corregido</span>:<button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:corrigiendo===it.billingId?.5:1}}>{corrigiendo===it.billingId?'…':'Corregir'}</button>}
+                  </Fila> })}
+                </>}
+                {result.sinMatch?.length>0&&<>
+                  <Hdr label='Ventas no cargadas' color='#B8860B' bg='#FFFBF0' border='#F0E4B8' right={result.sinMatch.length>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:'#003C50',color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Asignar todas</button>}/>
+                  {result.sinMatch.map((it,i)=>{ const ya=ingresadas[it.folio]; return <Fila key={i}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:500,color:'#1a1a1a',textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
+                      <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>F° {it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:500,color:'#1a1a1a',marginLeft:'auto',marginRight:12,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>
+                    {ya?<span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>{ya.cliente?'Asignada':'Asigna cliente'}</span>:<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:26,padding:'0 12px',borderRadius:8,background:'#537281',color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'…':'+ Asignar'}</button>}
+                  </Fila> })}
+                </>}
+                {result.ambiguas?.length>0&&<>
+                  <Hdr label='Revisión manual' color='#537281' bg='#EEF1F4'/>
+                  {result.ambiguas.map((it,i)=><Fila key={i}><div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:500,color:'#1a1a1a'}}>F° {it.folio} · {it.candidatos?.length} candidatos</div><div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>{fmtRut(it.rut)}</div></div><span style={{fontSize:13,fontWeight:500,color:'#1a1a1a',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></Fila>)}
+                </>}
+                {result.errores?.length>0&&<>
+                  <Hdr label='Errores' color={C.overdue} bg='#FCEBEB'/>
+                  {result.errores.map((it,i)=><Fila key={i}><span style={{fontSize:12,color:'#1a1a1a'}}>F° {it.folio}</span><span style={{fontSize:11,color:C.overdue,marginLeft:'auto'}}>{it.error}</span></Fila>)}
+                </>}
+              </>}
+          {reg.length>0&&<>
+            <div onClick={()=>setYaOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 20px',cursor:'pointer'}}>
+              <span style={{fontSize:11,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.05em'}}>Ya registradas</span>
+              <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:yaOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+            </div>
+            {yaOpen&&reg.map((it,i)=>{ const cli=resolverCliente(it.rut,it.receptor); return (
+              <div key={i} style={{padding:'10px 20px',borderBottom:'0.5px solid #E4E8EB',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:500,color:'#537281',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||it.receptor||'—'}</div>
+                  <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>{it.receptor||''}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                  <div style={{fontSize:11,color:'#99ABB4'}}>F° {it.folio}</div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                  <span style={{fontSize:12,fontWeight:500,color:'#537281',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>
+                  <CheckVerde/>
+                </div>
+              </div>
+            )})}
+          </>}
+        </>}
       </div>
-    </Modal>
+    </div>
   )
 }
 
