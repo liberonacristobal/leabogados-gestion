@@ -7691,7 +7691,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
             <button onClick={()=>{setSFilter(null);setRespSel(new Set())}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]}</button>
             {responsables.map(r=>{ const on=respSel.has(r); return (
-              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{minWidth:34,height:30,padding:'0 9px',borderRadius:8,border:`0.5px solid ${on?'#99ABB4':'#E4E8EB'}`,background:on?'#E4E8EB':'#fff',color:on?'#003C50':'#537281',fontSize:12,fontWeight:on?600:500,letterSpacing:'.3px',cursor:'pointer'}}>{INICIALES_RESP[r]||r.slice(0,2).toUpperCase()}</button>
+              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{height:30,padding:'0 12px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:'#537281',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{r}</button>
             )})}
             {onProveedores&&<button onClick={onProveedores} style={{marginLeft:'auto',height:30,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Proveedores</button>}
           </div>
