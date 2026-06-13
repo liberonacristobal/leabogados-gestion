@@ -4258,9 +4258,9 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <button key={v||'all'} onClick={()=>{setFYear(v); if(!v) setFMonth('')}} style={{flexShrink:0,height:28,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           )})}
         </div>
-        {fYear&&<div style={{display:'flex',gap:5,marginBottom:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
+        {fYear&&<div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:5,marginBottom:4}}>
           {[['','Todos'],...MONTHS.map((m,i)=>[String(i+1).padStart(2,'0'),m.slice(0,3)])].map(([v,l])=>{ const on=fMonth===v; return (
-            <button key={v||'all'} onClick={()=>setFMonth(v)} style={{flexShrink:0,height:25,padding:'0 9px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+            <button key={v||'all'} onClick={()=>setFMonth(v)} style={{height:27,borderRadius:7,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:10.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',padding:0}}>{l}</button>
           )})}
         </div>}
         </>}
