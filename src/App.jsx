@@ -4869,11 +4869,13 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
 const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
 
 // ─── PROVEEDORES (catálogo + ficha de proveedores, costos de terceros) ──────
-function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSave,onRevertirPago,onClose,saving}) {
+function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sales=[],onSave,onRevertirPago,onOpenSale,onClose,saving}) {
   const [view,setView] = useState('list')   // list | ficha | form
   const [selId,setSelId] = useState(null)
   const [q,setQ] = useState('')
   const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
+  const {uf:ufHoy} = useUF()
+  const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
@@ -4976,6 +4978,20 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
   const pagado = sel?pagadoDe(sel.id):0
   const histo = sel?[...terceros].filter(t=>String(t.proveedor_id)===String(sel.id)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))):[]
   const estLbl = {pendiente:['Pendiente','#99ABB4','#F5F7F9'],por_pagar:['Por pagar',C.accent,'#E6EEF1'],pagado:['Pagado',C.normal,'#E1F5EE']}
+  // Ventas en que participa el proveedor (agrupa sus terceros por venta). "Su parte" = suma de sus cuentas de esa venta.
+  const ufRef = ufHoy || 40000
+  const ventasInv = sel ? [...new Set(histo.map(t=>t.sale_id).filter(Boolean))].map(sid=>{
+    const sale = (sales||[]).find(s=>String(s.id)===String(sid)); if(!sale) return null
+    const ts = histo.filter(t=>String(t.sale_id)===String(sid))
+    const parteCLP = ts.reduce((a,t)=>a+(t.monto||0),0)
+    const esUFs = (sale.moneda||'UF')!=='CLP'
+    const ufv = parseFloat(sale.uf_value)||0
+    const parteUF = (esUFs && ufv>0) ? parteCLP/ufv : null
+    const totalUF = ventaUF(sale, ufRef), totalCLP = ventaCLP(sale, ufRef)
+    const pct = esUFs ? (totalUF>0?Math.round(parteUF/totalUF*100):0) : (totalCLP>0?Math.round(parteCLP/totalCLP*100):0)
+    return {sale, cli:clients.find(c=>String(c.id)===String(sale.client_id)), esUFs, parteCLP, parteUF, totalUF, totalCLP, pct}
+  }).filter(Boolean).sort((a,b)=>(b.sale.year-a.sale.year)||((b.sale.month||0)-(a.sale.month||0))) : []
+  const honInvUF = ventasInv.reduce((a,v)=>a+(v.totalUF||0),0)
   return (
     <>
       {headerBack('Ficha de proveedor',()=>setView('list'))}
@@ -4990,17 +5006,6 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
           <button onClick={()=>abrirEditar(sel)} style={{height:32,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Editar</button>
         </div>
 
-        <div style={{display:'flex',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
-          <div style={{flex:1,padding:'12px 14px'}}>
-            <div style={flabel}>Le debes</div>
-            <div style={{fontSize:20,fontWeight:600,color:debe>0?C.overdue:'#3D3D3D',letterSpacing:-.5}}>{fmt0(debe)}</div>
-          </div>
-          <div style={{flex:1,padding:'12px 14px',borderLeft:`0.5px solid ${C.border}`}}>
-            <div style={flabel}>Pagado</div>
-            <div style={{fontSize:20,fontWeight:600,color:C.normal,letterSpacing:-.5}}>{fmt0(pagado)}</div>
-          </div>
-        </div>
-
         {sel?.datos_pago?.trim()&&(
           <div style={{marginBottom:14}}>
             <div style={flabel}>Datos de pago</div>
@@ -5008,7 +5013,48 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
           </div>
         )}
 
-        <div style={flabel}>Historial de pagos / cobros</div>
+        {/* Ventas en que participa: nº de ventas + honorarios totales involucrados */}
+        <div style={{display:'flex',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+          <div style={{flex:1,padding:'11px 14px'}}>
+            <div style={flabel}>Ventas</div>
+            <div style={{fontSize:20,fontWeight:600,color:'#003C50',letterSpacing:-.5}}>{ventasInv.length}</div>
+          </div>
+          <div style={{flex:1,padding:'11px 14px',borderLeft:`0.5px solid ${C.border}`}}>
+            <div style={flabel}>Honorarios involucrados</div>
+            <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',letterSpacing:-.5}}>{fmtUF(honInvUF)}</div>
+          </div>
+        </div>
+        {ventasInv.length>0&&(
+          <div style={{display:'flex',flexDirection:'column',gap:7,marginBottom:16}}>
+            {ventasInv.map(v=>(
+              <div key={v.sale.id} onClick={()=>onOpenSale&&onOpenSale(v.sale)} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',cursor:onOpenSale?'pointer':'default'}}>
+                <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'flex-start'}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v.sale.title||'Sin proyecto'}</div>
+                    <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>{v.cli?.name||'—'}{v.sale.month?` · ${MES[v.sale.month-1]} ${v.sale.year}`:(v.sale.year?` · ${v.sale.year}`:'')}</div>
+                  </div>
+                  <span style={{fontSize:10,fontWeight:600,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>Su parte {v.esUFs?fmtUF(v.parteUF):fmt0(v.parteCLP)}</span>
+                </div>
+                <div style={{display:'flex',gap:14,marginTop:8,paddingTop:8,borderTop:`1px solid #F0F2F4`,fontSize:11,color:'#537281'}}>
+                  <span>Venta <strong style={{color:'#3D3D3D'}}>{v.esUFs?fmtUF(v.totalUF):fmt0(v.totalCLP)}</strong></span>
+                  <span>{v.pct}% del total</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Pagos: le debes / pagado + detalle */}
+        <div style={{display:'flex',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+          <div style={{flex:1,padding:'11px 14px'}}>
+            <div style={flabel}>Le debes</div>
+            <div style={{fontSize:20,fontWeight:600,color:debe>0?C.overdue:'#3D3D3D',letterSpacing:-.5}}>{fmt0(debe)}</div>
+          </div>
+          <div style={{flex:1,padding:'11px 14px',borderLeft:`0.5px solid ${C.border}`}}>
+            <div style={flabel}>Pagado</div>
+            <div style={{fontSize:20,fontWeight:600,color:C.normal,letterSpacing:-.5}}>{fmt0(pagado)}</div>
+          </div>
+        </div>
         {histo.length===0?(
           <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos todavía. Aparecerán al asignar costos de proveedores en una venta.</div>
         ):(
@@ -10423,7 +10469,7 @@ export default function App() {
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
-        {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
+        {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,padding:'18px 20px 24px',boxSizing:'border-box'}}>

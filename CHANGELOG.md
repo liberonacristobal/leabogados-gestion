@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-13 — Ficha de proveedor: ventas en que participa
+- La ficha del proveedor ahora tiene dos bloques con indicadores propios:
+  - **Ventas**: nº de ventas en que participa + **honorarios involucrados** (total de esas ventas, en UF). Lista de tarjetas: proyecto, cliente, mes/año, **su parte** (suma de sus cuentas, UF si la venta es UF), total de la venta y % que representa. Tocar una tarjeta abre la venta.
+  - **Pagos**: Le debes / Pagado + el detalle de cuentas (con deshacer pago).
+
 ## 2026-06-13 — Proveedor visible en Condiciones registradas + botón
 - En "Costos de proveedores" (venta guardada) ahora se muestra el **nombre del proveedor** asignado al lado del monto (o "N proveedores"); si no hay, aparece el botón **+ Agregar proveedor** en la misma línea (sin desplegar).
 - El "+ Agregar proveedor" pasó a ser un **botón** (antes era texto).
