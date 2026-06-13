@@ -3820,11 +3820,6 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
 
 function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
-  const [anulando,setAnulando] = useState(null)        // factura en flujo de baja
-  const [motivoBaja,setMotivoBaja] = useState('')
-  const [obsBaja,setObsBaja] = useState('')
-  const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
-  const confirmarBaja = async() => { if(!motivoBaja||!anulando) return; await onAnular(anulando,motivoBaja,obsBaja); setAnulando(null); setMotivoBaja(''); setObsBaja('') }
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -3832,8 +3827,6 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [payingId,setPayingId] = useState(null)
   const [payDate,setPayDate] = useState('')
   const [inclTerceros,setInclTerceros] = useState(true)   // al pagar la factura ancla: ¿el pago incluyó los terceros?
-  const [menuBill,setMenuBill] = useState(null)   // id de la factura con el menú ⋯ abierto
-  useEffect(()=>{ if(!menuBill) return; const h=()=>setMenuBill(null); document.addEventListener('click',h); return ()=>document.removeEventListener('click',h) },[menuBill])
   const fmtDMY = iso => { if(!iso) return '—'; const p=iso.slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:iso }
   const [openClients,setOpenClients] = useState(()=>new Set())
   const toggleClient = id => setOpenClients(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
@@ -4096,17 +4089,11 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                     ):(!anulada&&!pagado)&&(
                       <button onClick={(e)=>{e.stopPropagation();setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
                     )}
-                    <button onClick={(e)=>{e.stopPropagation();setMenuBill(menuBill===b.id?null:b.id)}} style={{width:24,height:24,borderRadius:7,border:`1px solid ${menuBill===b.id?C.accent:C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                      <svg width='13' height='13' viewBox='0 0 24 24' fill={menuBill===b.id?C.accent:C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
+                    <button onClick={(e)=>{e.stopPropagation();onEdit(b)}} aria-label='Editar' style={{width:24,height:24,borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                      <svg width='13' height='13' viewBox='0 0 24 24' fill={C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
                     </button>
                   </div>
                 </div>
-                {menuBill===b.id&&(
-                  <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',right:13,marginTop:2,width:150,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',padding:'4px 0',zIndex:20}}>
-                    <div onClick={()=>{setMenuBill(null);onEdit(b)}} style={{fontSize:13,color:C.text,padding:'9px 13px',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>Editar</div>
-                    {!pagado&&!anulada&&onAnular&&<><div style={{height:'0.5px',background:C.border,margin:'2px 0'}}/><div onClick={()=>{setMenuBill(null);setAnulando(b);setMotivoBaja('');setObsBaja('')}} style={{fontSize:13,color:C.overdue,padding:'9px 13px',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#FEF2F2'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>Anular</div></>}
-                  </div>
-                )}
               </div>
               )
             })}
@@ -4172,27 +4159,6 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         )}
       </div>
 
-      {anulando&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center',padding:16}}>
-          <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:520,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
-            <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Dar de baja factura</div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{anulando.concept||'—'} · {fmt(anulando.amount)}</div>
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FBE9E7',color:C.overdue,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color={C.overdue}/>Esta acción no se puede deshacer</div>
-            <Lbl>Motivo</Lbl>
-            <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
-              {MOTIVOS_BAJA.map(m=>(
-                <button key={m} onClick={()=>setMotivoBaja(m)} style={{textAlign:'left',padding:'8px 11px',borderRadius:8,border:`1.5px solid ${motivoBaja===m?C.overdue:C.border}`,background:motivoBaja===m?'#FBE9E7':'transparent',color:motivoBaja===m?C.overdue:C.text,fontSize:12,fontWeight:motivoBaja===m?700:500,cursor:'pointer'}}>{m}</button>
-              ))}
-            </div>
-            <Lbl>Observaciones (opcional)</Lbl>
-            <textarea value={obsBaja} onChange={e=>setObsBaja(e.target.value)} rows={2} placeholder='Detalle adicional...' style={{width:'100%',padding:'8px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:13,color:C.text,boxSizing:'border-box',resize:'vertical',marginBottom:14,fontFamily:'inherit'}}/>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>{setAnulando(null);setMotivoBaja('');setObsBaja('')}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={confirmarBaja} disabled={!motivoBaja} style={{flex:2,padding:11,borderRadius:10,border:'none',background:motivoBaja?C.overdue:'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>Confirmar baja</button>
-            </div>
-          </div>
-        </div>
-      )}
       {payingId&&(()=>{ const pb=billing.find(b=>String(b.id)===String(payingId))||{}; return (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
           <div style={{background:'#fff',borderRadius:16,width:'min(90vw, 340px)',overflow:'hidden'}}>
@@ -4338,11 +4304,14 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
 }
 
 
-function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,onClose,onDelete,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
   const [selAnt,setSelAnt] = useState(new Set())
+  const [anularOpen,setAnularOpen] = useState(false)
+  const [motivoBaja,setMotivoBaja] = useState('')
+  const [obsBaja,setObsBaja] = useState('')
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:3,display:'block'}
@@ -4354,7 +4323,7 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
         <span style={{fontSize:15,fontWeight:500,color:'#3D3D3D',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {bill?.id?'Editar cobro':'Nuevo cobro'}
-          {f.client_id&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span><button type='button' onClick={()=>{up('client_id','');setClientQuery('')}} style={{border:'none',background:'none',color:C.accent,fontSize:12,fontWeight:500,cursor:'pointer',marginLeft:7}}>Cambiar</button></>}
+          {f.client_id&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span></>}
         </span>
         <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
@@ -4469,12 +4438,34 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
         {bill?.id&&user&&<div><label style={flabel}>Archivos</label><Attachments table='billing_attachments' idField='billing_id' entityId={bill.id} folderKind='facturas' namePrefix={`${clients.find(c=>String(c.id)===String(f.client_id))?.name||''} · ${f.concept||'Cobro'}`} user={user} onChange={onAttachChange}/></div>}
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center',padding:'12px 18px',borderTop:`0.5px solid ${C.border}`}}>
-        {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{height:36,padding:'0 14px',borderRadius:8,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:500,cursor:'pointer'}}>Eliminar</button>}
+        {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:500,cursor:'pointer'}}>Eliminar</button>}
+        {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
         <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
         <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave(f)} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
+      {anularOpen&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setAnularOpen(false)}>
+          <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+            <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Dar de baja factura</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{f.concept||'—'} · {fmt(parseInt(f.amount)||0)}</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FBE9E7',color:C.overdue,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color={C.overdue}/>Esta acción no se puede deshacer</div>
+            <label style={flabel}>Motivo</label>
+            <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
+              {MOTIVOS_BAJA.map(m=>(
+                <button key={m} onClick={()=>setMotivoBaja(m)} style={{textAlign:'left',padding:'8px 11px',borderRadius:8,border:`1.5px solid ${motivoBaja===m?C.overdue:C.border}`,background:motivoBaja===m?'#FBE9E7':'transparent',color:motivoBaja===m?C.overdue:C.text,fontSize:12,fontWeight:motivoBaja===m?700:500,cursor:'pointer'}}>{m}</button>
+              ))}
+            </div>
+            <label style={flabel}>Observaciones (opcional)</label>
+            <input value={obsBaja} onChange={e=>setObsBaja(e.target.value)} placeholder='Detalle adicional...' style={{...inp,marginBottom:14}}/>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>setAnularOpen(false)} style={{flex:1,height:40,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:40,borderRadius:10,border:'none',background:motivoBaja?C.overdue:'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>Confirmar baja</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -4631,6 +4622,8 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],on
     </div>
   )
 }
+
+const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
 
 // ─── PROVEEDORES (catálogo + ficha de colaboradores, costos de terceros) ──────
 function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSave,onClose,saving}) {
@@ -10057,7 +10050,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
