@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Proveedores inline (formato clientes) + pills de año en Facturación
+- **Proveedores** ya no abre un modal: se despliega **inline a pantalla completa con el mismo formato que clientes** (lista → ficha → editar), desde el chip en Clientes. La X vuelve a Clientes.
+- **Facturación**: el selector de año se reemplazó por **pills** (Todos · 2025 · 2026 · 2027…) para selección rápida; el mes queda en su selector. KPIs siguen el año elegido.
+
 ## 2026-06-13 — Proveedores como chip en filtros + ajustes ficha cliente
 - "Proveedores" se movió del header a un **chip discreto en la fila de filtros** de Clientes (a la derecha).
 - Editar cliente: header canónico; el listado plano de razones sociales sin asignar se reemplazó por búsqueda+asignar en el input; Editar en Limited abre directo como admin (sin paso "Confirmar cambios").
