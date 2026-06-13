@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Proveedor visible en Condiciones registradas + botón
+- En "Costos de proveedores" (venta guardada) ahora se muestra el **nombre del proveedor** asignado al lado del monto (o "N proveedores"); si no hay, aparece el botón **+ Agregar proveedor** en la misma línea (sin desplegar).
+- El "+ Agregar proveedor" pasó a ser un **botón** (antes era texto).
+
 ## 2026-06-13 — Reversibilidad: reactivar factura anulada + deshacer pago a proveedor
 - **Factura anulada**: ahora tiene botón **"Reactivar"** (vuelve a Pendiente y borra el registro de baja). El aviso al anular dejó de decir "no se puede deshacer".
 - **Pago a proveedor ya transferido**: en el panel Proveedores, cada pago marcado tiene **"Deshacer"** (vuelve a "Por pagar" y borra fecha, referencia y documento).

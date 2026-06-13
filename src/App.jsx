@@ -2633,7 +2633,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
             )}
           </div>
         )})}
-        <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:rows.length?2:0}}>+ Agregar proveedor</button>
+        <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600,padding:'7px 12px',marginTop:rows.length?4:0}}>+ Agregar proveedor</button>
         {rows.length>0&&costTotal>0&&!cuadra&&(
           <div style={{fontSize:11,color:C.muted,marginTop:8}}>Repartido <strong style={{color:C.text}}>{fmtU(suma)}</strong> de <strong style={{color:C.text}}>{fmtU(costTotal)}</strong>.</div>
         )}
@@ -3351,6 +3351,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         const curCost = moneda==='UF' ? (parseFloat(f.cost_uf)>0?fmtUF(parseFloat(f.cost_uf)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—')) : (parseFloat(f.cost_clp)>0?fmt(parseFloat(f.cost_clp)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—'))
         const curCobro = COBRO_LBL[cobroType]||'—'
         const notasPrev = f.notes ? (f.notes.length>48?f.notes.slice(0,48)+'…':f.notes) : '—'
+        const titP = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
+        const provIds = [...new Set((reparto||[]).map(r=>r.proveedor_id).filter(Boolean))]
+        const provNames = provIds.map(id=>titP(proveedores.find(p=>String(p.id)===String(id))))
+        const provLabel = provNames.length===0?'':provNames.length===1?provNames[0]:`${provNames.length} proveedores`
+        const addReparto = ()=>{ const esUF=moneda!=='CLP'; setReparto([...(reparto||[]),{proveedor_id:'',tipo:esUF?'uf':'clp',valor: costVal>0?String(esUF?+costVal.toFixed(2):Math.round(costVal)):'',_edit:false}]); setOpenCondicion('costos') }
         const row = (lbl,val,key,isLast) => (
           <div key={key} onClick={()=>setOpenCondicion(openCondicion===key?null:key)}
             style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:isLast?'none':`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
@@ -3364,7 +3369,16 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Condiciones registradas</div>
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
               {row('Honorarios',curHon,'honorarios',false)}
-              {row('Costos de proveedores',curCost,'costos',false)}
+              <div onClick={()=>setOpenCondicion(openCondicion==='costos'?null:'costos')} style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
+                <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>Costos de proveedores</div>
+                <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:13,fontWeight:500,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>
+                  {provLabel
+                    ? <span style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {provLabel}</span>
+                    : costVal>0&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}
+                </div>
+                <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion==='costos'?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}>›</span>
+              </div>
               {openCondicion==='costos'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`}}>
                   <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal} hideHeader/>
