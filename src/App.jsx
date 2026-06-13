@@ -4107,7 +4107,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado)?C.overdue:C.text,whiteSpace:'nowrap',flexShrink:0}}>{fmt(b.amount)}</div>
                 </div>
                 {/* línea 2: factura n° + fecha */}
-                <div style={{fontSize:11,color:'#99ABB4',marginTop:4}}>{prog?`Facturar: ${fmtDMY(b.due)}`:`Factura N° ${b.invoice_no||'—'} · Fecha: ${fmtDMY(b.issued_at)}`}</div>
+                <div style={{fontSize:11,color:'#99ABB4',marginTop:4}}>{prog?`Vence ${fmtDMY(b.due)}`:`N° ${b.invoice_no||'—'} · ${fmtDMY(b.issued_at)}`}</div>
                 {/* línea 3: semáforo + tags | acciones */}
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:7}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
