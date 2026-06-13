@@ -3580,6 +3580,9 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
   const [payDate,setPayDate] = useState('')
+  const [menuBill,setMenuBill] = useState(null)   // id de la factura con el menú ⋯ abierto
+  useEffect(()=>{ if(!menuBill) return; const h=()=>setMenuBill(null); document.addEventListener('click',h); return ()=>document.removeEventListener('click',h) },[menuBill])
+  const fmtDMY = iso => { if(!iso) return '—'; const p=iso.slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:iso }
   const [openClients,setOpenClients] = useState(()=>new Set())
   const toggleClient = id => setOpenClients(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
   const collapseAll = () => setOpenClients(new Set())
@@ -3797,56 +3800,54 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
               </div>
               <span style={{fontSize:11,fontWeight:700,color:C.muted}}>{fmt(bills.reduce((a,b)=>a+(b.amount||0),0))}</span>
             </div>}
-            {bills.map(b=>(
-              <div key={b.id} style={{background:C.card,borderRadius:10,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
-                  <div style={{minWidth:0,flex:1,display:'flex',gap:8,alignItems:'flex-start'}}>
-                    {isProg&&<input type='checkbox' checked={selected.has(b.id)} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
-                    <div style={{minWidth:0,flex:1}}>
-                      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                        {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600,flexShrink:0}}>Reembolso</span>}
-                        {b.status==='Anulada'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600,flexShrink:0}}>Anulada</span>}
-                      </div>
-                      <div style={{fontSize:12,color:C.text,fontWeight:500,marginTop:2,textDecoration:b.status==='Anulada'?'line-through':'none'}}>{b.concept||'—'}</div>
+            {bills.map(b=>{
+              const prog=b.status==='Programada', anulada=b.status==='Anulada', pagado=b.status==='Pagado'
+              const dl=daysLeft(b.due)
+              const dEmis=b.issued_at?Math.max(0,Math.round((Date.now()-new Date(b.issued_at+'T12:00').getTime())/86400000)):null
+              const semCol=pagado?C.muted:(dl==null?C.muted:dl<0?C.overdue:dl<=7?'#B8860B':C.normal)
+              const semTxt=prog?(dl!=null?(dl<0?`${Math.abs(dl)} días vencida`:`vence en ${dl} días`):''):((dl!=null&&dl<0)?`${Math.abs(dl)} días vencida`:(dEmis!=null?`${dEmis} días`:''))
+              return (
+              <div key={b.id} style={{position:'relative',background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`}}>
+                <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+                  {prog&&<input type='checkbox' checked={selected.has(b.id)} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}</div>
+                    <div style={{fontSize:11,color:'#99ABB4',marginTop:4}}>{prog?`Facturar: ${fmtDMY(b.due)}`:`Factura N° ${b.invoice_no||'—'} · Fecha: ${fmtDMY(b.issued_at)}`}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6,flexWrap:'wrap'}}>
+                      {semTxt&&<span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.muted}}><span style={{width:8,height:8,borderRadius:'50%',background:semCol,flexShrink:0}}/>{semTxt}</span>}
+                      {pagado&&b.paid_at&&<span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'#E4F1EA',color:C.normal}}>Pagada {fmtDMY(b.paid_at)}</span>}
+                      {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600}}>Reembolso</span>}
+                      {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600}}>Anulada{b.anulada_por?` · ${b.anulada_por}`:''}</span>}
                     </div>
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,marginLeft:8}}>
-                    <div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text}}>{fmt(b.amount)}</div>
-                    <button onClick={()=>onEdit(b)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',fontSize:11,color:C.muted,cursor:'pointer'}}>Editar</button>
-                    {!['Pagado','Anulada'].includes(b.status)&&onAnular&&<button onClick={()=>{setAnulando(b);setMotivoBaja('');setObsBaja('')}} title='Dar de baja' style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 6px',cursor:'pointer',display:'flex',alignItems:'center'}}><BanIcon size={14} color={C.overdue}/></button>}
-                  </div>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                    {b.status==='Programada'?(
-                      <span style={{fontSize:11,color:C.muted}}>Facturar: {fmtDate(b.due)}</span>
-                    ):(<>
-                      <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{b.invoice_no||'—'}</span>
-                      <span style={{fontSize:11,color:C.muted}}>· {fmtDate(b.issued_at)}</span>
-                      {b.status!=='Pagado'&&<DaysBadge due={b.due} status={b.status}/>}
-                      {b.status==='Pagado'&&b.paid_at&&<span style={{fontSize:10,color:C.normal,fontWeight:600}}>Pagado {fmtDate(b.paid_at)}</span>}
-                    </>)}
-                  </div>
-                  {b.status==='Anulada'?(
-                    <span style={{fontSize:10,color:C.muted}}>Baja{b.anulada_por?` · ${b.anulada_por}`:''}{b.anulada_at?` · ${fmtDate(b.anulada_at.slice(0,10))}`:''}</span>
-                  ):b.status==='Programada'?(
-                    selected.size===0&&(
-                    <button onClick={()=>marcarEmitida(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:`1px solid ${C.accent}`,cursor:'pointer',background:'transparent',color:C.accent,fontSize:11,fontWeight:700}}>
-                      Ya emitida
-                    </button>
-                    )
-                  ):(
+                  <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:8}}>
+                    <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado)?C.overdue:C.text,whiteSpace:'nowrap'}}>{fmt(b.amount)}</div>
                     <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    {client.id==='__none__'&&onAssignClient&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
-                    <button onClick={()=>handleTogglePagado(b)} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,border:'none',cursor:'pointer',background:b.status==='Pagado'?'#E4F1EA':'#F0F0F0',color:b.status==='Pagado'?C.normal:C.muted,fontSize:11,fontWeight:700}}>
-                      <span style={{width:14,height:14,borderRadius:'50%',background:b.status==='Pagado'?C.normal:'#ccc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',flexShrink:0}}></span>
-                      {b.status==='Pagado'?'Pagado':'Marcar pagado'}
-                    </button>
+                      {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
+                      {prog ? (
+                        selected.size===0&&<button onClick={()=>marcarEmitida(b)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ya emitida</button>
+                      ):anulada ? (
+                        b.anulada_at&&<span style={{fontSize:10,color:C.muted}}>Baja {fmtDMY(b.anulada_at.slice(0,10))}</span>
+                      ):pagado ? (
+                        <span style={{fontSize:11,fontWeight:600,color:C.normal,padding:'5px 12px',borderRadius:20,background:'#E4F1EA'}}>Pagada</span>
+                      ):(
+                        <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10))}} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Registrar pago</button>
+                      )}
+                      <button onClick={(e)=>{e.stopPropagation();setMenuBill(menuBill===b.id?null:b.id)}} style={{width:26,height:26,borderRadius:7,border:`1px solid ${menuBill===b.id?C.accent:C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                        <svg width='14' height='14' viewBox='0 0 24 24' fill={menuBill===b.id?C.accent:C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
+                      </button>
                     </div>
-                  )}
+                  </div>
                 </div>
+                {menuBill===b.id&&(
+                  <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:46,right:13,width:150,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',padding:'4px 0',zIndex:20}}>
+                    <div onClick={()=>{setMenuBill(null);onEdit(b)}} style={{fontSize:13,color:C.text,padding:'9px 13px',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>Editar</div>
+                    {!pagado&&!anulada&&onAnular&&<><div style={{height:'0.5px',background:C.border,margin:'2px 0'}}/><div onClick={()=>{setMenuBill(null);setAnulando(b);setMotivoBaja('');setObsBaja('')}} style={{fontSize:13,color:C.overdue,padding:'9px 13px',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#FEF2F2'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>Anular</div></>}
+                  </div>
+                )}
               </div>
-            ))}
+              )
+            })}
           </div>
         ))}
       </div>
@@ -3949,7 +3950,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
             </div>
             <div style={{padding:'14px 20px 10px'}}>
               <label style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',marginBottom:6,display:'block'}}>FECHA DE PAGO</label>
-              <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)} style={{width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#1a1a1a',outline:'none',boxSizing:'border-box'}}/>
+              <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)} style={{width:'100%',border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'10px 11px',color:'#1a1a1a',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
             </div>
             <div style={{padding:'6px 20px 20px',display:'flex',gap:8}}>
               <button onClick={()=>setPayingId(null)} style={{flex:1,height:40,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
