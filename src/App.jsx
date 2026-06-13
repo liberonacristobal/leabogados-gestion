@@ -329,7 +329,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
               <div style={{fontSize:18,fontWeight:700,color:'#3D3D3D'}}>{cl.name}</div>
               {cl.type&&<div style={{fontSize:11,color:'#888'}}>{cl.type}</div>}
             </div>
-            <button onClick={()=>setConfirmEdit(cl)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:'#fff',color:'#3D3D3D',fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
+            <button onClick={()=>onEdit(cl)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:'#fff',color:'#3D3D3D',fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
           </div>
           <FichaTabs tab={ftab} setTab={setFtab} role="limited"/>
         </div>
@@ -452,18 +452,6 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
   if(selected) return (
     <>
       <Ficha cl={selected}/>
-      {confirmEdit&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'flex-end'}}>
-          <div style={{background:'#fff',borderRadius:'16px 16px 0 0',padding:24,width:'100%',boxSizing:'border-box'}}>
-            <div style={{fontSize:15,fontWeight:700,color:'#3D3D3D',marginBottom:8}}>Confirmar cambios</div>
-            <div style={{fontSize:13,color:'#888',marginBottom:20}}>{'¿'}Confirmas que los datos son correctos y quieres guardar los cambios en el cliente <strong>{confirmEdit.name}</strong>?</div>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setConfirmEdit(null)} style={{flex:1,padding:12,borderRadius:10,border:'1px solid #E4E8EB',background:'#fff',color:'#888',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={()=>{onEdit(confirmEdit);setConfirmEdit(null)}} style={{flex:2,padding:12,borderRadius:10,border:'none',background:'#003C50',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Guardar cambios</button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 
@@ -7764,9 +7752,11 @@ function EntitiesEditor({clientId}) {
     getAllEntities().then(d=>ok&&setAll(d)).catch(()=>{})
     return ()=>{ok=false}
   },[clientId])
+  // Sugerencias = razones sociales SIN cliente (huérfanas del SII) que calzan con lo que se escribe.
+  // Elegir una la ASIGNA a este cliente (no crea duplicado). Si no existe, "+" crea una nueva.
   const handleNameChange=val=>{
     setName(val); if(val.trim().length<2){setSugg([]);setShowSugg(false);return}
-    const m=allEntities.filter(e=>e.name.toLowerCase().includes(val.toLowerCase())).slice(0,6)
+    const m=allEntities.filter(e=>!e.client_id && e.name.toLowerCase().includes(val.toLowerCase())).slice(0,6)
     setSugg(m);setShowSugg(m.length>0)
   }
   const add=async()=>{
@@ -7789,7 +7779,6 @@ function EntitiesEditor({clientId}) {
     if(!confirm('Eliminar?')) return
     try{await deleteClientEntity(id);setList(p=>p.filter(x=>x.id!==id))}catch(e){alert(e.message)}
   }
-  const huerfanas = (allEntities||[]).filter(e=>!e.client_id)
   const asignar=async(ent)=>{ setBusy(true); try{ const saved=await upsertClientEntity({id:ent.id,client_id:clientId,name:ent.name,rut:ent.rut}); setList(p=>sortN([...(p||[]),saved])); setAll(p=>p.filter(x=>x.id!==ent.id)) }catch(e){alert('Error: '+e.message)} setBusy(false) }
   const inS={padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:13,boxSizing:'border-box',outline:'none'}
   const iconBtn=col=>({width:30,height:30,flexShrink:0,borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:col,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'})
@@ -7818,32 +7807,18 @@ function EntitiesEditor({clientId}) {
           )}
         </div>
       ))}
-      {huerfanas.length>0&&(
-        <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Sin cliente asignado · {huerfanas.length}</div>
-          {huerfanas.map(e=>(
-            <div key={e.id} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>
-                {e.rut&&<div style={{fontSize:11,color:C.muted}}>{e.rut}</div>}
-              </div>
-              <button onClick={()=>asignar(e)} disabled={busy} style={{padding:'5px 11px',borderRadius:7,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:busy?'not-allowed':'pointer',flexShrink:0}}>+ Asignar</button>
-            </div>
-          ))}
-        </div>
-      )}
       <div style={{marginTop:8}}>
         <div style={{display:'flex',gap:6,position:'relative'}}>
           <div style={{flex:1,minWidth:0,position:'relative'}}>
-            <input value={name} onChange={e=>handleNameChange(e.target.value)} onBlur={()=>setTimeout(()=>setShowSugg(false),150)} placeholder='Razon social...' style={{...inS,width:'100%'}}/>
+            <input value={name} onChange={e=>handleNameChange(e.target.value)} onBlur={()=>setTimeout(()=>setShowSugg(false),150)} placeholder='Buscar o crear razón social...' style={{...inS,width:'100%'}}/>
             {showSugg&&suggestions.length>0&&(
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,maxHeight:200,overflowY:'auto',marginTop:2}}>
                 {suggestions.map((s,i)=>(
-                  <div key={i} onMouseDown={()=>{setName(s.name);setRut(s.rut||'');setSugg([]);setShowSugg(false)}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
+                  <div key={i} onMouseDown={()=>{setShowSugg(false);setSugg([]);setName('');setRut('');asignar(s)}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}
                     onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'}
                     onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                    <div style={{fontWeight:500}}>{s.name}</div>
-                    {s.rut&&<div style={{fontSize:11,color:C.muted}}>{s.rut}</div>}
+                    <div style={{minWidth:0}}><div style={{fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>{s.rut&&<div style={{fontSize:11,color:C.muted}}>{s.rut}</div>}</div>
+                    <span style={{fontSize:11,fontWeight:600,color:C.accent,flexShrink:0}}>+ Asignar</span>
                   </div>
                 ))}
               </div>
@@ -10499,7 +10474,7 @@ export default function App() {
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>{handleSaveTask({...t,status:'Terminado'});setModal(null)}}/></Modal>}
-        {modal?.type==='client'&&<Modal title={modal.data?.id?'Editar cliente':'Nuevo cliente'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
+        {modal?.type==='client'&&<Modal title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
     </>
   )
