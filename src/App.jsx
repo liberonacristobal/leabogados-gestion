@@ -4742,7 +4742,7 @@ function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,
           <div><span style={fl}>N° Factura</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder='367...' style={inp}/></div>
           <div><span style={fl}>Fecha emisión</span><input type='date' value={issued} onChange={e=>setIssued(e.target.value)} style={inp}/></div>
         </div>
-        <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.4}}>Se crea <strong style={{color:C.text}}>una factura</strong> por el total, marcada Pagada (con el anticipo). Las cuotas siguen como referencia, sin emitirse por separado.</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.4}}>Crea <strong style={{color:C.text}}>1 factura Pagada</strong> por el total con el anticipo; las cuotas quedan de referencia.</div>
         <div style={{display:'flex',gap:8}}>
           <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={busy} onClick={async()=>{ setBusy(true); const r=await onConfirm({invoice_no:invoiceNo.trim()||null,issued_at:issued}); setBusy(false); if(r) onClose() }} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1}}>{busy?'Emitiendo...':'Emitir factura'}</button>
@@ -5342,7 +5342,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
     <div style={{position:'fixed',inset:0,background:'rgba(16,30,38,.42)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>e.target===e.currentTarget&&onCancel()}>
       <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:340,padding:20,boxShadow:'0 16px 40px rgba(0,0,0,.2)'}}>
         <div style={{fontSize:15.5,fontWeight:600,color:C.text,marginBottom:9,fontFamily:"'DM Sans',sans-serif"}}>Deshacer importación</div>
-        <div style={{fontSize:12.5,color:C.muted,lineHeight:1.55,marginBottom:18}}>Se eliminarán los <strong style={{color:C.text}}>{target.count} gasto{target.count!==1?'s':''}</strong> de esta carga. Si editaste alguno después de importar, también se eliminará. Esta acción no se puede revertir.</div>
+        <div style={{fontSize:12.5,color:C.muted,lineHeight:1.5,marginBottom:18}}>Se eliminan los <strong style={{color:C.text}}>{target.count} gasto{target.count!==1?'s':''}</strong> de esta carga (incluye editados). No se puede revertir.</div>
         <div style={{display:'flex',gap:8}}>
           <button onClick={onCancel} style={{flex:1,padding:11,borderRadius:9,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={undoing} onClick={onConfirm} style={{flex:1,padding:11,borderRadius:9,border:'none',background:C.overdue,color:'#fff',fontSize:13,fontWeight:600,cursor:undoing?'default':'pointer',opacity:undoing?.6:1}}>{undoing?'Eliminando…':'Sí, eliminar todo'}</button>
