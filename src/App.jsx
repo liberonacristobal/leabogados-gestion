@@ -473,7 +473,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid #003C50`,background:'transparent',color:'#003C50',fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button>
+            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid #003C50`,background:'transparent',color:'#003C50',fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button>
             <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:'#003C50',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
           </div>
         </div>
@@ -1908,7 +1908,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               {terceros>0&&(
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
                   <div style={cell(C.accent)} title={fmt(netoFirma)}><div style={clbl}>Neto firma</div><div style={{...cnum,color:C.accent}}>{m(netoFirma)}</div></div>
-                  <div style={cell('#C77F18')} title={fmt(terceros)}><div style={clbl}>Terceros</div><div style={{...cnum,color:'#C77F18'}}>{m(terceros)}</div></div>
+                  <div style={cell('#C77F18')} title={fmt(terceros)}><div style={clbl}>Proveedores</div><div style={{...cnum,color:'#C77F18'}}>{m(terceros)}</div></div>
                 </div>
               )}
             </>
@@ -2540,10 +2540,10 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
         )}
         {rows.length>0&&costTotal>0&&!cuadra&&(
           <div style={{fontSize:11,color:'#B8860B',background:'#FFF8E1',border:'0.5px solid #F0D88A',borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
-            El reparto suma <strong>{fmtU(suma)}</strong>, pero el costo de terceros es <strong>{fmtU(costTotal)}</strong> ({desc>0?`faltan ${fmtU(desc)}`:`sobran ${fmtU(-desc)}`}).
+            El reparto suma <strong>{fmtU(suma)}</strong>, pero el costo de proveedores es <strong>{fmtU(costTotal)}</strong> ({desc>0?`faltan ${fmtU(desc)}`:`sobran ${fmtU(-desc)}`}).
           </div>
         )}
-        {rows.length>0&&costTotal>0&&cuadra&&<div style={{fontSize:11,color:C.normal,marginTop:9}}>Reparto cuadra con el costo de terceros: {fmtU(suma)}.</div>}
+        {rows.length>0&&costTotal>0&&cuadra&&<div style={{fontSize:11,color:C.normal,marginTop:9}}>Reparto cuadra con el costo de proveedores: {fmtU(suma)}.</div>}
       </>)}
     </div>
   )
@@ -3164,7 +3164,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </div>
 
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:costSwitch?10:14}}>
-          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6}}>Costos de terceros</div>
+          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6}}>Costos de proveedores</div>
           <button type='button' onClick={()=>setCostSwitch(p=>!p)} style={{width:34,height:19,borderRadius:10,border:'none',background:costSwitch?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0,transition:'background .15s'}}>
             <span style={{position:'absolute',top:2,left:costSwitch?16:2,width:15,height:15,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
           </button>
@@ -3291,7 +3291,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Condiciones registradas</div>
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
               {row('Honorarios',curHon,'honorarios',false)}
-              {row('Costos de terceros',curCost,'costos',false)}
+              {row('Costos de proveedores',curCost,'costos',false)}
               {openCondicion==='costos'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`}}>
                   <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>
@@ -4087,7 +4087,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                     {pagado&&b.paid_at&&<span style={{fontSize:11,fontWeight:600,color:C.normal}}>Pagada {fmtDMY(b.paid_at)}</span>}
                     {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600}}>Reembolso</span>}
                     {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600}}>Anulada</span>}
-                    {tercerosByBilling.has(b.id)&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600}}>Terceros</span>}
+                    {tercerosByBilling.has(b.id)&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600}}>Proveedores</span>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
@@ -4124,7 +4124,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           <div style={{display:'flex',gap:6}}>
             {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:descargando?'default':'pointer',opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
-            <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button>
+            <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button>
             <button onClick={()=>setSiiOpen(true)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ SII</button>
             <button onClick={onProveedores} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Proveedores</button>
           </div>
@@ -4139,7 +4139,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           ))}
         </div>}
         <div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
-          {[['emitidas','Emitidas'],['programadas','Programadas'],['pagado','Pagadas'],['all','Todas'],['terceros','Terceros'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
+          {[['emitidas','Emitidas'],['programadas','Programadas'],['pagado','Pagadas'],['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'1 0 auto',padding:'7px 11px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
@@ -4225,7 +4225,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                       {inclTerceros&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                     </span>
                     <div style={{minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>El pago incluyó lo de terceros</div>
+                      <div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>El pago incluyó lo de proveedores</div>
                       <div style={{fontSize:11,color:C.muted,marginTop:2,lineHeight:1.4}}>{nombres} · {fmt(tot)} → pasa{pend.length>1?'n':''} a <strong>Por pagar</strong>.</div>
                     </div>
                   </div>
@@ -4328,7 +4328,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           </>
         ) : (
           <>
-            {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{isProg?'Sin facturas programadas':filter==='terceros'?'Sin facturas con costos de terceros':'Sin cobros'}</div>}
+            {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{isProg?'Sin facturas programadas':filter==='terceros'?'Sin facturas con costos de proveedores':'Sin cobros'}</div>}
             {grouped.map(renderClientGroup)}
           </>
         )}
@@ -4779,7 +4779,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
 
         <div style={flabel}>Historial de pagos / cobros</div>
         {histo.length===0?(
-          <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos todavía. Aparecerán al asignar costos de terceros en una venta.</div>
+          <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos todavía. Aparecerán al asignar costos de proveedores en una venta.</div>
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {histo.map(t=>{
@@ -7407,7 +7407,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button>
+            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button>
             <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
             <button onClick={()=>onAddTask(null)} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
           </div>
@@ -10045,7 +10045,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
