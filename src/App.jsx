@@ -2549,7 +2549,8 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedores=[],terceros=[],onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
+  const [cubrirAnt,setCubrirAnt] = useState(null)
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Si estamos activando una propuesta, guardar el honorario original antes de que el usuario lo edite
@@ -3306,9 +3307,38 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 </div>
               )}
             </div>
+            {(()=>{
+              const antVenta = (anticipos||[]).filter(a=>String(a.sale_id)===String(sale.id))
+              const cuotasV = (billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.billing_type!=='reembolso')
+              const nAnt = cuotasV.filter(b=>b.status==='Anticipada').length
+              const nProg = cuotasV.filter(b=>b.status==='Programada').length
+              if(antVenta.length===0 && nAnt===0) return null
+              const fmtDA = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+              return (
+                <>
+                  <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Anticipos y cuotas</div>
+                  <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+                    <div style={{display:'flex',gap:14,padding:'9px 12px',background:'#F5F7F9',borderBottom:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>
+                      <span><strong style={{color:'#0F6E56'}}>{nAnt}</strong> anticipada{nAnt!==1?'s':''}</span>
+                      <span><strong style={{color:C.text}}>{nProg}</strong> programada{nProg!==1?'s':''}</span>
+                    </div>
+                    {antVenta.length===0&&<div style={{padding:'10px 12px',fontSize:12,color:C.muted}}>Sin anticipos en este proyecto.</div>}
+                    {antVenta.map(a=>{ const disp=a.estado==='disponible'; const cubre=cuotasV.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
+                      <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderBottom:`1px solid ${C.border}`}}>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:'#99ABB4'}}>{fmtDA(a.fecha)}{a.nota?` · ${a.nota}`:''}</div></div>
+                        <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?'#E1F5EE':cubre?'#E6EEF1':'#F5F7F9',color:disp?C.normal:cubre?C.accent:'#99ABB4'}}>{disp?'Disponible':cubre?'En cuotas':'Consumido'}</span>
+                        {disp&&onCubrirCuotas&&<button type='button' onClick={()=>setCubrirAnt(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Aplicar a cuotas</button>}
+                        {!disp&&cubre&&onDescubrirCuotas&&<button type='button' onClick={()=>onDescubrirCuotas(a.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Deshacer</button>}
+                      </div>
+                    )})}
+                  </div>
+                </>
+              )
+            })()}
           </>
         )
       })()}
+      {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={[sale].filter(Boolean)} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
 
       {/* 10. Actualizar honorarios (solo ventas guardadas) */}
       {sale?.id&&(
@@ -10126,7 +10156,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}

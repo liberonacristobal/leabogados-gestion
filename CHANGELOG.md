@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Anticipos↔cuotas desde la ficha de la venta — etapa 3
+- En la ficha de una venta/propuesta, nueva sección **"Anticipos y cuotas"**: muestra cuántas cuotas están anticipadas vs programadas y los anticipos del proyecto, con la misma acción **"Aplicar a cuotas"** (sugiere por monto + ajustas) y **"Deshacer"**. Así reflejas "anticipo recibido + resto en cuotas" desde la venta, no solo desde Anticipos.
+
 ## 2026-06-13 — Anticipos que cubren cuotas (sin doble conteo) — etapa 1
 - Un anticipo ahora puede **cubrir cuotas programadas**: desde Facturación → Anticipos, en un anticipo disponible, "Aplicar a cuotas programadas" abre un panel que **sugiere las cuotas por monto** (desde la primera) y permite **ajustarlas a mano**. Las cuotas cubiertas pasan a estado **Anticipada**: salen de la proyección de flujo de caja y de "por facturar" (su plata ya entró como anticipo → sin doble conteo, sin facturas fantasma). El anticipo queda "En cuotas". Reversible con "Deshacer cobertura". (Próximo: reflejarlo desde la ficha de la venta + emitir una sola factura por el bloque.) Requirió SQL: `billing.prepaid_anticipo_id`.
 
