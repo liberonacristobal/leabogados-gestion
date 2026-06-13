@@ -168,7 +168,7 @@ const DaysBadge = ({due,status}) => {
   return <span style={{fontSize:10,fontWeight:600,color:urgencyColor(due,status),whiteSpace:'nowrap'}}>{label}</span>
 }
 const AreaChip = ({area}) => {
-  const bg={Corporativo:'#E3EEF3',Tributario:'#F2E9DE',Laboral:'#F2E9DE',Otro:'#ECECEC'}
+  const bg={Corporativo:'#E6EEF1',Tributario:'#F2E9DE',Laboral:'#F2E9DE',Otro:'#ECECEC'}
   if(!area) return null
   return <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:bg[area]||'#ECECEC',color:'#537281',fontWeight:600,whiteSpace:'nowrap'}}>{area}</span>
 }
@@ -318,11 +318,11 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
     const saldo = fondos - gastos
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
-    const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
+    const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
 
     return (
       <div style={{paddingBottom:100}}>
-        <div style={{padding:'16px 20px 12px',position:'sticky',top:0,background:'#F7F8F9',zIndex:10,borderBottom:'1px solid #E4E8EB'}}>
+        <div style={{padding:'16px 20px 12px',position:'sticky',top:0,background:'#F5F7F9',zIndex:10,borderBottom:'1px solid #E4E8EB'}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',color:'#888',cursor:'pointer',fontSize:20,padding:'0 4px 0 0'}}>←</button>
             <div style={{flex:1}}>
@@ -361,11 +361,11 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
                 <div style={{fontSize:10,color:'#888',marginBottom:2}}>FONDOS</div>
                 <div style={{fontSize:12,fontWeight:700,color:'#1D9E75'}}>${fondos.toLocaleString('es-CL')}</div>
               </div>
-              <div style={{background:'#FBE9E7',borderRadius:8,padding:'8px 10px'}}>
+              <div style={{background:'#FCEBEB',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:'#888',marginBottom:2}}>GASTOS</div>
                 <div style={{fontSize:12,fontWeight:700,color:'#E24B4A'}}>${gastos.toLocaleString('es-CL')}</div>
               </div>
-              <div style={{background:saldo<0?'#FBE9E7':'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
+              <div style={{background:saldo<0?'#FCEBEB':'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:'#888',marginBottom:2}}>SALDO</div>
                 <div style={{fontSize:12,fontWeight:700,color:saldo<0?'#E24B4A':'#0F6E56'}}>${saldo.toLocaleString('es-CL')}</div>
               </div>
@@ -469,7 +469,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
 
   return (
     <div>
-      <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F7F8F9',zIndex:10}}>
+      <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F5F7F9',zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <div style={{display:'flex',gap:6}}>
@@ -602,7 +602,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const totalSel = seleccionados.reduce((a,e)=>a+(e.amount||0),0)
 
   const fmtCLP = fmtN
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
   // Pills de categoría en PENDIENTES: [valor en DB, etiqueta mostrada]
   const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
   const catLabel = c => c==='Diario Oficial'?'DO':c==='Registro Civil'?'R. Civil':(c||'Otro')
@@ -759,7 +759,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           </div>
         </div>
       )}
-      <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F7F8F9',zIndex:10}}>
+      <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F5F7F9',zIndex:10}}>
         <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja Chica</div>
         <div style={{display:'flex',background:'#F2F2F7',borderRadius:10,padding:3}}>
           {[['liquidar','PENDIENTES'],['caja','CAJA']].map(([id,lbl])=>{ const on=tab===id; return (
@@ -775,11 +775,11 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'0 0 130px'}}>
           {/* Resumen: saldo de caja + total sin liquidar */}
           <div style={{display:'flex',gap:8,padding:'2px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E1F5EE'}}>
+            <div style={{...kpiCard,background:saldoCaja<0?'#FCEBEB':'#E1F5EE'}}>
               <div style={kpiLbl}>Saldo caja</div>
               <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
             </div>
-            <div style={{...kpiCard,background:'#E3EEF3'}}>
+            <div style={{...kpiCard,background:'#E6EEF1'}}>
               <div style={kpiLbl}>Sin liquidar</div>
               <div style={{...kpiVal,color:C.accent}}>{fmtCLP(sinLiquidar)}</div>
             </div>
@@ -843,7 +843,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'4px 0 100px'}}>
           {/* KPIs */}
           <div style={{display:'flex',gap:8,padding:'4px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E1F5EE'}}>
+            <div style={{...kpiCard,background:saldoCaja<0?'#FCEBEB':'#E1F5EE'}}>
               <div style={kpiLbl}>Saldo</div>
               <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
               <div style={{...kpiSub,color:saldoCaja<0?C.overdue:C.muted}}>{saldoCaja<0?'Te debemos':'Disponible'}</div>
@@ -1108,7 +1108,7 @@ function TasksByPerson({tasks,clients}) {
                 {mine.map(t=>{
                   const client=clients.find(c=>c.id===t.client_id)
                   const u=urgency(t.due,t.status)
-                  const rowColor = u==='overdue'?'#FBE9E7':u==='urgent'?'#FFF8EC':u==='soon'?'#FFFBF0':'#fff'
+                  const rowColor = u==='overdue'?'#FCEBEB':u==='urgent'?'#FFF8EC':u==='soon'?'#FFFBF0':'#fff'
                   return (
                     <div key={t.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,background:rowColor,display:'flex',gap:10,alignItems:'flex-start'}}>
                       <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
@@ -1993,7 +1993,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <div style={{fontSize:20,fontWeight:600,color:C.overdue,lineHeight:1.1}}>{fmt(totalNeg)}</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:2}}>{negatives.length} cliente{negatives.length!==1?'s':''} con saldo negativo</div>
               </div>
-              <span style={{fontSize:10,fontWeight:600,padding:'3px 9px',borderRadius:10,background:'#FBE9E7',color:C.overdue,whiteSpace:'nowrap',flexShrink:0}}>Requieren fondos</span>
+              <span style={{fontSize:10,fontWeight:600,padding:'3px 9px',borderRadius:10,background:'#FCEBEB',color:C.overdue,whiteSpace:'nowrap',flexShrink:0}}>Requieren fondos</span>
             </div>
             {/* Filas */}
             {negatives.map(c=>{
@@ -2003,7 +2003,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               return (
               <div key={c.id} style={{borderBottom:`1px solid ${C.border}`}}>
                 <button onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'10px 14px',background:abierto?'#FAFBFC':'none',border:'none',cursor:'pointer',textAlign:'left'}}>
-                  <div style={{width:30,height:30,borderRadius:'50%',background:'#FBE9E7',color:C.overdue,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{iniciales(c.name)}</div>
+                  <div style={{width:30,height:30,borderRadius:'50%',background:'#FCEBEB',color:C.overdue,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{iniciales(c.name)}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                     <div style={{height:4,background:'#E4E8EB',borderRadius:2,overflow:'hidden',marginTop:4}}><div style={{height:'100%',background:C.overdue,width:`${prop}%`,borderRadius:2}}/></div>
@@ -2359,7 +2359,7 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
         </div>
         {fStatus==='Propuesta'?(
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:4}}>
-            <div style={{background:'#E3EEF3',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
+            <div style={{background:'#E6EEF1',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Pipeline</div>
               <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(pipelineUF)}</div>
             </div>
@@ -2389,7 +2389,7 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
           filtered.length>0&&(
             <>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:4}}>
-              <div style={{background:'#E3EEF3',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
+              <div style={{background:'#E6EEF1',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL UF</div>
                 <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(totalUF)}</div>
               </div>
@@ -2525,7 +2525,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
               <input type='number' value={r.valor??''} onChange={e=>up(i,'valor',e.target.value)} placeholder={tipo==='pct'?'%':tipo==='uf'?'UF':'$'} style={{flex:1,minWidth:0,border:'none',padding:'0 8px',fontSize:13,color:C.text,outline:'none'}}/>
               <div style={{display:'flex',flexShrink:0}}>
                 {tipos.map(([v,l])=>(
-                  <button key={v} type='button' onClick={()=>up(i,'tipo',v)} style={{padding:'0 7px',border:'none',borderLeft:`1px solid ${C.border}`,background:tipo===v?C.accent:'#EFF3F5',color:tipo===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+                  <button key={v} type='button' onClick={()=>up(i,'tipo',v)} style={{padding:'0 7px',border:'none',borderLeft:`1px solid ${C.border}`,background:tipo===v?C.accent:'#F5F7F9',color:tipo===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
                 ))}
               </div>
             </div>
@@ -3077,7 +3077,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 {clientMatches.map(c=>(
                   <div key={c.id} onMouseDown={()=>{setSelectedClient(c);up('client_id',c.id);setClientQ('')}}
                     style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
-                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                    onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'}
                     onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                     <div style={{fontWeight:500}}>{c.name}</div>
                     {c.rut&&<div style={{fontSize:11,color:C.muted}}>{c.rut}</div>}
@@ -3355,7 +3355,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               <div style={{fontSize:12,color:C.muted,background:'#F5F7F9',borderRadius:8,padding:'8px 10px',marginBottom:10,lineHeight:1.4}}>Reemplaza las cuotas programadas. Las ya emitidas y pagadas no se tocan.</div>
               <div style={{display:'flex',gap:0,marginBottom:12,border:`0.5px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
                 {['ajustar','cambiar'].map(m=>(
-                  <button key={m} onClick={()=>setModMode(m)} style={{flex:1,padding:'8px 6px',border:'none',background:modMode===m?C.accent:'#EFF3F5',color:modMode===m?'#fff':C.muted,fontSize:12,fontWeight:modMode===m?600:400,cursor:'pointer'}}>
+                  <button key={m} onClick={()=>setModMode(m)} style={{flex:1,padding:'8px 6px',border:'none',background:modMode===m?C.accent:'#F5F7F9',color:modMode===m?'#fff':C.muted,fontSize:12,fontWeight:modMode===m?600:400,cursor:'pointer'}}>
                     {m==='ajustar'?'Ajustar monto':'Cambiar formato'}
                   </button>
                 ))}
@@ -3369,7 +3369,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                         <input type='number' step={moneda==='UF'?'0.01':'1'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder={moneda==='UF'?'0.00':'0'}
                           style={{flex:1,border:'none',padding:'0 10px',fontSize:13,background:'#F5F7F9',color:C.text,outline:'none',minWidth:0}} autoFocus/>
                         <select value={moneda} onChange={e=>up('moneda',e.target.value)}
-                          style={{width:52,border:'none',borderLeft:`1px solid ${C.border}`,padding:'0 4px',fontSize:12,background:'#EFF3F5',color:C.accent,fontWeight:600,cursor:'pointer',outline:'none'}}>
+                          style={{width:52,border:'none',borderLeft:`1px solid ${C.border}`,padding:'0 4px',fontSize:12,background:'#F5F7F9',color:C.accent,fontWeight:600,cursor:'pointer',outline:'none'}}>
                           <option value='UF'>UF</option>
                           <option value='CLP'>CLP</option>
                         </select>
@@ -3383,8 +3383,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:panelCosto>0?4:10}}>
                     <span style={{fontSize:12,color:C.muted,flexShrink:0}}>Agregar costo</span>
                     <div style={{display:'flex',height:34,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>
-                      <button type='button' onClick={()=>setNewCostMode('fijo')} style={{padding:'0 10px',border:'none',background:newCostMode==='fijo'?C.accent:'#EFF3F5',color:newCostMode==='fijo'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{moneda}</button>
-                      <button type='button' onClick={()=>setNewCostMode('pct')} style={{padding:'0 10px',border:'none',borderLeft:`1px solid ${C.border}`,background:newCostMode==='pct'?C.accent:'#EFF3F5',color:newCostMode==='pct'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>%</button>
+                      <button type='button' onClick={()=>setNewCostMode('fijo')} style={{padding:'0 10px',border:'none',background:newCostMode==='fijo'?C.accent:'#F5F7F9',color:newCostMode==='fijo'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{moneda}</button>
+                      <button type='button' onClick={()=>setNewCostMode('pct')} style={{padding:'0 10px',border:'none',borderLeft:`1px solid ${C.border}`,background:newCostMode==='pct'?C.accent:'#F5F7F9',color:newCostMode==='pct'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>%</button>
                     </div>
                     <input type='number' step={newCostMode==='pct'?'0.1':'0.01'}
                       value={newCostMode==='pct'?newCostPct:newCosto}
@@ -3410,7 +3410,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   </div>
                   <Fld label='Vigente desde'><Inp type='month' value={newVig} onChange={e=>setNewVig(e.target.value)}/></Fld>
                   {newFmt==='cuotas'&&(
-                    <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px',border:`0.5px solid ${C.border}`,margin:'8px 0'}}>
+                    <div style={{background:'#F5F7F9',borderRadius:10,padding:'12px',border:`0.5px solid ${C.border}`,margin:'8px 0'}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                         <Fld label='N.° de cuotas'><Inp type='number' value={newNCuotas} onChange={e=>setNewNCuotas(parseInt(e.target.value)||3)} placeholder='3'/></Fld>
                         <Fld label={`Monto total (${moneda})`}><Inp type='number' step={moneda==='CLP'?'1':'0.01'} value={newHon} onChange={e=>setNewHon(e.target.value)} placeholder='0'/></Fld>
@@ -3427,7 +3427,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                     </div>
                   )}
                   {newFmt==='personalizada'&&(
-                    <div style={{background:'#F7F8F9',borderRadius:10,padding:'12px',border:`0.5px solid ${C.border}`,margin:'8px 0'}}>
+                    <div style={{background:'#F5F7F9',borderRadius:10,padding:'12px',border:`0.5px solid ${C.border}`,margin:'8px 0'}}>
                       {newCuotasCustom.map((c,i)=>(
                         <div key={c.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 28px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                           <Fld label={i===0?`Monto (${moneda})`:''}><Inp type='number' step={moneda==='CLP'?'1':'0.01'} value={c.monto} onChange={e=>setNewCuotasCustom(p=>p.map(x=>x.id===c.id?{...x,monto:e.target.value}:x))}/></Fld>
@@ -3505,7 +3505,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
       {matches.length>0&&(
         <div style={{position:'absolute',top:'100%',right:0,left:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
           {matches.map(c=>(
-            <div key={c.id} onMouseDown={()=>{onAssign(bill,c.id);setOpen(false);setQ('')}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:12}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+            <div key={c.id} onMouseDown={()=>{onAssign(bill,c.id);setOpen(false);setQ('')}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:12}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
               <div style={{fontWeight:500}}>{c.name}</div>
               {c.rut&&<div style={{fontSize:10,color:C.muted}}>{c.rut}</div>}
             </div>
@@ -4114,7 +4114,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                     {semTxt&&<span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.muted}}><span style={{width:8,height:8,borderRadius:'50%',background:semCol,flexShrink:0}}/>{semTxt}</span>}
                     {pagado&&b.paid_at&&<span style={{fontSize:11,fontWeight:600,color:C.normal}}>Pagada {fmtDMY(b.paid_at)}</span>}
                     {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600}}>Reembolso</span>}
-                    {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600}}>Anulada</span>}
+                    {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FCEBEB',color:C.overdue,fontWeight:600}}>Anulada</span>}
                     {tercerosByBilling.has(b.id)&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600}}>Proveedores</span>}
                     {anticipada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E1F5EE',color:'#0F6E56',fontWeight:600}}>Anticipada</span>}
                   </div>
@@ -4154,7 +4154,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
         {filter!=='anticipos'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
-          {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E1F5EE',C.normal]].map(([l,v,bg,col])=>(
+          {[['Por cobrar',fmt(pending),'#E6EEF1',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FCEBEB',C.overdue],['Cobrado',fmt(paid),'#E1F5EE',C.normal]].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
               <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
@@ -4250,7 +4250,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         ) : filter==='emitidas' ? (
           <>
             {/* BLOQUE 1 — PENDIENTE PAGO (acordeón maestro) */}
-            <button onClick={()=>setOpenPendiente(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F7F8F9',cursor:'pointer',textAlign:'left',marginBottom:10}}>
+            <button onClick={()=>setOpenPendiente(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F5F7F9',cursor:'pointer',textAlign:'left',marginBottom:10}}>
               <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                 <span style={{fontSize:12,color:C.accent,transform:openPendiente?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
                 <span style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Pendiente pago</span>
@@ -4266,7 +4266,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             )}
 
             {/* BLOQUE 2 — POR FACTURAR · mes en curso (acordeón) */}
-            <button onClick={()=>setOpenPorFacturar(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F7F8F9',cursor:'pointer',textAlign:'left',marginBottom:10}}>
+            <button onClick={()=>setOpenPorFacturar(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F5F7F9',cursor:'pointer',textAlign:'left',marginBottom:10}}>
               <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
                 <span style={{fontSize:12,color:C.accent,transform:openPorFacturar?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
                 <span style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Por facturar</span>
@@ -4488,11 +4488,11 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
           <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
             <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Dar de baja factura</div>
             <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{f.concept||'—'} · {fmt(parseInt(f.amount)||0)}</div>
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FBE9E7',color:C.overdue,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color={C.overdue}/>Esta acción no se puede deshacer</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FCEBEB',color:C.overdue,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color={C.overdue}/>Esta acción no se puede deshacer</div>
             <label style={flabel}>Motivo</label>
             <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
               {MOTIVOS_BAJA.map(m=>(
-                <button key={m} onClick={()=>setMotivoBaja(m)} style={{textAlign:'left',padding:'8px 11px',borderRadius:8,border:`1.5px solid ${motivoBaja===m?C.overdue:C.border}`,background:motivoBaja===m?'#FBE9E7':'transparent',color:motivoBaja===m?C.overdue:C.text,fontSize:12,fontWeight:motivoBaja===m?700:500,cursor:'pointer'}}>{m}</button>
+                <button key={m} onClick={()=>setMotivoBaja(m)} style={{textAlign:'left',padding:'8px 11px',borderRadius:8,border:`1.5px solid ${motivoBaja===m?C.overdue:C.border}`,background:motivoBaja===m?'#FCEBEB':'transparent',color:motivoBaja===m?C.overdue:C.text,fontSize:12,fontWeight:motivoBaja===m?700:500,cursor:'pointer'}}>{m}</button>
               ))}
             </div>
             <label style={flabel}>Observaciones (opcional)</label>
@@ -4979,7 +4979,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     else setSelected(new Set(disponibles.map(e=>e.id)))
   }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Otro':'#ECECEC'}
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
 
@@ -5038,8 +5038,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
   }
 
   const lblG = {fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:2}
-  const fK = fondosDisp>0?{c:'#1D9E75',bg:'#E1F5EE'}:fondosDisp===0?{c:'#C77F18',bg:'#FEF6EE'}:{c:'#E24B4A',bg:'#FBE9E7'}
-  const sK = saldoActual>0?{c:'#1D9E75',bg:'#E1F5EE'}:{c:'#E24B4A',bg:'#FBE9E7'}
+  const fK = fondosDisp>0?{c:'#1D9E75',bg:'#E1F5EE'}:fondosDisp===0?{c:'#C77F18',bg:'#FEF6EE'}:{c:'#E24B4A',bg:'#FCEBEB'}
+  const sK = saldoActual>0?{c:'#1D9E75',bg:'#E1F5EE'}:{c:'#E24B4A',bg:'#FCEBEB'}
 
   return (
     <div>
@@ -5833,7 +5833,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
   const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
 
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
@@ -5850,8 +5850,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const multiRS = selEnts.length>=2
 
   // Colores de KPI según reglas (labels siempre gris #99ABB4)
-  const cFondos = v => v>0?{c:C.normal,bg:'#E1F5EE'} : v===0?{c:'#C77F18',bg:'#FEF6EE'} : {c:C.overdue,bg:'#FBE9E7'}
-  const cSaldo = v => v>0?{c:C.normal,bg:'#E1F5EE'} : {c:C.overdue,bg:'#FBE9E7'}
+  const cFondos = v => v>0?{c:C.normal,bg:'#E1F5EE'} : v===0?{c:'#C77F18',bg:'#FEF6EE'} : {c:C.overdue,bg:'#FCEBEB'}
+  const cSaldo = v => v>0?{c:C.normal,bg:'#E1F5EE'} : {c:C.overdue,bg:'#FCEBEB'}
   const KpiRect = ({label,value,c,bg}) => (
     <div style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
       <div style={{fontSize:10,color:'#99ABB4',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</div>
@@ -5861,7 +5861,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const KpiRow = ({bal}) => { const f=cFondos(bal.fondos), s=cSaldo(bal.saldo); return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
       <KpiRect label='Fondos' value={fmt(bal.fondos)} c={f.c} bg={f.bg}/>
-      <KpiRect label='Gastos' value={fmt(bal.gastos)} c={C.overdue} bg='#FBE9E7'/>
+      <KpiRect label='Gastos' value={fmt(bal.gastos)} c={C.overdue} bg='#FCEBEB'/>
       <KpiRect label='Saldo actual' value={fmt(bal.saldo)} c={s.c} bg={s.bg}/>
     </div>
   )}
@@ -5925,7 +5925,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
         </div>
         {expandRend===r.id&&(()=>{
           const gastos=expenses.filter(e=>e.client_render_id===r.id)
-          return <div style={{marginTop:8,padding:'8px 11px',background:'#F7F8F9',borderRadius:8}}>
+          return <div style={{marginTop:8,padding:'8px 11px',background:'#F5F7F9',borderRadius:8}}>
             {gastos.length===0?<div style={{fontSize:11,color:C.muted}}>Sin detalle de gastos.</div>:gastos.map((e,i)=>(
               <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 0',borderBottom:i<gastos.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>
                 <div style={{minWidth:0}}>
@@ -6086,7 +6086,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
                         <button onClick={()=>setAsignandoRS(null)} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancelar</button>
                       </div>
                     ):(
-                      <button onClick={()=>setAsignandoRS(c.id)} style={{background:'#F0F4F6',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Asignar razón social ({b.sinAsignar})</button>
+                      <button onClick={()=>setAsignandoRS(c.id)} style={{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Asignar razón social ({b.sinAsignar})</button>
                     )}
                   </div>
                 ) })()}
@@ -6342,7 +6342,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:220,overflowY:'auto'}}>
                 {matches.map(c=>(
                   <div key={c.id} onMouseDown={()=>{setSelectedClient(c);setQ('')}} style={{padding:'10px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
-                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                    onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'}
                     onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                     <div style={{fontWeight:500}}>{c.name}</div>
                   </div>
@@ -6657,7 +6657,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
                   {showProjects&&clientProjects.length>0&&(
                     <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
                       {clientProjects.filter(p=>!f.project||p.toLowerCase().includes(f.project.toLowerCase())).map((p,i)=>(
-                        <div key={i} onMouseDown={()=>up('project',p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
+                        <div key={i} onMouseDown={()=>up('project',p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
                       ))}
                     </div>
                   )}
@@ -6671,7 +6671,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
                 {showProjects&&clientProjects.length>0&&(
                   <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,marginTop:4,maxHeight:180,overflowY:'auto'}}>
                     {clientProjects.filter(p=>!f.project||p.toLowerCase().includes(f.project.toLowerCase())).map((p,i)=>(
-                      <div key={i} onMouseDown={()=>up('project',p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
+                      <div key={i} onMouseDown={()=>up('project',p)} style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.text}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{p}</div>
                     ))}
                   </div>
                 )}
@@ -6904,7 +6904,7 @@ function ContactoTab({client, entities, onSaveFields}) {
           </div>
         ))}
         {showAdd&&(
-          <div style={{marginTop:10,padding:'12px',borderRadius:10,background:'#F7F8F9',border:`1px solid ${C.border}`}}>
+          <div style={{marginTop:10,padding:'12px',borderRadius:10,background:'#F5F7F9',border:`1px solid ${C.border}`}}>
             <div style={{display:'grid',gap:8}}>
               <input autoFocus value={cForm.nombre} onChange={e=>setCForm(f=>({...f,nombre:e.target.value}))} placeholder="Nombre *" style={inp}/>
               <input value={cForm.cargo} onChange={e=>setCForm(f=>({...f,cargo:e.target.value}))} placeholder="Cargo" style={inp}/>
@@ -7181,7 +7181,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const taskGroups = {}
   clientTasks.forEach(t=>{ const k=t.project||'__none__'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
 
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
 
   return (
     <div style={{paddingBottom:100}}>
@@ -7224,10 +7224,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         {/* Resumen financiero */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
           {[
-            ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E3EEF3',C.accent],
-            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?'#FBE9E7':'#F5F7F9',totalPorCobrar>0?C.overdue:C.muted],
+            ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent],
+            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?'#FCEBEB':'#F5F7F9',totalPorCobrar>0?C.overdue:C.muted],
             ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal],
-            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?'#FBE9E7':'#E1F5EE',saldoFondos<0?C.overdue:C.normal],
+            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?'#FCEBEB':'#E1F5EE',saldoFondos<0?C.overdue:C.normal],
           ].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
@@ -7319,11 +7319,11 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>FONDOS</div>
               <div style={{fontSize:12,fontWeight:700,color:C.normal}}>{fmt(fondos)}</div>
             </div>
-            <div style={{background:'#FBE9E7',borderRadius:8,padding:'8px 10px'}}>
+            <div style={{background:'#FCEBEB',borderRadius:8,padding:'8px 10px'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS</div>
               <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>{fmt(gastos)}</div>
             </div>
-            <div style={{background:saldoFondos<0?'#FBE9E7':'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
+            <div style={{background:saldoFondos<0?'#FCEBEB':'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
               <div style={{fontSize:12,fontWeight:700,color:saldoFondos<0?C.overdue:C.normal}}>{fmt(saldoFondos)}</div>
             </div>
@@ -7667,7 +7667,7 @@ function EntitiesEditor({clientId}) {
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,boxShadow:'0 4px 16px rgba(0,0,0,.10)',zIndex:100,maxHeight:200,overflowY:'auto',marginTop:2}}>
                 {suggestions.map((s,i)=>(
                   <div key={i} onMouseDown={()=>{setName(s.name);setRut(s.rut||'');setSugg([]);setShowSugg(false)}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
-                    onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                    onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'}
                     onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                     <div style={{fontWeight:500}}>{s.name}</div>
                     {s.rut&&<div style={{fontSize:11,color:C.muted}}>{s.rut}</div>}
@@ -8441,7 +8441,7 @@ function InvoiceClientPicker({inv,clients,assigned,onAssign}) {
               {matches.map(c=>(
                 <div key={c.id} onMouseDown={()=>{onAssign(c.id);setQ('')}}
                   style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
-                  onMouseEnter={e=>e.currentTarget.style.background='#F0F4F6'}
+                  onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'}
                   onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                   <div style={{fontWeight:500}}>{c.name}</div>
                   {c.rut&&<div style={{fontSize:11,color:C.muted}}>{c.rut}</div>}
@@ -8713,8 +8713,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
   tfoot tr{background:${A4};font-weight:700}
   tfoot td{padding:7px 10px;border-top:2px solid ${A3}}
   .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700}
-  .badge-pending{background:#E3EEF3;color:${A}}
-  .badge-overdue{background:#FBE9E7;color:#E24B4A}
+  .badge-pending{background:#E6EEF1;color:${A}}
+  .badge-overdue{background:#FCEBEB;color:#E24B4A}
   .badge-paid{background:#E1F5EE;color:#1D9E75}
   .badge-area{background:${A4};color:${A2}}
   .who-section{margin-bottom:16px}
@@ -9011,7 +9011,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
       {comments.length>0&&(
         <div style={{marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Comentarios · {comments.length}</div>
-          <div style={{background:'#F7F8F9',borderRadius:7,padding:'8px 10px'}}>
+          <div style={{background:'#F5F7F9',borderRadius:7,padding:'8px 10px'}}>
             <div style={{fontSize:10,fontWeight:600,color:C.accent,marginBottom:2}}>{comments[0].user_name}</div>
             <div style={{fontSize:12,color:C.text,lineHeight:1.4}}>{comments[0].content}</div>
           </div>
@@ -9210,7 +9210,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                   const esHoy=iso===fmtISO(hoy)
                   const tareasDelDia=tasks.filter(t=>t.due===iso&&t.status!=='Terminado'&&(enMiLista(t,me)||t.assigned_by===me))
                   return (
-                    <div key={i} onClick={()=>onAddTask(iso)} title='Nueva tarea este día' style={{minHeight:90,background:esHoy?'#E6EEF1':'#F7F8F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`,cursor:'pointer'}}>
+                    <div key={i} onClick={()=>onAddTask(iso)} title='Nueva tarea este día' style={{minHeight:90,background:esHoy?'#E6EEF1':'#F5F7F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`,cursor:'pointer'}}>
                       <div style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.muted,textTransform:'uppercase'}}>{DIAS[i]}</div>
                       <div style={{fontSize:10,fontWeight:600,color:esHoy?C.accent:C.text,marginBottom:4}}>{String(dia.getDate()).padStart(2,'0')}</div>
                       {tareasDelDia.length===0&&<div style={{fontSize:8,color:'#bbb',fontStyle:'italic'}}>—</div>}
@@ -9255,7 +9255,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           }).slice(0,3)
           const fmtCLP = fmtN
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
-          const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
+          const CAT_BG = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
           const GREEN={num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:'#C77F18',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C77F18'}
           const RED={num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5',label:C.muted}
