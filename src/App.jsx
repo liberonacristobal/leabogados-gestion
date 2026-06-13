@@ -6657,7 +6657,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,onSave,onClose
           <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
         </Fld>
       )}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <Fld label='Monto (CLP)'><Inp type='number' value={f.amount} onChange={e=>up('amount',e.target.value)}/></Fld>
         <Fld label='Fecha'><Inp type='date' value={f.date||''} onChange={e=>up('date',e.target.value)}/></Fld>
       </div>
