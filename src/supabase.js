@@ -115,6 +115,7 @@ export const getBilling = async () => {
   const { data, error } = await supabase
     .from('billing')
     .select('*, clients(name, erasmo)')
+    .is('deleted_at', null)
     .order('due', { ascending: true, nullsLast: true })
   if (error) throw error
   return data

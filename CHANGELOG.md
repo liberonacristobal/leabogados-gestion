@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Soft-delete + Papelera
+- Eliminar **venta, cobro o gasto** ya no borra: marca `deleted_at` y va a la **Papelera** (menú ≡). Desde ahí se puede **Restaurar** o **Eliminar definitivo**. Restaurar una venta también restaura sus cuotas.
+- Los loaders excluyen lo eliminado, así desaparece de todas las vistas. Requiere columnas `deleted_at` en sales/billing/expenses.
+
 ## 2026-06-13 — Facturación: KPIs compactos y tappables = navegación
 - Los 4 KPIs (Por cobrar / Programado / Vencido / Cobrado) ahora son **más chicos y tappables**: al tocar uno entras a su detalle (reemplazan las tabs Emitidas/Programadas/Pagadas). El activo queda resaltado con su color.
 - Tabs secundarias (Todas, Proveedores, Checklist, Anticipos) quedan en una fila de píldoras debajo.
