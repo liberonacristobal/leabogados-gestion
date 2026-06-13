@@ -4412,10 +4412,16 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
 }
 
 
-function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
+  // Proveedor al que le pertenece el monto "de terceros" de esta factura (cuenta por pagar anclada a este cobro).
+  const tercerosBill = (terceros||[]).filter(t=>String(t.billing_id)===String(bill?.id))
+  const [terceroProv,setTerceroProv] = useState(()=>{ const t=tercerosBill.find(x=>x.estado!=='pagado')||tercerosBill[0]; return t?String(t.proveedor_id):'' })
+  const terceroPagado = tercerosBill.some(t=>t.estado==='pagado')
+  const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+  const provsOrd = [...(proveedores||[])].sort((a,b)=>tituloProv(a).localeCompare(tituloProv(b),'es'))
   const [selAnt,setSelAnt] = useState(new Set())
   const [anularOpen,setAnularOpen] = useState(false)
   const [motivoBaja,setMotivoBaja] = useState('')
@@ -4507,6 +4513,21 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
           <div><label style={flabel}>Monto total (CLP)</label><input type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0' style={inp}/></div>
           <div><label style={flabel}>De terceros (CLP)</label><input type='number' value={f.monto_terceros||''} onChange={e=>up('monto_terceros',e.target.value)} placeholder='0' style={inp}/></div>
         </div>
+        {(parseInt(f.monto_terceros)||0)>0&&(
+          <div>
+            <label style={flabel}>¿A quién le pagas?</label>
+            {terceroPagado?(
+              <div style={{fontSize:12,color:C.muted,background:'#F5F7F9',borderRadius:8,padding:'9px 11px'}}>Ya le pagaste a <b style={{color:C.text}}>{tituloProv(provsOrd.find(p=>String(p.id)===terceroProv))}</b>. Para cambiarlo, deshaz el pago en Cuentas por pagar.</div>
+            ):provsOrd.length===0?(
+              <div style={{fontSize:12,color:C.muted,background:'#F5F7F9',borderRadius:8,padding:'9px 11px'}}>Crea proveedores en Facturación → Proveedores.</div>
+            ):(
+              <select value={terceroProv} onChange={e=>setTerceroProv(e.target.value)} style={sel}>
+                <option value=''>— Sin asignar —</option>
+                {provsOrd.map(p=><option key={p.id} value={p.id}>{tituloProv(p)}</option>)}
+              </select>
+            )}
+          </div>
+        )}
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
           <div><label style={flabel}>Estado</label><select value={f.status||'Pendiente'} onChange={e=>up('status',e.target.value)} style={sel}>{estados.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
@@ -4541,15 +4562,19 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
           {f.status==='Pagado'&&<div><label style={flabel}>Fecha de pago</label><input type='date' value={f.paid_at||''} onChange={e=>up('paid_at',e.target.value)} style={inp}/></div>}
         </div>
 
-        <div><label style={flabel}>Notas</label><input value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...' style={inp}/></div>
-
-        {bill?.id&&user&&<div><label style={flabel}>Archivos</label><Attachments table='billing_attachments' idField='billing_id' entityId={bill.id} folderKind='facturas' namePrefix={`${clients.find(c=>String(c.id)===String(f.client_id))?.name||''} · ${f.concept||'Cobro'}`} user={user} onChange={onAttachChange}/></div>}
+        <div>
+          <label style={flabel}>Notas</label>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
+            <input value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...' style={inp}/>
+            {bill?.id&&user&&<Attachments inline table='billing_attachments' idField='billing_id' entityId={bill.id} folderKind='facturas' namePrefix={`${clients.find(c=>String(c.id)===String(f.client_id))?.name||''} · ${f.concept||'Cobro'}`} user={user} onChange={onAttachChange}/>}
+          </div>
+        </div>
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center',padding:'12px 18px',borderTop:`0.5px solid ${C.border}`}}>
         {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:500,cursor:'pointer'}}>Eliminar</button>}
         {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
         <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
-        <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave(f)} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
+        <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave({...f,_terceroProv:terceroProv,_terceroPagado:terceroPagado})} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -8106,7 +8131,7 @@ async function driveTrash(token, fileId){
 }
 
 // Bloque "Archivos" reutilizable (tareas y gastos). Sube a Drive y registra en `table`.
-function Attachments({table, idField, entityId, ensureEntityId, folderKind, namePrefix, user, onChange}) {
+function Attachments({table, idField, entityId, ensureEntityId, folderKind, namePrefix, user, onChange, inline}) {
   const [items,setItems] = useState([])
   const [busy,setBusy] = useState(false)
   const inputRef = useRef(null)
@@ -8149,20 +8174,30 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
       setItems(p=>p.filter(x=>x.id!==a.id)); onChange&&onChange(-1, a)
     }catch(err){ alert('Error al eliminar: '+(err.message||err)) }
   }
+  const fileRow = a => (
+    <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
+      <span style={{flexShrink:0}}>Adjunto</span>
+      <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
+      <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a>
+      <button onClick={()=>del(a)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,flexShrink:0}}>×</button>
+    </div>
+  )
+  const icon = busy?<Spin/>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
+  // inline: el ícono se ubica en la misma línea que lo controla el padre (grid); la lista cae full-width debajo.
+  if(inline) return (<>
+    <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
+    <button onClick={()=>inputRef.current?.click()} disabled={busy} aria-label='Adjuntar archivo' title='Adjuntar archivo · máx. 15 MB · se guarda en Drive' style={{width:36,height:36,borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative'}}>
+      {icon}{items.length>0&&<span style={{position:'absolute',top:-5,right:-5,minWidth:15,height:15,borderRadius:8,background:C.accent,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px'}}>{items.length}</span>}
+    </button>
+    {items.length>0&&<div style={{gridColumn:'1 / -1',marginTop:2}}>{items.map(fileRow)}</div>}
+  </>)
   return (
     <div style={{marginBottom:12}}>
       <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Archivos {items.length>0&&`(${items.length})`}</div>
-      {items.map(a=>(
-        <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
-          <span style={{flexShrink:0}}>Adjunto</span>
-          <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
-          <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a>
-          <button onClick={()=>del(a)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,flexShrink:0}}>×</button>
-        </div>
-      ))}
+      {items.map(fileRow)}
       <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
       <button onClick={()=>inputRef.current?.click()} disabled={busy} aria-label='Adjuntar archivo' title='Adjuntar archivo · máx. 15 MB · se guarda en Drive' style={{marginTop:8,width:40,height:40,borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
-        {busy?<Spin/>:<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>}
+        {icon}
       </button>
     </div>
   )
@@ -9965,13 +10000,38 @@ export default function App() {
     setSaving(true)
     try{
       // Limpiar campos virtuales que no van a la DB
-      const {clients:_c, erasmo:_e, ...rest} = f
+      const {clients:_c, erasmo:_e, _terceroProv, _terceroPagado, ...rest} = f
       const payload={...rest,amount:parseInt(f.amount)||0,updated_at:new Date().toISOString()}
       const saved=await upsertBilling(payload)
       setBilling(p=>{
         const wc={...saved,clients:clients.find(c=>c.id===saved.client_id)}
         return f.id?p.map(x=>x.id===saved.id?wc:x):[wc,...p]
       })
+      // Cuenta por pagar a proveedor anclada a este cobro (monto "de terceros").
+      // No se toca si ya se pagó. Se crea/actualiza/elimina según el proveedor asignado.
+      if(!_terceroPagado){
+        try{
+          const montoT=parseInt(saved.monto_terceros)||0
+          const previas=(terceros||[]).filter(t=>String(t.billing_id)===String(saved.id)&&t.estado!=='pagado')
+          if(montoT>0 && _terceroProv){
+            const prov=(proveedores||[]).find(p=>String(p.id)===String(_terceroProv))
+            const estado=saved.status==='Pagado'?'por_pagar':'pendiente'
+            const fields={sale_id:saved.sale_id||null, billing_id:saved.id, proveedor_id:_terceroProv,
+              proveedor:prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
+              monto:montoT, estado}
+            if(previas.length){
+              await supabase.from('terceros_pagos').update(fields).eq('id',previas[0].id)
+              if(previas.length>1) await supabase.from('terceros_pagos').delete().in('id',previas.slice(1).map(t=>t.id))
+            }else{
+              await supabase.from('terceros_pagos').insert({...fields,created_by:user?.name||null})
+            }
+          }else if(previas.length){
+            await supabase.from('terceros_pagos').delete().in('id',previas.map(t=>t.id))
+          }
+          const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
+          if(nt) setTerceros(nt)
+        }catch(te){ alert('El cobro se guardó, pero hubo un problema con la cuenta por pagar al proveedor: '+te.message) }
+      }
       // Aprendizaje universal: si la factura trae razón social, la guarda en el catálogo
       if(saved.client_id && (saved.receptor_name||saved.receptor_rut)){
         const yaExiste=(clientEntities||[]).some(e=>e.client_id===saved.client_id&&((e.rut&&e.rut===saved.receptor_rut)||(e.name?.toLowerCase()===saved.receptor_name?.toLowerCase())))
@@ -9984,7 +10044,7 @@ export default function App() {
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[clients,clientEntities])
+  },[clients,clientEntities,terceros,proveedores,user])
 
   // Anticipos (PP-15): crear un anticipo disponible
   const handleSaveAnticipo=useCallback(async(f)=>{
@@ -10309,7 +10369,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return cn?`${base} · ${cn}`:base })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(

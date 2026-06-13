@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Editar cobro: proveedor del monto de terceros + notas/archivos en una línea
+- En "Editar cobro", al poner un monto **De terceros (CLP)** se despliega **¿A quién le pagas?** para asignar el proveedor. Viene prepoblado si la venta/propuesta ya tenía el costo y el proveedor; se puede cambiar aquí (ej: costo que surgió después). Al guardar, crea/actualiza/elimina la cuenta por pagar anclada a ese cobro (Por pagar si ya está cobrado). Si ya le pagaste, queda bloqueado (deshacer el pago en Cuentas por pagar).
+- **Notas y el ícono de adjuntar** ahora en la misma línea; se eliminó el título "Archivos" duplicado. El ícono muestra un contador y la lista de archivos cae debajo.
+
 ## 2026-06-13 — Pagar varias cuotas juntas a un proveedor
 - El reparto a proveedores se reparte SIEMPRE en las mismas cuotas del cobro (de cada factura cobrada, la parte que le corresponde al proveedor queda "Por pagar"). La decisión de pagarle al tiro o juntar varias cuotas es del momento de pagar, no de la venta.
 - En "Cuentas por pagar" del dashboard, cuando un proveedor tiene ≥2 cuotas por pagar aparece **Pagar las N · $total**: registra todas en una sola transferencia (misma fecha y referencia). También se puede pagar cada cuota por separado.
