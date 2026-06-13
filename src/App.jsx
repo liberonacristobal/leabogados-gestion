@@ -3808,39 +3808,36 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
               const semTxt=prog?(dl!=null?(dl<0?`${Math.abs(dl)} días vencida`:`vence en ${dl} días`):''):((dl!=null&&dl<0)?`${Math.abs(dl)} días vencida`:(dEmis!=null?`${dEmis} días`:''))
               return (
               <div key={b.id} style={{position:'relative',background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`}}>
-                <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+                {/* línea 1: concepto + monto */}
+                <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
                   {prog&&<input type='checkbox' checked={selected.has(b.id)} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}</div>
-                    <div style={{fontSize:11,color:'#99ABB4',marginTop:4}}>{prog?`Facturar: ${fmtDMY(b.due)}`:`Factura N° ${b.invoice_no||'—'} · Fecha: ${fmtDMY(b.issued_at)}`}</div>
-                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6,flexWrap:'wrap'}}>
-                      {semTxt&&<span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.muted}}><span style={{width:8,height:8,borderRadius:'50%',background:semCol,flexShrink:0}}/>{semTxt}</span>}
-                      {pagado&&b.paid_at&&<span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'#E4F1EA',color:C.normal}}>Pagada {fmtDMY(b.paid_at)}</span>}
-                      {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600}}>Reembolso</span>}
-                      {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600}}>Anulada{b.anulada_por?` · ${b.anulada_por}`:''}</span>}
-                    </div>
+                  <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado)?C.overdue:C.text,whiteSpace:'nowrap',flexShrink:0}}>{fmt(b.amount)}</div>
+                </div>
+                {/* línea 2: factura n° + fecha */}
+                <div style={{fontSize:11,color:'#99ABB4',marginTop:4}}>{prog?`Facturar: ${fmtDMY(b.due)}`:`Factura N° ${b.invoice_no||'—'} · Fecha: ${fmtDMY(b.issued_at)}`}</div>
+                {/* línea 3: semáforo + tags | acciones */}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:7}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
+                    {semTxt&&<span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.muted}}><span style={{width:8,height:8,borderRadius:'50%',background:semCol,flexShrink:0}}/>{semTxt}</span>}
+                    {pagado&&b.paid_at&&<span style={{fontSize:11,fontWeight:600,color:C.normal}}>Pagada {fmtDMY(b.paid_at)}</span>}
+                    {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600}}>Reembolso</span>}
+                    {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600}}>Anulada</span>}
                   </div>
-                  <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:8}}>
-                    <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado)?C.overdue:C.text,whiteSpace:'nowrap'}}>{fmt(b.amount)}</div>
-                    <div style={{display:'flex',alignItems:'center',gap:6}}>
-                      {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
-                      {prog ? (
-                        selected.size===0&&<button onClick={()=>marcarEmitida(b)} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ya emitida</button>
-                      ):anulada ? (
-                        b.anulada_at&&<span style={{fontSize:10,color:C.muted}}>Baja {fmtDMY(b.anulada_at.slice(0,10))}</span>
-                      ):pagado ? (
-                        <span style={{fontSize:11,fontWeight:600,color:C.normal,padding:'5px 12px',borderRadius:20,background:'#E4F1EA'}}>Pagada</span>
-                      ):(
-                        <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10))}} style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Registrar pago</button>
-                      )}
-                      <button onClick={(e)=>{e.stopPropagation();setMenuBill(menuBill===b.id?null:b.id)}} style={{width:26,height:26,borderRadius:7,border:`1px solid ${menuBill===b.id?C.accent:C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                        <svg width='14' height='14' viewBox='0 0 24 24' fill={menuBill===b.id?C.accent:C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
-                      </button>
-                    </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
+                    {prog ? (
+                      selected.size===0&&<button onClick={()=>marcarEmitida(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Ya emitida</button>
+                    ):(!anulada&&!pagado)&&(
+                      <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10))}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
+                    )}
+                    <button onClick={(e)=>{e.stopPropagation();setMenuBill(menuBill===b.id?null:b.id)}} style={{width:24,height:24,borderRadius:7,border:`1px solid ${menuBill===b.id?C.accent:C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                      <svg width='13' height='13' viewBox='0 0 24 24' fill={menuBill===b.id?C.accent:C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
+                    </button>
                   </div>
                 </div>
                 {menuBill===b.id&&(
-                  <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:46,right:13,width:150,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',padding:'4px 0',zIndex:20}}>
+                  <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',right:13,marginTop:2,width:150,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',padding:'4px 0',zIndex:20}}>
                     <div onClick={()=>{setMenuBill(null);onEdit(b)}} style={{fontSize:13,color:C.text,padding:'9px 13px',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>Editar</div>
                     {!pagado&&!anulada&&onAnular&&<><div style={{height:'0.5px',background:C.border,margin:'2px 0'}}/><div onClick={()=>{setMenuBill(null);setAnulando(b);setMotivoBaja('');setObsBaja('')}} style={{fontSize:13,color:C.overdue,padding:'9px 13px',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#FEF2F2'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>Anular</div></>}
                   </div>
