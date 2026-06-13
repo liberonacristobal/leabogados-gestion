@@ -9585,6 +9585,72 @@ function UsersView({onClose}) {
   )
 }
 
+// ─── PAPELERA (soft-delete): ventas, cobros y gastos eliminados; restaurar o borrar definitivo ──
+function PapeleraModal({clients=[],onClose,onChanged}){
+  const [data,setData] = useState(null)   // {ventas, cobros, gastos}
+  const [busy,setBusy] = useState(false)
+  const cli = id => clients.find(c=>String(c.id)===String(id))?.name||'—'
+  const fmtD = iso => { if(!iso) return ''; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:'' }
+  const cargar = async()=>{
+    const [v,b,g] = await Promise.all([
+      supabase.from('sales').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).then(r=>r.data||[]),
+      supabase.from('billing').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).then(r=>r.data||[]),
+      supabase.from('expenses').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).then(r=>r.data||[]),
+    ])
+    setData({ventas:v,cobros:b,gastos:g})
+  }
+  useEffect(()=>{ cargar() },[])
+  const restaurar = async(tipo,row)=>{
+    setBusy(true)
+    try{
+      if(tipo==='ventas'){ await supabase.from('sales').update({deleted_at:null}).eq('id',row.id); await supabase.from('billing').update({deleted_at:null}).eq('sale_id',row.id) }
+      else if(tipo==='cobros'){ await supabase.from('billing').update({deleted_at:null}).eq('id',row.id) }
+      else { await supabase.from('expenses').update({deleted_at:null}).eq('id',row.id) }
+      await cargar(); onChanged&&onChanged()
+    }catch(e){alert('Error: '+e.message)}
+    setBusy(false)
+  }
+  const purgar = async(tipo,row)=>{
+    if(!confirm('Eliminar DEFINITIVAMENTE. Esto no se puede deshacer. ¿Continuar?')) return
+    setBusy(true)
+    try{
+      if(tipo==='ventas'){ await supabase.from('billing').delete().eq('sale_id',row.id); await supabase.from('sales').delete().eq('id',row.id) }
+      else if(tipo==='cobros'){ await supabase.from('billing').delete().eq('id',row.id) }
+      else { await supabase.from('expenses').delete().eq('id',row.id) }
+      await cargar()
+    }catch(e){alert('Error: '+e.message)}
+    setBusy(false)
+  }
+  const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const seccion = (tipo,titulo,rows,label) => (
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{titulo} {rows.length>0&&`· ${rows.length}`}</div>
+      {rows.length===0?(
+        <div style={{fontSize:12,color:'#99ABB4',padding:'8px 0'}}>Nada eliminado.</div>
+      ):rows.map(r=>(
+        <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',border:`0.5px solid ${C.border}`,borderRadius:9,marginBottom:6}}>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label(r)}</div>
+            <div style={{fontSize:11,color:'#99ABB4'}}>Eliminado {fmtD(r.deleted_at)}</div>
+          </div>
+          <button onClick={()=>restaurar(tipo,r)} disabled={busy} style={{flexShrink:0,height:30,padding:'0 11px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Restaurar</button>
+          <button onClick={()=>purgar(tipo,r)} disabled={busy} title='Eliminar definitivo' style={{flexShrink:0,width:30,height:30,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.overdue,fontSize:14,cursor:'pointer'}}>×</button>
+        </div>
+      ))}
+    </div>
+  )
+  if(!data) return <div style={{padding:'30px 20px',textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
+  const total = data.ventas.length+data.cobros.length+data.gastos.length
+  return (
+    <div>
+      {total===0&&<div style={{fontSize:12.5,color:'#99ABB4',textAlign:'center',padding:'16px 0 18px'}}>La papelera está vacía. Lo que elimines (ventas, cobros, gastos) aparecerá acá y podrás restaurarlo.</div>}
+      {seccion('ventas','Ventas',data.ventas,r=>r.title||'Venta')}
+      {seccion('cobros','Cobros',data.cobros,r=>`${cli(r.client_id)} · ${r.concept||'Cobro'} · ${fmt0(r.amount)}`)}
+      {seccion('gastos','Gastos',data.gastos,r=>`${r.notas||r.concept||'Gasto'} · ${fmt0(r.amount)}`)}
+    </div>
+  )
+}
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null)
@@ -9665,9 +9731,9 @@ export default function App() {
       supabase.from('petty_cash').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
       supabase.from('rendiciones').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
       getClients(),
-      supabase.from('sales').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
+      supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(({data})=>data||[]),
       getBilling(),
-      supabase.from('expenses').select('*').order('date',{ascending:false}).then(({data})=>data||[]),
+      supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(({data})=>data||[]),
       supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}).then(({data})=>data||[]),
       supabase.from('client_entities').select('*').then(({data})=>data||[]),
       supabase.from('expense_attachments').select('id,expense_id').then(({data})=>data||[]),
@@ -9858,9 +9924,10 @@ export default function App() {
       const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('sale_id',id)
       const emitidas = (cuotas||[]).filter(b=>b.invoice_no)
       if(emitidas.length>0 && !confirm(`Esta venta tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar la venta y TODAS sus cuotas igual?`)) return
-      // Borrar cuotas asociadas y la venta
-      await supabase.from('billing').delete().eq('sale_id',id)
-      await supabase.from('sales').delete().eq('id',id)
+      // Soft-delete: la venta y sus cuotas van a la papelera (restaurables), no se borran físicamente
+      const now=new Date().toISOString()
+      await supabase.from('billing').update({deleted_at:now}).eq('sale_id',id)
+      await supabase.from('sales').update({deleted_at:now}).eq('id',id)
       setBilling(p=>p.filter(b=>b.sale_id!==id))
       setSales(p=>p.filter(x=>x.id!==id))
       setModal(null)
@@ -9966,7 +10033,7 @@ export default function App() {
       ?'Este gasto ya fue incluido en una rendición enviada al cliente.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?'
       :'¿Eliminar este registro?'
     if(!confirm(msg)) return
-    const {error}=await supabase.from('expenses').delete().eq('id',id)
+    const {error}=await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',id)
     if(error){ alert('No se pudo eliminar: '+error.message); return }
     // Si estaba en una rendición, ajustar su total y contador para no descuadrarla
     if(exp?.client_render_id){
@@ -10261,7 +10328,7 @@ export default function App() {
   const handleDeleteBilling=useCallback(async(id)=>{
     if(!confirm('¿Eliminar este cobro?')) return
     try{
-      await supabase.from('billing').delete().eq('id',id)
+      await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',id)
       setBilling(p=>p.filter(x=>x.id!==id))
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
@@ -10299,7 +10366,7 @@ export default function App() {
     const arr=Array.isArray(ids)?ids:[ids]
     if(arr.length===0) return
     try{
-      await supabase.from('billing').delete().in('id',arr)
+      await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',arr)
       setBilling(p=>p.filter(x=>!arr.includes(x.id)))
     }catch(e){alert('Error: '+e.message)}
   },[])
@@ -10433,6 +10500,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
                   Gestión de usuarios
                 </div>}
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'papelera'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>
+                  Papelera
+                </div>}
                 {actualRole==='admin'&&(userRole==='admin'
                   ? <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('limited');setTab('tasks')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
@@ -10496,6 +10567,13 @@ export default function App() {
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='papelera'&&<Modal title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
+          const [s,b,e]=await Promise.all([
+            supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
+            getBilling(),
+            supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
+          ]); setSales(s); if(b)setBilling(b); setExpenses(e)
+        }}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>{handleSaveTask({...t,status:'Terminado'});setModal(null)}}/></Modal>}
