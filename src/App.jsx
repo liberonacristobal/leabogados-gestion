@@ -3921,7 +3921,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onStatusChange,onRevertirPago,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
@@ -4194,8 +4194,10 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                       selected.size===0&&<button onClick={(e)=>{e.stopPropagation();marcarEmitida(b)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Ya emitida</button>
                     ):(!anulada&&!pagado&&!anticipada)?(
                       <button onClick={(e)=>{e.stopPropagation();setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
-                    ):(pagado&&onRevertirPago)&&(
+                    ):(pagado&&onRevertirPago)?(
                       <button onClick={(e)=>{e.stopPropagation(); if(confirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Deshacer pago</button>
+                    ):(anulada&&onReactivar)&&(
+                      <button onClick={(e)=>{e.stopPropagation(); if(confirm('¿Reactivar esta factura anulada? Vuelve a Pendiente y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Reactivar</button>
                     )}
                     <button onClick={(e)=>{e.stopPropagation();onEdit(b)}} aria-label='Editar' style={{width:24,height:24,borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
                       <svg width='13' height='13' viewBox='0 0 24 24' fill={C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
@@ -4585,7 +4587,7 @@ function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],ant
           <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
             <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Dar de baja factura</div>
             <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{f.concept||'—'} · {fmt(parseInt(f.amount)||0)}</div>
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FCEBEB',color:C.overdue,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color={C.overdue}/>Esta acción no se puede deshacer</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FFF8E1',color:'#B8860B',fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color='#B8860B'/>Podrás reactivarla después si fue un error</div>
             <label style={flabel}>Motivo</label>
             <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
               {MOTIVOS_BAJA.map(m=>(
@@ -4853,7 +4855,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
 const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
 
 // ─── PROVEEDORES (catálogo + ficha de proveedores, costos de terceros) ──────
-function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSave,onClose,saving}) {
+function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSave,onRevertirPago,onClose,saving}) {
   const [view,setView] = useState('list')   // list | ficha | form
   const [selId,setSelId] = useState(null)
   const [q,setQ] = useState('')
@@ -5011,6 +5013,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <span style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{fmt0(t.monto)}</span>
                     <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:eb,color:ec}}>{el}</span>
+                    {t.estado==='pagado'&&onRevertirPago&&<button onClick={()=>{ if(confirm('¿Deshacer este pago? Vuelve a "Por pagar" y se borra fecha, referencia y documento.')) onRevertirPago(t) }} title='Deshacer pago' style={{background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,color:C.muted,fontSize:10,fontWeight:600,padding:'3px 8px',cursor:'pointer',whiteSpace:'nowrap'}}>Deshacer</button>}
                   </div>
                 </div>
               )
@@ -10259,7 +10262,7 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
-  // Dar de baja (anular) una factura: registra motivo, quién y cuándo. No se puede deshacer.
+  // Dar de baja (anular) una factura: registra motivo, quién y cuándo.
   const handleAnularFactura=useCallback(async(bill,motivo,obs)=>{
     try{
       const patch={status:'Anulada', motivo_baja:obs?.trim()?`${motivo} — ${obs.trim()}`:motivo, anulada_por:user?.name||user?.email||null, anulada_at:new Date().toISOString(), updated_at:new Date().toISOString()}
@@ -10268,6 +10271,26 @@ export default function App() {
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
     }catch(e){alert('No se pudo dar de baja: '+e.message)}
   },[user])
+
+  // Reactivar una factura anulada por error: vuelve a Pendiente y borra el registro de baja.
+  const handleReactivarFactura=useCallback(async(bill)=>{
+    try{
+      const patch={status:'Pendiente', motivo_baja:null, anulada_por:null, anulada_at:null, updated_at:new Date().toISOString()}
+      const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
+      if(error) throw error
+      setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
+    }catch(e){alert('No se pudo reactivar: '+e.message)}
+  },[])
+
+  // Deshacer un pago a proveedor (transferencia registrada por error): vuelve a "Por pagar" y borra fecha/referencia/documento.
+  const handleRevertirPagoProveedor=useCallback(async(tercero)=>{
+    try{
+      const {data,error}=await supabase.from('terceros_pagos').update({estado:'por_pagar',pagado_at:null,referencia:null,factura_numero:null,factura_fecha:null}).eq('id',tercero.id).select().single()
+      if(error)throw error
+      setTerceros(p=>p.map(t=>t.id===data.id?data:t))
+      return data
+    }catch(e){alert('Error: '+e.message); return null}
+  },[])
 
   const handleRendicionComplete=useCallback(async(r)=>{
     setRendiciones(p=>[r,...p])
@@ -10368,7 +10391,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
@@ -10386,7 +10409,7 @@ export default function App() {
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
-        {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
+        {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,padding:'18px 20px 24px',boxSizing:'border-box'}}>

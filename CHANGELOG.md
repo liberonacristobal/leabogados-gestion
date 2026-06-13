@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Reversibilidad: reactivar factura anulada + deshacer pago a proveedor
+- **Factura anulada**: ahora tiene botón **"Reactivar"** (vuelve a Pendiente y borra el registro de baja). El aviso al anular dejó de decir "no se puede deshacer".
+- **Pago a proveedor ya transferido**: en el panel Proveedores, cada pago marcado tiene **"Deshacer"** (vuelve a "Por pagar" y borra fecha, referencia y documento).
+
 ## 2026-06-13 — Deshacer pago de una factura
 - Si marcas una factura como pagada por error, ahora tiene un botón **"Deshacer pago"**: vuelve a Pendiente, borra la fecha de pago y revierte las cuentas por pagar a proveedores que se habían liberado (las que aún no transferiste vuelven a "Pendiente"). Pide confirmación.
 
