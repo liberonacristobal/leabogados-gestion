@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-13 — Reparto: switch "Cambiar", Condiciones sin textos extra, doc en historial
+- Cada proveedor del reparto muestra **"Cambiar"** junto al switch (cambiar condiciones = monto y forma).
+- En **Condiciones registradas**, al expandir Costos de proveedores se muestra el reparto sin el encabezado "¿A quién le pagas?" ni el texto "Comisión de tu honorario": queda solo "+ Agregar proveedor" y las filas.
+- El **N° de documento del proveedor y su fecha** ahora se ven en el historial de pagos del proveedor (panel Proveedores).
+
 ## 2026-06-13 — UF sin decimales forzados, proveedor por contacto, doc fiscal al pagar
 - **UF**: ya no se muestran decimales forzados (UF 100 = "UF 100"); los decimales aparecen solo cuando existen (ej. conversión CLP→UF), máximo 2.
 - **Proveedores**: el nombre visible es el **contacto (la persona)**; la razón social pasa a subtítulo.
