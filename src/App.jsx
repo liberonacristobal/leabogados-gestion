@@ -4252,16 +4252,17 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&<>
-        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
-        <div style={{display:'flex',gap:6,marginBottom:6,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
+        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura...' style={{marginBottom:6,padding:'7px 11px',fontSize:13}}/>
+        <div style={{display:'flex',gap:6,marginBottom:fYear?6:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
           {[['','Todos'],...years.map(y=>[y,y])].map(([v,l])=>{ const on=fYear===v; return (
-            <button key={v||'all'} onClick={()=>setFYear(v)} style={{flexShrink:0,height:30,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+            <button key={v||'all'} onClick={()=>{setFYear(v); if(!v) setFMonth('')}} style={{flexShrink:0,height:28,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           )})}
         </div>
-        <select value={fMonth} onChange={e=>setFMonth(e.target.value)} style={{width:'100%',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:12,marginBottom:4,boxSizing:'border-box'}}>
-          <option value=''>Todos los meses</option>
-          {MONTHS.map((m,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{m}</option>)}
-        </select>
+        {fYear&&<div style={{display:'flex',gap:5,marginBottom:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
+          {[['','Todos'],...MONTHS.map((m,i)=>[String(i+1).padStart(2,'0'),m.slice(0,3)])].map(([v,l])=>{ const on=fMonth===v; return (
+            <button key={v||'all'} onClick={()=>setFMonth(v)} style={{flexShrink:0,height:25,padding:'0 9px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+          )})}
+        </div>}
         </>}
         {(openClients.size>0||(isProg&&selected.size>0))&&(
           <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
