@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Honorarios y Costos en una línea (Opción C)
+- En nueva venta/propuesta, **Honorarios y Costos de proveedores** quedan en dos columnas en la misma fila, con el **toggle UF/CLP compartido** subido al header de la sección (ya no duplicado). Costos conserva su toggle UF/% inline. El valor UF del día queda compacto bajo Honorarios.
+- Se eliminó el **switch on/off** de costos: si dejas Costos vacío = sin costo; el bloque "¿A quién le pagas?" aparece solo cuando hay monto. Modal más corto.
+
 ## 2026-06-13 — Reparto proveedores en venta: por defecto + switch editar; header y densidad
 - Al **agregar proveedor** toma por defecto el costo de proveedores aún no repartido (todo el costo si es el primero), en las mismas cuotas del cobro. Cada proveedor trae un **switch "editar"**: apagado muestra solo el monto por defecto; encendido despliega los campos para cambiar monto y forma (% / UF / $).
 - Se eliminó el **mensaje amarillo** de reconciliación; si no cuadra, solo una línea gris discreta "Repartido X de Y".
