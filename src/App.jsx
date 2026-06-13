@@ -2131,18 +2131,18 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {/* Cuentas por pagar a colaboradores (costos de terceros) */}
+      {/* Cuentas por pagar a proveedores (costos de terceros) */}
       {(()=>{
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
-        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Colaborador')
+        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
         const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
         const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar').reduce((a,t)=>a+(t.monto||0),0)
         const pendienteTot = (terceros||[]).filter(t=>t.estado==='pendiente').reduce((a,t)=>a+(t.monto||0),0)
         const pagadoYr = (terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).reduce((a,t)=>a+(t.monto||0),0)
         const nProvPorPagar = new Set((terceros||[]).filter(t=>t.estado==='por_pagar').map(t=>t.proveedor_id)).size
-        // Agrupar lo NO pagado por colaborador; por_pagar primero
+        // Agrupar lo NO pagado por proveedor; por_pagar primero
         const activos = (terceros||[]).filter(t=>t.estado!=='pagado')
         const byProv = {}
         activos.forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProv[k]) byProv[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProv[k].cuentas.push(t) })
@@ -2154,7 +2154,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{padding:'16px 20px 0'}}>
             <button onClick={()=>setOpenPagar(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openPagar?10:0}}>
               <span style={{fontSize:10,color:C.muted,transform:openPagar?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-              <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Cuentas por pagar a colaboradores</span>
+              <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Cuentas por pagar a proveedores</span>
               <span style={{fontSize:13,fontWeight:700,color:porPagarTot>0?C.normal:C.muted,marginLeft:'auto'}}>{fmt(porPagarTot)}</span>
             </button>
             {openPagar&&(
@@ -2166,7 +2166,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     </span>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:12.5,fontWeight:600,color:'#0F6E56'}}>Listo para transferir: {fmt(porPagarTot)}</div>
-                      <div style={{fontSize:11,color:C.normal,marginTop:1}}>{nProvPorPagar} colaborador{nProvPorPagar!==1?'es':''} · ya cobraste su factura</div>
+                      <div style={{fontSize:11,color:C.normal,marginTop:1}}>{nProvPorPagar} proveedor{nProvPorPagar!==1?'es':''} · ya cobraste su factura</div>
                     </div>
                   </div>
                 )}
@@ -2175,7 +2175,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Pendiente</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:'#B8860B'}}>{fmt(pendienteTot)}</div></div>
                   <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Pagado {yr}</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.muted}}>{fmt(pagadoYr)}</div></div>
                 </div>
-                {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún colaborador.</div>}
+                {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
                 {grupos.map((g,gi)=>(
                   <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',background:C.neutro||'#F5F7F9'}}>
@@ -2220,7 +2220,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {payTercero&&(()=>{
         const prov=(proveedores||[]).find(p=>String(p.id)===String(payTercero.proveedor_id))
-        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Colaborador')
+        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
         const fac=(billing||[]).find(b=>String(b.id)===String(payTercero.billing_id))
         const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
@@ -2257,11 +2257,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       <pre style={{fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,color:'#3D3D3D',whiteSpace:'pre-wrap',lineHeight:1.55,margin:0,paddingRight:54}}>{prov.datos_pago}</pre>
                     </div>
                   ):(
-                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Este colaborador no tiene datos de pago. Agrégalos en Proveedores.</div>
+                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Este proveedor no tiene datos de pago. Agrégalos en Proveedores.</div>
                   )}
                 </div>
                 <div style={{marginBottom:13}}>
-                  <span style={fl}>Factura del colaborador</span>
+                  <span style={fl}>Factura del proveedor</span>
                   {user&&<Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={payTercero.id} folderKind='facturas' namePrefix={`${tituloProv(prov)} · ${fac?.invoice_no?`F° ${fac.invoice_no}`:'pago'}`} user={user}/>}
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
@@ -2477,9 +2477,9 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
   )
 }
 
-// Reparto del costo de terceros entre colaboradores (cuentas por pagar).
-// Cada fila = un colaborador + monto (CLP) + cuota ancla (la factura cuyo pago libera el fee).
-// Reparto del costo a colaboradores. Cada fila: proveedor + tipo (% / UF / $) + valor.
+// Reparto del costo de terceros entre proveedores (cuentas por pagar).
+// Cada fila = un proveedor + monto (CLP) + cuota ancla (la factura cuyo pago libera el fee).
+// Reparto del costo a proveedores. Cada fila: proveedor + tipo (% / UF / $) + valor.
 // El costo se reparte en las MISMAS cuotas que el cobro (se distribuye al guardar).
 // Por defecto el tipo = la unidad de la venta. La reconciliación y los montos se muestran en esa unidad.
 function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,saleTotal=0,costTotal=0}) {
@@ -2510,7 +2510,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
     <div style={{background:'#F7F9FA',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
       <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>¿A quién le pagas?</div>
       {provs.length===0?(
-        <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes colaboradores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
+        <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes proveedores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
       ):(<>
         {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Agrega a quién le pagas parte de este honorario. Se reparte en las mismas cuotas que te pagan a ti.</div>}
         {rows.map((r,i)=>{
@@ -2518,7 +2518,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
           return (
           <div key={i} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 24px',gap:6,marginBottom:7,alignItems:'center'}}>
             <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
-              <option value=''>— Colaborador —</option>
+              <option value=''>— Proveedor —</option>
               {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
             </select>
             <div style={{display:'flex',height:36,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff'}}>
@@ -2532,7 +2532,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
             <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
           </div>
         )})}
-        <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:2}}>+ Agregar colaborador</button>
+        <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:2}}>+ Agregar proveedor</button>
         {hayClpEnUF&&(
           <div style={{fontSize:11,color:C.muted,background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
             Hay un costo en <strong>pesos fijos</strong> y la venta es en UF: ese monto no se reajusta con la factura. Si quieres que suba junto con la UF, usa <strong>%</strong> o <strong>UF</strong>.
@@ -2572,7 +2572,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   const [costMode,setCostMode] = useState('fijo')
   const [costPct,setCostPct] = useState('')
   const [costSwitch,setCostSwitch] = useState(!!(sale?.cost_uf||sale?.cost_clp))
-  // Reparto del costo de terceros entre colaboradores. Para venta existente se ancla por billing_id;
+  // Reparto del costo de terceros entre proveedores. Para venta existente se ancla por billing_id;
   // para venta nueva por índice de cuota (cuotaIdx), que se resuelve a billing_id al guardar.
   // Reconstruye las filas del reparto agrupando los terceros_pagos por proveedor+tipo+valor
   // (cada fila se reparte en N cuotas, así que varios registros = una fila del formulario).
@@ -3879,7 +3879,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [descExcel,setDescExcel] = useState(false)
 
   const bb = billing.filter(b=>b.billing_type!=='reembolso')   // Facturación excluye reembolsos de gastos
-  // Cuentas por pagar a colaboradores ancladas a cada factura (terceros_pagos.billing_id)
+  // Cuentas por pagar a proveedores ancladas a cada factura (terceros_pagos.billing_id)
   const tercerosByBilling = useMemo(()=>{
     const m = new Map()
     for(const t of (terceros||[])){ if(!t.billing_id) continue; if(!m.has(t.billing_id)) m.set(t.billing_id,[]); m.get(t.billing_id).push(t) }
@@ -4221,7 +4221,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             </div>
             {(()=>{ const pend=(terceros||[]).filter(t=>String(t.billing_id)===String(payingId)&&t.estado==='pendiente'); if(!pend.length) return null
               const tot=pend.reduce((a,t)=>a+(t.monto||0),0)
-              const nombres=pend.map(t=>t.proveedor||'colaborador').filter((v,i,a)=>a.indexOf(v)===i).join(', ')
+              const nombres=pend.map(t=>t.proveedor||'proveedor').filter((v,i,a)=>a.indexOf(v)===i).join(', ')
               return (
                 <div style={{margin:'4px 20px 0',padding:'11px 12px',background:'#E6EEF1',borderRadius:10}}>
                   <div onClick={()=>setInclTerceros(v=>!v)} style={{display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer'}}>
@@ -4755,7 +4755,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
 
 const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
 
-// ─── PROVEEDORES (catálogo + ficha de colaboradores, costos de terceros) ──────
+// ─── PROVEEDORES (catálogo + ficha de proveedores, costos de terceros) ──────
 function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSave,onClose,saving}) {
   const [view,setView] = useState('list')   // list | ficha | form
   const [selId,setSelId] = useState(null)
@@ -9559,7 +9559,7 @@ export default function App() {
       }
       const {data:newBilling} = await getBilling()
       if(newBilling) setBilling(newBilling)
-      // Reparto a colaboradores (terceros_pagos): comisión de tu honorario, NO toca monto_terceros.
+      // Reparto a proveedores (terceros_pagos): comisión de tu honorario, NO toca monto_terceros.
       // Cada fila (proveedor + tipo % / UF / $ + valor) se REPARTE en todas las cuotas de la venta,
       // proporcional al monto de cada cuota. %/UF se calculan como fracción de la cuota real → reajustan con la UF.
       if(Array.isArray(f.repartoTerceros)){
@@ -10020,7 +10020,7 @@ export default function App() {
   },[])
 
   // Conciliación: al cobrar la factura ancla, las cuentas por pagar de esa factura pasan
-  // de 'pendiente' (cliente no ha pagado) a 'por_pagar' (ya tienes el fee, falta transferir al colaborador).
+  // de 'pendiente' (cliente no ha pagado) a 'por_pagar' (ya tienes el fee, falta transferir al proveedor).
   const handleConciliarTerceros=useCallback(async(billingId)=>{
     try{
       const ids=(terceros||[]).filter(t=>String(t.billing_id)===String(billingId)&&t.estado==='pendiente').map(t=>t.id)
@@ -10031,7 +10031,7 @@ export default function App() {
     }catch(e){alert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
   },[terceros])
 
-  // Pagar a un colaborador: la cuenta pasa a 'pagado' con fecha y referencia (transferencia manual).
+  // Pagar a un proveedor: la cuenta pasa a 'pagado' con fecha y referencia (transferencia manual).
   const handlePagarTercero=useCallback(async(terceroId,{pagado_at,referencia})=>{
     try{
       const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null}).eq('id',terceroId).select().single()
