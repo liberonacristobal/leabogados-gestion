@@ -1465,6 +1465,7 @@ function UFStamp({uf,isToday,asOf,loading}){
 
 function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   const [sortBy,setSortBy] = useState('encargo')
+  const [showList,setShowList] = useState(true)
   const [openPersonas,setOpenPersonas] = useState({})
   const [openTerminadas,setOpenTerminadas] = useState(false)
   const activas = tasks.filter(t=>t.status==='Activo')
@@ -1528,15 +1529,22 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   }
   return (
     <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Tareas del estudio</div>
-        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'#F5F7F9',color:C.text}}>
-          <option value='encargo'>Orden: fecha de encargo</option>
-          <option value='vencimiento'>Orden: fecha de vencimiento</option>
-          <option value='cliente'>Orden: cliente</option>
-          <option value='alfabetico'>Orden: alfab\u00e9tico</option>
-        </select>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:showList?10:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+          <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Tareas del estudio</div>
+          <span style={{fontSize:11,color:C.muted}}>\u00b7 {activas.length}</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {showList&&<select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'#F5F7F9',color:C.text}}>
+            <option value='encargo'>Orden: fecha de encargo</option>
+            <option value='vencimiento'>Orden: fecha de vencimiento</option>
+            <option value='cliente'>Orden: cliente</option>
+            <option value='alfabetico'>Orden: alfab\u00e9tico</option>
+          </select>}
+          <button onClick={()=>setShowList(s=>!s)} title={showList?'Ocultar tareas':'Mostrar tareas'} style={{width:34,height:20,borderRadius:11,border:'none',background:showList?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0}}><span style={{position:'absolute',top:2,left:showList?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></button>
+        </div>
       </div>
+      {showList&&(<>
       <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
       <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',padding:'12px 14px 4px'}}>Activas</div>
       {personas.map(persona=>{
@@ -1626,6 +1634,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         )
       })()}
       </div>
+      </>)}
     </div>
   )
 }
