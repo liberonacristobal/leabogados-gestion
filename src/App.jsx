@@ -5007,6 +5007,8 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
   const [hechos,setHechos] = useState(0)
   const [fallos,setFallos] = useState([])   // filas que fallaron al insertar (con motivo)
   const [genPlantilla,setGenPlantilla] = useState(false)
+  const [matching,setMatching] = useState(false)        // análisis de matching/IA en curso
+  const [matchProg,setMatchProg] = useState(null)       // {done,total} de lotes IA
 
   const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
   // Categorías válidas del sistema (mismas que GastosForm). No se crean nuevas desde el Excel.
@@ -5110,11 +5112,123 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
     setGenPlantilla(false)
   }
 
-  const matchCliente = (rut,nombre) => {
+  // ── MOTOR DE MATCHING (Commit 2) ──────────────────────────────────────────
+  // Nivel 1-2: exacto por RUT (cliente o razón social) o por nombre/razón social.
+  const exactMatch = (rut,nombre) => {
     const nr = normRut(rut)
-    if(nr){ const byRut = clients.find(c=>normRut(c.rut)===nr); if(byRut) return byRut }
-    if(nombre){ const nn=nombre.toString().trim().toLowerCase(); const byName = clients.find(c=>c.name?.toLowerCase()===nn); if(byName) return byName }
-    return null
+    if(nr){
+      const c = clients.find(c=>normRut(c.rut)===nr); if(c) return {client:c,method:'rut_exact',entity_id:null}
+      const e = (clientEntities||[]).find(e=>normRut(e.rut)===nr); if(e){ const cc=clients.find(c=>c.id===e.client_id); if(cc) return {client:cc,method:'rut_exact',entity_id:e.id} }
+    }
+    if(nombre){
+      const nn = String(nombre).trim().toLowerCase()
+      const c = clients.find(c=>c.name?.toLowerCase().trim()===nn || c.razon_social?.toLowerCase().trim()===nn); if(c) return {client:c,method:'name_exact',entity_id:null}
+      const e = (clientEntities||[]).find(e=>e.name?.toLowerCase().trim()===nn); if(e){ const cc=clients.find(c=>c.id===e.client_id); if(cc) return {client:cc,method:'name_exact',entity_id:e.id} }
+    }
+    return {client:null,method:'none',entity_id:null}
+  }
+
+  // Nivel 3: fuzzy por distancia de Levenshtein normalizada contra nombre, razón social y razones sociales (client_entities).
+  const STOP = new Set(['de','la','el','los','las','y','del','e','en','spa','ltda','sa','eirl','cia','limitada','sociedad','inversiones','inmobiliaria','comercial','servicios','grupo'])
+  const levenshtein = (a,b) => {
+    const m=a.length,n=b.length
+    const dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0))
+    for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1])
+    return dp[m][n]
+  }
+  const normName = s => String(s||'').toLowerCase()
+    .replace(/\b(spa|s\.p\.a\.?|ltda\.?|limitada|s\.a\.?|y c[ií]a\.?|cia\.?|eirl)\b/gi,'')
+    .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n')
+    .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim()
+  const simil = (a,b) => { const x=normName(a),y=normName(b); if(!x||!y) return 0; const d=levenshtein(x,y); return Math.round((1-d/Math.max(x.length,y.length))*100) }
+  const fuzzyScore = (rawName,client) => {
+    const rn = normName(rawName); if(!rn) return 0
+    const rWords = rn.split(' ').filter(w=>w.length>2&&!STOP.has(w))
+    const variants = [client.name, client.razon_social, ...entsOf(client.id).map(e=>e.name)].filter(Boolean)
+    let best = 0
+    for(const v of variants){
+      const nv = normName(v); if(!nv) continue
+      let s = simil(rawName,v)
+      if(nv.includes(rn)||rn.includes(nv)){ const r=Math.min(rn.length,nv.length)/Math.max(rn.length,nv.length); s += r>=0.7?20:10 }
+      const vWords = new Set(nv.split(' ').filter(w=>w.length>2&&!STOP.has(w)))
+      if(rWords.some(w=>vWords.has(w))) s += 15
+      best = Math.max(best, Math.min(100,s))
+    }
+    return best
+  }
+  const candidatos = rawName => clients.map(c=>({c,score:fuzzyScore(rawName,c)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score)
+
+  // Nivel 4: lote a Claude (Opus) para nombres sin resolver + corrección de conceptos.
+  const aiMatchBatch = async(batch) => {
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+    if(!apiKey) return []
+    const clientesDB = clients.map(c=>`- ID: ${c.id} | Nombre: "${c.name}" | RUT: ${c.rut||'-'} | RS: "${c.razon_social||''}"`).join('\n')
+    const lista = batch.map((r,i)=>`${i+1}. "${r.nombre||r.rut||''}" | concepto: "${r.concepto||''}"`).join('\n')
+    const prompt = `Eres un asistente experto para una firma de abogados chilena. Debes hacer match entre nombres de una planilla histórica y clientes del sistema. Los nombres pueden estar abreviados, sin sufijos legales, con errores de tipeo o con distintas capitalizaciones.
+
+CLIENTES REGISTRADOS EN EL SISTEMA:
+${clientesDB}
+
+NOMBRES A RESOLVER (con su concepto):
+${lista}
+
+El campo cliente de la planilla puede contener indistintamente: el nombre del cliente, la razón social, una mezcla o abreviación, solo apellido o nombre parcial, o el nombre de fantasía/proyecto. Compara contra AMBOS campos (nombre Y razón social) de cada cliente. "Oficina", "Liberona Escala", "interno" → gasto interno de la firma (sin cliente externo, is_internal=true).
+
+TAREA 2 — corrige el concepto de cada fila: ortografía y tildes ("inscripcion"→"Inscripción", "notaria"→"Notaría"), capitalización, y expande abreviaciones legales chilenas ("EP"→"Escritura Pública", "CV"→"Compraventa", "CCV"→"Copia con Vigencia", "GP"→"Gravámenes y Prohibiciones", "D.O."→"Diario Oficial", "+K"→"Empresa en un Día", "CBRS"→"CBR Santiago"). Mantén el significado; si ya está correcto, devuelve el mismo texto.
+
+Responde SOLO con un array JSON sin markdown ni texto adicional:
+[{"index":1,"raw_nombre":"...","client_id":"uuid o null","client_nombre":"... o null","confidence":0-100,"reason":"breve","is_internal":true/false,"concepto_corregido":"..."}]`
+    try{
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-opus-4-8',max_tokens:4000,messages:[{role:'user',content:prompt}]})
+      })
+      const data = await resp.json()
+      const raw = (data.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr : []
+    }catch(e){ return [] }
+  }
+
+  // Orquesta: fuzzy sync + IA en lotes. Enriquardo cada fila con confidence/method/suggestion/candidates/concepto.
+  const runMatching = async(baseRows) => {
+    setMatching(true)
+    const rows = baseRows.map(r=>({...r}))
+    for(const r of rows){
+      if(r.client_id){ continue }   // ya resuelto exacto en el parse
+      if(!r.rut && !r.nombre){ r.matchMethod='none'; r.confidence=0; continue }
+      const cs = candidatos(r.nombre||r.rut)
+      const top = cs[0]
+      if(top && top.score>=90){ const ents=entsOf(top.c.id); r.client_id=top.c.id; r.clientName=top.c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='name_fuzzy'; r.confidence=top.score }
+      else if(top && top.score>=70){ r.suggestion={id:top.c.id,name:top.c.name}; r.confidence=top.score; r.matchMethod='name_fuzzy' }
+      else if(top && top.score>=50){ r.candidates=cs.slice(0,3).map(s=>({id:s.c.id,name:s.c.name,score:s.score})); r.confidence=top.score; r.matchMethod='name_fuzzy' }
+      else { r._needsAI=true }
+    }
+    setRows(rows.map(r=>({...r})))
+    // IA: solo los sin resolver por fuzzy
+    const aiRows = rows.filter(r=>r._needsAI)
+    if(aiRows.length && import.meta.env.VITE_ANTHROPIC_API_KEY){
+      const lotes=[]; for(let i=0;i<aiRows.length;i+=50) lotes.push(aiRows.slice(i,i+50))
+      setMatchProg({done:0,total:lotes.length})
+      for(let li=0; li<lotes.length; li++){
+        const lote = lotes[li]
+        const res = await aiMatchBatch(lote)
+        res.forEach(o=>{
+          const r = lote[(o.index||0)-1]; if(!r) return
+          const conf = Number(o.confidence)||0
+          if(o.concepto_corregido && o.concepto_corregido.trim() && o.concepto_corregido.trim()!==r.concepto){ r.conceptoOrig=r.concepto; r.concepto=o.concepto_corregido.trim(); r.conceptoFix=true }
+          if(o.is_internal){ r.isInternal=true; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null; return }
+          if(o.client_id && conf>=85){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ const ents=entsOf(c.id); r.client_id=c.id; r.clientName=c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null } }
+          else if(o.client_id && conf>=65){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ r.suggestion={id:c.id,name:c.name}; r.confidence=conf; r.matchMethod='ai'; r.aiReason=o.reason||null } }
+          else { r.matchMethod='none'; r.confidence=conf; r.aiReason=o.reason||null }
+        })
+        setRows(rows.map(r=>({...r})))
+        setMatchProg({done:li+1,total:lotes.length})
+      }
+    }
+    setRows(rows.map(r=>({...r})))
+    setMatching(false); setMatchProg(null)
   }
 
   // Fecha tolerante: Date nativo, serial Excel, dd.mm.yy(yy), dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd. Vacío → ''.
@@ -5215,13 +5329,14 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
         // Fila completamente vacía → se ignora
         if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return
         const categoria = tipo==='fondo' ? 'Fondo' : mapCategoria(getC(row,'categoria'))
-        const cli = matchCliente(rut,nombre)
+        const ex = exactMatch(rut,nombre)
+        const cli = ex.client
         const ents = cli ? entsOf(cli.id) : []
         let error=null
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        parsed.push({id:parsed.length, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ents.length===1?ents[0].id:null, error, dup:false})
+        parsed.push({id:parsed.length, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ex.entity_id || (ents.length===1?ents[0].id:null), matchMethod: cli?ex.method:undefined, confidence: cli?(ex.method==='rut_exact'?100:95):undefined, error, dup:false})
       })
       // Detección de duplicados dentro del archivo (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
       const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}`
@@ -5229,6 +5344,9 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
       parsed.forEach(r=>{ const k=keyOf(r); counts[k]=(counts[k]||0)+1 })
       parsed.forEach(r=>{ if(counts[keyOf(r)]>1) r.dup=true })
       setRows(parsed)
+      setCargando(false)
+      runMatching(parsed)   // enriquece con fuzzy + IA (async, vuelve a setRows)
+      return
     }catch(err){ alert('Error al leer el Excel: '+err.message) }
     setCargando(false)
   }
@@ -5312,6 +5430,7 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
             <div style={{fontSize:13,fontWeight:700,color:C.text}}>{rows.length} fila(s) · {fmt(totalMonto)}</div>
             <div style={{fontSize:11,color:C.muted}}><span style={{color:C.normal,fontWeight:600}}>{listas.length} listas</span> · <span style={{color:C.soon}}>{porRevisar.length} por revisar</span> · <span style={{color:C.overdue}}>{conError.length} errores</span></div>
           </div>
+          {matching&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:'#E6EEF1',borderRadius:8,padding:'8px 10px',marginBottom:8}}><Spin/>Analizando con IA{matchProg?` · lote ${matchProg.done}/${matchProg.total}`:''}…</div>}
           {dups.length>0&&<div style={{fontSize:11,color:'#C77F18',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto). No se deduplican: si las cargas, se duplicarán.</div>}
           <div style={{maxHeight:360,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
             {rows.map(r=>{
