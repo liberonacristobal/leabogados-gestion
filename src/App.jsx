@@ -4348,7 +4348,6 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:5,display:'block'}
   const inp={width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none'}
-  const txt={width:'100%',height:64,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'8px 11px',color:'#3D3D3D',background:'#fff',outline:'none',resize:'none',fontFamily:'inherit',boxSizing:'border-box'}
   const estados=(()=>{ const base=['Pendiente','Pagado','Anulado']; return (f.status&&!base.includes(f.status))?[f.status,...base]:base })()
   return (
     <>
@@ -4469,7 +4468,7 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
           {f.status==='Pagado'&&<div><label style={flabel}>Fecha de pago</label><input type='date' value={f.paid_at||''} onChange={e=>up('paid_at',e.target.value)} style={inp}/></div>}
         </div>
 
-        <div><label style={flabel}>Notas</label><textarea value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...' style={txt}/></div>
+        <div><label style={flabel}>Notas</label><input value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...' style={inp}/></div>
 
         {bill?.id&&user&&<div><label style={flabel}>Archivos</label><Attachments table='billing_attachments' idField='billing_id' entityId={bill.id} folderKind='facturas' namePrefix={`${clients.find(c=>String(c.id)===String(f.client_id))?.name||''} · ${f.concept||'Cobro'}`} user={user} onChange={onAttachChange}/></div>}
       </div>
@@ -7979,10 +7978,9 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
         </div>
       ))}
       <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
-      <button onClick={()=>inputRef.current?.click()} disabled={busy} style={{marginTop:8,padding:'7px 12px',borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',gap:6}}>
-        {busy?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>}{busy?'Subiendo...':'Adjuntar archivo'}
+      <button onClick={()=>inputRef.current?.click()} disabled={busy} aria-label='Adjuntar archivo' title='Adjuntar archivo · máx. 15 MB · se guarda en Drive' style={{marginTop:8,width:40,height:40,borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
+        {busy?<Spin/>:<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>}
       </button>
-      <div style={{fontSize:10,color:C.muted,marginTop:4}}>Máx. 15 MB · se guarda en Drive (Respaldo Gastos APP)</div>
     </div>
   )
 }
