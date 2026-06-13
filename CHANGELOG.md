@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-13 — UF sin decimales forzados, proveedor por contacto, doc fiscal al pagar
+- **UF**: ya no se muestran decimales forzados (UF 100 = "UF 100"); los decimales aparecen solo cuando existen (ej. conversión CLP→UF), máximo 2.
+- **Proveedores**: el nombre visible es el **contacto (la persona)**; la razón social pasa a subtítulo.
+- **Pago a proveedor**: el modal Pagar (individual y en bloque) pide **N° de documento del proveedor y su fecha** (factura/boleta que respalda el pago). Requiere columnas `factura_numero` (text) y `factura_fecha` (date) en `terceros_pagos`.
+- **Anticipos**: el filtro Anticipos ya no muestra el listado de facturas por cliente debajo (era redundante); solo el panel de anticipos.
+
 ## 2026-06-13 — Honorarios y Costos en una línea (Opción C)
 - En nueva venta/propuesta, **Honorarios y Costos de proveedores** quedan en dos columnas en la misma fila, con el **toggle UF/CLP compartido** subido al header de la sección (ya no duplicado). Costos conserva su toggle UF/% inline. El valor UF del día queda compacto bajo Honorarios.
 - Se eliminó el **switch on/off** de costos: si dejas Costos vacío = sin costo; el bloque "¿A quién le pagas?" aparece solo cuando hay monto. Modal más corto.
