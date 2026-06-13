@@ -3567,7 +3567,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoAnticipo,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoAnticipo,onProveedores,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [anulando,setAnulando] = useState(null)        // factura en flujo de baja
   const [motivoBaja,setMotivoBaja] = useState('')
@@ -3861,6 +3861,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
             <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
             <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button>
             <button onClick={()=>setSiiOpen(true)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ SII</button>
+            <button onClick={onProveedores} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Proveedores</button>
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
@@ -4349,6 +4350,175 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],on
         )
       })}
     </div>
+  )
+}
+
+// ─── PROVEEDORES (catálogo + ficha de colaboradores, costos de terceros) ──────
+function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSave,onClose,saving}) {
+  const [view,setView] = useState('list')   // list | ficha | form
+  const [selId,setSelId] = useState(null)
+  const [q,setQ] = useState('')
+  const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
+  const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+  const titulo = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+  const debeDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
+  const pagadoDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0)
+  const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
+  const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#1a1a1a',background:'#fff',outline:'none',boxSizing:'border-box'}
+  const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+
+  const lista = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
+  const filtrados = q.trim()
+    ? lista.filter(p=>`${p.nombre||''} ${p.razon_social||''} ${p.rut||''}`.toLowerCase().includes(q.trim().toLowerCase()))
+    : lista
+  const sel = proveedores.find(p=>String(p.id)===String(selId))
+
+  const abrirFicha = id => { setSelId(id); setView('ficha') }
+  const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:''}); setView('form') }
+  const abrirEditar = p => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||''}); setView('form') }
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const canSave = f.nombre?.trim()
+  const guardar = async () => { const d=await onSave(f); if(d){ setSelId(d.id); setView('ficha') } }
+
+  const headerBack = (titleTxt,onBack) => (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+      <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
+        {onBack&&<button onClick={onBack} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+          <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>
+        </button>}
+        <span style={{fontSize:16,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleTxt}</span>
+      </div>
+      <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+        <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+      </button>
+    </div>
+  )
+
+  // ── LISTA ──
+  if(view==='list') return (
+    <>
+      {headerBack('Proveedores',null)}
+      <div style={{padding:'14px 20px 20px'}}>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, razón social, RUT...' style={{...inp,flex:1}}/>
+          <button onClick={abrirNuevo} style={{height:38,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Nuevo</button>
+        </div>
+        {filtrados.length===0?(
+          <div style={{textAlign:'center',padding:'40px 20px',color:'#99ABB4',fontSize:13}}>{q.trim()?'Sin resultados':'Aún no hay proveedores. Agrega el primero.'}</div>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            {filtrados.map(p=>{
+              const debe=debeDe(p.id)
+              return (
+                <div key={p.id} onClick={()=>abrirFicha(p.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',background:'#fff',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
+                  <span style={{width:32,height:32,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(titulo(p))}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'#1a1a1a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo(p)}</div>
+                    <div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()?`Contacto: ${p.nombre||'—'}`:(p.rut||'Sin RUT')}</div>
+                  </div>
+                  {debe>0&&<span style={{fontSize:12,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmt0(debe)}</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  )
+
+  // ── FORMULARIO (nuevo/editar) ──
+  if(view==='form') return (
+    <>
+      {headerBack(f.id?'Editar proveedor':'Nuevo proveedor',()=>setView(f.id?'ficha':'list'))}
+      <div style={{padding:'16px 20px 20px'}}>
+        <div style={{marginBottom:13}}>
+          <label style={flabel}>Nombre <span style={{color:C.overdue}}>*</span> <span style={{textTransform:'none',letterSpacing:0,color:'#99ABB4'}}>· persona de contacto</span></label>
+          <input value={f.nombre} onChange={e=>up('nombre',e.target.value)} placeholder='Ej: Rodrigo Díaz' style={inp}/>
+        </div>
+        <div style={{marginBottom:13}}>
+          <label style={flabel}>Razón social <span style={{textTransform:'none',letterSpacing:0,color:'#99ABB4'}}>· opcional</span></label>
+          <input value={f.razon_social} onChange={e=>up('razon_social',e.target.value)} placeholder='Ej: Díaz & Asociados SpA' style={inp}/>
+        </div>
+        <div style={{marginBottom:13}}>
+          <label style={flabel}>RUT <span style={{textTransform:'none',letterSpacing:0,color:'#99ABB4'}}>· de la razón social</span></label>
+          <input value={f.rut} onChange={e=>up('rut',e.target.value)} placeholder='Ej: 76.123.456-7' style={inp}/>
+        </div>
+        <div style={{marginBottom:18}}>
+          <label style={flabel}>Datos de pago <span style={{textTransform:'none',letterSpacing:0,color:'#99ABB4'}}>· para transferencias</span></label>
+          <textarea value={f.datos_pago} onChange={e=>up('datos_pago',e.target.value)} placeholder='Banco, tipo de cuenta, N° cuenta, RUT, correo…' style={{width:'100%',minHeight:74,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:'#1a1a1a',outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={()=>setView(f.id?'ficha':'list')} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}</button>
+        </div>
+      </div>
+    </>
+  )
+
+  // ── FICHA ──
+  const debe = sel?debeDe(sel.id):0
+  const pagado = sel?pagadoDe(sel.id):0
+  const histo = sel?[...terceros].filter(t=>String(t.proveedor_id)===String(sel.id)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))):[]
+  const estLbl = {pendiente:['Pendiente','#99ABB4','#F5F7F9'],por_pagar:['Por pagar',C.accent,'#E6EEF1'],pagado:['Pagado',C.normal,'#E1F5EE']}
+  return (
+    <>
+      {headerBack('Ficha de proveedor',()=>setView('list'))}
+      <div style={{padding:'16px 20px 20px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+          <span style={{width:46,height:46,borderRadius:12,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,flexShrink:0}}>{cIni(titulo(sel))}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:17,fontWeight:600,color:'#1a1a1a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo(sel)}</div>
+            {sel?.razon_social?.trim()&&<div style={{fontSize:12,color:'#99ABB4'}}>Contacto: {sel.nombre||'—'}</div>}
+            {sel?.rut&&<div style={{fontSize:12,color:'#99ABB4'}}>{sel.rut}</div>}
+          </div>
+          <button onClick={()=>abrirEditar(sel)} style={{height:32,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Editar</button>
+        </div>
+
+        <div style={{display:'flex',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+          <div style={{flex:1,padding:'12px 14px'}}>
+            <div style={flabel}>Le debes</div>
+            <div style={{fontSize:20,fontWeight:600,color:debe>0?C.overdue:'#1a1a1a',letterSpacing:-.5}}>{fmt0(debe)}</div>
+          </div>
+          <div style={{flex:1,padding:'12px 14px',borderLeft:`0.5px solid ${C.border}`}}>
+            <div style={flabel}>Pagado</div>
+            <div style={{fontSize:20,fontWeight:600,color:C.normal,letterSpacing:-.5}}>{fmt0(pagado)}</div>
+          </div>
+        </div>
+
+        {sel?.datos_pago?.trim()&&(
+          <div style={{marginBottom:14}}>
+            <div style={flabel}>Datos de pago</div>
+            <div style={{background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'10px 12px',fontSize:12.5,color:'#3D3D3D',whiteSpace:'pre-wrap',lineHeight:1.5}}>{sel.datos_pago}</div>
+          </div>
+        )}
+
+        <div style={flabel}>Historial de pagos / cobros</div>
+        {histo.length===0?(
+          <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos todavía. Aparecerán al asignar costos de terceros en una venta.</div>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            {histo.map(t=>{
+              const fac = billing.find(b=>String(b.id)===String(t.billing_id))
+              const cli = clients.find(c=>String(c.id)===String(t.client_id||fac?.client_id))
+              const [el,ec,eb] = estLbl[t.estado]||estLbl.pendiente
+              return (
+                <div key={t.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,color:'#1a1a1a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}</div>
+                    <div style={{fontSize:11,color:'#99ABB4'}}>{fac?.invoice_no?`F° ${fac.invoice_no} · `:''}{t.estado==='pagado'&&t.pagado_fecha?`Pagado ${fmtD(t.pagado_fecha)}`:(t.created_at?fmtD(String(t.created_at).slice(0,10)):'')}</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    <span style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{fmt0(t.monto)}</span>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:eb,color:ec}}>{el}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -8504,6 +8674,8 @@ export default function App() {
   const [expenses,setExpenses]=useState([])
   const [tasks,setTasks]=useState([])
   const [anticipos,setAnticipos]=useState([])
+  const [proveedores,setProveedores]=useState([])
+  const [terceros,setTerceros]=useState([])   // terceros_pagos (cuentas por pagar)
   const [pettyCash,setPettyCash]=useState([])
   const [rendiciones,setRendiciones]=useState([])
   const [expenseAttachments,setExpenseAttachments]=useState([])
@@ -8575,7 +8747,9 @@ export default function App() {
       supabase.from('expense_attachments').select('id,expense_id').then(({data})=>data||[]),
       supabase.from('billing_attachments').select('id,billing_id').then(({data})=>data||[]),
       supabase.from('anticipos').select('*').order('fecha',{ascending:false}).then(({data})=>data||[]),
-    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an)})
+      supabase.from('proveedores').select('*').order('nombre').then(({data})=>data||[]),
+      supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
+    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
@@ -8906,6 +9080,20 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[clients])
 
+  // Proveedores (PP terceros): crear/editar un proveedor del catálogo
+  const handleSaveProveedor=useCallback(async(f)=>{
+    setSaving(true)
+    try{
+      const payload={nombre:f.nombre?.trim()||null,razon_social:f.razon_social?.trim()||null,rut:f.rut?.trim()||null,datos_pago:f.datos_pago?.trim()||null}
+      if(f.id){
+        const {data,error}=await supabase.from('proveedores').update(payload).eq('id',f.id).select().single()
+        if(error)throw error; setProveedores(p=>p.map(x=>x.id===data.id?data:x)); setSaving(false); return data
+      }
+      const {data,error}=await supabase.from('proveedores').insert(payload).select().single()
+      if(error)throw error; setProveedores(p=>[...p,data].sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'))); setSaving(false); return data
+    }catch(e){alert('Error: '+e.message); setSaving(false); return null}
+  },[])
+
   const handleDeleteBilling=useCallback(async(id)=>{
     if(!confirm('¿Eliminar este cobro?')) return
     try{
@@ -9079,7 +9267,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
@@ -9097,6 +9285,7 @@ export default function App() {
         {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
+        {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
           <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div style={{background:C.surface,borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)',border:`1px solid ${C.border}`,padding:'18px 20px 24px',boxSizing:'border-box'}}>
