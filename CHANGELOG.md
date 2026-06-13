@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Proveedores como chip en filtros + ajustes ficha cliente
+- "Proveedores" se movió del header a un **chip discreto en la fila de filtros** de Clientes (a la derecha).
+- Editar cliente: header canónico; el listado plano de razones sociales sin asignar se reemplazó por búsqueda+asignar en el input; Editar en Limited abre directo como admin (sin paso "Confirmar cambios").
+
 ## 2026-06-13 — Ficha proveedor: honorarios = su parte, "Le debes" solo lo cobrado
 - **Honorarios involucrados** ahora suma **lo que cobra el proveedor (su parte)** en sus ventas, no el total de las ventas.
 - **Le debes** cuenta solo lo que ya está **Por pagar** (la factura del cliente ya se cobró). Lo que está **Pendiente** (cliente aún no paga) se muestra aparte y no se considera deuda. Aplica también al listado de proveedores.
