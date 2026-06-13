@@ -533,7 +533,7 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
       {showConfirm&&(
         <div style={{padding:'12px 14px',borderRadius:8,background:'#FCEBEB',border:'1px solid #E24B4A',marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:700,color:'#E24B4A',marginBottom:4}}>{'\u00bf'}Confirmas que este cliente NO es un duplicado?</div>
-          <div style={{fontSize:11,color:'#E24B4A'}}>Hay clientes con nombres similares. Si es un cliente nuevo, confirma para continuar.</div>
+          <div style={{fontSize:11,color:'#E24B4A'}}>Hay nombres similares. Si es nuevo, confirma para continuar.</div>
         </div>
       )}
 
@@ -741,7 +741,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             <div>
               <div style={{fontSize:13,fontWeight:700,color:'#0F6E56'}}>Liquidación registrada</div>
               <div style={{fontSize:12,color:'#3D3D3D',marginTop:2}}>{toast.n} gasto{toast.n!==1?'s':''} liquidado{toast.n!==1?'s':''} por {fmtCLP(toast.total)}</div>
-              {toast.correo&&<div style={{fontSize:11,color:'#C77F18',marginTop:5,fontWeight:600}}>Correo preparado — recuerda enviarlo desde tu cliente de correo</div>}
+              {toast.correo&&<div style={{fontSize:11,color:'#C77F18',marginTop:5,fontWeight:600}}>Correo preparado — envíalo desde tu correo</div>}
             </div>
             <button onClick={()=>setToast(null)} style={{background:'none',border:'none',color:'#537281',cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
           </div>
@@ -2254,7 +2254,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       <pre style={{fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,color:'#3D3D3D',whiteSpace:'pre-wrap',lineHeight:1.55,margin:0,paddingRight:54}}>{prov.datos_pago}</pre>
                     </div>
                   ):(
-                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Este proveedor no tiene datos de pago. Agrégalos en Proveedores.</div>
+                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Sin datos de pago. Agrégalos en Proveedores.</div>
                   )}
                 </div>
                 <div style={{marginBottom:13}}>
@@ -2328,7 +2328,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       <pre style={{fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,color:'#3D3D3D',whiteSpace:'pre-wrap',lineHeight:1.55,margin:0,paddingRight:54}}>{prov.datos_pago}</pre>
                     </div>
                   ):(
-                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Este proveedor no tiene datos de pago. Agrégalos en Proveedores.</div>
+                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Sin datos de pago. Agrégalos en Proveedores.</div>
                   )}
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
@@ -3178,7 +3178,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </div>
       ))}
       {showNewClient&&<MiniClientForm defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
-      {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se creará como Prospecto. Al activar la propuesta se convertirá en cliente activo.</div>}
+      {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
 
       <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
 
@@ -3428,7 +3428,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
           {modCobro&&(
             <div>
-              <div style={{fontSize:12,color:C.muted,background:'#F5F7F9',borderRadius:8,padding:'8px 10px',marginBottom:10,lineHeight:1.4}}>Reemplaza las cuotas programadas. Las ya emitidas y pagadas no se tocan.</div>
+              <div style={{fontSize:12,color:C.muted,background:'#F5F7F9',borderRadius:8,padding:'8px 10px',marginBottom:10,lineHeight:1.4}}>Reemplaza las programadas; las emitidas/pagadas no se tocan.</div>
               <div style={{display:'flex',gap:0,marginBottom:12,border:`0.5px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
                 {['ajustar','cambiar'].map(m=>(
                   <button key={m} onClick={()=>setModMode(m)} style={{flex:1,padding:'8px 6px',border:'none',background:modMode===m?C.accent:'#F5F7F9',color:modMode===m?'#fff':C.muted,fontSize:12,fontWeight:modMode===m?600:400,cursor:'pointer'}}>
@@ -5081,7 +5081,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           </div>
         </div>
         {histo.length===0?(
-          <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos todavía. Aparecerán al asignar costos de proveedores en una venta.</div>
+          <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos. Aparecen al asignar costos en una venta.</div>
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {histo.map(t=>{
@@ -7329,7 +7329,7 @@ Liberona Escala Abogados`
   }
   return (
     <Modal title='Enviar rendición al cliente' onClose={onClose} closeOnBackdrop={false}>
-      {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:'#C77F18',fontSize:12,marginBottom:12}}>El cliente no tiene email en su ficha. Complétalo (botón Editar del cliente) o escríbelo abajo antes de enviar.</div>}
+      {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:'#C77F18',fontSize:12,marginBottom:12}}>El cliente no tiene email. Escríbelo abajo o complétalo en su ficha.</div>}
       <Fld label='De'><Inp value={user?.email||''} disabled style={{opacity:.7}}/></Fld>
       <Fld label='Para'><Inp type='email' value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl'/></Fld>
       <Fld label='Asunto'><Inp value={asunto} onChange={e=>setAsunto(e.target.value)}/></Fld>
@@ -8578,7 +8578,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
             {log.map((l,i)=><div key={i}>{l}</div>)}
           </div>
           <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Asignar clientes</div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Estas facturas no se pudieron asociar automáticamente. Asígnalas una vez y el RUT quedará guardado para siempre.</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:12}}>No se asociaron solas. Asígnalas una vez y el RUT queda guardado.</div>
           {unmatched.map(inv=>(
             <InvoiceClientPicker key={inv.id} inv={inv} clients={clients} assigned={clients.find(c=>c.id===assignments[inv.id])} onAssign={clientId=>setAssignments(p=>({...p,[inv.id]:clientId}))}/>
           ))}
@@ -8809,7 +8809,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
             {log.map((l,i)=><div key={i}>{l}</div>)}
           </div>
           <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Asignar clientes</div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Estas facturas no se pudieron asociar automáticamente. Asígnalas una vez y el RUT quedará guardado para siempre.</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:12}}>No se asociaron solas. Asígnalas una vez y el RUT queda guardado.</div>
           {unmatched.map(inv=>(
             <InvoiceClientPicker key={inv.id} inv={inv} clients={clients} assigned={clients.find(c=>c.id===assignments[inv.id])} onAssign={clientId=>setAssignments(p=>({...p,[inv.id]:clientId}))}/>
           ))}
@@ -9700,7 +9700,7 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   if(resultado) return (
     <div style={{padding:'20px',textAlign:'center'}}>
       <div style={{fontSize:15,fontWeight:600,color:C.normal,marginBottom:8}}>Importadas {resultado.n} factura{resultado.n!==1?'s':''}</div>
-      <div style={{fontSize:12.5,color:C.muted,marginBottom:18}}>Ya aparecen en Facturación. Si alguna quedó sin cliente, asígnala desde la lista.</div>
+      <div style={{fontSize:12.5,color:C.muted,marginBottom:18}}>Ya están en Facturación. Asigna las que quedaron sin cliente.</div>
       <button onClick={onClose} style={{padding:'10px 18px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
     </div>
   )
@@ -9826,7 +9826,7 @@ function PapeleraModal({clients=[],onClose,onChanged}){
   const total = data.ventas.length+data.cobros.length+data.gastos.length
   return (
     <div>
-      {total===0&&<div style={{fontSize:12.5,color:'#99ABB4',textAlign:'center',padding:'16px 0 18px'}}>La papelera está vacía. Lo que elimines (ventas, cobros, gastos) aparecerá acá y podrás restaurarlo.</div>}
+      {total===0&&<div style={{fontSize:12.5,color:'#99ABB4',textAlign:'center',padding:'16px 0 18px'}}>Vacía. Lo que elimines (ventas, cobros, gastos) aparece acá para restaurar.</div>}
       {seccion('ventas','Ventas',data.ventas,r=>r.title||'Venta')}
       {seccion('cobros','Cobros',data.cobros,r=>`${cli(r.client_id)} · ${r.concept||'Cobro'} · ${fmt0(r.amount)}`)}
       {seccion('gastos','Gastos',data.gastos,r=>`${r.notas||r.concept||'Gasto'} · ${fmt0(r.amount)}`)}
