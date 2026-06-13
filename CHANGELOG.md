@@ -1,7 +1,8 @@
 # Changelog
 
-## 2026-06-13 — Reparto a proveedores: pagarle distinto + dashboard
-- En el reparto a proveedores cada fila tiene un toggle **Con el cobro / Un pago**: por defecto se reparte en las mismas cuotas del cliente; "Un pago" registra UN solo pago al proveedor (calendario distinto). El modo se reconstruye al reabrir la venta (1 registro con venta multi-cuota = "Un pago").
+## 2026-06-13 — Pagar varias cuotas juntas a un proveedor
+- El reparto a proveedores se reparte SIEMPRE en las mismas cuotas del cobro (de cada factura cobrada, la parte que le corresponde al proveedor queda "Por pagar"). La decisión de pagarle al tiro o juntar varias cuotas es del momento de pagar, no de la venta.
+- En "Cuentas por pagar" del dashboard, cuando un proveedor tiene ≥2 cuotas por pagar aparece **Pagar las N · $total**: registra todas en una sola transferencia (misma fecha y referencia). También se puede pagar cada cuota por separado.
 - Widget "Cuentas por pagar a proveedores" del dashboard ahora **abierto por defecto**.
 - Editar venta: el nombre del cliente sube al título (sin botón "Cambiar"). Texto del reparto reducido.
 
