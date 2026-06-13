@@ -4882,7 +4882,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
-  const debeDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
+  const debeDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='por_pagar').reduce((s,t)=>s+(t.monto||0),0)
   const pagadoDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0)
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
@@ -4977,9 +4977,11 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   )
 
   // ── FICHA ──
-  const debe = sel?debeDe(sel.id):0
-  const pagado = sel?pagadoDe(sel.id):0
   const histo = sel?[...terceros].filter(t=>String(t.proveedor_id)===String(sel.id)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))):[]
+  // "Le debes" = solo lo que ya está por_pagar (cliente ya pagó su factura). Lo pendiente aún no se debe.
+  const debe = histo.filter(t=>t.estado==='por_pagar').reduce((a,t)=>a+(t.monto||0),0)
+  const pendienteFut = histo.filter(t=>t.estado==='pendiente').reduce((a,t)=>a+(t.monto||0),0)
+  const pagado = histo.filter(t=>t.estado==='pagado').reduce((a,t)=>a+(t.monto||0),0)
   const estLbl = {pendiente:['Pendiente','#99ABB4','#F5F7F9'],por_pagar:['Por pagar',C.accent,'#E6EEF1'],pagado:['Pagado',C.normal,'#E1F5EE']}
   // Ventas en que participa el proveedor (agrupa sus terceros por venta). "Su parte" = suma de sus cuentas de esa venta.
   const ufRef = ufHoy || 40000
@@ -4990,11 +4992,13 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
     const esUFs = (sale.moneda||'UF')!=='CLP'
     const ufv = parseFloat(sale.uf_value)||0
     const parteUF = (esUFs && ufv>0) ? parteCLP/ufv : null
+    const parteUFeq = esUFs ? (parteUF||0) : (ufRef>0?parteCLP/ufRef:0)   // su parte en UF (para sumar el total)
     const totalUF = ventaUF(sale, ufRef), totalCLP = ventaCLP(sale, ufRef)
     const pct = esUFs ? (totalUF>0?Math.round(parteUF/totalUF*100):0) : (totalCLP>0?Math.round(parteCLP/totalCLP*100):0)
-    return {sale, cli:clients.find(c=>String(c.id)===String(sale.client_id)), esUFs, parteCLP, parteUF, totalUF, totalCLP, pct}
+    return {sale, cli:clients.find(c=>String(c.id)===String(sale.client_id)), esUFs, parteCLP, parteUF, parteUFeq, totalUF, totalCLP, pct}
   }).filter(Boolean).sort((a,b)=>(b.sale.year-a.sale.year)||((b.sale.month||0)-(a.sale.month||0))) : []
-  const honInvUF = ventasInv.reduce((a,v)=>a+(v.totalUF||0),0)
+  // Honorarios involucrados = suma de "su parte" (lo que cobra el proveedor), no el total de las ventas.
+  const honInvUF = ventasInv.reduce((a,v)=>a+(v.parteUFeq||0),0)
   return (
     <>
       {headerBack('Ficha de proveedor',()=>setView('list'))}
@@ -5047,15 +5051,19 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           </div>
         )}
 
-        {/* Pagos: le debes / pagado + detalle */}
+        {/* Pagos: le debes (ya cobraste al cliente) / pendiente (aún no) / pagado */}
         <div style={{display:'flex',border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
-          <div style={{flex:1,padding:'11px 14px'}}>
+          <div style={{flex:1,padding:'11px 12px'}}>
             <div style={flabel}>Le debes</div>
-            <div style={{fontSize:20,fontWeight:600,color:debe>0?C.overdue:'#3D3D3D',letterSpacing:-.5}}>{fmt0(debe)}</div>
+            <div style={{fontSize:18,fontWeight:600,color:debe>0?C.overdue:'#3D3D3D',letterSpacing:-.5}}>{fmt0(debe)}</div>
           </div>
-          <div style={{flex:1,padding:'11px 14px',borderLeft:`0.5px solid ${C.border}`}}>
+          <div style={{flex:1,padding:'11px 12px',borderLeft:`0.5px solid ${C.border}`}}>
+            <div style={flabel}>Pendiente</div>
+            <div style={{fontSize:18,fontWeight:600,color:pendienteFut>0?'#B8860B':'#3D3D3D',letterSpacing:-.5}}>{fmt0(pendienteFut)}</div>
+          </div>
+          <div style={{flex:1,padding:'11px 12px',borderLeft:`0.5px solid ${C.border}`}}>
             <div style={flabel}>Pagado</div>
-            <div style={{fontSize:20,fontWeight:600,color:C.normal,letterSpacing:-.5}}>{fmt0(pagado)}</div>
+            <div style={{fontSize:18,fontWeight:600,color:C.normal,letterSpacing:-.5}}>{fmt0(pagado)}</div>
           </div>
         </div>
         {histo.length===0?(
