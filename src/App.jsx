@@ -9612,13 +9612,25 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   const parseMonto = v => { if(v==null||v==='') return null; if(typeof v==='number') return Math.round(v); let s=String(v).replace(/[^\d,.-]/g,''); if(s.includes(',')&&s.includes('.')) s=s.replace(/\./g,'').replace(',','.'); else if(s.includes(',')) s=s.replace(',','.'); const n=parseFloat(s); return isNaN(n)?null:Math.round(n) }
   const parseFecha = v => { if(!v) return null; if(v instanceof Date && !isNaN(v)) { const d=new Date(v.getTime()-v.getTimezoneOffset()*60000); return d.toISOString().slice(0,10) } const s=String(v).trim(); let m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/); if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/); if(m){ let[,d,mo,y]=m; if(y.length===2) y='20'+y; return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}` } return null }
   const COL = {
-    cliente:['cliente','nombre','razon social','razón social','receptor','señor','señores','razon','cliente/receptor','nombre cliente'],
+    cliente:['cliente','nombre','razon social','razón social','receptor','señor','señores','razon','cliente/receptor','nombre cliente','razon social a facturar'],
     rut:['rut','r.u.t','rut receptor','rut cliente'],
-    factura:['n° factura','factura','folio','nro','numero','número','n factura','n°','nº','documento','doc'],
-    monto:['monto','total','valor','neto','importe','monto total','bruto','monto bruto'],
-    emision:['emision','emisión','fecha emision','fecha emisión','fecha','fecha factura','fecha doc'],
-    pago:['fecha pago','pago','pagado','fecha de pago','fecha pagada','fecha cobro','cobrado'],
-    concepto:['concepto','glosa','detalle','descripcion','descripción','observacion','observación'],
+    factura:['n° factura','factura','folio','nro','numero','número','n factura','n°','nº','documento','doc','numero factura','n de factura','nro factura'],
+    monto:['monto','total','valor','neto','importe','monto total','bruto','monto bruto','monto neto','honorarios','monto honorarios'],
+    emision:['emision','emisión','fecha emision','fecha emisión','fecha','fecha factura','fecha doc','fecha de emision','fecha de emisión'],
+    pago:['fecha pago','pago','pagado','fecha de pago','fecha pagada','fecha cobro','cobrado','fecha de cobro'],
+    estado:['estado','status','estado factura','estado pago'],
+    concepto:['concepto','glosa','detalle','descripcion','descripción','observacion','observación','servicio'],
+  }
+  const mapEstado = raw => { const k=norm(raw); if(!k) return null; if(/(pagad|cobrad)/.test(k)) return 'Pagado'; if(/(anulad)/.test(k)) return 'Anulada'; if(/(vencid)/.test(k)) return 'Vencido'; if(/(pendiente|por cobrar|emitid)/.test(k)) return 'Pendiente'; return null }
+  const descargarPlantilla = async()=>{
+    try{
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const header=['Cliente','RUT','N° factura','Monto','Fecha emisión','Fecha pago','Estado','Concepto']
+      const ej=[['Ejemplo S.A.','76.123.456-7','1234','1500000','01-03-2026','15-03-2026','Pagada','Asesoría tributaria'],
+                ['Otro Cliente SpA','77.987.654-3','1235','800000','05-03-2026','','Pendiente','Honorarios']]
+      const ws=XLSX.utils.aoa_to_sheet([header,...ej]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturas')
+      XLSX.writeFile(wb,'Plantilla_facturas.xlsx')
+    }catch(e){ alert('No se pudo generar la plantilla: '+e.message) }
   }
   const matchClient = (nombre,rut) => {
     const rn=normRut(rut)
@@ -9646,10 +9658,12 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
         const emision=parseFecha(g('emision')), pago=parseFecha(g('pago')), monto=parseMonto(g('monto'))
         if(!rut&&!nombre&&!factura&&monto==null) return null
         const m=matchClient(nombre,rut)
+        const estadoCol=mapEstado(g('estado'))
+        const status = estadoCol || (pago?'Pagado':'Pendiente')
         let error=null
         if(monto==null) error='Monto inválido'; else if(monto<=0) error='Monto debe ser > 0'
         const dup = factura && (billing||[]).some(b=>String(b.invoice_no||'').replace(/\.0$/,'')===factura)
-        return {id:idx, rut, nombre, factura, concepto, emision, pago, monto, status: pago?'Pagado':'Pendiente',
+        return {id:idx, rut, nombre, factura, concepto, emision, pago:(status==='Pagado'&&!pago&&emision)?emision:pago, monto, status,
           client_id:m.client?.id||null, clientName:m.client?.name||null, entity_id:m.ent?.id||null,
           receptor_name:(m.ent?.name)||nombre||null, receptor_rut:(m.ent?.rut)||rut||null, fuzzy:!!m.fuzzy, error, dup}
       }
@@ -9698,6 +9712,9 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
         <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{cargando?'Leyendo…':'Elegir archivo Excel'}</div>
         {fileName&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{fileName}</div>}
       </label>
+      <div style={{textAlign:'center',marginTop:10}}>
+        <button onClick={descargarPlantilla} style={{fontSize:12,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Descargar plantilla de ejemplo</button>
+      </div>
     </div>
   )
   const validas = rows.filter(r=>!r.error&&!r.dup&&!r._skip)
@@ -10084,7 +10101,7 @@ export default function App() {
   },[user])
 
   const handleDeleteSale=useCallback(async(id)=>{
-    if(!confirm('Eliminar esta venta?')) return
+    if(!confirm('¿Eliminar esta venta? Va a la Papelera (menú ≡) y puedes restaurarla.')) return
     try{
       // Salvaguarda: avisar si hay facturas emitidas (con folio) asociadas
       const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('sale_id',id)
@@ -10203,7 +10220,7 @@ export default function App() {
     const exp=expenses.find(x=>x.id===id)
     const msg=exp?.client_rendered_at
       ?'Este gasto ya fue incluido en una rendición enviada al cliente.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?'
-      :'¿Eliminar este registro?'
+      :'¿Eliminar este registro? Va a la Papelera (menú ≡) y puedes restaurarlo.'
     if(!confirm(msg)) return
     const {error}=await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',id)
     if(error){ alert('No se pudo eliminar: '+error.message); return }
@@ -10498,7 +10515,7 @@ export default function App() {
     }catch(e){alert('Error: '+e.message); return null}
   },[])
   const handleDeleteBilling=useCallback(async(id)=>{
-    if(!confirm('¿Eliminar este cobro?')) return
+    if(!confirm('¿Eliminar este cobro? Va a la Papelera (menú ≡) y puedes restaurarlo.')) return
     try{
       await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',id)
       setBilling(p=>p.filter(x=>x.id!==id))
