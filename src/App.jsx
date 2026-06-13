@@ -2590,7 +2590,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
     <div style={hideHeader?{}:{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
       {!hideHeader&&<div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>¿A quién le pagas?</div>}
       {provs.length===0?(
-        <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes proveedores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
+        <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Sin proveedores. Créalos en <strong style={{color:C.accent}}>Clientes → Proveedores</strong>.</div>
       ):(<>
         {rows.map((r,i)=>{
           const tipo=r.tipo||defTipo
@@ -7074,7 +7074,7 @@ function ContactoTab({client, entities, onSaveFields}) {
           {!showAdd&&<button onClick={()=>{setEdit(null);setCForm({nombre:'',cargo:'',email:'',telefono:''});setShowAdd(true)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Agregar</button>}
         </div>
         {loadingC&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Cargando...</div>}
-        {!loadingC&&contacts.length===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin personas de contacto registradas.</div>}
+        {!loadingC&&contacts.length===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin contactos.</div>}
         {contacts.map(c=>(
           <div key={c.id} style={{display:'flex',gap:10,alignItems:'center',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
             <div style={{width:34,height:34,borderRadius:'50%',background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
@@ -7937,7 +7937,7 @@ function ContactsEditor({clientId,clientName}) {
       {open&&(
         <div style={{marginTop:8}}>
           {contacts===null&&<div style={{fontSize:12,color:C.muted}}>Cargando...</div>}
-          {contacts!==null&&n===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin contactos registrados.</div>}
+          {contacts!==null&&n===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin contactos.</div>}
           {(contacts||[]).map(c=>(
             <div key={c.id} style={{display:'flex',gap:9,alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
               <div style={{width:32,height:32,borderRadius:'50%',background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
