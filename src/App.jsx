@@ -4249,22 +4249,21 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           {[['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'0 0 auto',padding:'6px 12px',borderRadius:20,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
+          {filter!=='anticipos'&&filter!=='checklist'&&<button onClick={()=>setShowBuscar(s=>!s)} style={{flex:'0 0 auto',marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:20,border:`1px solid ${C.accent}`,background:(q||showBuscar)?C.accent:'#E6EEF1',color:(q||showBuscar)?'#fff':C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',maxWidth:160,overflow:'hidden'}}>
+            <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' style={{flexShrink:0}}><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q||'Buscar'}</span>
+            {q&&<span onClick={e=>{e.stopPropagation();setQ('')}} style={{flexShrink:0,fontSize:13,lineHeight:1}}>×</span>}
+          </button>}
         </div>
         {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onFacturar={setFacturarAnt}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&<>
-        {showBuscar ? (
+        {showBuscar&&(
           <div style={{display:'flex',gap:6,marginBottom:6}}>
             <Inp autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura...' style={{flex:1,marginBottom:0,padding:'7px 11px',fontSize:13}}/>
             <button onClick={()=>setShowBuscar(false)} style={{flexShrink:0,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Listo</button>
           </div>
-        ) : (
-          <button onClick={()=>setShowBuscar(true)} style={{display:'inline-flex',alignItems:'center',gap:6,marginBottom:6,padding:'7px 13px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',maxWidth:'100%',overflow:'hidden'}}>
-            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' style={{flexShrink:0}}><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
-            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q||'Buscar'}</span>
-            {q&&<span onClick={e=>{e.stopPropagation();setQ('')}} style={{flexShrink:0,marginLeft:2,fontSize:14,lineHeight:1}}>×</span>}
-          </button>
         )}
         <div style={{display:'flex',gap:6,marginBottom:(fYear&&showMeses)?6:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
           {[['','Todos'],...years.map(y=>[y,y])].map(([v,l])=>{ const on=fYear===v; return (
