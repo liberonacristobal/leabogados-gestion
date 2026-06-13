@@ -1546,7 +1546,6 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
       </div>
       {showList&&(<>
       <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-      <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',padding:'12px 14px 4px'}}>Activas</div>
       {personas.map(persona=>{
         const [avBg,avColor]=avatarColor(persona)
         const isOpen=!!openPersonas[persona]
@@ -1938,7 +1937,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:11,color:'#99ABB4',fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase'}}>Aging de cartera</div>
+              <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase'}}>Aging de cartera</div>
               <div style={{fontSize:26,fontWeight:500,color:'#003C50',lineHeight:1.1,marginTop:2}}>{fmt(agingData.total)}</div>
             </div>
             {agingData.delta.monto!==0&&(
