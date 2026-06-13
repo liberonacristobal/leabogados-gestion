@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-13 — Auditoría Tanda A: fixes de cifras
+- **Export de Ventas (ReportBuilder)**: ahora usa `ventaUF` (anualiza recurrentes ×12 y convierte ventas en CLP→UF) y la meta `META_UF` real (antes sumaba `amount_uf` crudo y meta 9.800 hardcodeada) → el reporte cuadra con el Dashboard. Filas y totales coherentes.
+- **Tasa de cobro**: numerador y denominador en el mismo universo (facturado del año) + tope 100% (antes podía pasar de 100% contando pagos de años previos).
+- **% meta histórico**: la barra de avance y el texto ahora usan ambos el **neto** (antes la barra iba en bruto y el texto en neto → no coincidían).
+- **Anticipos parciales**: aplicar anticipos que NO cubren el total ya **no marca la factura pagada**; registra el abono y avisa cuánto queda pendiente.
+- **`saldoCliente()` central**: la fórmula "fondos − gastos" se unificó en un helper con guarda `||0` y se blindaron todos los acumuladores/sumas de montos (antes ~8 copias, varias sin `||0` → riesgo de NaN y de no reconciliar entre vistas).
+
 ## 2026-06-13 — Costo de proveedores: % / UF / CLP + reparto por cuotas
 - Reparto a colaboradores (en venta/propuesta) rediseñado: cada fila ahora elige **% · UF · $** (por defecto la unidad de la venta), y el costo se **reparte en las mismas cuotas que el cobro** (si te pagan en 5, al proveedor en 5). %/UF se calculan como **fracción de cada cuota real** → cuando la UF sube, lo que le debes sube junto con tu factura (cero descuadre). UF→CLP con la UF de la fecha de emisión de cada factura. La reconciliación y los montos se muestran en la unidad de la venta. Nota suave (no error) solo cuando hay costo en pesos fijos sobre una venta en UF. Aplica a ventas nuevas y ya cargadas. Requirió SQL: `terceros_pagos.tipo_costo`, `valor`.
 
