@@ -5378,10 +5378,23 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     setCargando(false)
   }
 
+  // Identidad cruda de la fila para propagar: RUT si hay, si no el nombre normalizado.
+  const rawKey = r => normRut(r.rut) || String(r.nombre||'').toLowerCase().trim()
+  // Asignar cliente a una fila Y a todas las filas iguales (mismo RUT/nombre) que aún no haya
+  // resuelto el usuario manualmente — así no se repite el trabajo.
   const asignar = (rowId,clientId) => {
     const c = clients.find(x=>x.id===clientId)
     const ents = entsOf(clientId)
-    setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:r))
+    setRows(p=>{
+      const src = p.find(r=>r.id===rowId)
+      const key = src ? rawKey(src) : null
+      const apply = r => ({...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'})
+      return p.map(r=>{
+        if(r.id===rowId) return apply(r)
+        if(key && rawKey(r)===key && r.matchMethod!=='manual') return apply(r)  // iguales aún no fijados a mano
+        return r
+      })
+    })
   }
   // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
   const confirmarSugeridos = () => setRows(p=>p.map(r=>{
