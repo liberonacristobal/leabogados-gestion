@@ -2908,6 +2908,9 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   const cobros = generarCobros()
 
   const handleSave = () => {
+    // Red de seguridad: si hay una fila de reparto con monto pero sin proveedor elegido, avisar (no descartarla en silencio).
+    const repartoIncompleto = (reparto||[]).some(r=>(parseFloat(r.valor)||0)>0 && !r.proveedor_id)
+    if(repartoIncompleto){ alert('Falta elegir el proveedor en el reparto de costos. Selecciónalo en el desplegable o quita esa fila con la ×.'); return }
     const saveF = {...f}
     if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
@@ -3560,16 +3563,15 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </div>
       )}
 
-      {/* 11. Botones */}
-      <div style={{display:'flex',gap:8,marginTop:4}}>
-        {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{flex:1,padding:'11px 0',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
-        <button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft}
-          style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-          Borrador
-        </button>}
+      {/* 11. Botones — CTA principal full-width abajo, acciones secundarias arriba (responsive móvil) */}
+      <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:6}}>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Borrador</button>}
+          {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{flex:1,padding:'11px 0',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
+        </div>
         <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:handleSave}
-          style={{flex:2,padding:11,borderRadius:10,border:'none',background:_activandoPropuesta?'#1D9E75':C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
+          style={{width:'100%',padding:13,borderRadius:10,border:'none',background:_activandoPropuesta?'#1D9E75':C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
           {(saving||savingTariff)?<Spin/>:null}{(saving||savingTariff)?'Guardando...':modCobro?'Confirmar y guardar':_activandoPropuesta?'Activar propuesta':'Guardar'}
         </button>
       </div>

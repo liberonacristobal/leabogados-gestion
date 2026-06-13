@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Reparto proveedor: aviso si falta elegir + footer responsive
+- Al guardar una venta, si quedó una fila de reparto con monto pero **sin proveedor elegido**, ahora avisa en vez de descartarla en silencio (era la causa de que "no se guardara" el proveedor: la fila se agregaba pero no se completaba el desplegable).
+- Footer del modal de venta **responsive en móvil**: botón principal (Guardar) full-width abajo; Cancelar/Eliminar/Borrador en una fila arriba.
+
 ## 2026-06-13 — Ficha de proveedor: ventas en que participa
 - La ficha del proveedor ahora tiene dos bloques con indicadores propios:
   - **Ventas**: nº de ventas en que participa + **honorarios involucrados** (total de esas ventas, en UF). Lista de tarjetas: proyecto, cliente, mes/año, **su parte** (suma de sus cuentas, UF si la venta es UF), total de la venta y % que representa. Tocar una tarjeta abre la venta.
