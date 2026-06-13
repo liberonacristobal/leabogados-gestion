@@ -2512,7 +2512,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
       {provs.length===0?(
         <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes proveedores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
       ):(<>
-        {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Agrega a quién le pagas parte de este honorario. Se reparte en las mismas cuotas que te pagan a ti.</div>}
+        {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Se reparte en las mismas cuotas del cobro.</div>}
         {rows.map((r,i)=>{
           const tipo=r.tipo||defTipo
           return (
@@ -3087,15 +3087,12 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             )}
           </div>
         </Fld>
-      ) : (
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
-            {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
-          </div>
-          <button onClick={()=>{setSelectedClient(null);up('client_id','')}} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>Cambiar</button>
+      ) : (sale?.id ? null : (
+        <div style={{marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
+          {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
         </div>
-      )}
+      ))}
       {showNewClient&&<MiniClientForm defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
       {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se creará como Prospecto. Al activar la propuesta se convertirá en cliente activo.</div>}
 
@@ -3297,7 +3294,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               {openCondicion==='costos'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`}}>
                   <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>
-                  <div style={{fontSize:11,color:C.muted,lineHeight:1.4}}>Se guarda al tocar <strong style={{color:C.text}}>Guardar</strong>. Es comisión de tu honorario; no se le cobra al cliente.</div>
+                  <div style={{fontSize:11,color:C.muted,lineHeight:1.4}}>Comisión de tu honorario (no se le cobra al cliente).</div>
                 </div>
               )}
               {row('Forma de cobro',curCobro,'cobro',false)}
@@ -10228,7 +10225,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return cn?`${base} · ${cn}`:base })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
