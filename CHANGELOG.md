@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Editar cobro: cliente en el encabezado
+- **Editar cobro** adopta el formato de Nueva tarea: el cliente va en el **encabezado** ("Editar cobro | Cliente" + Cambiar) en vez de ocupar una fila del cuerpo. Más corto y consistente.
+
 ## 2026-06-13 — Densidad: formularios más compactos
 - Se apretó el espaciado de los formularios sin esconder campos: **Editar cobro** (gap entre campos 14→10, etiquetas más juntas) y, vía los componentes compartidos `Fld`/`Lbl`, también **Nueva venta/propuesta, Cliente, Gastos y Fondo** (margen entre campos 14→10, etiqueta 5→3). Las vistas largas quedan notoriamente más cortas.
 
