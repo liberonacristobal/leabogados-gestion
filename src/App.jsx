@@ -4478,7 +4478,7 @@ function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],ant
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
-      <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:8}}>
         {!f.client_id&&(
           <div>
             <label style={flabel}>Cliente</label>
@@ -7985,17 +7985,6 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   const ini=INICIALES_RESP[f.abogado_responsable]
   return (
     <>
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-        <div style={{width:48,height:48,flexShrink:0,borderRadius:12,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700}}>{(f.name||'?').charAt(0).toUpperCase()}</div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name?.trim()||'Nuevo cliente'}</div>
-          <div style={{display:'flex',gap:6,marginTop:5,flexWrap:'wrap'}}>
-            <span style={{fontSize:11,fontWeight:600,color:stColor,background:stColor+'1A',padding:'2px 9px',borderRadius:20}}>{f.status||'Activo'}</span>
-            {ini&&<span style={{fontSize:11,fontWeight:600,color:C.muted,background:C.border,padding:'2px 9px',borderRadius:20,letterSpacing:'.3px'}}>{ini}</span>}
-            {f.is_internal&&<span style={{fontSize:11,fontWeight:600,color:C.muted,background:C.border,padding:'2px 9px',borderRadius:20}}>Interno</span>}
-          </div>
-        </div>
-      </div>
       <Fld label='Nombre'><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
         <Fld label='RUT'><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
