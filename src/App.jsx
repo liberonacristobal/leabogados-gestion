@@ -4071,10 +4071,10 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               const semCol=pagado?C.muted:(dl==null?C.muted:dl<0?C.overdue:dl<=7?'#B8860B':C.normal)
               const semTxt=prog?(dl!=null?(dl<0?`${Math.abs(dl)} días vencida`:`vence en ${dl} días`):''):((dl!=null&&dl<0)?`${Math.abs(dl)} días vencida`:(dEmis!=null?`${dEmis} días`:''))
               return (
-              <div key={b.id} style={{position:'relative',background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`}}>
+              <div key={b.id} onClick={()=>onEdit(b)} style={{position:'relative',background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`,cursor:'pointer'}}>
                 {/* línea 1: concepto + monto */}
                 <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-                  {prog&&<input type='checkbox' checked={selected.has(b.id)} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
+                  {prog&&<input type='checkbox' checked={selected.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
                   <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}</div>
                   <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado)?C.overdue:C.text,whiteSpace:'nowrap',flexShrink:0}}>{fmt(b.amount)}</div>
                 </div>
@@ -4090,11 +4090,11 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                     {tercerosByBilling.has(b.id)&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600}}>Proveedores</span>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
+                    {client.id==='__none__'&&onAssignClient&&!prog&&<span onClick={e=>e.stopPropagation()}><AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/></span>}
                     {prog ? (
-                      selected.size===0&&<button onClick={()=>marcarEmitida(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Ya emitida</button>
+                      selected.size===0&&<button onClick={(e)=>{e.stopPropagation();marcarEmitida(b)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Ya emitida</button>
                     ):(!anulada&&!pagado)&&(
-                      <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
+                      <button onClick={(e)=>{e.stopPropagation();setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
                     )}
                     <button onClick={(e)=>{e.stopPropagation();setMenuBill(menuBill===b.id?null:b.id)}} style={{width:24,height:24,borderRadius:7,border:`1px solid ${menuBill===b.id?C.accent:C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
                       <svg width='13' height='13' viewBox='0 0 24 24' fill={menuBill===b.id?C.accent:C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>

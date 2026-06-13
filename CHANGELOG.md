@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Tanda D (UX) parte 2: tarjeta de factura → editar
+- En Facturación, **tocar la tarjeta de una factura abre Editar** (antes había que ir al menú ⋯). Los controles internos (checkbox, Registrar pago/Ya emitida, asignar cliente, ⋯) siguen funcionando aparte (no abren editar). El menú ⋯ mantiene Editar/Anular.
+
 ## 2026-06-13 — Tanda C (diseño) parte 1: alineación de paleta
 - Se alinearon a la paleta corporativa los colores fuera de norma más repetidos (cambios casi imperceptibles, solo más coherentes): texto `#1a1a1a` → grafito `#3D3D3D` (47 líneas), fondo de inputs `#F7F7F7` → `#F5F7F9` (68), bordes `#E8E8E8` → `#E4E8EB` (19). (Pendiente etapa 2: extraer componentes únicos Btn/Input/Lbl/Chip, mapa CATS único, normalizar tintes y escala tipográfica.)
 
