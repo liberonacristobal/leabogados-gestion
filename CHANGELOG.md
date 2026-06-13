@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-13 — Reparto a proveedores: pagarle distinto + dashboard
+- En el reparto a proveedores cada fila tiene un toggle **Con el cobro / Un pago**: por defecto se reparte en las mismas cuotas del cliente; "Un pago" registra UN solo pago al proveedor (calendario distinto). El modo se reconstruye al reabrir la venta (1 registro con venta multi-cuota = "Un pago").
+- Widget "Cuentas por pagar a proveedores" del dashboard ahora **abierto por defecto**.
+- Editar venta: el nombre del cliente sube al título (sin botón "Cambiar"). Texto del reparto reducido.
+
 ## 2026-06-13 — Tanda C: tintes a la paleta + tap targets
 - Botones de cerrar (×) de los formularios con área de toque de 40px.
 - Consolidación de tintes casi-idénticos a la paleta oficial (sin cambio de layout): verde `#E4F1EA`→`#E1F5EE`; rojo `#FBE9E7`→`#FCEBEB`; azules/grises `#E3EEF3`→`#E6EEF1`, `#F7F8F9`/`#F0F4F6`/`#EFF3F5`→`#F5F7F9`. ~80 usos alineados.

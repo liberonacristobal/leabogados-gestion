@@ -1731,7 +1731,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [openOficina,setOpenOficina] = useState(false)
-  const [openPagar,setOpenPagar] = useState(false)
+  const [openPagar,setOpenPagar] = useState(true)
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
   const [payFecha,setPayFecha] = useState('')
   const [payRef,setPayRef] = useState('')
@@ -2503,7 +2503,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   const cuadra = Math.abs(desc)<=tol
   const hayClpEnUF = esUF && rows.some(r=>r.tipo==='clp' && (parseFloat(r.valor)||0)>0)
   const up=(i,k,v)=>setRows(rows.map((r,j)=>j===i?{...r,[k]:v}:r))
-  const addRow=()=>setRows([...rows,{proveedor_id:'',tipo:defTipo,valor:''}])
+  const addRow=()=>setRows([...rows,{proveedor_id:'',tipo:defTipo,valor:'',modo:'cuotas'}])
   const delRow=i=>setRows(rows.filter((_,j)=>j!==i))
   const tipos=[['pct','%'],['uf','UF'],['clp','$']]
   return (
@@ -2515,8 +2515,10 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
         {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Se reparte en las mismas cuotas del cobro.</div>}
         {rows.map((r,i)=>{
           const tipo=r.tipo||defTipo
+          const modo=r.modo||'cuotas'
           return (
-          <div key={i} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 24px',gap:6,marginBottom:7,alignItems:'center'}}>
+          <div key={i} style={{marginBottom:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 24px',gap:6,alignItems:'center'}}>
             <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
               <option value=''>— Proveedor —</option>
               {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
@@ -2530,6 +2532,12 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
               </div>
             </div>
             <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
+          </div>
+          <div style={{display:'flex',gap:0,marginTop:4,width:'fit-content',border:`1px solid ${C.border}`,borderRadius:7,overflow:'hidden'}}>
+            {[['cuotas','Con el cobro'],['unico','Un pago']].map(([v,l])=>(
+              <button key={v} type='button' onClick={()=>up(i,'modo',v)} style={{padding:'2px 9px',border:'none',background:modo===v?C.accent:'#F5F7F9',color:modo===v?'#fff':C.muted,fontSize:10.5,fontWeight:600,cursor:'pointer'}}>{l}</button>
+            ))}
+          </div>
           </div>
         )})}
         <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:2}}>+ Agregar proveedor</button>
@@ -2578,9 +2586,11 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   // (cada fila se reparte en N cuotas, así que varios registros = una fila del formulario).
   const [reparto,setReparto] = useState(()=>{
     const mine=(terceros||[]).filter(t=>String(t.sale_id)===String(sale?.id))
+    const nCuotasVenta=(billing||[]).filter(b=>String(b.sale_id)===String(sale?.id)&&b.billing_type!=='reembolso').length
     const g={}
-    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??''} })
-    return Object.values(g)
+    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??'',_n:0}; g[k]._n++ })
+    // Si la venta tiene varias cuotas pero el proveedor tiene 1 solo pago → se le paga distinto ('unico').
+    return Object.values(g).map(r=>({proveedor_id:r.proveedor_id,tipo:r.tipo,valor:r.valor,modo:(nCuotasVenta>1&&r._n===1)?'unico':'cuotas'}))
   })
   const [tariffs,setTariffs] = useState([])
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
@@ -9577,17 +9587,33 @@ export default function App() {
           const pagadas = new Set(previas.filter(t=>t.estado==='pagado').map(t=>`${t.proveedor_id}|${t.billing_id}`))
           const borrar = previas.filter(t=>t.estado!=='pagado')   // recrea todo lo no pagado
           if(borrar.length) await supabase.from('terceros_pagos').delete().in('id', borrar.map(t=>t.id))
+          // 'unico' = se le paga distinto al cliente: UN solo pago (no se reparte en las cuotas).
+          const montoUnico = (row) => {
+            const v = parseFloat(row.valor)||0
+            if(row.tipo==='pct') return Math.round(totalCuotas*v/100)
+            if(row.tipo==='uf') return Math.round(v*sUfVal)
+            return Math.round(v)
+          }
           const nuevos=[]
           for(const row of f.repartoTerceros){
             if(!row.proveedor_id || !((parseFloat(row.valor)||0)>0)) continue
             const prov = proveedores.find(p=>String(p.id)===String(row.proveedor_id))
+            const base = {sale_id:data.id, proveedor_id:row.proveedor_id,
+              proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
+              tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, created_by:user?.name||null}
+            if(row.modo==='unico'){
+              const cuota = cuotasVenta[0]; if(!cuota) continue
+              if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
+              const m = montoUnico(row); if(m<=0) continue
+              nuevos.push({...base, billing_id:cuota.id, monto:m,
+                estado: cuota.status==='Pagado'?'por_pagar':'pendiente'})
+              continue
+            }
             for(const cuota of cuotasVenta){
               if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
               const m = montoCuota(row,cuota); if(m<=0) continue
-              nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
-                proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
-                tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, monto:m,
-                estado: cuota.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null})
+              nuevos.push({...base, billing_id:cuota.id, monto:m,
+                estado: cuota.status==='Pagado'?'por_pagar':'pendiente'})
             }
           }
           if(nuevos.length) await supabase.from('terceros_pagos').insert(nuevos)
