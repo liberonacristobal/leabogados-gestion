@@ -7680,7 +7680,6 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
           <div style={{display:'flex',gap:6}}>
-            {onProveedores&&<button onClick={onProveedores} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Proveedores</button>}
             <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button>
             <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
             <button onClick={()=>onAddTask(null)} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
@@ -7694,12 +7693,14 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
             {responsables.map(r=>{ const on=respSel.has(r); return (
               <button key={r} onClick={()=>toggleResp(r)} title={r} style={{minWidth:34,height:30,padding:'0 9px',borderRadius:8,border:`0.5px solid ${on?'#99ABB4':'#E4E8EB'}`,background:on?'#E4E8EB':'#fff',color:on?'#003C50':'#537281',fontSize:12,fontWeight:on?600:500,letterSpacing:'.3px',cursor:'pointer'}}>{INICIALES_RESP[r]||r.slice(0,2).toUpperCase()}</button>
             )})}
+            {onProveedores&&<button onClick={onProveedores} style={{marginLeft:'auto',height:30,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Proveedores</button>}
           </div>
         ) : (
           <div style={{display:'flex',gap:6,marginBottom:4}}>
             {[['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>(
               <button key={v} onClick={()=>{setSFilter(v);setRespSel(new Set())}} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
             ))}
+            {onProveedores&&<button onClick={onProveedores} style={{padding:'7px 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Proveedores</button>}
           </div>
         )}
       </div>
