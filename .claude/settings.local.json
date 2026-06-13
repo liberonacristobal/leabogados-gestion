@@ -112,7 +112,9 @@
       "Bash(sort -t: -k2 -n)",
       "Bash(perl -0pi -e 's/if\\\\\\(!costSwitch\\\\\\) \\\\{ saveF\\\\.cost_uf = null; saveF\\\\.cost_clp = null \\\\}/if\\(!hasCost\\) { saveF.cost_uf = null; saveF.cost_clp = null }/g' src/App.jsx)",
       "Bash(perl -0pi -e 's/p\\\\?\\\\.razon_social\\\\?\\\\.trim\\\\\\(\\\\\\)\\\\|\\\\|p\\\\?\\\\.nombre\\\\?\\\\.trim\\\\\\(\\\\\\)\\\\|\\\\|.Proveedor./p?.nombre?.trim\\(\\)||p?.razon_social?.trim\\(\\)||\\\\x27Proveedor\\\\x27/g' src/App.jsx)",
-      "Bash(perl -0pi -e \"s/const subtit = prov\\\\?\\\\.razon_social\\\\?\\\\.trim\\\\\\(\\\\\\) \\\\? \\\\`\\\\\\\\\\\\$\\\\{prov\\\\.nombre\\\\?\\\\`\\\\\\\\\\\\$\\\\{prov\\\\.nombre\\\\} · \\\\`:''\\\\}\\\\\\\\\\\\$\\\\{prov\\\\.rut\\\\|\\\\|''\\\\}\\\\`\\\\.replace\\\\\\(\\\\/ · \\\\\\\\\\\\$\\\\/,''\\\\\\) : \\\\\\(prov\\\\?\\\\.rut\\\\|\\\\|''\\\\\\)/const subtit = [prov?.razon_social?.trim\\(\\), prov?.rut].filter\\(Boolean\\).join\\(' · '\\)/g\" src/App.jsx)"
+      "Bash(perl -0pi -e \"s/const subtit = prov\\\\?\\\\.razon_social\\\\?\\\\.trim\\\\\\(\\\\\\) \\\\? \\\\`\\\\\\\\\\\\$\\\\{prov\\\\.nombre\\\\?\\\\`\\\\\\\\\\\\$\\\\{prov\\\\.nombre\\\\} · \\\\`:''\\\\}\\\\\\\\\\\\$\\\\{prov\\\\.rut\\\\|\\\\|''\\\\}\\\\`\\\\.replace\\\\\\(\\\\/ · \\\\\\\\\\\\$\\\\/,''\\\\\\) : \\\\\\(prov\\\\?\\\\.rut\\\\|\\\\|''\\\\\\)/const subtit = [prov?.razon_social?.trim\\(\\), prov?.rut].filter\\(Boolean\\).join\\(' · '\\)/g\" src/App.jsx)",
+      "Bash(git ls-remote *)",
+      "Bash(pkill -f \"vite\")"
     ]
   }
 }

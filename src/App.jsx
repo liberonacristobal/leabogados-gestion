@@ -2908,9 +2908,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   const cobros = generarCobros()
 
   const handleSave = () => {
-    // Red de seguridad: si hay una fila de reparto con monto pero sin proveedor elegido, avisar (no descartarla en silencio).
-    const repartoIncompleto = (reparto||[]).some(r=>(parseFloat(r.valor)||0)>0 && !r.proveedor_id)
-    if(repartoIncompleto){ alert('Falta elegir el proveedor en el reparto de costos. Selecciónalo en el desplegable o quita esa fila con la ×.'); return }
+    // Reparto: solo filas con proveedor elegido y monto. Si hay filas con monto pero SIN proveedor y ninguna completa, avisar.
+    const repartoLimpio = (reparto||[]).filter(r=>r.proveedor_id && (parseFloat(r.valor)||0)>0)
+    const hayIncompleto = (reparto||[]).some(r=>(parseFloat(r.valor)||0)>0 && !r.proveedor_id)
+    if(repartoLimpio.length===0 && hayIncompleto){ alert('Elige el proveedor en el reparto de costos antes de guardar (o quita la fila con la ×).'); return }
     const saveF = {...f}
     if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
@@ -2924,7 +2925,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       saveF.status = 'Activo'
     }
     clearDraft()
-    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false, repartoTerceros:reparto})
+    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false, repartoTerceros:repartoLimpio})
   }
 
   const handleSaveDraft = () => {
@@ -3378,7 +3379,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   <span style={{fontSize:13,fontWeight:500,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>
                   {provLabel
                     ? <span style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {provLabel}</span>
-                    : costVal>0&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}
+                    : (costVal>0&&openCondicion!=='costos')&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}
                 </div>
                 <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion==='costos'?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}>›</span>
               </div>
