@@ -5015,7 +5015,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImports=[],onUndoImport,onClose,onClientsUpdate}) {
+function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
@@ -5146,6 +5146,10 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
     }
     return {client:null,method:'none',entity_id:null}
   }
+
+  // Memoria aprendida: nombre-crudo normalizado → cliente (de asignaciones manuales previas).
+  const aliasMap = useMemo(()=>{ const m=new Map(); (importAliases||[]).forEach(a=>m.set(a.alias_norm,a.client_id)); return m },[importAliases])
+  const aliasClient = nombre => { const k=String(nombre||'').toLowerCase().trim(); if(!k) return null; const cid=aliasMap.get(k); return cid?clients.find(c=>String(c.id)===String(cid)):null }
 
   // Nivel 3: fuzzy por distancia de Levenshtein normalizada contra nombre, razón social y razones sociales (client_entities).
   const STOP = new Set(['de','la','el','los','las','y','del','e','en','spa','ltda','sa','eirl','cia','limitada','sociedad','inversiones','inmobiliaria','comercial','servicios','grupo'])
@@ -5334,12 +5338,15 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const monto = parseMonto(getField('monto'))
         if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return null  // fila vacía
         const categoria = tipo==='fondo' ? 'Fondo' : mapCategoria(getField('categoria'))
-        const ex = exactMatch(rut,nombre); const cli=ex.client; const ents=cli?entsOf(cli.id):[]
+        const ex = exactMatch(rut,nombre)
+        let cli=ex.client, method=ex.method, entId=ex.entity_id
+        if(!cli){ const al=aliasClient(nombre); if(al){ cli=al; method='aprendido'; entId=null } }   // memoria aprendida
+        const ents=cli?entsOf(cli.id):[]
         let error=null
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        return {id:idx, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ex.entity_id || (ents.length===1?ents[0].id:null), matchMethod: cli?ex.method:undefined, confidence: cli?(ex.method==='rut_exact'?100:95):undefined, error, dup:false}
+        return {id:idx, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: cli?method:undefined, confidence: cli?(method==='name_exact'?95:100):undefined, error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
       let parsed = []
@@ -5385,8 +5392,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const asignar = (rowId,clientId) => {
     const c = clients.find(x=>x.id===clientId)
     const ents = entsOf(clientId)
+    let srcNombre=null
     setRows(p=>{
       const src = p.find(r=>r.id===rowId)
+      srcNombre = src?.nombre || null
       const key = src ? rawKey(src) : null
       const apply = r => ({...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'})
       return p.map(r=>{
@@ -5395,6 +5404,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         return r
       })
     })
+    // Aprende: este nombre crudo → este cliente, para que las próximas cargas caigan solas.
+    if(onLearnAlias && srcNombre && String(srcNombre).trim()) onLearnAlias(String(srcNombre).toLowerCase().trim(), clientId)
   }
   // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
   const confirmarSugeridos = () => setRows(p=>p.map(r=>{
@@ -5514,7 +5525,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               const bad = montoBad(r)
               const ents = r.client_id ? entsOf(r.client_id) : []
               const bg = bad?'#FEF2F2':(bucket==='auto'?'#E1F5EE':bucket==='sug'?'#FFF8E1':bucket==='rev'?'#FEF2F2':'#F5F7F9')
-              const badge = bad?['Error',C.overdue,'#fff']:(bucket==='auto'?[r.isInternal?'Interno':'Auto',C.normal,'#fff']:bucket==='sug'?[`Sugerido ${r.confidence||''}%`,'#B8860B','#fff']:bucket==='rev'?[`Revisar ${r.confidence||''}%`,C.overdue,'#fff']:['Sin cliente',C.muted,'#fff'])
+              const badge = bad?['Error',C.overdue,'#fff']:(bucket==='auto'?[r.isInternal?'Interno':r.matchMethod==='aprendido'?'Aprendido':'Auto',C.normal,'#fff']:bucket==='sug'?[`Sugerido ${r.confidence||''}%`,'#B8860B','#fff']:bucket==='rev'?[`Revisar ${r.confidence||''}%`,C.overdue,'#fff']:['Sin cliente',C.muted,'#fff'])
               if(r.isInternal&&!bad) badge[1]=C.muted
               return (
                 <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg,boxShadow:bad?`inset 3px 0 0 ${C.overdue}`:'none'}}>
@@ -9248,6 +9259,7 @@ export default function App() {
   const [proveedores,setProveedores]=useState([])
   const [terceros,setTerceros]=useState([])   // terceros_pagos (cuentas por pagar)
   const [bulkImports,setBulkImports]=useState([])   // lotes de carga masiva (para deshacer)
+  const [importAliases,setImportAliases]=useState([])   // memoria nombre-crudo → cliente (carga masiva aprende)
   const [pettyCash,setPettyCash]=useState([])
   const [rendiciones,setRendiciones]=useState([])
   const [expenseAttachments,setExpenseAttachments]=useState([])
@@ -9322,7 +9334,8 @@ export default function App() {
       supabase.from('proveedores').select('*').order('nombre').then(({data})=>data||[]),
       supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
       supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10).then(({data})=>data||[]),
-    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi)})
+      supabase.from('import_aliases').select('*').then(({data})=>data||[]),
+    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
@@ -9579,6 +9592,16 @@ export default function App() {
       setBulkImports(p=>p.map(b=>b.id===batchId?{...b,status:'undone',undone_at:new Date().toISOString(),undone_by:user?.name||null}:b))
       return true
     }catch(e){ alert('Error al deshacer: '+e.message); return false }
+  },[user])
+
+  // Memoria que aprende: guarda nombre-crudo → cliente. La próxima carga con ese nombre cae solo.
+  const handleLearnAlias=useCallback(async(aliasNorm,clientId)=>{
+    if(!aliasNorm||!clientId) return
+    try{
+      const {data,error}=await supabase.from('import_aliases').upsert({alias_norm:aliasNorm,client_id:clientId,created_by:user?.name||null},{onConflict:'alias_norm'}).select().single()
+      if(error)throw error
+      setImportAliases(p=>{ const rest=p.filter(a=>a.alias_norm!==aliasNorm); return [...rest,data] })
+    }catch(e){ /* no bloquear la asignación si falla el aprendizaje */ console.error('learnAlias',e) }
   },[user])
 
   // Asignar (o cambiar) el cliente de un gasto ya guardado — para los huérfanos "Sin cliente".
@@ -9981,7 +10004,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
