@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Tanda C: tintes a la paleta + tap targets
+- Botones de cerrar (×) de los formularios con área de toque de 40px.
+- Consolidación de tintes casi-idénticos a la paleta oficial (sin cambio de layout): verde `#E4F1EA`→`#E1F5EE`; rojo `#FBE9E7`→`#FCEBEB`; azules/grises `#E3EEF3`→`#E6EEF1`, `#F7F8F9`/`#F0F4F6`/`#EFF3F5`→`#F5F7F9`. ~80 usos alineados.
+
 ## 2026-06-13 — Sobrante de anticipo
 - Al cubrir cuotas, si el anticipo es mayor que la suma de las cuotas cubiertas, el **saldo queda como un anticipo disponible** ("Saldo de anticipo") — no se pierde y se puede aplicar después (a otra cuota o como abono). El panel no deja cubrir por más que el anticipo. El saldo parcial de una cuota que el anticipo no alcanza se maneja dejando ese saldo disponible y aplicándolo como abono al emitir esa factura.
 
