@@ -3931,7 +3931,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
   const [filter,setFilter] = useState('emitidas')
-  const [fYear,setFYear] = useState('')
+  const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
@@ -3993,15 +3993,18 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
     return Object.values(byClient).sort((a,b)=>a.client.name.localeCompare(b.client.name,'es'))
   },[filtered,clients])
 
-  const pending=bb.filter(b=>b.status==='Pendiente').reduce((s,b)=>s+(b.amount||0),0)
-  const overdue=bb.filter(b=>b.status==='Vencido').reduce((s,b)=>s+(b.amount||0),0)
-  const paid=bb.filter(b=>b.status==='Pagado').reduce((s,b)=>s+(b.amount||0),0)
-  const programado=bb.filter(b=>b.status==='Programada').reduce((s,b)=>s+(b.amount||0),0)
+  // KPIs acotados al año/mes del filtro. Cada estado usa su fecha relevante: Programada→vencimiento, Pagado→pago, resto→emisión.
+  const matchYM = dateStr => { if(!fYear&&!fMonth) return true; if(!dateStr) return false; if(fYear&&String(dateStr).slice(0,4)!==fYear) return false; if(fMonth&&String(dateStr).slice(5,7)!==fMonth) return false; return true }
+  const kpiDate = b => b.status==='Programada'?b.due:(b.status==='Pagado'?(b.paid_at||b.issued_at):b.issued_at)
+  const pending=bb.filter(b=>b.status==='Pendiente'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
+  const overdue=bb.filter(b=>b.status==='Vencido'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
+  const paid=bb.filter(b=>b.status==='Pagado'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
+  const programado=bb.filter(b=>b.status==='Programada'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   // Contadores por nº de documentos para las tabs
   const nEmitidas=bb.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status)).length
   const nProgramadas=bb.filter(b=>b.status==='Programada').length
   const nPagadas=bb.filter(b=>b.status==='Pagado').length
-  const years=[...new Set(bb.map(b=>b.issued_at?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+  const years=[...new Set(bb.flatMap(b=>[b.issued_at?.slice(0,4),b.due?.slice(0,4)]).filter(Boolean))].sort((a,b)=>b-a)
 
   const handleTogglePagado = async(b) => {
     if(b.status==='Pagado') { await onStatusChange(b.id,'Pendiente',null) }
