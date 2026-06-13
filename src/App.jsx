@@ -1689,7 +1689,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onEditTask,onCompleteTask,onPreviewTask}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onEditTask,onCompleteTask,onPreviewTask}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -1733,6 +1733,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [openOficina,setOpenOficina] = useState(false)
   const [openPagar,setOpenPagar] = useState(true)
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
+  const [payGroup,setPayGroup] = useState(null)        // varias cuentas del mismo proveedor pagadas juntas
   const [payFecha,setPayFecha] = useState('')
   const [payRef,setPayRef] = useState('')
   const [payingNow,setPayingNow] = useState(false)
@@ -2176,7 +2177,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Pagado {yr}</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.muted}}>{fmt(pagadoYr)}</div></div>
                 </div>
                 {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
-                {grupos.map((g,gi)=>(
+                {grupos.map((g,gi)=>{
+                  const ppCuentas=g.cuentas.filter(t=>t.estado==='por_pagar')
+                  const ppTot=ppCuentas.reduce((a,t)=>a+(t.monto||0),0)
+                  return (
                   <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',background:C.neutro||'#F5F7F9'}}>
                       <span style={{width:34,height:34,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
@@ -2184,9 +2188,12 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                         <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(g.prov)}</div>
                         <div style={{fontSize:11,color:'#99ABB4'}}>{g.prov?.razon_social?.trim()?(g.prov.nombre||''):(g.prov?.rut||'')}</div>
                       </div>
-                      <div style={{marginLeft:'auto',textAlign:'right'}}>
+                      <div style={{marginLeft:'auto',textAlign:'right',flexShrink:0}}>
                         <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Le debes</div>
                         <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(g.total)}</div>
+                        {ppCuentas.length>=2&&(
+                          <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('')}} style={{marginTop:6,height:28,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:11.5,fontWeight:600,padding:'0 11px',cursor:'pointer',whiteSpace:'nowrap'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
+                        )}
                       </div>
                     </div>
                     {ordCuentas(g.cuentas).map(t=>{
@@ -2211,7 +2218,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       )
                     })}
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
@@ -2271,6 +2278,72 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>setPayTercero(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':'Marcar pagado'}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {payGroup&&(()=>{
+        const prov=payGroup.prov
+        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+        const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+        const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
+        const subtit = prov?.razon_social?.trim() ? `${prov.nombre?`${prov.nombre} · `:''}${prov.rut||''}`.replace(/ · $/,'') : (prov?.rut||'')
+        const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
+        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercerosBulk(payGroup.cuentas.map(t=>t.id),{pagado_at:payFecha,referencia:payRef}); setPayingNow(false); if(r) setPayGroup(null) }
+        const fl={fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
+        const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#3D3D3D',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
+        return (
+          <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setPayGroup(null)}>
+            <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:400,maxHeight:'90vh',overflowY:'auto'}}>
+              <div style={{display:'flex',alignItems:'center',gap:11,padding:'16px 18px',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:1}}>
+                <span style={{width:42,height:42,borderRadius:11,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(prov))}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(prov)}</div>
+                  {subtit&&<div style={{fontSize:11.5,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subtit}</div>}
+                </div>
+                <button onClick={()=>setPayGroup(null)} style={{marginLeft:'auto',width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+                </button>
+              </div>
+              <div style={{padding:'16px 18px'}}>
+                <div style={{textAlign:'center',marginBottom:14}}>
+                  <div style={{fontSize:30,fontWeight:600,letterSpacing:-.6,color:C.text}}>{fmt(payGroup.total)}</div>
+                  <div style={{fontSize:12,color:'#99ABB4',marginTop:3}}>{payGroup.cuentas.length} cuotas en una transferencia</div>
+                </div>
+                <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+                  {payGroup.cuentas.map((t,i)=>{
+                    const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
+                    const venta=(sales||[]).find(s=>String(s.id)===String(t.sale_id))
+                    const ori=`${venta?.title||fac?.invoice_no?`F° ${fac.invoice_no}`:'—'}`
+                    return (
+                      <div key={t.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',fontSize:12,color:C.text}}>
+                        <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{venta?.title?venta.title:''}{fac?.invoice_no?`${venta?.title?' · ':''}F° ${fac.invoice_no}`:''}{fac?.paid_at?` · cobrada ${fmtDMY(fac.paid_at)}`:''}</span>
+                        <span style={{fontWeight:600,flexShrink:0}}>{fmt(t.monto)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{marginBottom:13}}>
+                  <span style={fl}>Datos de transferencia</span>
+                  {prov?.datos_pago?.trim()?(
+                    <div style={{background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'11px 12px',position:'relative'}}>
+                      <button onClick={copiar} style={{position:'absolute',top:9,right:9,fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Copiar</button>
+                      <pre style={{fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,color:'#3D3D3D',whiteSpace:'pre-wrap',lineHeight:1.55,margin:0,paddingRight:54}}>{prov.datos_pago}</pre>
+                    </div>
+                  ):(
+                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Este proveedor no tiene datos de pago. Agrégalos en Proveedores.</div>
+                  )}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+                  <div><span style={fl}>Fecha de pago</span><input type='date' value={payFecha} onChange={e=>setPayFecha(e.target.value)} style={inp}/></div>
+                  <div><span style={fl}>Referencia</span><input value={payRef} onChange={e=>setPayRef(e.target.value)} placeholder='N° transferencia' style={inp}/></div>
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>setPayGroup(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':`Marcar ${payGroup.cuentas.length} pagadas`}</button>
                 </div>
               </div>
             </div>
@@ -2503,7 +2576,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   const cuadra = Math.abs(desc)<=tol
   const hayClpEnUF = esUF && rows.some(r=>r.tipo==='clp' && (parseFloat(r.valor)||0)>0)
   const up=(i,k,v)=>setRows(rows.map((r,j)=>j===i?{...r,[k]:v}:r))
-  const addRow=()=>setRows([...rows,{proveedor_id:'',tipo:defTipo,valor:'',modo:'cuotas'}])
+  const addRow=()=>setRows([...rows,{proveedor_id:'',tipo:defTipo,valor:''}])
   const delRow=i=>setRows(rows.filter((_,j)=>j!==i))
   const tipos=[['pct','%'],['uf','UF'],['clp','$']]
   return (
@@ -2515,10 +2588,8 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
         {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Se reparte en las mismas cuotas del cobro.</div>}
         {rows.map((r,i)=>{
           const tipo=r.tipo||defTipo
-          const modo=r.modo||'cuotas'
           return (
-          <div key={i} style={{marginBottom:8}}>
-          <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 24px',gap:6,alignItems:'center'}}>
+          <div key={i} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 24px',gap:6,marginBottom:7,alignItems:'center'}}>
             <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
               <option value=''>— Proveedor —</option>
               {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
@@ -2532,12 +2603,6 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
               </div>
             </div>
             <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
-          </div>
-          <div style={{display:'flex',gap:0,marginTop:4,width:'fit-content',border:`1px solid ${C.border}`,borderRadius:7,overflow:'hidden'}}>
-            {[['cuotas','Con el cobro'],['unico','Un pago']].map(([v,l])=>(
-              <button key={v} type='button' onClick={()=>up(i,'modo',v)} style={{padding:'2px 9px',border:'none',background:modo===v?C.accent:'#F5F7F9',color:modo===v?'#fff':C.muted,fontSize:10.5,fontWeight:600,cursor:'pointer'}}>{l}</button>
-            ))}
-          </div>
           </div>
         )})}
         <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:2}}>+ Agregar proveedor</button>
@@ -2586,11 +2651,9 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   // (cada fila se reparte en N cuotas, así que varios registros = una fila del formulario).
   const [reparto,setReparto] = useState(()=>{
     const mine=(terceros||[]).filter(t=>String(t.sale_id)===String(sale?.id))
-    const nCuotasVenta=(billing||[]).filter(b=>String(b.sale_id)===String(sale?.id)&&b.billing_type!=='reembolso').length
     const g={}
-    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??'',_n:0}; g[k]._n++ })
-    // Si la venta tiene varias cuotas pero el proveedor tiene 1 solo pago → se le paga distinto ('unico').
-    return Object.values(g).map(r=>({proveedor_id:r.proveedor_id,tipo:r.tipo,valor:r.valor,modo:(nCuotasVenta>1&&r._n===1)?'unico':'cuotas'}))
+    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??''} })
+    return Object.values(g)
   })
   const [tariffs,setTariffs] = useState([])
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
@@ -9587,33 +9650,17 @@ export default function App() {
           const pagadas = new Set(previas.filter(t=>t.estado==='pagado').map(t=>`${t.proveedor_id}|${t.billing_id}`))
           const borrar = previas.filter(t=>t.estado!=='pagado')   // recrea todo lo no pagado
           if(borrar.length) await supabase.from('terceros_pagos').delete().in('id', borrar.map(t=>t.id))
-          // 'unico' = se le paga distinto al cliente: UN solo pago (no se reparte en las cuotas).
-          const montoUnico = (row) => {
-            const v = parseFloat(row.valor)||0
-            if(row.tipo==='pct') return Math.round(totalCuotas*v/100)
-            if(row.tipo==='uf') return Math.round(v*sUfVal)
-            return Math.round(v)
-          }
           const nuevos=[]
           for(const row of f.repartoTerceros){
             if(!row.proveedor_id || !((parseFloat(row.valor)||0)>0)) continue
             const prov = proveedores.find(p=>String(p.id)===String(row.proveedor_id))
-            const base = {sale_id:data.id, proveedor_id:row.proveedor_id,
-              proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
-              tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, created_by:user?.name||null}
-            if(row.modo==='unico'){
-              const cuota = cuotasVenta[0]; if(!cuota) continue
-              if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
-              const m = montoUnico(row); if(m<=0) continue
-              nuevos.push({...base, billing_id:cuota.id, monto:m,
-                estado: cuota.status==='Pagado'?'por_pagar':'pendiente'})
-              continue
-            }
             for(const cuota of cuotasVenta){
               if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
               const m = montoCuota(row,cuota); if(m<=0) continue
-              nuevos.push({...base, billing_id:cuota.id, monto:m,
-                estado: cuota.status==='Pagado'?'por_pagar':'pendiente'})
+              nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
+                proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
+                tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, monto:m,
+                estado: cuota.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null})
             }
           }
           if(nuevos.length) await supabase.from('terceros_pagos').insert(nuevos)
@@ -10063,6 +10110,16 @@ export default function App() {
       return data
     }catch(e){alert('Error: '+e.message); return null}
   },[])
+  // Pagar varias cuentas del mismo proveedor en una sola transferencia (mismo fecha y referencia).
+  const handlePagarTercerosBulk=useCallback(async(ids,{pagado_at,referencia})=>{
+    try{
+      if(!ids?.length) return null
+      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null}).in('id',ids).select()
+      if(error)throw error
+      setTerceros(p=>p.map(t=>{const u=(data||[]).find(d=>d.id===t.id); return u||t}))
+      return data
+    }catch(e){alert('Error: '+e.message); return null}
+  },[])
   const handleDeleteBilling=useCallback(async(id)=>{
     if(!confirm('¿Eliminar este cobro?')) return
     try{
@@ -10234,7 +10291,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
