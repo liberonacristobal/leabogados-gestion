@@ -9501,7 +9501,7 @@ export default function App() {
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const {cobros, cobroType, _actualizarPago, _activandoPropuesta, _propAmountUF, _propAmountCLP, ...saleData} = f
+      const {cobros, cobroType, _actualizarPago, _activandoPropuesta, _propAmountUF, _propAmountCLP, repartoTerceros, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
       const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
