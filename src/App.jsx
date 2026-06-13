@@ -4352,33 +4352,29 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
-        <span style={{fontSize:15,fontWeight:500,color:'#3D3D3D'}}>{bill?.id?'Editar cobro':'Nuevo cobro'}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+        <span style={{fontSize:15,fontWeight:500,color:'#3D3D3D',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          {bill?.id?'Editar cobro':'Nuevo cobro'}
+          {f.client_id&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span><button type='button' onClick={()=>{up('client_id','');setClientQuery('')}} style={{border:'none',background:'none',color:C.accent,fontSize:12,fontWeight:500,cursor:'pointer',marginLeft:7}}>Cambiar</button></>}
+        </span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
       <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:10}}>
-        <div>
-          <label style={flabel}>Cliente</label>
-          {f.client_id ? (
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'0 11px'}}>
-              <span style={{fontSize:13,fontWeight:500,color:'#3D3D3D'}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span>
-              <button type='button' onClick={()=>{up('client_id','');setClientQuery('')}} style={{border:'none',background:'none',color:C.accent,fontSize:12,fontWeight:500,cursor:'pointer'}}>Cambiar</button>
-            </div>
-          ) : (
-            <div>
-              <input value={clientQuery} onChange={e=>setClientQuery(e.target.value)} placeholder='Buscar cliente por nombre...' style={inp}/>
-              {clientQuery.trim()&&(
-                <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff'}}>
-                  {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
-                    <div key={c.id} onClick={()=>{up('client_id',c.id);setClientQuery('')}} style={{padding:'9px 11px',fontSize:13,color:'#3D3D3D',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
-                  ))}
-                  {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).length===0&&<div style={{padding:'9px 11px',fontSize:13,color:C.muted}}>Sin resultados</div>}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {!f.client_id&&(
+          <div>
+            <label style={flabel}>Cliente</label>
+            <input value={clientQuery} onChange={e=>setClientQuery(e.target.value)} placeholder='Buscar cliente por nombre...' style={inp}/>
+            {clientQuery.trim()&&(
+              <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:4,background:'#fff'}}>
+                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).slice(0,30).map(c=>(
+                  <div key={c.id} onClick={()=>{up('client_id',c.id);setClientQuery('')}} style={{padding:'9px 11px',fontSize:13,color:'#3D3D3D',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
+                ))}
+                {clients.filter(c=>c.name.toLowerCase().includes(clientQuery.toLowerCase())).length===0&&<div style={{padding:'9px 11px',fontSize:13,color:C.muted}}>Sin resultados</div>}
+              </div>
+            )}
+          </div>
+        )}
 
         {bill?.id&&(()=>{
           const antDisp = anticipos.filter(a=>String(a.client_id)===String(f.client_id) && a.estado==='disponible')
