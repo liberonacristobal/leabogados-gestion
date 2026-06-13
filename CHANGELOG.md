@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Tanda D (UX) parte 1
+- **Cliente + razón social en un paso**: al crear un cliente nuevo ya puedes ingresar su razón social (nombre + RUT) en el mismo formulario; se crea junto con el cliente (antes había que guardar y reabrir). Podrás agregar más razones sociales después.
+- **Área de toque del botón cerrar (×)** de los modales agrandada a 40×40 en iPhone (antes era un glifo sin caja).
+
 ## 2026-06-13 — Drive solo logo + "Terceros" → "Proveedores"
 - Los 4 botones de importar desde Drive ahora muestran **solo el logo** (se quitó el texto "Drive"; ícono a 16px).
 - En toda la interfaz visible, **"Terceros" pasó a "Proveedores"**: KPI del Dashboard, switch y fila "Costos de proveedores" en venta, tag y filtro "Proveedores" en Facturación, conciliación "El pago incluyó lo de proveedores", avisos de reconciliación y mensajes vacíos. (Los nombres internos de tabla/variables/componentes se mantienen.)

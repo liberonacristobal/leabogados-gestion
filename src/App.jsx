@@ -225,7 +225,7 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
         <span style={{fontSize:16,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>{title}</span>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           {titleRight}
-          <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
+          <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-8}}>x</button>
         </div>
       </div>}
       <div style={{padding:hideHeader?'0':'18px 20px'}}>{children}</div>
@@ -7684,6 +7684,7 @@ function ContactsEditor({clientId,clientName}) {
 
 function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,abogado_responsable:'',status:'Activo',ended_at:'',notes:''})
+  const [rsIni,setRsIni]=useState({name:'',rut:''})   // razón social inicial (cliente nuevo) — se crea junto con el cliente
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const stColor=f.status==='Terminado'?C.overdue:f.status==='Prospecto'?C.soon:C.normal
   const ini=INICIALES_RESP[f.abogado_responsable]
@@ -7723,12 +7724,21 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
         </button>
       </Fld>
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
-      {client?.id?<EntitiesEditor clientId={client.id}/>:<div style={{fontSize:11,color:C.muted,marginBottom:14}}>Guarda el cliente para agregar razones sociales.</div>}
+      {client?.id?<EntitiesEditor clientId={client.id}/>:(
+        <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
+          <Lbl>Razón social <span style={{textTransform:'none',letterSpacing:0,color:C.muted}}>· opcional, se crea con el cliente</span></Lbl>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 130px',gap:8}}>
+            <Inp value={rsIni.name} onChange={e=>setRsIni(r=>({...r,name:e.target.value}))} placeholder={f.name?.trim()||'Razón social'}/>
+            <Inp value={rsIni.rut} onChange={e=>setRsIni(r=>({...r,rut:e.target.value}))} placeholder='RUT'/>
+          </div>
+          <div style={{fontSize:11,color:C.muted,marginTop:6}}>Podrás agregar más razones sociales después de guardar.</div>
+        </div>
+      )}
       {client?.id&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.name?.trim()} onClick={()=>onSave(f)} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!f.name?.trim()?.6:1}}>
+        <button disabled={saving||!f.name?.trim()} onClick={()=>onSave({...f, _rsIni: client?.id?undefined:(rsIni.name?.trim()||rsIni.rut?.trim()?rsIni:undefined)})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!f.name?.trim()?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -9727,11 +9737,19 @@ export default function App() {
   const handleSaveClient=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const payload={...f,name:f.name.trim(),updated_at:new Date().toISOString()}
+      const {_rsIni, ...rest}=f
+      const payload={...rest,name:rest.name.trim(),updated_at:new Date().toISOString()}
       if(payload.status!=='Terminado')payload.ended_at=null
       else if(!payload.ended_at)payload.ended_at=new Date().toISOString().slice(0,10)
       const saved=await upsertClient(payload)
       setClients(p=>{const next=f.id?p.map(x=>x.id===saved.id?saved:x):[...p,saved];return next.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))})
+      // Razón social inicial: se crea junto con el cliente nuevo (evita el viaje de reabrir).
+      if(!f.id && _rsIni && (_rsIni.name?.trim()||_rsIni.rut?.trim())){
+        try{
+          const ent=await upsertClientEntity({client_id:saved.id,name:(_rsIni.name?.trim()||saved.name),rut:_rsIni.rut?.trim()||null})
+          setClientEntities(p=>[...(p||[]),ent])
+        }catch(ee){ /* el cliente ya quedó; la RS se puede agregar luego */ }
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
