@@ -3428,16 +3428,16 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     </>
   )
 }
-function AsignarClienteInline({bill,clients,onAssign}) {
+function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',placeholder='Buscar cliente...'}) {
   const [open,setOpen] = useState(false)
   const [q,setQ] = useState('')
-  const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'es')).slice(0,6) },[q,clients])
+  const matches = useMemo(()=>{ if(!q.trim()) return []; const t=q.toLowerCase(); return clients.filter(c=>c.name.toLowerCase().includes(t)||(c.rut||'').toLowerCase().includes(t)||(c.razon_social||'').toLowerCase().includes(t)).sort((a,b)=>a.name.localeCompare(b.name,'es')).slice(0,6) },[q,clients])
   if(!open) return (
-    <button onClick={()=>setOpen(true)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Asignar cliente</button>
+    <button onClick={()=>setOpen(true)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
   )
   return (
     <div style={{position:'relative',minWidth:180}}>
-      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder='Buscar cliente...' style={{width:'100%',padding:'6px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12,boxSizing:'border-box',outline:'none'}}/>
+      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={placeholder} style={{width:'100%',padding:'6px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#F7F7F7',color:C.text,fontSize:12,boxSizing:'border-box',outline:'none'}}/>
       {matches.length>0&&(
         <div style={{position:'absolute',top:'100%',right:0,left:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
           {matches.map(c=>(
@@ -5354,22 +5354,36 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const asignar = (rowId,clientId) => {
     const c = clients.find(x=>x.id===clientId)
     const ents = entsOf(clientId)
-    setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null}:r))
+    setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:r))
   }
+  // Confirma de una vez todas las sugerencias (fuzzy 70-89 / IA 65-84) como cliente asignado.
+  const confirmarSugeridos = () => setRows(p=>p.map(r=>{
+    if(!r.suggestion) return r
+    const c=clients.find(x=>x.id===r.suggestion.id); const ents=entsOf(r.suggestion.id)
+    return {...r,client_id:r.suggestion.id,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,matchMethod:'manual'}
+  }))
 
+  // Estado de cada fila para la vista previa. montoBad es ortogonal al match.
+  const montoBad = r => r.monto==null || r.monto<=0
+  const bucketOf = r => (r.client_id||r.isInternal) ? 'auto' : (r.suggestion ? 'sug' : (r.candidates?.length ? 'rev' : 'man'))
   const listas = (rows||[]).filter(rowReady)
+  const sugeridos = (rows||[]).filter(r=>!!r.suggestion)
+  const nAuto = (rows||[]).filter(r=>bucketOf(r)==='auto').length
+  const nRev = (rows||[]).filter(r=>bucketOf(r)==='rev').length
+  const nMan = (rows||[]).filter(r=>bucketOf(r)==='man').length
   const porRevisar = (rows||[]).filter(r=>!r.error && !rowReady(r))   // sin cliente, o con varias razones sociales sin elegir
   const conError = (rows||[]).filter(r=>r.error)
   const dups = (rows||[]).filter(r=>r.dup)
   const totalMonto = (rows||[]).filter(r=>!r.error).reduce((a,r)=>a+(r.monto||0),0)
   const editarCampo = (rowId,campo,valor) => setRows(p=>p.map(r=>r.id===rowId?{...r,[campo]:valor}:r))
 
-  const guardar = async() => {
-    if(listas.length===0){ alert('No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
+  const guardar = async(incluirTodo=false) => {
+    const target = incluirTodo ? (rows||[]) : listas
+    if(target.length===0){ alert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
     setGuardando(true); let n=0; const fail=[]
-    for(const r of listas){
+    for(const r of target){
       try{
-        await onSave({client_id:r.client_id,entity_id:r.entity_id||null,type:tipo,amount:r.monto,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null,paid_by_client:tipo!=='fondo'&&r.categoria==='Notaria'})
+        await onSave({client_id:r.client_id||null,entity_id:r.entity_id||null,type:tipo,amount:r.monto||0,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null,paid_by_client:tipo!=='fondo'&&r.categoria==='Notaria'})
         n++
       }catch(e){ fail.push({concepto:r.concepto||'(sin concepto)', cliente:r.clientName||'—', monto:r.monto, msg:e.message||'Error al insertar'}) }
     }
@@ -5426,28 +5440,40 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Paso 2: vista previa */}
       {rows&&(
         <>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{rows.length} fila(s) · {fmt(totalMonto)}</div>
-            <div style={{fontSize:11,color:C.muted}}><span style={{color:C.normal,fontWeight:600}}>{listas.length} listas</span> · <span style={{color:C.soon}}>{porRevisar.length} por revisar</span> · <span style={{color:C.overdue}}>{conError.length} errores</span></div>
+          <div style={{display:'flex',gap:6,marginBottom:10}}>
+            {[['Auto',nAuto,C.normal,'#BFE6D7'],['Sugeridos',sugeridos.length,'#B8860B','#F0D88A'],['Revisar',nRev,C.overdue,'#F3C0C0'],['Manual',nMan,C.muted,C.border]].map(([l,n,col,bd])=>(
+              <div key={l} style={{flex:1,border:`1px solid ${bd}`,borderRadius:10,padding:'8px 4px',textAlign:'center'}}>
+                <div style={{fontSize:18,fontWeight:700,letterSpacing:-.4,color:col}}>{n}</div>
+                <div style={{fontSize:9.5,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,color:col,marginTop:1}}>{l}</div>
+              </div>
+            ))}
           </div>
-          {matching&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:'#E6EEF1',borderRadius:8,padding:'8px 10px',marginBottom:8}}><Spin/>Analizando con IA{matchProg?` · lote ${matchProg.done}/${matchProg.total}`:''}…</div>}
-          {dups.length>0&&<div style={{fontSize:11,color:'#C77F18',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto). No se deduplican: si las cargas, se duplicarán.</div>}
+          {matching&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:'#E6EEF1',borderRadius:8,padding:'8px 10px',marginBottom:8}}><Spin/>Analizando {rows.length} filas con IA{matchProg?` · lote ${matchProg.done}/${matchProg.total}`:''}…</div>}
+          <div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
+            <button disabled={sugeridos.length===0} onClick={confirmarSugeridos} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:sugeridos.length?'pointer':'default',border:'1px solid #F0D88A',background:sugeridos.length?'#FFF8E1':'#FAFBFC',color:'#B8860B',opacity:sugeridos.length?1:.5}}>Confirmar sugeridos ({sugeridos.length})</button>
+            <button disabled={guardando||listas.length===0} onClick={()=>guardar(false)} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:listas.length?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:listas.length?1:.5}}>Importar listos ({listas.length})</button>
+            <button disabled={guardando||rows.length===0} onClick={()=>{ if(confirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
+          </div>
+          {dups.length>0&&<div style={{fontSize:11,color:'#C77F18',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto) dentro del archivo.</div>}
           <div style={{maxHeight:360,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
             {rows.map(r=>{
-              const ready = rowReady(r)
+              const bucket = bucketOf(r)
+              const bad = montoBad(r)
               const ents = r.client_id ? entsOf(r.client_id) : []
-              const estado = r.error ? 'Error' : (ready ? 'Lista' : 'Revisar')
-              const bg = r.error ? '#FCEBEB' : (ready ? '#fff' : '#FFF8EC')
-              const chip = r.error ? C.overdue : (ready ? C.normal : C.soon)
+              const bg = bad?'#FEF2F2':(bucket==='auto'?'#E1F5EE':bucket==='sug'?'#FFF8E1':bucket==='rev'?'#FEF2F2':'#F5F7F9')
+              const badge = bad?['Error',C.overdue,'#fff']:(bucket==='auto'?[r.isInternal?'Interno':'Auto',C.normal,'#fff']:bucket==='sug'?[`Sugerido ${r.confidence||''}%`,'#B8860B','#fff']:bucket==='rev'?[`Revisar ${r.confidence||''}%`,C.overdue,'#fff']:['Sin cliente',C.muted,'#fff'])
+              if(r.isInternal&&!bad) badge[1]=C.muted
               return (
-                <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg}}>
+                <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg,boxShadow:bad?`inset 3px 0 0 ${C.overdue}`:'none'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                    <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:chip,border:`1px solid ${chip}`,borderRadius:4,padding:'1px 6px',flexShrink:0}}>{estado}</span>
+                    <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:badge[2],background:badge[1],borderRadius:4,padding:'2px 7px',flexShrink:0,whiteSpace:'nowrap'}}>{badge[0]}</span>
                     <span style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.fecha||'sin fecha'} · {r.rut||r.nombre||'sin RUT'}</span>
                     {r.dup&&<span style={{fontSize:9,fontWeight:600,color:'#C77F18',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:4,padding:'1px 6px',flexShrink:0}}>Duplicada</span>}
-                    <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:r.error?C.overdue:C.text,flexShrink:0}}>{fmt(r.monto)}</span>
+                    <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:bad?C.overdue:C.text,flexShrink:0}}>{bad?'$0':fmt(r.monto)}</span>
                   </div>
-                  {r.error&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginBottom:6}}>{r.error}</div>}
+                  {bad&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginBottom:6}}>Sin monto válido — se importa como $0 solo con "Importar todo".</div>}
+                  {/* concepto (con corrección de IA si aplica) */}
+                  {r.conceptoFix&&r.conceptoOrig&&<div style={{fontSize:11,marginBottom:4}}><span style={{color:C.muted,textDecoration:'line-through',marginRight:6}}>{r.conceptoOrig}</span><span style={{color:C.normal,fontWeight:600}}>{r.concepto}</span><span style={{color:C.muted,marginLeft:6}}>· corregido por IA</span></div>}
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} placeholder='Concepto'
                       style={{flex:'1 1 140px',minWidth:120,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}/>
@@ -5457,28 +5483,51 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                         {CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}
                       </select>
                     )}
-                    {r.client_id
-                      ? <div style={{display:'flex',flexDirection:'column',gap:3,alignItems:'flex-end',flexShrink:0}}>
-                          <span style={{fontSize:11,color:C.normal,fontWeight:600}}>{r.clientName}</span>
-                          {ents.length===1&&<span style={{fontSize:10,color:C.muted}}>{ents[0].name}</span>}
-                          {ents.length>1&&(
-                            <select value={r.entity_id||''} onChange={e=>editarCampo(r.id,'entity_id',e.target.value||null)}
-                              style={{padding:'5px 7px',borderRadius:6,border:`1px solid ${r.entity_id?C.border:C.soon}`,fontSize:11,background:'#fff',color:C.text,outline:'none',maxWidth:170}}>
-                              <option value=''>Elegir razón social...</option>
-                              {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
-                            </select>
-                          )}
-                        </div>
-                      : <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)}/>}
+                  </div>
+                  {/* resolución de cliente según estado */}
+                  <div style={{marginTop:7}}>
+                    {bucket==='auto'&&!r.isInternal&&(
+                      <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',flexWrap:'wrap'}}>
+                        <span style={{fontSize:11.5,color:C.normal,fontWeight:600,marginRight:'auto'}}>{r.clientName}</span>
+                        {ents.length>1&&(
+                          <select value={r.entity_id||''} onChange={e=>editarCampo(r.id,'entity_id',e.target.value||null)} style={{padding:'5px 7px',borderRadius:6,border:`1px solid ${r.entity_id?C.border:C.soon}`,fontSize:11,background:'#fff',color:C.text,outline:'none',maxWidth:170}}>
+                            <option value=''>Elegir razón social…</option>
+                            {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
+                          </select>
+                        )}
+                        {ents.length===1&&<span style={{fontSize:10,color:C.muted}}>{ents[0].name}</span>}
+                        <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Cambiar'/>
+                      </div>
+                    )}
+                    {bucket==='auto'&&r.isInternal&&(
+                      <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end'}}>
+                        <span style={{fontSize:11.5,color:C.muted,fontWeight:600,marginRight:'auto'}}>Gasto interno de la firma</span>
+                        <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Asignar cliente'/>
+                      </div>
+                    )}
+                    {bucket==='sug'&&(
+                      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                        <span style={{fontSize:11.5,color:C.text,fontWeight:600}}>{r.suggestion.name}</span>
+                        {r.aiReason&&<span style={{fontSize:10.5,color:C.muted,fontStyle:'italic',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.aiReason}</span>}
+                        <button onClick={()=>asignar(r.id,r.suggestion.id)} style={{marginLeft:'auto',fontSize:12,fontWeight:600,padding:'5px 11px',borderRadius:7,border:'none',background:C.normal,color:'#fff',cursor:'pointer'}}>Confirmar</button>
+                        <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Cambiar'/>
+                      </div>
+                    )}
+                    {bucket==='rev'&&(
+                      <select value='' onChange={e=>e.target.value&&asignar(r.id,e.target.value)} style={{width:'100%',padding:'7px 9px',borderRadius:7,border:`1px solid ${C.overdue}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}>
+                        <option value=''>Elige el cliente… ({r.candidates.length} candidatos)</option>
+                        {r.candidates.map(c=><option key={c.id} value={c.id}>{c.name} ({c.score}%)</option>)}
+                      </select>
+                    )}
+                    {bucket==='man'&&(
+                      <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Buscar cliente por nombre o RUT…'/>
+                    )}
                   </div>
                 </div>
               )
             })}
           </div>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={()=>setRows(null)} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver</button>
-            <button disabled={guardando||listas.length===0} onClick={guardar} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:listas.length===0?.5:1}}>{guardando?'Cargando...':`Cargar ${listas.length} fila${listas.length!==1?'s':''} listas`}</button>
-          </div>
+          <button onClick={()=>setRows(null)} style={{width:'100%',padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver a subir otro archivo</button>
         </>
       )}
     </>
