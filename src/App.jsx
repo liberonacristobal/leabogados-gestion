@@ -3933,6 +3933,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
+  const [showMeses,setShowMeses] = useState(false)
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
   const [payDate,setPayDate] = useState('')
@@ -4253,14 +4254,15 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&<>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura...' style={{marginBottom:6,padding:'7px 11px',fontSize:13}}/>
-        <div style={{display:'flex',gap:6,marginBottom:fYear?6:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
+        <div style={{display:'flex',gap:6,marginBottom:(fYear&&showMeses)?6:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
           {[['','Todos'],...years.map(y=>[y,y])].map(([v,l])=>{ const on=fYear===v; return (
-            <button key={v||'all'} onClick={()=>{setFYear(v); if(!v) setFMonth('')}} style={{flexShrink:0,height:28,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+            <button key={v||'all'} onClick={()=>{setFYear(v); if(!v){setFMonth('');setShowMeses(false)}}} style={{flexShrink:0,height:28,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           )})}
+          {fYear&&<button onClick={()=>setShowMeses(s=>!s)} style={{flexShrink:0,height:28,padding:'0 11px',borderRadius:20,border:`1px solid ${fMonth?C.accent:C.border}`,background:fMonth?'#E6EEF1':'#fff',color:fMonth?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{fMonth?MONTHS[parseInt(fMonth)-1].slice(0,3):'Mes'} {showMeses?'▴':'▾'}</button>}
         </div>
-        {fYear&&<div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:5,marginBottom:4}}>
+        {fYear&&showMeses&&<div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:5,marginBottom:4}}>
           {[['','Todos'],...MONTHS.map((m,i)=>[String(i+1).padStart(2,'0'),m.slice(0,3)])].map(([v,l])=>{ const on=fMonth===v; return (
-            <button key={v||'all'} onClick={()=>setFMonth(v)} style={{height:27,borderRadius:7,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:10.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',padding:0}}>{l}</button>
+            <button key={v||'all'} onClick={()=>{setFMonth(v);setShowMeses(false)}} style={{height:27,borderRadius:7,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:10.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',padding:0}}>{l}</button>
           )})}
         </div>}
         </>}
