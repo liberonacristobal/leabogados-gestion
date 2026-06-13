@@ -119,7 +119,11 @@
       "Bash(cat)",
       "Bash(python3 render_fact.py)",
       "Bash(perl -ni -e 'if\\($.>=2642 && $.<=3600\\){s/marginBottom:14/marginBottom:10/g} print' src/App.jsx)",
-      "Bash(perl -0pi -e \"s#scopes: 'https://www\\\\.googleapis\\\\.com/auth/drive',#scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send',#g\" src/supabase.js)"
+      "Bash(perl -0pi -e \"s#scopes: 'https://www\\\\.googleapis\\\\.com/auth/drive',#scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send',#g\" src/supabase.js)",
+      "Bash(curl -s \"https://gestion.leabogados.cl/\")",
+      "Bash(curl -s \"https://project-q85ri.vercel.app/\")",
+      "Bash(curl -s \"https://gestion.leabogados.cl/assets/index-DQzpcDZ9.js\")",
+      "Bash(curl -sI \"https://gestion.leabogados.cl/\")"
     ]
   }
 }

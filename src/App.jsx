@@ -9662,6 +9662,9 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
       }
       let parsed=[]
       objs.forEach(o=>{ const r=build(f=>getField(o,f), parsed.length); if(r) parsed.push(r) })
+      // Dedup dentro del MISMO archivo: la 2ª aparición de un N° de factura se marca como duplicada.
+      const vistos=new Set()
+      parsed.forEach(r=>{ if(r.factura){ if(vistos.has(r.factura)) r.dup=true; else vistos.add(r.factura) } })
       if(parsed.length===0){ alert('No se encontraron filas. El Excel debe tener al menos columnas de Cliente (o RUT), Monto y Fecha. Tip: agrega una columna "Fecha pago" para que entren como pagadas.'); setRows(null); setCargando(false); return }
       setRows(parsed)
     }catch(err){ alert('Error al leer el Excel: '+err.message) }
@@ -9678,22 +9681,24 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
     const aImportar = (rows||[]).filter(r=>!r.error&&!r.dup&&!r._skip)
     if(aImportar.length===0){ alert('No hay filas válidas para importar.'); return }
     setImportando(true)
-    try{
-      const payload = aImportar.map(r=>({client_id:r.client_id||null, entity_id:r.entity_id||null, concept:r.concepto, amount:r.monto, status:r.status,
+    // Fila por fila: si un N° de factura ya existe (incl. borradas, que igual ocupan el número único), se omite esa sola y sigue.
+    let ok=0, dups=0, errs=0, lastErr=''
+    for(const r of aImportar){
+      const payload={client_id:r.client_id||null, entity_id:r.entity_id||null, concept:r.concepto, amount:r.monto, status:r.status,
         invoice_no:r.factura||null, issued_at:r.emision||null, due:r.emision?dueFromIssued(r.emision):null, paid_at:r.pago||null,
-        receptor_name:r.receptor_name||null, receptor_rut:r.receptor_rut||null, billing_type:'honorarios', updated_at:new Date().toISOString()}))
+        receptor_name:r.receptor_name||null, receptor_rut:r.receptor_rut||null, billing_type:'honorarios', updated_at:new Date().toISOString()}
       const {error}=await supabase.from('billing').insert(payload)
-      if(error) throw error
-      setResultado({n:aImportar.length})
-      onImported&&await onImported()
-    }catch(e){ alert('Error al importar: '+e.message) }
+      if(error){ if(/duplicate|unique/i.test(error.message)) dups++; else { errs++; lastErr=error.message } } else ok++
+    }
+    setResultado({n:ok, dups, errs, lastErr})
+    onImported&&await onImported()
     setImportando(false)
   }
   // ── render ──
   if(resultado) return (
     <div style={{padding:'20px',textAlign:'center'}}>
       <div style={{fontSize:15,fontWeight:600,color:C.normal,marginBottom:8}}>Importadas {resultado.n} factura{resultado.n!==1?'s':''}</div>
-      <div style={{fontSize:12.5,color:C.muted,marginBottom:18}}>Ya están en Facturación. Asigna las que quedaron sin cliente.</div>
+      <div style={{fontSize:12.5,color:C.muted,marginBottom:18}}>Ya están en Facturación. Asigna las que quedaron sin cliente.{resultado.dups>0&&` ${resultado.dups} omitida${resultado.dups!==1?'s':''} por N° de factura repetido.`}{resultado.errs>0&&` ${resultado.errs} con error.`}</div>
       <button onClick={onClose} style={{padding:'10px 18px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
     </div>
   )
