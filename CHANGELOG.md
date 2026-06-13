@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Dashboard: KPIs y Tareas
+- **Espacios uniformes entre KPIs** (bloque Facturación pasa a `gap:8`, igual que Cobranza y meta) y título "Cobranza" en el grid accionable.
+- **Rediseño de Tareas**: cada persona muestra de un vistazo si tiene tareas **vencidas** (pill roja) o **prontas** ≤7 días (pill ámbar) sin expandir, con contador y jerarquía más limpia (avatar 28px, nombre en grafito, fila resaltada al abrir).
+
 ## 2026-06-13 — Importar facturas antiguas (Excel) + gasto que aprende
 - Nuevo **Importar facturas (Excel)** en Facturación (botón "↑ Excel"): lee el archivo, detecta columnas (Cliente/RUT, N° factura, Monto, Fecha emisión, **Fecha pago**), hace match de cliente, y muestra un **preview con pre-confirmación** (estado por fila: Pagada/Pendiente/Error/Ya existe; asignar cliente, omitir) antes de guardar. Las que traen fecha de pago entran como Pagadas con su `paid_at`. Detecta duplicados por N° factura.
 - **Gasto huérfano que aprende**: al asignar un cliente a un gasto sin cliente, se aplica también a los otros gastos sin cliente con la misma descripción (no repetir el trabajo).
