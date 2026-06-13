@@ -4999,13 +4999,32 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,onClose,onClientsUpdate}) {
+// Modal de confirmación para deshacer una carga masiva (elimina sus gastos).
+function UndoConfirm({target,undoing,onCancel,onConfirm}) {
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(16,30,38,.42)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>e.target===e.currentTarget&&onCancel()}>
+      <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:340,padding:20,boxShadow:'0 16px 40px rgba(0,0,0,.2)'}}>
+        <div style={{fontSize:15.5,fontWeight:600,color:C.text,marginBottom:9,fontFamily:"'DM Sans',sans-serif"}}>Deshacer importación</div>
+        <div style={{fontSize:12.5,color:C.muted,lineHeight:1.55,marginBottom:18}}>Se eliminarán los <strong style={{color:C.text}}>{target.count} gasto{target.count!==1?'s':''}</strong> de esta carga. Si editaste alguno después de importar, también se eliminará. Esta acción no se puede revertir.</div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onCancel} style={{flex:1,padding:11,borderRadius:9,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={undoing} onClick={onConfirm} style={{flex:1,padding:11,borderRadius:9,border:'none',background:C.overdue,color:'#fff',fontSize:13,fontWeight:600,cursor:undoing?'default':'pointer',opacity:undoing?.6:1}}>{undoing?'Eliminando…':'Sí, eliminar todo'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImports=[],onUndoImport,onClose,onClientsUpdate}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
   const [cargando,setCargando] = useState(false)
   const [guardando,setGuardando] = useState(false)
   const [resultado,setResultado] = useState(null)   // {imported,dupOmit,sinCliente,sinFecha,batchId}
+  const [undoTarget,setUndoTarget] = useState(null)  // {batchId,count} para el modal de confirmación
+  const [undoing,setUndoing] = useState(false)
+  const fmtFDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
   const [genPlantilla,setGenPlantilla] = useState(false)
   const [matching,setMatching] = useState(false)        // análisis de matching/IA en curso
   const [matchProg,setMatchProg] = useState(null)       // {done,total} de lotes IA
@@ -5401,7 +5420,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {resultado.dupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FBF1DF',borderRadius:20,padding:'4px 11px'}}><b>{resultado.dupOmit}</b> duplicados omitidos</span>}
       </div>
       {resultado.sinCliente>0&&<div style={{fontSize:11.5,color:C.muted,marginBottom:14,lineHeight:1.45}}>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</div>}
-      <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Listo</button>
+      <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
+      {resultado.batchId&&resultado.imported>0&&<button onClick={()=>setUndoTarget({batchId:resultado.batchId,count:resultado.imported})} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Deshacer importación</button>}
+      {undoTarget&&<UndoConfirm target={undoTarget} undoing={undoing} onCancel={()=>setUndoTarget(null)} onConfirm={async()=>{ setUndoing(true); const ok=await onUndoImport(undoTarget.batchId); setUndoing(false); if(ok){ setUndoTarget(null); onClose() } }}/>}
     </div>
   )
 
@@ -5427,6 +5448,25 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             </button>
             <div style={{fontSize:10,color:C.muted,marginTop:3}}>Incluye hojas Gastos, Fondos e Instrucciones con ejemplos</div>
           </div>
+          {bulkImports.length>0&&(
+            <div style={{marginTop:18,paddingTop:14,borderTop:`0.5px solid ${C.border}`}}>
+              <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Importaciones recientes</div>
+              <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+                {bulkImports.map((b,i)=>(
+                  <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:i<bulkImports.length-1?`0.5px solid ${C.border}`:'none'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.filename||'Carga sin nombre'}</div>
+                      <div style={{fontSize:10.5,color:'#99ABB4',marginTop:1}}>{fmtFDMY(b.created_at)}{b.created_by?` · ${b.created_by}`:''} · {b.row_count} gasto{b.row_count!==1?'s':''}</div>
+                    </div>
+                    {b.status==='undone'
+                      ? <span style={{fontSize:11,color:'#99ABB4',flexShrink:0}}>Anulada {b.undone_at?fmtFDMY(b.undone_at):''}</span>
+                      : <button onClick={()=>setUndoTarget({batchId:b.id,count:b.row_count})} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer',flexShrink:0}}>Deshacer</button>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {undoTarget&&<UndoConfirm target={undoTarget} undoing={undoing} onCancel={()=>setUndoTarget(null)} onConfirm={async()=>{ setUndoing(true); const ok=await onUndoImport(undoTarget.batchId); setUndoing(false); if(ok) setUndoTarget(null) }}/>}
         </>
       )}
 
@@ -9187,6 +9227,7 @@ export default function App() {
   const [anticipos,setAnticipos]=useState([])
   const [proveedores,setProveedores]=useState([])
   const [terceros,setTerceros]=useState([])   // terceros_pagos (cuentas por pagar)
+  const [bulkImports,setBulkImports]=useState([])   // lotes de carga masiva (para deshacer)
   const [pettyCash,setPettyCash]=useState([])
   const [rendiciones,setRendiciones]=useState([])
   const [expenseAttachments,setExpenseAttachments]=useState([])
@@ -9260,7 +9301,8 @@ export default function App() {
       supabase.from('anticipos').select('*').order('fecha',{ascending:false}).then(({data})=>data||[]),
       supabase.from('proveedores').select('*').order('nombre').then(({data})=>data||[]),
       supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
-    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc)})
+      supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10).then(({data})=>data||[]),
+    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi)})
       .catch(console.error).finally(()=>setLoading(false))
   },[session])
 
@@ -9502,8 +9544,22 @@ export default function App() {
       if(data) inserted.push(...data)
     }
     setExpenses(p=>[...inserted,...p])
+    setBulkImports(p=>[{id:batchId,created_at:new Date().toISOString(),created_by:user?.name||null,row_count:inserted.length,filename:filename||null,status:'active'},...p].slice(0,10))
     return {imported:inserted.length, dupOmit, sinCliente, sinFecha, batchId, filename}
   },[expenses,user])
+
+  // Deshacer una carga masiva: elimina sus gastos y marca el lote como anulado.
+  const handleUndoImport=useCallback(async(batchId)=>{
+    try{
+      const {error:dErr} = await supabase.from('expenses').delete().eq('bulk_import_id',batchId)
+      if(dErr) throw dErr
+      const {error:uErr} = await supabase.from('bulk_imports').update({status:'undone',undone_at:new Date().toISOString(),undone_by:user?.name||null}).eq('id',batchId)
+      if(uErr) throw uErr
+      setExpenses(p=>p.filter(e=>e.bulk_import_id!==batchId))
+      setBulkImports(p=>p.map(b=>b.id===batchId?{...b,status:'undone',undone_at:new Date().toISOString(),undone_by:user?.name||null}:b))
+      return true
+    }catch(e){ alert('Error al deshacer: '+e.message); return false }
+  },[user])
 
   // Asignar (o cambiar) el cliente de un gasto ya guardado — para los huérfanos "Sin cliente".
   const handleAssignClientToExpense=useCallback(async(expenseId,clientId)=>{
@@ -9905,7 +9961,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
