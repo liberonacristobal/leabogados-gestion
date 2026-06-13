@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Sobrante de anticipo
+- Al cubrir cuotas, si el anticipo es mayor que la suma de las cuotas cubiertas, el **saldo queda como un anticipo disponible** ("Saldo de anticipo") — no se pierde y se puede aplicar después (a otra cuota o como abono). El panel no deja cubrir por más que el anticipo. El saldo parcial de una cuota que el anticipo no alcanza se maneja dejando ese saldo disponible y aplicándolo como abono al emitir esa factura.
+
 ## 2026-06-13 — Una factura por el bloque anticipado — etapa 4
 - Para un anticipo que ya cubre cuotas, botón **"Emitir una factura"** (en Anticipos y en la ficha de la venta): crea **una sola factura** por el total del bloque, marcada Pagada (pagada con el anticipo), con N° y fecha. Las cuotas siguen como referencia (Anticipada), sin emitirse por separado. O puedes dejarlo sin factura. Cierra el flujo anticipos↔cuotas (etapas 1-4).
 

@@ -4664,11 +4664,13 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
                 </div>
               )})}
             </div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Cubre <b style={{color:C.text}}>{fmt(sumSel)}</b> de {fmt(anticipo.monto)}{sumSel>(anticipo.monto||0)?<span style={{color:C.soon}}> · excede el anticipo en {fmt(sumSel-(anticipo.monto||0))}</span>:(anticipo.monto||0)-sumSel>0&&sel.size>0?<span style={{color:C.muted}}> · quedan {fmt((anticipo.monto||0)-sumSel)} del anticipo disponibles</span>:null}</div>
+            {(()=>{ const exc=sumSel>(anticipo.monto||0); const left=(anticipo.monto||0)-sumSel; return (
+              <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Cubre <b style={{color:C.text}}>{fmt(sumSel)}</b> de {fmt(anticipo.monto)}{exc?<span style={{color:C.overdue}}> · excede el anticipo en {fmt(-left)} (quita cuotas)</span>:left>0&&sel.size>0?<span style={{color:C.normal}}> · el saldo de {fmt(left)} queda disponible</span>:null}</div>
+            )})()}
           </>)}
           <div style={{display:'flex',gap:8}}>
             <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-            <button disabled={sel.size===0} onClick={()=>onConfirm([...sel])} style={{flex:2,height:42,borderRadius:10,border:'none',background:sel.size?C.accent:'#ccc',color:'#fff',fontSize:13,fontWeight:600,cursor:sel.size?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
+            <button disabled={sel.size===0||sumSel>(anticipo.monto||0)} onClick={()=>onConfirm([...sel])} style={{flex:2,height:42,borderRadius:10,border:'none',background:(sel.size&&sumSel<=(anticipo.monto||0))?C.accent:'#ccc',color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&sumSel<=(anticipo.monto||0))?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
           </div>
         </div>
       </div>
@@ -9954,14 +9956,24 @@ export default function App() {
   const handleCubrirCuotas=useCallback(async(anticipoId,cuotaIds)=>{
     if(!cuotaIds?.length) return
     try{
+      const ant=(anticipos||[]).find(a=>String(a.id)===String(anticipoId))
+      const coveredSum=(billing||[]).filter(b=>cuotaIds.includes(b.id)).reduce((s,b)=>s+(b.amount||0),0)
+      const leftover=ant?Math.max(0,(ant.monto||0)-coveredSum):0
       const {error}=await supabase.from('billing').update({status:'Anticipada',prepaid_anticipo_id:anticipoId,updated_at:new Date().toISOString()}).in('id',cuotaIds)
       if(error)throw error
-      const {error:ae}=await supabase.from('anticipos').update({estado:'consumido'}).eq('id',anticipoId)
+      // El anticipo queda consumido por lo que efectivamente cubrió; si sobró, ese saldo se separa como anticipo disponible (no se pierde).
+      const nuevoMonto=leftover>0?coveredSum:(ant?.monto||0)
+      const {error:ae}=await supabase.from('anticipos').update({estado:'consumido',monto:nuevoMonto}).eq('id',anticipoId)
       if(ae)throw ae
+      let saldoRow=null
+      if(leftover>0 && ant){
+        const {data}=await supabase.from('anticipos').insert({client_id:ant.client_id,entity_id:ant.entity_id||null,monto:leftover,fecha:ant.fecha,nota:'Saldo de anticipo',proyecto:ant.proyecto||null,sale_id:ant.sale_id||null,estado:'disponible',created_by:ant.created_by||null}).select().single()
+        saldoRow=data
+      }
       setBilling(p=>p.map(b=>cuotaIds.includes(b.id)?{...b,status:'Anticipada',prepaid_anticipo_id:anticipoId}:b))
-      setAnticipos(p=>p.map(a=>a.id===anticipoId?{...a,estado:'consumido'}:a))
+      setAnticipos(p=>{ let n=p.map(a=>a.id===anticipoId?{...a,estado:'consumido',monto:nuevoMonto}:a); if(saldoRow) n=[saldoRow,...n]; return n })
     }catch(e){alert('Error: '+e.message)}
-  },[])
+  },[anticipos,billing])
   // Deshacer: las cuotas vuelven a 'Programada' y el anticipo a 'disponible'.
   const handleDescubrirCuotas=useCallback(async(anticipoId)=>{
     try{
