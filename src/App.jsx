@@ -3818,8 +3818,9 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
+  const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -4058,11 +4059,11 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               <span style={{fontSize:11,fontWeight:700,color:C.muted}}>{fmt(bills.reduce((a,b)=>a+(b.amount||0),0))}</span>
             </div>}
             {bills.map(b=>{
-              const prog=b.status==='Programada', anulada=b.status==='Anulada', pagado=b.status==='Pagado'
+              const prog=b.status==='Programada', anulada=b.status==='Anulada', pagado=b.status==='Pagado', anticipada=b.status==='Anticipada'
               const dl=daysLeft(b.due)
               const dEmis=b.issued_at?Math.max(0,Math.round((Date.now()-new Date(b.issued_at+'T12:00').getTime())/86400000)):null
-              const semCol=pagado?C.muted:(dl==null?C.muted:dl<0?C.overdue:dl<=7?'#B8860B':C.normal)
-              const semTxt=prog?(dl!=null?(dl<0?`${Math.abs(dl)} días vencida`:`vence en ${dl} días`):''):((dl!=null&&dl<0)?`${Math.abs(dl)} días vencida`:(dEmis!=null?`${dEmis} días`:''))
+              const semCol=(pagado||anticipada)?C.muted:(dl==null?C.muted:dl<0?C.overdue:dl<=7?'#B8860B':C.normal)
+              const semTxt=anticipada?'':prog?(dl!=null?(dl<0?`${Math.abs(dl)} días vencida`:`vence en ${dl} días`):''):((dl!=null&&dl<0)?`${Math.abs(dl)} días vencida`:(dEmis!=null?`${dEmis} días`:''))
               return (
               <div key={b.id} onClick={()=>onEdit(b)} style={{position:'relative',background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`,cursor:'pointer'}}>
                 {/* línea 1: concepto + monto */}
@@ -4081,12 +4082,13 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                     {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600}}>Reembolso</span>}
                     {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600}}>Anulada</span>}
                     {tercerosByBilling.has(b.id)&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600}}>Proveedores</span>}
+                    {anticipada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E1F5EE',color:'#0F6E56',fontWeight:600}}>Anticipada</span>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     {client.id==='__none__'&&onAssignClient&&!prog&&<span onClick={e=>e.stopPropagation()}><AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/></span>}
                     {prog ? (
                       selected.size===0&&<button onClick={(e)=>{e.stopPropagation();marcarEmitida(b)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Ya emitida</button>
-                    ):(!anulada&&!pagado)&&(
+                    ):(!anulada&&!pagado&&!anticipada)&&(
                       <button onClick={(e)=>{e.stopPropagation();setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
                     )}
                     <button onClick={(e)=>{e.stopPropagation();onEdit(b)}} aria-label='Editar' style={{width:24,height:24,borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
@@ -4130,7 +4132,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'1 0 auto',padding:'7px 11px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
-        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} onNuevo={onNuevoAnticipo}/>}
+        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas}/>}
+        {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&<>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:4}}>
@@ -4553,7 +4556,61 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
 }
 
 // ─── ANTICIPOS PANEL (tab Anticipos en Facturación, PP-15) ────────────────────
-function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],onNuevo}) {
+// Cubrir cuotas programadas con un anticipo. Sugiere por monto (consume desde la 1ª) y se puede ajustar a mano.
+function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,onClose}) {
+  const cliente = clients.find(c=>String(c.id)===String(anticipo.client_id))
+  const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
+  const cuotas = (billing||[]).filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&(anticipo.sale_id?String(b.sale_id)===String(anticipo.sale_id):String(b.client_id)===String(anticipo.client_id)))
+    .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
+  const autoSel = () => { const ids=new Set(); let acc=0; const m=anticipo.monto||0; for(const c of cuotas){ if(acc>=m) break; ids.add(c.id); acc+=c.amount||0 } return ids }
+  const [sel,setSel] = useState(autoSel)
+  const toggle = id => setSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+  const sumSel = cuotas.filter(c=>sel.has(c.id)).reduce((a,c)=>a+(c.amount||0),0)
+  const venta = sales.find(s=>String(s.id)===String(anticipo.sale_id))
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,padding:'16px 18px',borderBottom:`0.5px solid ${C.border}`}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:15,fontWeight:600,color:C.text}}>Cubrir cuotas con anticipo</div>
+            <div style={{fontSize:11.5,color:'#99ABB4'}}>{cliente?.name||'Cliente'}{venta?.title?` · ${venta.title}`:''} · anticipo {fmt(anticipo.monto)}</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:'auto',width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+          </button>
+        </div>
+        <div style={{padding:'14px 18px'}}>
+          {cuotas.length===0?(
+            <div style={{fontSize:12.5,color:C.muted,textAlign:'center',padding:'20px 0'}}>No hay cuotas programadas {anticipo.sale_id?'en este proyecto':'de este cliente'} para cubrir.</div>
+          ):(<>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5}}>Cuotas programadas</span>
+              <button onClick={()=>setSel(autoSel())} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>Sugerir por monto</button>
+            </div>
+            <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
+              {cuotas.map(c=>{ const on=sel.has(c.id); return (
+                <div key={c.id} onClick={()=>toggle(c.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderBottom:`0.5px solid ${C.border}`,background:on?'#E1F5EE':'#fff',cursor:'pointer'}}>
+                  <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:on?`1.5px solid ${C.accent}`:`1.5px solid ${C.border}`,background:on?C.accent:'#fff'}}>
+                    {on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
+                  </span>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.concept||'Cuota'}</div><div style={{fontSize:11,color:'#99ABB4'}}>Vence {fmtDMY(c.due)}</div></div>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(c.amount)}</span>
+                </div>
+              )})}
+            </div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Cubre <b style={{color:C.text}}>{fmt(sumSel)}</b> de {fmt(anticipo.monto)}{sumSel>(anticipo.monto||0)?<span style={{color:C.soon}}> · excede el anticipo en {fmt(sumSel-(anticipo.monto||0))}</span>:(anticipo.monto||0)-sumSel>0&&sel.size>0?<span style={{color:C.muted}}> · quedan {fmt((anticipo.monto||0)-sumSel)} del anticipo disponibles</span>:null}</div>
+          </>)}
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+            <button disabled={sel.size===0} onClick={()=>onConfirm([...sel])} style={{flex:2,height:42,borderRadius:10,border:'none',background:sel.size?C.accent:'#ccc',color:'#fff',fontSize:13,fontWeight:600,cursor:sel.size?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir}) {
   const [fil,setFil] = useState('disponible')
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
@@ -4602,14 +4659,18 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],on
               <div><div style={{fontSize:12,fontWeight:600,color:C.accent}}>{cliName(cid)}</div>{rs&&<div style={{fontSize:11,color:'#99ABB4'}}>{rs}</div>}</div>
               <div style={{textAlign:'right'}}><div style={flabel}>Disponible</div><div style={{fontSize:14,fontWeight:600,color:C.normal}}>{fmtCLP0(totCli)}</div></div>
             </div>
-            {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); return (
-              <div key={a.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{fmtD(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}</div>{a.nota&&<div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
-                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                  {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>F° {folio}</span>}
-                  <span style={{fontSize:13,fontWeight:500,color:disp?C.normal:C.muted}}>{fmtCLP0(a.monto)}</span>
-                  <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?'#E1F5EE':'#F5F7F9',color:disp?C.normal:'#99ABB4'}}>{disp?'Disponible':'Consumido'}</span>
+            {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); const cubreCuotas=billing.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
+              <div key={a.id} style={{padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+                  <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{fmtD(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}</div>{a.nota&&<div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>F° {folio}</span>}
+                    <span style={{fontSize:13,fontWeight:500,color:disp?C.normal:C.muted}}>{fmtCLP0(a.monto)}</span>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?'#E1F5EE':cubreCuotas?'#E6EEF1':'#F5F7F9',color:disp?C.normal:cubreCuotas?C.accent:'#99ABB4'}}>{disp?'Disponible':cubreCuotas?'En cuotas':'Consumido'}</span>
+                  </div>
                 </div>
+                {disp&&onCubrir&&<button onClick={()=>onCubrir(a)} style={{marginTop:7,fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Aplicar a cuotas programadas</button>}
+                {!disp&&cubreCuotas&&onDescubrir&&<button onClick={()=>onDescubrir(a.id)} style={{marginTop:7,fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Deshacer cobertura</button>}
               </div>
             )})}
           </div>
@@ -9817,6 +9878,31 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[clients,billing,anticipos])
 
+  // Cubrir cuotas programadas con un anticipo: esas cuotas pasan a 'Anticipada' (salen del flujo de caja
+  // y de "por facturar" porque su plata ya entró como anticipo). El anticipo queda 'consumido'.
+  const handleCubrirCuotas=useCallback(async(anticipoId,cuotaIds)=>{
+    if(!cuotaIds?.length) return
+    try{
+      const {error}=await supabase.from('billing').update({status:'Anticipada',prepaid_anticipo_id:anticipoId,updated_at:new Date().toISOString()}).in('id',cuotaIds)
+      if(error)throw error
+      const {error:ae}=await supabase.from('anticipos').update({estado:'consumido'}).eq('id',anticipoId)
+      if(ae)throw ae
+      setBilling(p=>p.map(b=>cuotaIds.includes(b.id)?{...b,status:'Anticipada',prepaid_anticipo_id:anticipoId}:b))
+      setAnticipos(p=>p.map(a=>a.id===anticipoId?{...a,estado:'consumido'}:a))
+    }catch(e){alert('Error: '+e.message)}
+  },[])
+  // Deshacer: las cuotas vuelven a 'Programada' y el anticipo a 'disponible'.
+  const handleDescubrirCuotas=useCallback(async(anticipoId)=>{
+    try{
+      const {error}=await supabase.from('billing').update({status:'Programada',prepaid_anticipo_id:null,updated_at:new Date().toISOString()}).eq('prepaid_anticipo_id',anticipoId)
+      if(error)throw error
+      const {error:ae}=await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).eq('id',anticipoId)
+      if(ae)throw ae
+      setBilling(p=>p.map(b=>String(b.prepaid_anticipo_id)===String(anticipoId)?{...b,status:'Programada',prepaid_anticipo_id:null}:b))
+      setAnticipos(p=>p.map(a=>a.id===anticipoId?{...a,estado:'disponible',billing_id:null}:a))
+    }catch(e){alert('Error: '+e.message)}
+  },[])
+
   // Proveedores (PP terceros): crear/editar un proveedor del catálogo
   const handleSaveProveedor=useCallback(async(f)=>{
     setSaving(true)
@@ -10025,7 +10111,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
