@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-13 — Facturación: kebab directo a editar + Anular dentro de Editar
+- El botón **⋯** de cada factura ahora **abre Editar directamente** (se eliminó el submenú que se veía mal). La tarjeta entera también abre editar.
+- **Anular** y **Eliminar** viven ahora **solo dentro de Editar cobro** (Anular abre el flujo de baja con motivo/observaciones ahí mismo).
+- Se quitó el botón **"Cambiar"** del cliente en el encabezado (en todos los formularios, según preferencia): el cliente va en el título, sin acción de cambio.
+
 ## 2026-06-13 — Editar cobro: cliente en el encabezado
 - **Editar cobro** adopta el formato de Nueva tarea: el cliente va en el **encabezado** ("Editar cobro | Cliente" + Cambiar) en vez de ocupar una fila del cuerpo. Más corto y consistente.
 
