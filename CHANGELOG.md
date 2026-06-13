@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Densidad: formularios más compactos
+- Se apretó el espaciado de los formularios sin esconder campos: **Editar cobro** (gap entre campos 14→10, etiquetas más juntas) y, vía los componentes compartidos `Fld`/`Lbl`, también **Nueva venta/propuesta, Cliente, Gastos y Fondo** (margen entre campos 14→10, etiqueta 5→3). Las vistas largas quedan notoriamente más cortas.
+
 ## 2026-06-13 — Densidad: menos texto/instrucciones (criterio permanente)
 - Se adopta como criterio permanente **ahorrar espacio y minimizar texto/instrucciones visibles** en toda la app. Primeros recortes: se quitaron hints redundantes (ej. "Podrás agregar más razones sociales…"), se acortó la instrucción de Carga masiva ("Sube un Excel — la app reconoce las columnas solas") y se simplificó el rótulo de razón social.
 
