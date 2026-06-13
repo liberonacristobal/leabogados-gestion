@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Importar facturas antiguas (Excel) + gasto que aprende
+- Nuevo **Importar facturas (Excel)** en Facturación (botón "↑ Excel"): lee el archivo, detecta columnas (Cliente/RUT, N° factura, Monto, Fecha emisión, **Fecha pago**), hace match de cliente, y muestra un **preview con pre-confirmación** (estado por fila: Pagada/Pendiente/Error/Ya existe; asignar cliente, omitir) antes de guardar. Las que traen fecha de pago entran como Pagadas con su `paid_at`. Detecta duplicados por N° factura.
+- **Gasto huérfano que aprende**: al asignar un cliente a un gasto sin cliente, se aplica también a los otros gastos sin cliente con la misma descripción (no repetir el trabajo).
+
 ## 2026-06-13 — Soft-delete + Papelera
 - Eliminar **venta, cobro o gasto** ya no borra: marca `deleted_at` y va a la **Papelera** (menú ≡). Desde ahí se puede **Restaurar** o **Eliminar definitivo**. Restaurar una venta también restaura sus cuotas.
 - Los loaders excluyen lo eliminado, así desaparece de todas las vistas. Requiere columnas `deleted_at` en sales/billing/expenses.
