@@ -2565,7 +2565,7 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
 // Reparto del costo a proveedores. Cada fila: proveedor + tipo (% / UF / $) + valor.
 // El costo se reparte en las MISMAS cuotas que el cobro (se distribuye al guardar).
 // Por defecto el tipo = la unidad de la venta. La reconciliación y los montos se muestran en esa unidad.
-function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,saleTotal=0,costTotal=0}) {
+function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,saleTotal=0,costTotal=0,hideHeader=false}) {
   const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const provs = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
   const esUF = moneda!=='CLP'
@@ -2599,8 +2599,8 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
     </button>
   )
   return (
-    <div style={{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
-      <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>¿A quién le pagas?</div>
+    <div style={hideHeader?{}:{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
+      {!hideHeader&&<div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>¿A quién le pagas?</div>}
       {provs.length===0?(
         <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes proveedores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
       ):(<>
@@ -2608,12 +2608,15 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
           const tipo=r.tipo||defTipo
           return (
           <div key={i} style={{marginBottom:9}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto',gap:8,alignItems:'center'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto 20px',gap:8,alignItems:'center'}}>
               <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
                 <option value=''>— Proveedor —</option>
                 {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
               </select>
-              <Switch on={!!r._edit} onClick={()=>up(i,'_edit',!r._edit)} title='Editar monto y forma'/>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap'}}>Cambiar</span>
+                <Switch on={!!r._edit} onClick={()=>up(i,'_edit',!r._edit)} title='Cambiar condiciones (monto y forma)'/>
+              </div>
               <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
             </div>
             {r._edit?(
@@ -3364,8 +3367,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               {row('Costos de proveedores',curCost,'costos',false)}
               {openCondicion==='costos'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`}}>
-                  <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>
-                  <div style={{fontSize:11,color:C.muted,lineHeight:1.4}}>Comisión de tu honorario (no se le cobra al cliente).</div>
+                  <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal} hideHeader/>
                 </div>
               )}
               {row('Forma de cobro',curCobro,'cobro',false)}
@@ -5002,6 +5004,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:500,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}</div>
                     <div style={{fontSize:11,color:'#99ABB4'}}>{fac?.invoice_no?`F° ${fac.invoice_no} · `:''}{t.estado==='pagado'&&t.pagado_at?`Pagado ${fmtD(String(t.pagado_at).slice(0,10))}`:(t.created_at?fmtD(String(t.created_at).slice(0,10)):'')}</div>
+                    {t.estado==='pagado'&&t.factura_numero&&<div style={{fontSize:11,color:'#99ABB4'}}>Doc {t.factura_numero}{t.factura_fecha?` · ${fmtD(String(t.factura_fecha).slice(0,10))}`:''}</div>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <span style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{fmt0(t.monto)}</span>
