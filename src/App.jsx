@@ -5213,41 +5213,47 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Orquesta: fuzzy sync + IA en lotes. Enriquardo cada fila con confidence/method/suggestion/candidates/concepto.
   const runMatching = async(baseRows) => {
     setMatching(true)
-    const rows = baseRows.map(r=>({...r}))
-    for(const r of rows){
-      if(r.client_id){ continue }   // ya resuelto exacto en el parse
-      if(!r.rut && !r.nombre){ r.matchMethod='none'; r.confidence=0; continue }
-      const cs = candidatos(r.nombre||r.rut)
-      const top = cs[0]
-      if(top && top.score>=90){ const ents=entsOf(top.c.id); r.client_id=top.c.id; r.clientName=top.c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='name_fuzzy'; r.confidence=top.score }
-      else if(top && top.score>=70){ r.suggestion={id:top.c.id,name:top.c.name}; r.confidence=top.score; r.matchMethod='name_fuzzy' }
-      else if(top && top.score>=50){ r.candidates=cs.slice(0,3).map(s=>({id:s.c.id,name:s.c.name,score:s.score})); r.confidence=top.score; r.matchMethod='name_fuzzy' }
-      else { r._needsAI=true }
-    }
-    setRows(rows.map(r=>({...r})))
-    // IA: solo los sin resolver por fuzzy
-    const aiRows = rows.filter(r=>r._needsAI)
-    if(aiRows.length && import.meta.env.VITE_ANTHROPIC_API_KEY){
-      const lotes=[]; for(let i=0;i<aiRows.length;i+=50) lotes.push(aiRows.slice(i,i+50))
-      setMatchProg({done:0,total:lotes.length})
-      for(let li=0; li<lotes.length; li++){
-        const lote = lotes[li]
-        const res = await aiMatchBatch(lote)
-        res.forEach(o=>{
-          const r = lote[(o.index||0)-1]; if(!r) return
-          const conf = Number(o.confidence)||0
-          if(o.concepto_corregido && o.concepto_corregido.trim() && o.concepto_corregido.trim()!==r.concepto){ r.conceptoOrig=r.concepto; r.concepto=o.concepto_corregido.trim(); r.conceptoFix=true }
-          if(o.is_internal){ r.isInternal=true; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null; return }
-          if(o.client_id && conf>=85){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ const ents=entsOf(c.id); r.client_id=c.id; r.clientName=c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null } }
-          else if(o.client_id && conf>=65){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ r.suggestion={id:c.id,name:c.name}; r.confidence=conf; r.matchMethod='ai'; r.aiReason=o.reason||null } }
-          else { r.matchMethod='none'; r.confidence=conf; r.aiReason=o.reason||null }
-        })
-        setRows(rows.map(r=>({...r})))
-        setMatchProg({done:li+1,total:lotes.length})
+    const yield0 = () => new Promise(r=>setTimeout(r,0))
+    try{
+      const rows = baseRows.map(r=>({...r}))
+      await yield0()   // deja que la tabla se pinte antes del trabajo pesado
+      // Fuzzy en bloques, cediendo el hilo cada 20 filas para no congelar Safari.
+      for(let i=0;i<rows.length;i++){
+        const r = rows[i]
+        if(r.client_id || (!r.rut && !r.nombre)){ if(!r.client_id){ r.matchMethod='none'; r.confidence=0 } continue }
+        const cs = candidatos(r.nombre||r.rut)
+        const top = cs[0]
+        if(top && top.score>=90){ const ents=entsOf(top.c.id); r.client_id=top.c.id; r.clientName=top.c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='name_fuzzy'; r.confidence=top.score }
+        else if(top && top.score>=70){ r.suggestion={id:top.c.id,name:top.c.name}; r.confidence=top.score; r.matchMethod='name_fuzzy' }
+        else if(top && top.score>=50){ r.candidates=cs.slice(0,3).map(s=>({id:s.c.id,name:s.c.name,score:s.score})); r.confidence=top.score; r.matchMethod='name_fuzzy' }
+        else { r._needsAI=true }
+        if(i%20===19){ setRows(rows.map(x=>({...x}))); await yield0() }
       }
-    }
-    setRows(rows.map(r=>({...r})))
-    setMatching(false); setMatchProg(null)
+      setRows(rows.map(r=>({...r})))
+      // IA: solo los sin resolver por fuzzy
+      const aiRows = rows.filter(r=>r._needsAI)
+      if(aiRows.length && import.meta.env.VITE_ANTHROPIC_API_KEY){
+        const lotes=[]; for(let i=0;i<aiRows.length;i+=50) lotes.push(aiRows.slice(i,i+50))
+        setMatchProg({done:0,total:lotes.length})
+        for(let li=0; li<lotes.length; li++){
+          const lote = lotes[li]
+          const res = await aiMatchBatch(lote)
+          res.forEach(o=>{
+            const r = lote[(o.index||0)-1]; if(!r) return
+            const conf = Number(o.confidence)||0
+            if(o.concepto_corregido && o.concepto_corregido.trim() && o.concepto_corregido.trim()!==r.concepto){ r.conceptoOrig=r.concepto; r.concepto=o.concepto_corregido.trim(); r.conceptoFix=true }
+            if(o.is_internal){ r.isInternal=true; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null; return }
+            if(o.client_id && conf>=85){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ const ents=entsOf(c.id); r.client_id=c.id; r.clientName=c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null } }
+            else if(o.client_id && conf>=65){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ r.suggestion={id:c.id,name:c.name}; r.confidence=conf; r.matchMethod='ai'; r.aiReason=o.reason||null } }
+            else { r.matchMethod='none'; r.confidence=conf; r.aiReason=o.reason||null }
+          })
+          setRows(rows.map(r=>({...r})))
+          setMatchProg({done:li+1,total:lotes.length})
+        }
+      }
+      setRows(rows.map(r=>({...r})))
+    }catch(e){ console.error('matching',e) }
+    finally{ setMatching(false); setMatchProg(null) }
   }
 
   // Fecha tolerante: Date nativo, serial Excel, dd.mm.yy(yy), dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd. Vacío → ''.
