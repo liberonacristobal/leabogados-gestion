@@ -3074,7 +3074,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{propClientMatch.name}</div>
             {propClientMatch.rut&&<div style={{fontSize:11,color:C.muted}}>{propClientMatch.rut}</div>}
           </div>
-          <div style={{display:'flex',gap:8,marginBottom:14}}>
+          <div style={{display:'flex',gap:8,marginBottom:10}}>
             <button type='button' onClick={()=>setPropClientMode('asociar')}
               style={{flex:1,padding:'10px 0',borderRadius:8,border:`1px solid ${propClientMode==='asociar'?C.accent:C.border}`,background:propClientMode==='asociar'?C.accent:'transparent',color:propClientMode==='asociar'?'#fff':C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>
               Asociar a este cliente
@@ -3136,7 +3136,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     <>
       {/* Banner recuperar borrador local */}
       {hasDraft&&!sale?.id&&(
-        <div style={{background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:8,padding:'9px 12px',marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+        <div style={{background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:8,padding:'9px 12px',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
           <div>
             <div style={{fontSize:12,fontWeight:600,color:'#7A5C00'}}>Borrador guardado</div>
             {draftTs&&<div style={{fontSize:11,color:'#7A5C00'}}>{new Date(draftTs).toLocaleDateString('es-CL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>}
@@ -3172,7 +3172,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
         </Fld>
       ) : (sale?.id ? null : (
-        <div style={{marginBottom:14,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`}}>
+        <div style={{marginBottom:10,padding:'10px 14px',borderRadius:8,background:'#E6EEF1',border:`1px solid ${C.accent}`}}>
           <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
           {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
         </div>
@@ -3197,7 +3197,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       )}
 
       {/* 3. Área + Responsable */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
         <Fld label={<>Área<AiBadge field='area'/></>}><Sel value={f.area||'Corporativo'} onChange={e=>up('area',e.target.value)} options={['Corporativo','Tributario','Laboral','Otro']}/></Fld>
         <Fld label={<>Responsable<AiBadge field='responsible'/></>}>
           <select value={f.responsible||''} onChange={e=>up('responsible',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}>
@@ -3208,7 +3208,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       </div>
 
       {/* 4. Estado + Año + Mes */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
         <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado']}/></Fld>
         <Fld label='Año'><Inp type='number' value={f.year||currentYear} onChange={e=>up('year',parseInt(e.target.value))} placeholder={String(currentYear)}/></Fld>
         <Fld label='Mes'>
@@ -3359,7 +3359,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         return (
           <>
             <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Condiciones registradas</div>
-            <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+            <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
               {row('Honorarios',curHon,'honorarios',false)}
               <div onClick={()=>setOpenCondicion(openCondicion==='costos'?null:'costos')} style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
                 <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>Costos de proveedores</div>
@@ -3394,7 +3394,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               return (
                 <>
                   <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Anticipos y cuotas</div>
-                  <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+                  <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
                     <div style={{display:'flex',gap:14,padding:'9px 12px',background:'#F5F7F9',borderBottom:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>
                       <span><strong style={{color:'#0F6E56'}}>{nAnt}</strong> anticipada{nAnt!==1?'s':''}</span>
                       <span><strong style={{color:C.text}}>{nProg}</strong> programada{nProg!==1?'s':''}</span>
