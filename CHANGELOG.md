@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Ficha proveedor: honorarios = su parte, "Le debes" solo lo cobrado
+- **Honorarios involucrados** ahora suma **lo que cobra el proveedor (su parte)** en sus ventas, no el total de las ventas.
+- **Le debes** cuenta solo lo que ya está **Por pagar** (la factura del cliente ya se cobró). Lo que está **Pendiente** (cliente aún no paga) se muestra aparte y no se considera deuda. Aplica también al listado de proveedores.
+
 ## 2026-06-13 — Reparto proveedor: aviso si falta elegir + footer responsive
 - Al guardar una venta, si quedó una fila de reparto con monto pero **sin proveedor elegido**, ahora avisa en vez de descartarla en silencio (era la causa de que "no se guardara" el proveedor: la fila se agregaba pero no se completaba el desplegable).
 - Footer del modal de venta **responsive en móvil**: botón principal (Guardar) full-width abajo; Cancelar/Eliminar/Borrador en una fila arriba.
