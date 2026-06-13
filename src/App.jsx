@@ -2651,7 +2651,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   const [mensualInicio,setMensualInicio] = useState(sale?.cobro_config?.mensualInicio||'')
   const [costMode,setCostMode] = useState('fijo')
   const [costPct,setCostPct] = useState('')
-  const [costSwitch,setCostSwitch] = useState(!!(sale?.cost_uf||sale?.cost_clp))
   // Reparto del costo de terceros entre proveedores. Para venta existente se ancla por billing_id;
   // para venta nueva por índice de cuota (cuotaIdx), que se resuelve a billing_id al guardar.
   // Reconstruye las filas del reparto agrupando los terceros_pagos por proveedor+tipo+valor
@@ -2726,10 +2725,10 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
     if(sale?.id) return
     clearTimeout(draftTimer.current)
     draftTimer.current=setTimeout(()=>{
-      localStorage.setItem(DRAFT_KEY,JSON.stringify({f,selectedClient,cobroType,nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,costMode,costPct,costSwitch,ts:Date.now()}))
+      localStorage.setItem(DRAFT_KEY,JSON.stringify({f,selectedClient,cobroType,nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,costMode,costPct,ts:Date.now()}))
     },2000)
     return ()=>clearTimeout(draftTimer.current)
-  },[f,selectedClient,cobroType,nCuotas,cobroInicio,mensualInicio,costMode,costPct,costSwitch,tramos,cuotasCustom])
+  },[f,selectedClient,cobroType,nCuotas,cobroInicio,mensualInicio,costMode,costPct,tramos,cuotasCustom])
   const resetMod = () => { setModCobro(false); setModMode('ajustar'); setNewHon(''); setNewVig(''); setNewCosto(''); setNewFmt(''); setNewNCuotas(3); setNewCobroInicio(''); setNewCuotasCustom([{id:1,monto:'',fecha:''}]); setNewCostMode('fijo'); setNewCostPct('') }
 
   const AiBadge = ({field}) => aiFields.has(field) ? <span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#E4E8EB',color:'#537281',marginLeft:5,verticalAlign:'middle',lineHeight:1}}>IA</span> : null
@@ -2747,7 +2746,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
       if(d.mensualInicio) setMensualInicio(d.mensualInicio)
       if(d.costMode) setCostMode(d.costMode)
       if(d.costPct) setCostPct(d.costPct)
-      if(typeof d.costSwitch==='boolean') setCostSwitch(d.costSwitch)
     } catch {}
     setHasDraft(false)
   }
@@ -2874,6 +2872,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   const costVal = costMode==='pct'
     ? (moneda==='UF' ? amountUF*(parseFloat(costPct)||0)/100 : montoCLP*(parseFloat(costPct)||0)/100)
     : (moneda==='UF' ? parseFloat(f.cost_uf)||0 : parseFloat(f.cost_clp)||0)
+  const hasCost = costMode==='pct' ? (parseFloat(costPct)||0)>0 : costVal>0
   const panelHon = parseFloat(newHon)||0
   const panelCosto = newCostMode==='pct' ? panelHon*(parseFloat(newCostPct)||0)/100 : parseFloat(newCosto)||0
 
@@ -2897,7 +2896,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
   const handleSave = () => {
     const saveF = {...f}
-    if(!costSwitch) { saveF.cost_uf = null; saveF.cost_clp = null }
+    if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
       if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
       else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
@@ -2914,7 +2913,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
   const handleSaveDraft = () => {
     const saveF = {...f, status:'Borrador'}
-    if(!costSwitch) { saveF.cost_uf = null; saveF.cost_clp = null }
+    if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
       if(moneda==='UF') saveF.cost_uf = (amountUF*(parseFloat(costPct)||0)/100)||null
       else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
@@ -3214,59 +3213,41 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </Fld>
       </div>
 
-      {/* 5–8. Honorarios, costos, cobro, notas — editable solo en NUEVA VENTA */}
+      {/* 5–8. Honorarios + costos en una línea (toggle UF/CLP compartido), cobro, notas — editable solo en NUEVA VENTA */}
       {!sale?.id&&(<>
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Honorarios<AiBadge field='amount_uf'/><AiBadge field='amount_clp'/></div>
-        <div style={{display:'flex',alignItems:'stretch',height:44,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff',marginBottom:14}}>
-          <input type='number' step={moneda==='UF'?'0.01':'1'}
-            value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''}
-            onChange={e=>up(moneda==='UF'?'amount_uf':'amount_clp',e.target.value)}
-            placeholder={moneda==='UF'?'0.00':'0'}
-            style={{flex:1,border:'none',background:'transparent',padding:'0 14px',fontSize:15,color:C.text,outline:'none',minWidth:0}}
-          />
-          <div style={{width:1,background:'#EBEBEB',margin:'10px 0',flexShrink:0}}/>
-          <div style={{display:'flex',alignItems:'center',padding:'0 8px',gap:4,flexShrink:0}}>
-            <button type='button' onClick={()=>up('moneda','UF')} style={{padding:'2px 6px',border:'none',background:moneda==='UF'?C.accent:'transparent',color:moneda==='UF'?'#fff':C.muted,fontSize:11,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>UF</button>
-            <button type='button' onClick={()=>up('moneda','CLP')} style={{padding:'2px 6px',border:'none',background:moneda==='CLP'?C.accent:'transparent',color:moneda==='CLP'?'#fff':C.muted,fontSize:11,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>CLP</button>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6}}>Honorarios y costos<AiBadge field='amount_uf'/><AiBadge field='amount_clp'/></div>
+          <div style={{display:'flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:6,overflow:'hidden'}}>
+            {['UF','CLP'].map(mo=>(
+              <button key={mo} type='button' onClick={()=>up('moneda',mo)} style={{padding:'3px 11px',border:'none',background:moneda===mo?C.accent:'transparent',color:moneda===mo?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer',letterSpacing:.3}}>{mo}</button>
+            ))}
           </div>
-          {moneda==='UF'&&<>
-            <div style={{width:1,background:'#EBEBEB',margin:'10px 0',flexShrink:0}}/>
-            <div style={{display:'flex',alignItems:'center',padding:'0 10px',gap:3,flexShrink:0}}>
-              <span style={{fontSize:11,color:C.muted,fontWeight:600}}>$</span>
-              <input type='number' value={f.uf_value||''}
-                onChange={e=>up('uf_value',e.target.value)}
-                placeholder={ufHoy?String(Math.round(ufHoy)):'—'}
-                style={{width:58,border:'none',background:'transparent',fontSize:12,color:C.muted,outline:'none'}}
-              />
-            </div>
-          </>}
         </div>
-
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:costSwitch?10:14}}>
-          <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6}}>Costos de proveedores</div>
-          <button type='button' onClick={()=>setCostSwitch(p=>!p)} style={{width:34,height:19,borderRadius:10,border:'none',background:costSwitch?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0,transition:'background .15s'}}>
-            <span style={{position:'absolute',top:2,left:costSwitch?16:2,width:15,height:15,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
-          </button>
-        </div>
-        {costSwitch&&(
-          <div style={{marginBottom:costMode==='pct'&&costVal>0?4:14}}>
-            <div style={{display:'flex',alignItems:'stretch',height:44,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff'}}>
-              <input type='number' step={costMode==='pct'?'0.1':'0.01'}
-                value={costMode==='pct'?costPct:(moneda==='UF'?f.cost_uf||'':f.cost_clp||'')}
-                onChange={e=>{ if(costMode==='pct') setCostPct(e.target.value); else up(moneda==='UF'?'cost_uf':'cost_clp',e.target.value) }}
-                placeholder='0.00'
-                style={{flex:1,border:'none',background:'transparent',padding:'0 14px',fontSize:15,color:C.text,outline:'none',minWidth:0}}
-              />
-              <div style={{width:1,background:'#EBEBEB',margin:'10px 0',flexShrink:0}}/>
-              <div style={{display:'flex',alignItems:'center',padding:'0 8px',gap:4,flexShrink:0}}>
-                <button type='button' onClick={()=>setCostMode('fijo')} style={{padding:'2px 6px',border:'none',background:costMode==='fijo'?C.accent:'transparent',color:costMode==='fijo'?'#fff':C.muted,fontSize:11,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>{moneda}</button>
-                <button type='button' onClick={()=>setCostMode('pct')} style={{padding:'2px 6px',border:'none',background:costMode==='pct'?C.accent:'transparent',color:costMode==='pct'?'#fff':C.muted,fontSize:11,fontWeight:700,borderRadius:4,cursor:'pointer',letterSpacing:.3}}>%</button>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:costVal>0?12:14}}>
+          <div>
+            <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,marginBottom:3}}>HONORARIOS</div>
+            <input type='number' step={moneda==='UF'?'0.01':'1'} value={moneda==='UF'?f.amount_uf||'':f.amount_clp||''} onChange={e=>up(moneda==='UF'?'amount_uf':'amount_clp',e.target.value)} placeholder={moneda==='UF'?'0.00':'0'} style={{width:'100%',height:40,border:`1px solid ${C.border}`,borderRadius:9,background:'#fff',padding:'0 11px',fontSize:15,color:C.text,outline:'none',boxSizing:'border-box'}}/>
+            {moneda==='UF'&&(
+              <div style={{display:'flex',alignItems:'center',gap:3,marginTop:3}}>
+                <span style={{fontSize:10,color:'#99ABB4'}}>UF día $</span>
+                <input type='number' value={f.uf_value||''} onChange={e=>up('uf_value',e.target.value)} placeholder={ufHoy?String(Math.round(ufHoy)):'—'} style={{width:62,border:'none',background:'transparent',fontSize:11,color:C.muted,outline:'none',padding:0}}/>
+              </div>
+            )}
+          </div>
+          <div>
+            <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,marginBottom:3}}>COSTOS PROVEEDORES</div>
+            <div style={{display:'flex',height:40,border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden',background:'#fff'}}>
+              <input type='number' step={costMode==='pct'?'0.1':'0.01'} value={costMode==='pct'?costPct:(moneda==='UF'?f.cost_uf||'':f.cost_clp||'')} onChange={e=>{ if(costMode==='pct') setCostPct(e.target.value); else up(moneda==='UF'?'cost_uf':'cost_clp',e.target.value) }} placeholder='0' style={{flex:1,minWidth:0,border:'none',background:'transparent',padding:'0 11px',fontSize:15,color:C.text,outline:'none'}}/>
+              <div style={{display:'flex',flexShrink:0}}>
+                {[['fijo',moneda],['pct','%']].map(([v,l])=>(
+                  <button key={v} type='button' onClick={()=>setCostMode(v)} style={{padding:'0 8px',border:'none',borderLeft:`1px solid ${C.border}`,background:costMode===v?C.accent:'#F5F7F9',color:costMode===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+                ))}
               </div>
             </div>
+            {costMode==='pct'&&costVal>0&&<div style={{fontSize:10,color:'#99ABB4',marginTop:3}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
           </div>
-        )}
-        {costSwitch&&costMode==='pct'&&costVal>0&&<div style={{fontSize:11,color:C.muted,marginBottom:14}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
-        {costSwitch&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>}
+        </div>
+        {costVal>0&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>}
 
       </>)}
 
