@@ -5320,50 +5320,51 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       // Hoja según el tipo elegido (Gastos/Fondos); si no existe esa hoja, la primera
       const target = tipo==='fondo' ? 'fondos' : 'gastos'
       const sheetName = wb.SheetNames.find(n=>n.toLowerCase().trim()===target) || wb.SheetNames[0]
-      // Lectura como matriz para detectar el encabezado en las primeras filas (tolera filas de título arriba).
-      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true})
       const norm = s => String(s??'').toLowerCase().trim()
-      const aliasFlat = Object.values(COLALIAS).flat()
-      let hIdx=-1, best=0
-      for(let i=0;i<Math.min(5,aoa.length);i++){
-        const score = (aoa[i]||[]).filter(c=>aliasFlat.includes(norm(c))).length
-        if(score>best){ best=score; hIdx=i }
-      }
-      const resolveCols = headerArr => {
-        const map={}
-        ;(headerArr||[]).forEach((cell,idx)=>{ const n=norm(cell); for(const [field,aliases] of Object.entries(COLALIAS)){ if(aliases.includes(n)&&map[field]===undefined) map[field]=idx } })
-        return map
-      }
-      let colMap = resolveCols(hIdx>=0?aoa[hIdx]:(aoa[0]||[]))
-      let startRow = (hIdx>=0?hIdx:0)+1
-      // Sin encabezado reconocible → orden estándar Cliente, Fecha, Concepto, Categoría, Monto.
-      if(!['cliente','rut','monto'].some(f=>colMap[f]!==undefined)){ colMap={cliente:0,fecha:1,concepto:2,categoria:3,monto:4}; startRow=0 }
-      const getC = (row,field) => colMap[field]!==undefined ? row[colMap[field]] : ''
-      const dataRows = aoa.slice(startRow)
-      const parsed = []
-      dataRows.forEach((row,i)=>{
-        if(!Array.isArray(row)) return
-        const rut = String(getC(row,'rut')||'').trim()
-        const nombre = String(getC(row,'cliente')||'').trim()
-        const cBase = String(getC(row,'concepto')||'').trim()
-        const cDet  = String(getC(row,'detalle')||'').trim()
+      // Construye una fila a partir de un getter de campo (sirve para la vía por objeto y la de matriz).
+      const buildRow = (getField,idx) => {
+        const rut = String(getField('rut')||'').trim()
+        const nombre = String(getField('cliente')||'').trim()
+        const cBase = String(getField('concepto')||'').trim()
+        const cDet  = String(getField('detalle')||'').trim()
         const concepto = cBase&&cDet ? `${cBase} — ${cDet}` : (cBase||cDet)
-        const notas = String(getC(row,'notas')||'').trim()
-        const proyecto = String(getC(row,'proyecto')||'').trim()
-        const fecha = parseFecha(getC(row,'fecha'))
-        const monto = parseMonto(getC(row,'monto'))
-        // Fila completamente vacía → se ignora
-        if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return
-        const categoria = tipo==='fondo' ? 'Fondo' : mapCategoria(getC(row,'categoria'))
-        const ex = exactMatch(rut,nombre)
-        const cli = ex.client
-        const ents = cli ? entsOf(cli.id) : []
+        const notas = String(getField('notas')||'').trim()
+        const proyecto = String(getField('proyecto')||'').trim()
+        const fecha = parseFecha(getField('fecha'))
+        const monto = parseMonto(getField('monto'))
+        if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return null  // fila vacía
+        const categoria = tipo==='fondo' ? 'Fondo' : mapCategoria(getField('categoria'))
+        const ex = exactMatch(rut,nombre); const cli=ex.client; const ents=cli?entsOf(cli.id):[]
         let error=null
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        parsed.push({id:parsed.length, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ex.entity_id || (ents.length===1?ents[0].id:null), matchMethod: cli?ex.method:undefined, confidence: cli?(ex.method==='rut_exact'?100:95):undefined, error, dup:false})
+        return {id:idx, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ex.entity_id || (ents.length===1?ents[0].id:null), matchMethod: cli?ex.method:undefined, confidence: cli?(ex.method==='rut_exact'?100:95):undefined, error, dup:false}
+      }
+      // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
+      let parsed = []
+      const objs = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:''})
+      objs.forEach(o=>{
+        const getField = field => { const aliases=COLALIAS[field]||[]; for(const k of Object.keys(o)){ if(aliases.includes(norm(k))) return o[k] } return '' }
+        const r = buildRow(getField, parsed.length); if(r) parsed.push(r)
       })
+      // VÍA 2 (respaldo): si la vía 1 no obtuvo filas, leer como matriz y detectar encabezado en las 5 primeras filas.
+      if(parsed.length===0){
+        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true})
+        const aliasFlat = Object.values(COLALIAS).flat()
+        let hIdx=-1, best=0
+        for(let i=0;i<Math.min(5,aoa.length);i++){ const score=(aoa[i]||[]).filter(c=>aliasFlat.includes(norm(c))).length; if(score>best){best=score;hIdx=i} }
+        const colMap={}
+        ;(hIdx>=0?aoa[hIdx]:(aoa[0]||[])).forEach((cell,idx)=>{ const n=norm(cell); for(const [field,aliases] of Object.entries(COLALIAS)){ if(aliases.includes(n)&&colMap[field]===undefined) colMap[field]=idx } })
+        let startRow=(hIdx>=0?hIdx:0)+1
+        if(!['cliente','rut','monto'].some(f=>colMap[f]!==undefined)){ Object.assign(colMap,{cliente:0,fecha:1,concepto:2,categoria:3,monto:4}); startRow=0 }
+        aoa.slice(startRow).forEach(row=>{
+          if(!Array.isArray(row)) return
+          const getField = field => colMap[field]!==undefined ? row[colMap[field]] : ''
+          const r = buildRow(getField, parsed.length); if(r) parsed.push(r)
+        })
+      }
+      if(parsed.length===0){ alert('No se encontraron filas. Revisa que el Excel tenga una columna de Cliente (o RUT) y otra de Monto. Puedes descargar la plantilla modelo como referencia.'); setRows(null); setCargando(false); return }
       // Detección de duplicados dentro del archivo (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
       const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}`
       const counts={}
