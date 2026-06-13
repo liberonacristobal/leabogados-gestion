@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-06-13
+- Facturación · tag Terceros + filtro + conciliación al pagar (commit 4): tag **Terceros** (sin monto, azul corporativo) en toda factura con cuentas por pagar ancladas; nuevo filtro **Terceros** en las pills (la fila ahora hace scroll horizontal para no romper el iPhone con 7 pills). Al registrar el pago de una factura ancla con terceros pendientes, el modal Confirmar pago pregunta con un check (activo por defecto) **"El pago incluyó lo de terceros"** (nombres + total): al confirmar, esas cuentas pasan de **pendiente** a **por pagar**. Si la factura no tiene terceros, el modal queda idéntico.
 - Ventas/propuestas · reparto del costo de terceros a colaboradores (commit 3): al activar el switch **Costos de terceros** se despliega **"¿A quién le pagas?"** — filas con colaborador (del catálogo de Proveedores), monto en CLP y cuota ancla (la factura cuyo pago libera el fee; por defecto la 1ª, editable si hay 2+). Aviso ámbar/verde de reconciliación con el costo total. Cada fila crea una **cuenta por pagar** (`terceros_pagos`) anclada a venta + cuota + colaborador, estado inicial **pendiente**. NO toca `monto_terceros` (es comisión de tu honorario, sin doble conteo). Funciona en venta nueva (ancla por índice → factura real al guardar) y existente (en Condiciones → "Costos de terceros"). Quitar una fila borra la cuenta salvo que ya esté pagada.
 
 ## 2026-06-12
