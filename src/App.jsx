@@ -7981,35 +7981,43 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
   const [f,setF]=useState(client||{name:'',rut:'',type:'',email:'',phone:'',contact:'',erasmo:false,abogado_responsable:'',status:'Activo',ended_at:'',notes:''})
   const [rsIni,setRsIni]=useState({name:'',rut:''})   // razón social inicial (cliente nuevo) — se crea junto con el cliente
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
-  const stColor=f.status==='Terminado'?C.overdue:f.status==='Prospecto'?C.soon:C.normal
-  const ini=INICIALES_RESP[f.abogado_responsable]
+  const [showRS,setShowRS]=useState(false)
+  const [showCon,setShowCon]=useState(false)
+  const sec=(label,open,setOpen)=>(
+    <button type='button' onClick={()=>setOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 12px',border:`1px solid ${C.border}`,borderRadius:10,background:'#F5F7F9',cursor:'pointer',marginBottom:8}}>
+      <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>{label}</span>
+      <span style={{fontSize:14,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+    </button>
+  )
   return (
     <>
-      <Fld label='Nombre'><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='RUT'><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
-        <Fld label='Tipo'><Sel value={f.type||''} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral']} placeholder='— Seleccionar —'/></Fld>
+      <Fld label='Nombre' mb={8}><Inp value={f.name||''} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...'/></Fld>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <Fld label='RUT' mb={8}><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
+        <Fld label='Tipo' mb={8}><Sel value={f.type||''} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral']} placeholder='— Seleccionar —'/></Fld>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Email'><Inp type='email' value={f.email||''} onChange={e=>up('email',e.target.value)} placeholder='correo@...'/></Fld>
-        <Fld label='Telefono'><Inp value={f.phone||''} onChange={e=>up('phone',e.target.value)} placeholder='+56...'/></Fld>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <Fld label='Email' mb={8}><Inp type='email' value={f.email||''} onChange={e=>up('email',e.target.value)} placeholder='correo@...'/></Fld>
+        <Fld label='Teléfono' mb={8}><Inp value={f.phone||''} onChange={e=>up('phone',e.target.value)} placeholder='+56...'/></Fld>
       </div>
-      <Fld label='Contacto'><Inp value={f.contact||''} onChange={e=>up('contact',e.target.value)} placeholder='Persona de contacto...'/></Fld>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        <Fld label='Estado'><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Prospecto','Terminado']}/></Fld>
-        {f.status==='Terminado'&&<Fld label='Fecha termino'><Inp type='date' value={f.ended_at||''} onChange={e=>up('ended_at',e.target.value)}/></Fld>}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <Fld label='Estado' mb={8}><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Prospecto','Terminado']}/></Fld>
+        <Fld label='Responsable' mb={8}><Sel value={f.abogado_responsable||''} onChange={e=>up('abogado_responsable',e.target.value)} options={['Cristóbal','Erasmo','Martín','Martina','Rodrigo']} placeholder='— Sin asignar —'/></Fld>
       </div>
-      <Fld label='Responsable'>
-        <Sel value={f.abogado_responsable||''} onChange={e=>up('abogado_responsable',e.target.value)} options={['Cristóbal','Erasmo','Martín','Martina','Rodrigo']} placeholder='— Sin asignar —'/>
-      </Fld>
-      <Fld label='Interno (gastos de oficina)'>
-        <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{padding:'9px 14px',borderRadius:8,border:`1px solid ${f.is_internal?C.accent:C.border}`,background:f.is_internal?'#E6EEF1':'transparent',color:f.is_internal?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-          {f.is_internal?'Cliente interno (no cuenta como cliente de negocio)':'Marcar como interno'}
-        </button>
-      </Fld>
-      <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
-      {client?.id?<EntitiesEditor clientId={client.id}/>:(
-        <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#F5F7F9'}}>
+      {f.status==='Terminado'&&<Fld label='Fecha término' mb={8}><Inp type='date' value={f.ended_at||''} onChange={e=>up('ended_at',e.target.value)}/></Fld>}
+      <Fld label='Contacto' mb={8}><Inp value={f.contact||''} onChange={e=>up('contact',e.target.value)} placeholder='Persona de contacto...'/></Fld>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8}}>
+        <span style={{fontSize:13,color:C.text}}>Cliente interno <span style={{fontSize:11,color:C.muted}}>(gastos de oficina)</span></span>
+        <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{width:34,height:20,borderRadius:11,border:'none',background:f.is_internal?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0}}><span style={{position:'absolute',top:2,left:f.is_internal?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></button>
+      </div>
+      <Fld label='Notas' mb={8}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
+      {client?.id?(<>
+        {sec('Razones sociales',showRS,setShowRS)}
+        {showRS&&<EntitiesEditor clientId={client.id}/>}
+        {sec('Contactos',showCon,setShowCon)}
+        {showCon&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
+      </>):(
+        <div style={{marginBottom:8,padding:'11px 12px',borderRadius:10,border:`1px solid ${C.border}`,background:'#F5F7F9'}}>
           <Lbl>Razón social <span style={{textTransform:'none',letterSpacing:0,color:C.muted}}>· opcional</span></Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 130px',gap:8}}>
             <Inp value={rsIni.name} onChange={e=>setRsIni(r=>({...r,name:e.target.value}))} placeholder={f.name?.trim()||'Razón social'}/>
@@ -8017,7 +8025,6 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
           </div>
         </div>
       )}
-      {client?.id&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
