@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Costo de proveedores: % / UF / CLP + reparto por cuotas
+- Reparto a colaboradores (en venta/propuesta) rediseñado: cada fila ahora elige **% · UF · $** (por defecto la unidad de la venta), y el costo se **reparte en las mismas cuotas que el cobro** (si te pagan en 5, al proveedor en 5). %/UF se calculan como **fracción de cada cuota real** → cuando la UF sube, lo que le debes sube junto con tu factura (cero descuadre). UF→CLP con la UF de la fecha de emisión de cada factura. La reconciliación y los montos se muestran en la unidad de la venta. Nota suave (no error) solo cuando hay costo en pesos fijos sobre una venta en UF. Aplica a ventas nuevas y ya cargadas. Requirió SQL: `terceros_pagos.tipo_costo`, `valor`.
+
 ## 2026-06-13 — Carga masiva de gastos con IA (PP-19)
 - Carga masiva · memoria que aprende + auto-asignar iguales: al asignar un cliente a una fila, todas las filas con el mismo nombre se asignan al tiro, y la asignación se **guarda permanente** (tabla `import_aliases`, nombre-crudo → cliente). En la próxima carga, ese mismo nombre cae directo en "Auto" (badge **Aprendido**), sin volver a preguntar. La app aprende y no repite trabajo.
 - Carga masiva · deshacer importación + historial (commit 5): tras importar, botón **Deshacer importación** (con modal de confirmación) que elimina los gastos de ese lote y lo marca anulado. En la pantalla de subida aparece **"Importaciones recientes"** (últimas 10) con quién, cuándo y N gastos, y un **Deshacer** mientras los gastos existan (o "Anulada el …" si ya se revirtió). Cierra el principio de que toda carga se pueda revertir si se cargó mal.
