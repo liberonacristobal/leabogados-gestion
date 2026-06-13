@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Deshacer pago de una factura
+- Si marcas una factura como pagada por error, ahora tiene un botón **"Deshacer pago"**: vuelve a Pendiente, borra la fecha de pago y revierte las cuentas por pagar a proveedores que se habían liberado (las que aún no transferiste vuelven a "Pendiente"). Pide confirmación.
+
 ## 2026-06-13 — Reparto: switch "Cambiar", Condiciones sin textos extra, doc en historial
 - Cada proveedor del reparto muestra **"Cambiar"** junto al switch (cambiar condiciones = monto y forma).
 - En **Condiciones registradas**, al expandir Costos de proveedores se muestra el reparto sin el encabezado "¿A quién le pagas?" ni el texto "Comisión de tu honorario": queda solo "+ Agregar proveedor" y las filas.
