@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-13 — Reparto proveedores en venta: por defecto + switch editar; header y densidad
+- Al **agregar proveedor** toma por defecto el costo de proveedores aún no repartido (todo el costo si es el primero), en las mismas cuotas del cobro. Cada proveedor trae un **switch "editar"**: apagado muestra solo el monto por defecto; encendido despliega los campos para cambiar monto y forma (% / UF / $).
+- Se eliminó el **mensaje amarillo** de reconciliación; si no cuadra, solo una línea gris discreta "Repartido X de Y".
+- Header del modal de venta/propuesta alineado al patrón canónico de "Nueva tarea" (título azul + separador `|` + cliente en gris).
+- "Razón social a facturar" sin RS: el aviso se resumió a un paréntesis junto al label "(se asocia al emitir la 1ª factura)".
+
 ## 2026-06-13 — Editar cobro: proveedor del monto de terceros + notas/archivos en una línea
 - En "Editar cobro", al poner un monto **De terceros (CLP)** se despliega **¿A quién le pagas?** para asignar el proveedor. Viene prepoblado si la venta/propuesta ya tenía el costo y el proveedor; se puede cambiar aquí (ej: costo que surgió después). Al guardar, crea/actualiza/elimina la cuenta por pagar anclada a ese cobro (Por pagar si ya está cobrado). Si ya le pagaste, queda bloqueado (deshacer el pago en Cuentas por pagar).
 - **Notas y el ícono de adjuntar** ahora en la misma línea; se eliminó el título "Archivos" duplicado. El ícono muestra un contador y la lista de archivos cae debajo.
