@@ -7688,7 +7688,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
           <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1,marginBottom:0}}/>
-          {onProveedores&&<button onClick={onProveedores} style={{flexShrink:0,padding:'0 13px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:500,cursor:'pointer'}}>Proveedores</button>}
+          {onProveedores&&<button onClick={onProveedores} style={{flexShrink:0,padding:'0 14px',borderRadius:8,border:`1px solid #99ABB4`,background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Proveedores</button>}
         </div>
         {sFilter ? (
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
