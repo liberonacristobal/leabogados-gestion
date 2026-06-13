@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Cliente en el encabezado en todos los formularios
+- En **Anticipo, Fondo, Editar gasto** (y ya Editar cobro y Nueva tarea) el cliente se muestra en el **encabezado/título** y no se repite como campo en el cuerpo — más corto y consistente. Ninguno lleva "Cambiar". En Fondo se conserva el "Saldo actual" como una línea; en Editar gasto el cliente va en el título del modal.
+
 ## 2026-06-13 — Facturación: kebab directo a editar + Anular dentro de Editar
 - El botón **⋯** de cada factura ahora **abre Editar directamente** (se eliminó el submenú que se veía mal). La tarjeta entera también abre editar.
 - **Anular** y **Eliminar** viven ahora **solo dentro de Editar cobro** (Anular abre el flujo de baja con motivo/observaciones ahí mismo).
