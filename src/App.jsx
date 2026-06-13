@@ -3635,7 +3635,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoAnticipo,onProveedores,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [anulando,setAnulando] = useState(null)        // factura en flujo de baja
   const [motivoBaja,setMotivoBaja] = useState('')
@@ -3648,6 +3648,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
   const [payDate,setPayDate] = useState('')
+  const [inclTerceros,setInclTerceros] = useState(true)   // al pagar la factura ancla: ¿el pago incluyó los terceros?
   const [menuBill,setMenuBill] = useState(null)   // id de la factura con el menú ⋯ abierto
   useEffect(()=>{ if(!menuBill) return; const h=()=>setMenuBill(null); document.addEventListener('click',h); return ()=>document.removeEventListener('click',h) },[menuBill])
   const fmtDMY = iso => { if(!iso) return '—'; const p=iso.slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:iso }
@@ -3667,6 +3668,12 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
   const [descExcel,setDescExcel] = useState(false)
 
   const bb = billing.filter(b=>b.billing_type!=='reembolso')   // Facturación excluye reembolsos de gastos
+  // Cuentas por pagar a colaboradores ancladas a cada factura (terceros_pagos.billing_id)
+  const tercerosByBilling = useMemo(()=>{
+    const m = new Map()
+    for(const t of (terceros||[])){ if(!t.billing_id) continue; if(!m.has(t.billing_id)) m.set(t.billing_id,[]); m.get(t.billing_id).push(t) }
+    return m
+  },[terceros])
   const isProg = filter==='programadas'
   // En Programadas la fecha relevante es el vencimiento (due); en el resto, la emisión (issued_at)
   const dateField = b => isProg ? b.due : b.issued_at
@@ -3675,6 +3682,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
     if(filter==='emitidas') r = r.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status))
     else if(filter==='programadas') r = r.filter(b=>b.status==='Programada')
     else if(filter==='pagado') r = r.filter(b=>b.status==='Pagado')
+    else if(filter==='terceros') r = r.filter(b=>tercerosByBilling.has(b.id))
     if(fYear) r = r.filter(b=>dateField(b)?.startsWith(fYear))
     if(fMonth) r = r.filter(b=>dateField(b)?.slice(5,7)===fMonth)
     if(q.trim()) r = r.filter(b=>{
@@ -3684,7 +3692,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
     return r.sort((a,b)=> isProg
       ? new Date(a.due||0)-new Date(b.due||0)
       : new Date(b.issued_at||0)-new Date(a.issued_at||0))
-  },[bb,filter,fYear,fMonth,q,clients,isProg])
+  },[bb,filter,fYear,fMonth,q,clients,isProg,tercerosByBilling])
 
   // Agrupar por cliente → razón social
   const grouped = useMemo(()=>{
@@ -3711,9 +3719,14 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
 
   const handleTogglePagado = async(b) => {
     if(b.status==='Pagado') { await onStatusChange(b.id,'Pendiente',null) }
-    else { setPayingId(b.id); setPayDate(new Date().toISOString().slice(0,10)) }
+    else { setPayingId(b.id); setPayDate(new Date().toISOString().slice(0,10)); setInclTerceros(true) }
   }
-  const confirmPago = async() => { await onStatusChange(payingId,'Pagado',payDate); setPayingId(null) }
+  const confirmPago = async() => {
+    const pend = (terceros||[]).filter(t=>String(t.billing_id)===String(payingId)&&t.estado==='pendiente')
+    await onStatusChange(payingId,'Pagado',payDate)
+    if(pend.length&&inclTerceros&&onConciliarTerceros) await onConciliarTerceros(payingId)
+    setPayingId(null)
+  }
   // Unificado a "convertir": la cuota programada pasa a emitida (Pendiente de cobro), no se borra.
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
   const marcarEmitida = async(b) => { if(confirm('¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.')) await emitirConRS(b) }
@@ -3891,13 +3904,14 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
                     {pagado&&b.paid_at&&<span style={{fontSize:11,fontWeight:600,color:C.normal}}>Pagada {fmtDMY(b.paid_at)}</span>}
                     {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:'#C77F18',fontWeight:600}}>Reembolso</span>}
                     {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#FBE9E7',color:C.overdue,fontWeight:600}}>Anulada</span>}
+                    {tercerosByBilling.has(b.id)&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600}}>Terceros</span>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
                     {prog ? (
                       selected.size===0&&<button onClick={()=>marcarEmitida(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Ya emitida</button>
                     ):(!anulada&&!pagado)&&(
-                      <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10))}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
+                      <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
                     )}
                     <button onClick={(e)=>{e.stopPropagation();setMenuBill(menuBill===b.id?null:b.id)}} style={{width:24,height:24,borderRadius:7,border:`1px solid ${menuBill===b.id?C.accent:C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
                       <svg width='13' height='13' viewBox='0 0 24 24' fill={menuBill===b.id?C.accent:C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
@@ -3941,9 +3955,9 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
             </div>
           ))}
         </div>}
-        <div style={{display:'flex',gap:6,marginBottom:8}}>
-          {[['emitidas','Emitidas'],['programadas','Programadas'],['pagado','Pagadas'],['all','Todas'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
-            <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:1,padding:'7px 2px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+        <div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
+          {[['emitidas','Emitidas'],['programadas','Programadas'],['pagado','Pagadas'],['all','Todas'],['terceros','Terceros'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
+            <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'1 0 auto',padding:'7px 11px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
         {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} onNuevo={onNuevoAnticipo}/>}
@@ -4018,7 +4032,24 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
               <label style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',marginBottom:6,display:'block'}}>FECHA DE PAGO</label>
               <input type='date' value={payDate} onChange={e=>setPayDate(e.target.value)} style={{width:'100%',border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'10px 11px',color:'#1a1a1a',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
             </div>
-            <div style={{padding:'6px 20px 20px',display:'flex',gap:8}}>
+            {(()=>{ const pend=(terceros||[]).filter(t=>String(t.billing_id)===String(payingId)&&t.estado==='pendiente'); if(!pend.length) return null
+              const tot=pend.reduce((a,t)=>a+(t.monto||0),0)
+              const nombres=pend.map(t=>t.proveedor||'colaborador').filter((v,i,a)=>a.indexOf(v)===i).join(', ')
+              return (
+                <div style={{margin:'4px 20px 0',padding:'11px 12px',background:'#E6EEF1',borderRadius:10}}>
+                  <div onClick={()=>setInclTerceros(v=>!v)} style={{display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer'}}>
+                    <span style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${inclTerceros?C.accent:C.border}`,background:inclTerceros?C.accent:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}>
+                      {inclTerceros&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
+                    </span>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>El pago incluyó lo de terceros</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:2,lineHeight:1.4}}>{nombres} · {fmt(tot)} → pasa{pend.length>1?'n':''} a <strong>Por pagar</strong>.</div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+            <div style={{padding:'14px 20px 20px',display:'flex',gap:8}}>
               <button onClick={()=>setPayingId(null)} style={{flex:1,height:40,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
               <button onClick={confirmPago} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer'}}>Confirmar pago</button>
             </div>
@@ -4114,7 +4145,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],onNuevoA
           </>
         ) : (
           <>
-            {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{isProg?'Sin facturas programadas':'Sin cobros'}</div>}
+            {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{isProg?'Sin facturas programadas':filter==='terceros'?'Sin facturas con costos de terceros':'Sin cobros'}</div>}
             {grouped.map(renderClientGroup)}
           </>
         )}
@@ -9196,6 +9227,18 @@ export default function App() {
     }catch(e){alert('Error: '+e.message); setSaving(false); return null}
   },[])
 
+  // Conciliación: al cobrar la factura ancla, las cuentas por pagar de esa factura pasan
+  // de 'pendiente' (cliente no ha pagado) a 'por_pagar' (ya tienes el fee, falta transferir al colaborador).
+  const handleConciliarTerceros=useCallback(async(billingId)=>{
+    try{
+      const ids=(terceros||[]).filter(t=>String(t.billing_id)===String(billingId)&&t.estado==='pendiente').map(t=>t.id)
+      if(!ids.length) return
+      const {error}=await supabase.from('terceros_pagos').update({estado:'por_pagar'}).in('id',ids)
+      if(error)throw error
+      setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'por_pagar'}:t))
+    }catch(e){alert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
+  },[terceros])
+
   const handleDeleteBilling=useCallback(async(id)=>{
     if(!confirm('¿Eliminar este cobro?')) return
     try{
@@ -9369,7 +9412,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
