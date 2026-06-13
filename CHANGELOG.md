@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Densidad: menos texto/instrucciones (criterio permanente)
+- Se adopta como criterio permanente **ahorrar espacio y minimizar texto/instrucciones visibles** en toda la app. Primeros recortes: se quitaron hints redundantes (ej. "Podrás agregar más razones sociales…"), se acortó la instrucción de Carga masiva ("Sube un Excel — la app reconoce las columnas solas") y se simplificó el rótulo de razón social.
+
 ## 2026-06-13 — Editar cobro más corto + adjuntar solo ícono
 - **Editar cobro**: el campo Notas pasó a una **sola línea** (antes era un recuadro alto) → la vista queda más corta.
 - **Adjuntar archivo** (en toda la app): ahora es **solo el ícono** (sin el texto "Adjuntar archivo" ni la línea "Máx. 15 MB"); el detalle queda en el tooltip. Ahorra espacio en todos los formularios.
