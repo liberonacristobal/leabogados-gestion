@@ -1705,6 +1705,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
   const porCobrar = bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrar.reduce((a,b)=>a+(b.amount||0),0)
+  // KPIs accionables del Dashboard (mismo criterio que Facturación). Tappables → tab Facturación.
+  const kpiPendiente = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
+  const kpiVencido = bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
+  const kpiProgramado = bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
   const age0_30  = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d>=-30 }).reduce((a,b)=>a+(b.amount||0),0)
   const age31_60 = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-30&&d>=-60 }).reduce((a,b)=>a+(b.amount||0),0)
   const age60p   = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-60 }).reduce((a,b)=>a+(b.amount||0),0)
@@ -1874,6 +1878,18 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
+      {/* KPIs accionables: tocar lleva a Facturación */}
+      <div style={{padding:'14px 20px 0'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {[['Por cobrar',kpiPendiente,C.accent],['Vencido',kpiVencido,C.overdue],['Cobrado '+yr,cobrado,C.normal],['Programado',kpiProgramado,'#537281']].map(([l,v,col])=>(
+            <button key={l} onClick={()=>setTab('billing')} style={{textAlign:'left',background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
+              <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+              <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',marginTop:2}}>{fmtShort(v)}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda}/>
       <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef}/>
 
@@ -1993,13 +2009,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               const prop = Math.min(100, Math.abs(d.saldo)/maxDeficit*100)
               return (
               <div key={c.id} style={{borderBottom:`1px solid ${C.border}`}}>
-                <button onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'10px 14px',background:abierto?'#F5F7F9':'none',border:'none',cursor:'pointer',textAlign:'left'}}>
-                  <div style={{width:30,height:30,borderRadius:'50%',background:'#FCEBEB',color:C.overdue,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{iniciales(c.name)}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-                    <div style={{height:4,background:'#E4E8EB',borderRadius:2,overflow:'hidden',marginTop:4}}><div style={{height:'100%',background:C.overdue,width:`${prop}%`,borderRadius:2}}/></div>
-                  </div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(d.saldo)}</div>
+                <button onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'9px 14px',background:abierto?'#F5F7F9':'none',border:'none',cursor:'pointer',textAlign:'left'}}>
+                  <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(d.saldo)}</div>
                   <Chev open={abierto}/>
                 </button>
                 {abierto&&(
@@ -2040,9 +2052,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Gestión Caja Chica — control del equipo (el Dashboard ya es admin-only) */}
       {(()=>{
-        const LIMITED_NAMES=new Set(['Martín','Martina','Rodrigo'])
-        const cajaUsers = [...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>LIMITED_NAMES.has(u)).sort((a,b)=>a.localeCompare(b,'es'))
-        if(cajaUsers.length===0) return null
+        // Siempre mostrar al equipo limited completo, aunque alguno no tenga movimientos aún (ej. Martín sin caja todavía).
+        const cajaUsers = ['Martín','Martina','Rodrigo']
         const money = fmtN
         const filas = cajaUsers.map(u=>{
           const saldo = saldoCajaChica(pettyCash, expenses, u)
