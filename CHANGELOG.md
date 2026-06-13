@@ -5,6 +5,7 @@
 - **Proveedores**: el nombre visible es el **contacto (la persona)**; la razón social pasa a subtítulo.
 - **Pago a proveedor**: el modal Pagar (individual y en bloque) pide **N° de documento del proveedor y su fecha** (factura/boleta que respalda el pago). Requiere columnas `factura_numero` (text) y `factura_fecha` (date) en `terceros_pagos`.
 - **Anticipos**: el filtro Anticipos ya no muestra el listado de facturas por cliente debajo (era redundante); solo el panel de anticipos.
+- **Proveedores** se movió de Facturación a la pestaña **Clientes** (botón arriba a la derecha); Facturación queda más liviana.
 
 ## 2026-06-13 — Honorarios y Costos en una línea (Opción C)
 - En nueva venta/propuesta, **Honorarios y Costos de proveedores** quedan en dos columnas en la misma fila, con el **toggle UF/CLP compartido** subido al header de la sección (ya no duplicado). Costos conserva su toggle UF/% inline. El valor UF del día queda compacto bajo Honorarios.
