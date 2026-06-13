@@ -118,7 +118,8 @@
       "Bash(python3 -c \"from PIL import Image, ImageDraw, ImageFont; print\\('PIL ok'\\)\")",
       "Bash(cat)",
       "Bash(python3 render_fact.py)",
-      "Bash(perl -ni -e 'if\\($.>=2642 && $.<=3600\\){s/marginBottom:14/marginBottom:10/g} print' src/App.jsx)"
+      "Bash(perl -ni -e 'if\\($.>=2642 && $.<=3600\\){s/marginBottom:14/marginBottom:10/g} print' src/App.jsx)",
+      "Bash(perl -0pi -e \"s#scopes: 'https://www\\\\.googleapis\\\\.com/auth/drive',#scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send',#g\" src/supabase.js)"
     ]
   }
 }
