@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Drive solo logo + "Terceros" → "Proveedores"
+- Los 4 botones de importar desde Drive ahora muestran **solo el logo** (se quitó el texto "Drive"; ícono a 16px).
+- En toda la interfaz visible, **"Terceros" pasó a "Proveedores"**: KPI del Dashboard, switch y fila "Costos de proveedores" en venta, tag y filtro "Proveedores" en Facturación, conciliación "El pago incluyó lo de proveedores", avisos de reconciliación y mensajes vacíos. (Los nombres internos de tabla/variables/componentes se mantienen.)
+
 ## 2026-06-13 — Auditoría Tanda A: fixes de cifras
 - **Export de Ventas (ReportBuilder)**: ahora usa `ventaUF` (anualiza recurrentes ×12 y convierte ventas en CLP→UF) y la meta `META_UF` real (antes sumaba `amount_uf` crudo y meta 9.800 hardcodeada) → el reporte cuadra con el Dashboard. Filas y totales coherentes.
 - **Tasa de cobro**: numerador y denominador en el mismo universo (facturado del año) + tope 100% (antes podía pasar de 100% contando pagos de años previos).
