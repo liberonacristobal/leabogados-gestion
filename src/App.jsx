@@ -7686,21 +7686,22 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
           </div>
         </div>
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
-        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
+        <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
+          <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1,marginBottom:0}}/>
+          {onProveedores&&<button onClick={onProveedores} style={{flexShrink:0,padding:'0 13px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:500,cursor:'pointer'}}>Proveedores</button>}
+        </div>
         {sFilter ? (
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
             <button onClick={()=>{setSFilter(null);setRespSel(new Set())}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]}</button>
             {responsables.map(r=>{ const on=respSel.has(r); return (
-              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{height:30,padding:'0 12px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:'#537281',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{r}</button>
+              <button key={r} onClick={()=>toggleResp(r)} title={r} style={{height:26,padding:'0 10px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:'#537281',fontSize:10.5,fontWeight:on?600:500,cursor:'pointer',whiteSpace:'nowrap'}}>{r}</button>
             )})}
-            {onProveedores&&<button onClick={onProveedores} style={{marginLeft:'auto',height:30,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Proveedores</button>}
           </div>
         ) : (
           <div style={{display:'flex',gap:6,marginBottom:4}}>
             {[['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>(
               <button key={v} onClick={()=>{setSFilter(v);setRespSel(new Set())}} style={{flex:1,padding:'7px 0',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
             ))}
-            {onProveedores&&<button onClick={onProveedores} style={{padding:'7px 11px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Proveedores</button>}
           </div>
         )}
       </div>
