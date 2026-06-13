@@ -1546,15 +1546,20 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
       </div>
       {showList&&(<>
       <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-      {personas.map(persona=>{
+      {personas.map((persona,pi)=>{
         const [avBg,avColor]=avatarColor(persona)
         const isOpen=!!openPersonas[persona]
+        const lista=porPersona[persona]
+        const vencidas=lista.filter(t=>{const d=daysLeft(t.due); return d!==null&&d<0}).length
+        const prontas=lista.filter(t=>{const d=daysLeft(t.due); return d!==null&&d>=0&&d<=7}).length
         return (
           <div key={persona}>
-            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderTop:`1px solid #E4E8EB`,cursor:'pointer',userSelect:'none'}}>
-              <div style={{width:24,height:24,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
-              <span style={{fontSize:13,fontWeight:500,color:C.muted}}>{persona}</span>
-              <span style={{fontSize:12,color:C.muted,flex:1}}>{' · '}{porPersona[persona].length}</span>
+            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:pi===0?'none':`1px solid #E4E8EB`,cursor:'pointer',userSelect:'none',background:isOpen?'#F5F7F9':'transparent'}}>
+              <div style={{width:28,height:28,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
+              <span style={{fontSize:13.5,fontWeight:600,color:C.text,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{persona}</span>
+              {vencidas>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:9,background:'#FCEBEB',color:'#E24B4A',flexShrink:0}}>{vencidas} vencida{vencidas!==1?'s':''}</span>}
+              {vencidas===0&&prontas>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:9,background:'#FFF8E1',color:'#C77F18',flexShrink:0}}>{prontas} pronta{prontas!==1?'s':''}</span>}
+              <span style={{fontSize:11,fontWeight:600,color:C.muted,background:'#E4E8EB',borderRadius:9,padding:'2px 7px',flexShrink:0}}>{lista.length}</span>
               <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:isOpen?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:isOpen?-2:2,flexShrink:0}}></span>
             </div>
             {isOpen&&porPersona[persona].map(t=>{
@@ -1887,7 +1892,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       </div>
 
       {/* KPIs accionables: tocar lleva a Facturación */}
-      <div style={{padding:'14px 20px 0'}}>
+      <div style={{padding:'16px 20px 0'}}>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Cobranza</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
           {[['Por cobrar',kpiPendiente,C.accent],['Vencido',kpiVencido,C.overdue],['Cobrado '+yr,cobrado,C.normal],['Programado',kpiProgramado,'#537281']].map(([l,v,col])=>(
             <button key={l} onClick={()=>setTab('billing')} style={{textAlign:'left',background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
@@ -1915,13 +1921,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           const cnum = {fontSize:17,fontWeight:600,whiteSpace:'nowrap'}
           return (
             <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:terceros>0?6:0}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:terceros>0?8:0}}>
                 <div style={cell(C.normal)} title={fmt(facturado)}><div style={clbl}>Facturado</div><div style={{...cnum,color:C.normal}}>{m(facturado)}</div></div>
                 <div style={cell(C.normal)} title={fmt(cobrado)}><div style={clbl}>Cobrado</div><div style={{...cnum,color:C.normal}}>{m(cobrado)}</div></div>
                 <div style={cell(tasaCol)}><div style={clbl}>Tasa cobro</div><div style={{...cnum,color:tasaCol}}>{tasaCobro}%</div></div>
               </div>
               {terceros>0&&(
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <div style={cell(C.accent)} title={fmt(netoFirma)}><div style={clbl}>Neto firma</div><div style={{...cnum,color:C.accent}}>{m(netoFirma)}</div></div>
                   <div style={cell('#C77F18')} title={fmt(terceros)}><div style={clbl}>Proveedores</div><div style={{...cnum,color:'#C77F18'}}>{m(terceros)}</div></div>
                 </div>
