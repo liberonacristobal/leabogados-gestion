@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-06-12
+- Facturación · rediseño de filas (cuentas por pagar, commit 1): cada factura se reordenó — concepto y monto arriba (el concepto se trunca, el monto deja de correrse), "Factura N° 359 · Fecha: 01-06-2026" debajo, y en la última línea un **semáforo** (días desde emisión, color verde/ámbar/rojo según vencimiento) + badges. Las acciones se simplificaron: botón **"Registrar pago"** (abre el modal; revertir se hace desde Editar) y un menú **⋯** que recoge **Editar / Anular** (saca la acción destructiva del camino). Se arregló el campo de fecha del modal Confirmar pago (quedaba descuadrado en iOS).
+
 - Registrar fondo recibido · rediseño moderno (mismo lenguaje que Nuevo anticipo): título "Registrar fondo | Cliente", cliente con avatar + saldo actual, **Proyecto obligatorio** (de las ventas/propuestas del cliente, guarda `project`+`sale_id`), fila **Razón social · Monto · Fecha** (RS obligatoria salvo que el cliente no tenga ninguna), montos rápidos en pills y descripción amplia. Botón azul "Guardar fondo".
 - Facturación · excluir reembolsos de gastos: toda la vista de Facturación (lista, KPIs Por cobrar/Programado/Vencido/Cobrado, conteos), el aging de cartera y la proyección/cobranza del Dashboard ahora excluyen los registros `billing_type='reembolso'` (no se borran ni se ocultan en la ficha del cliente ni en el modal Editar cobro). Además se quitaron los conteos entre paréntesis de las pestañas (Emitidas / Programadas / Pagadas).
 - Confirmar pago · rediseño: el modal de confirmar pago se rehízo (centrado, responsive) — label "CONFIRMAR PAGO", monto grande + concepto · folio, ícono check verde, campo "FECHA DE PAGO" (sin el texto "Fecha en que se recibió el pago") y botones Cancelar / Confirmar pago.
