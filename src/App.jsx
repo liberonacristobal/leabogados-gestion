@@ -2572,51 +2572,58 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   }
   const suma = rows.reduce((a,r)=>a+enUnidad(r),0)
   const tol = esUF ? 0.01 : 1
-  const desc = costTotal>0 ? costTotal-suma : 0
-  const cuadra = Math.abs(desc)<=tol
-  const hayClpEnUF = esUF && rows.some(r=>r.tipo==='clp' && (parseFloat(r.valor)||0)>0)
+  const cuadra = costTotal<=0 || Math.abs(costTotal-suma)<=tol
   const up=(i,k,v)=>setRows(rows.map((r,j)=>j===i?{...r,[k]:v}:r))
-  const addRow=()=>setRows([...rows,{proveedor_id:'',tipo:defTipo,valor:''}])
+  // Al agregar un proveedor toma por defecto el costo aún no repartido (todo el costo si es el primero), en las mismas cuotas.
+  const addRow=()=>{
+    const asignado = rows.reduce((a,r)=>a+enUnidad(r),0)
+    const resto = Math.max(0, costTotal-asignado)
+    const val = resto>0 ? (esUF? String(+resto.toFixed(2)) : String(Math.round(resto))) : ''
+    setRows([...rows,{proveedor_id:'',tipo:defTipo,valor:val,_edit:false}])
+  }
   const delRow=i=>setRows(rows.filter((_,j)=>j!==i))
   const tipos=[['pct','%'],['uf','UF'],['clp','$']]
+  const Switch = ({on,onClick,title}) => (
+    <button type='button' onClick={onClick} title={title} style={{width:30,height:17,borderRadius:9,border:'none',background:on?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0,transition:'background .15s'}}>
+      <span style={{position:'absolute',top:2,left:on?15:2,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
+    </button>
+  )
   return (
-    <div style={{background:'#F7F9FA',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
+    <div style={{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
       <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>¿A quién le pagas?</div>
       {provs.length===0?(
         <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes proveedores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
       ):(<>
-        {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Se reparte en las mismas cuotas del cobro.</div>}
         {rows.map((r,i)=>{
           const tipo=r.tipo||defTipo
           return (
-          <div key={i} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 24px',gap:6,marginBottom:7,alignItems:'center'}}>
-            <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
-              <option value=''>— Proveedor —</option>
-              {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
-            </select>
-            <div style={{display:'flex',height:36,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff'}}>
-              <input type='number' value={r.valor??''} onChange={e=>up(i,'valor',e.target.value)} placeholder={tipo==='pct'?'%':tipo==='uf'?'UF':'$'} style={{flex:1,minWidth:0,border:'none',padding:'0 8px',fontSize:13,color:C.text,outline:'none'}}/>
-              <div style={{display:'flex',flexShrink:0}}>
-                {tipos.map(([v,l])=>(
-                  <button key={v} type='button' onClick={()=>up(i,'tipo',v)} style={{padding:'0 7px',border:'none',borderLeft:`1px solid ${C.border}`,background:tipo===v?C.accent:'#F5F7F9',color:tipo===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
-                ))}
-              </div>
+          <div key={i} style={{marginBottom:9}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto',gap:8,alignItems:'center'}}>
+              <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
+                <option value=''>— Proveedor —</option>
+                {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
+              </select>
+              <Switch on={!!r._edit} onClick={()=>up(i,'_edit',!r._edit)} title='Editar monto y forma'/>
+              <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
             </div>
-            <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
+            {r._edit?(
+              <div style={{display:'flex',height:36,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff',marginTop:6}}>
+                <input type='number' value={r.valor??''} onChange={e=>up(i,'valor',e.target.value)} placeholder={tipo==='pct'?'%':tipo==='uf'?'UF':'$'} style={{flex:1,minWidth:0,border:'none',padding:'0 9px',fontSize:13,color:C.text,outline:'none'}}/>
+                <div style={{display:'flex',flexShrink:0}}>
+                  {tipos.map(([v,l])=>(
+                    <button key={v} type='button' onClick={()=>up(i,'tipo',v)} style={{padding:'0 8px',border:'none',borderLeft:`1px solid ${C.border}`,background:tipo===v?C.accent:'#F5F7F9',color:tipo===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            ):(
+              <div style={{fontSize:11.5,color:C.muted,marginTop:4}}><strong style={{color:C.text,fontWeight:600}}>{fmtU(enUnidad(r))}</strong> · en las mismas cuotas del cobro</div>
+            )}
           </div>
         )})}
-        <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:2}}>+ Agregar proveedor</button>
-        {hayClpEnUF&&(
-          <div style={{fontSize:11,color:C.muted,background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
-            Hay un costo en <strong>pesos fijos</strong> y la venta es en UF: ese monto no se reajusta con la factura. Si quieres que suba junto con la UF, usa <strong>%</strong> o <strong>UF</strong>.
-          </div>
-        )}
+        <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:rows.length?2:0}}>+ Agregar proveedor</button>
         {rows.length>0&&costTotal>0&&!cuadra&&(
-          <div style={{fontSize:11,color:'#B8860B',background:'#FFF8E1',border:'0.5px solid #F0D88A',borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
-            El reparto suma <strong>{fmtU(suma)}</strong>, pero el costo de proveedores es <strong>{fmtU(costTotal)}</strong> ({desc>0?`faltan ${fmtU(desc)}`:`sobran ${fmtU(-desc)}`}).
-          </div>
+          <div style={{fontSize:11,color:C.muted,marginTop:8}}>Repartido <strong style={{color:C.text}}>{fmtU(suma)}</strong> de <strong style={{color:C.text}}>{fmtU(costTotal)}</strong>.</div>
         )}
-        {rows.length>0&&costTotal>0&&cuadra&&<div style={{fontSize:11,color:C.normal,marginTop:9}}>Reparto cuadra con el costo de proveedores: {fmtU(suma)}.</div>}
       </>)}
     </div>
   )
@@ -3173,16 +3180,16 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
       {/* 2. Razón social */}
       {f.client_id&&(
-        <Fld label='Razón social a facturar'>
-          {clientEntitiesList.length>0?(
+        clientEntitiesList.length>0?(
+          <Fld label='Razón social a facturar'>
             <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}>
               <option value=''>— Asociar después —</option>
               {clientEntitiesList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
             </select>
-          ):(
-            <div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Este cliente no tiene razones sociales. Se asociará al emitir la primera factura.</div>
-          )}
-        </Fld>
+          </Fld>
+        ):(
+          <div style={{marginBottom:10}}><Lbl><span>Razón social a facturar </span><span style={{textTransform:'none',fontWeight:400,letterSpacing:0}}>(se asocia al emitir la 1ª factura)</span></Lbl></div>
+        )
       )}
 
       {/* 3. Área + Responsable */}
@@ -10368,7 +10375,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return cn?`${base} · ${cn}`:base })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
