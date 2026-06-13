@@ -2091,47 +2091,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {/* Costos de oficina del mes (cliente interno) */}
-      {(()=>{
-        const internalIds = new Set((clients||[]).filter(c=>c.is_internal).map(c=>c.id))
-        if(internalIds.size===0) return null
-        const gastosOf = (expenses||[]).filter(e=>e.type==='gasto'&&internalIds.has(e.client_id))
-        const delMes = gastosOf.filter(e=>e.date?.slice(0,7)===mesOficina).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
-        const totalMes = delMes.reduce((a,e)=>a+(e.amount||0),0)
-        const mesLbl = (()=>{ try{ return new Date(mesOficina+'-01T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase()) }catch(_){ return mesOficina } })()
-        return (
-          <div style={{padding:'16px 20px 0'}}>
-            <button onClick={()=>setOpenOficina(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openOficina?8:0}}>
-              <span style={{fontSize:10,color:C.muted,transform:openOficina?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-              <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Costos de oficina del mes</span>
-              <span style={{fontSize:12,fontWeight:600,color:C.text,marginLeft:'auto'}}>{fmt(totalMes)}</span>
-            </button>
-            {openOficina&&(
-              <div style={{marginTop:8,background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
-                  <input type='month' value={mesOficina} onChange={e=>setMesOficina(e.target.value)} style={{padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:12}}/>
-                  <span style={{fontSize:12,color:C.muted}}>{delMes.length} gasto{delMes.length!==1?'s':''}</span>
-                </div>
-                {delMes.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>Sin costos de oficina en {mesLbl}</div>}
-                {delMes.map(e=>(
-                  <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`,gap:8}}>
-                    <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>{e.category||'—'}{e.subcategory?`: ${e.subcategory}`:''} · {fmtDate(e.date)}</div>
-                    </div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmt(e.amount)}</div>
-                  </div>
-                ))}
-                {delMes.length>0&&(
-                  <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0 0',fontSize:13,fontWeight:600,color:C.text}}>
-                    <span>Total {mesLbl}</span><span>{fmt(totalMes)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })()}
 
       {/* Cuentas por pagar a proveedores (costos de terceros) */}
       {(()=>{
