@@ -5494,7 +5494,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Paso 1: tipo + subir archivo */}
       {!rows&&(
         <>
-          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Sube un Excel con las columnas indicadas. Cada fila debe traer RUT, Nombre, Fecha, Monto, Concepto{tipo==='gasto'?' y Categoría':''}.</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Sube un Excel — la app reconoce las columnas solas.</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
             {[['gasto','Gastos'],['fondo','Fondos']].map(([v,l])=>(
               <button key={v} type='button' onClick={()=>setTipo(v)} style={{padding:'10px',borderRadius:8,border:`2px solid ${tipo===v?C.accent:C.border}`,background:tipo===v?'#E6EEF1':'transparent',color:tipo===v?C.accent:C.muted,fontSize:13,fontWeight:700,cursor:'pointer'}}>{l}</button>
@@ -7725,12 +7725,11 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
       <Fld label='Notas'><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
       {client?.id?<EntitiesEditor clientId={client.id}/>:(
         <div style={{marginBottom:14,padding:14,borderRadius:10,border:`1px solid ${C.border}`,background:'#FAFAFA'}}>
-          <Lbl>Razón social <span style={{textTransform:'none',letterSpacing:0,color:C.muted}}>· opcional, se crea con el cliente</span></Lbl>
+          <Lbl>Razón social <span style={{textTransform:'none',letterSpacing:0,color:C.muted}}>· opcional</span></Lbl>
           <div style={{display:'grid',gridTemplateColumns:'1fr 130px',gap:8}}>
             <Inp value={rsIni.name} onChange={e=>setRsIni(r=>({...r,name:e.target.value}))} placeholder={f.name?.trim()||'Razón social'}/>
             <Inp value={rsIni.rut} onChange={e=>setRsIni(r=>({...r,rut:e.target.value}))} placeholder='RUT'/>
           </div>
-          <div style={{fontSize:11,color:C.muted,marginTop:6}}>Podrás agregar más razones sociales después de guardar.</div>
         </div>
       )}
       {client?.id&&<ContactsEditor clientId={client.id} clientName={f.name||client.name}/>}
