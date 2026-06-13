@@ -3934,6 +3934,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
   const [showMeses,setShowMeses] = useState(false)
+  const [showBuscar,setShowBuscar] = useState(false)
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
   const [payDate,setPayDate] = useState('')
@@ -4253,7 +4254,18 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&<>
-        <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura...' style={{marginBottom:6,padding:'7px 11px',fontSize:13}}/>
+        {showBuscar ? (
+          <div style={{display:'flex',gap:6,marginBottom:6}}>
+            <Inp autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura...' style={{flex:1,marginBottom:0,padding:'7px 11px',fontSize:13}}/>
+            <button onClick={()=>setShowBuscar(false)} style={{flexShrink:0,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Listo</button>
+          </div>
+        ) : (
+          <button onClick={()=>setShowBuscar(true)} style={{display:'inline-flex',alignItems:'center',gap:6,marginBottom:6,padding:'7px 13px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',maxWidth:'100%',overflow:'hidden'}}>
+            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' style={{flexShrink:0}}><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q||'Buscar'}</span>
+            {q&&<span onClick={e=>{e.stopPropagation();setQ('')}} style={{flexShrink:0,marginLeft:2,fontSize:14,lineHeight:1}}>×</span>}
+          </button>
+        )}
         <div style={{display:'flex',gap:6,marginBottom:(fYear&&showMeses)?6:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
           {[['','Todos'],...years.map(y=>[y,y])].map(([v,l])=>{ const on=fYear===v; return (
             <button key={v||'all'} onClick={()=>{setFYear(v); if(!v){setFMonth('');setShowMeses(false)}}} style={{flexShrink:0,height:28,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
