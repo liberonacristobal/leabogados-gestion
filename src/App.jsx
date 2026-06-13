@@ -2549,8 +2549,9 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
   const [cubrirAnt,setCubrirAnt] = useState(null)
+  const [facturarAntS,setFacturarAntS] = useState(null)
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Si estamos activando una propuesta, guardar el honorario original antes de que el usuario lo edite
@@ -3328,6 +3329,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:'#99ABB4'}}>{fmtDA(a.fecha)}{a.nota?` · ${a.nota}`:''}</div></div>
                         <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?'#E1F5EE':cubre?'#E6EEF1':'#F5F7F9',color:disp?C.normal:cubre?C.accent:'#99ABB4'}}>{disp?'Disponible':cubre?'En cuotas':'Consumido'}</span>
                         {disp&&onCubrirCuotas&&<button type='button' onClick={()=>setCubrirAnt(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Aplicar a cuotas</button>}
+                        {!disp&&cubre&&!a.billing_id&&onFacturarBloque&&<button type='button' onClick={()=>setFacturarAntS(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Emitir factura</button>}
                         {!disp&&cubre&&onDescubrirCuotas&&<button type='button' onClick={()=>onDescubrirCuotas(a.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Deshacer</button>}
                       </div>
                     )})}
@@ -3339,6 +3341,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         )
       })()}
       {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={[sale].filter(Boolean)} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
+      {facturarAntS&&<FacturarBloqueModal anticipo={facturarAntS} billing={billing} sales={[sale].filter(Boolean)} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAntS,d)} onClose={()=>setFacturarAntS(null)}/>}
 
       {/* 10. Actualizar honorarios (solo ventas guardadas) */}
       {sale?.id&&(
@@ -3848,9 +3851,10 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onStatusChange,onDelete,onAdd,onEdit,onImport,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
+  const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
   const [filter,setFilter] = useState('emitidas')
   const [fYear,setFYear] = useState('')
   const [fMonth,setFMonth] = useState('')
@@ -4162,8 +4166,9 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'1 0 auto',padding:'7px 11px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
-        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas}/>}
+        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onFacturar={setFacturarAnt}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
+        {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&<>
         <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, N° factura...' style={{marginBottom:6}}/>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:4}}>
@@ -4586,6 +4591,37 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
 }
 
 // ─── ANTICIPOS PANEL (tab Anticipos en Facturación, PP-15) ────────────────────
+// Emitir una sola factura por el bloque de cuotas que cubrió un anticipo.
+function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,onClose}) {
+  const hoy = new Date().toISOString().slice(0,10)
+  const [invoiceNo,setInvoiceNo] = useState('')
+  const [issued,setIssued] = useState(hoy)
+  const [busy,setBusy] = useState(false)
+  const cliente = clients.find(c=>String(c.id)===String(anticipo.client_id))
+  const cuotas = (billing||[]).filter(b=>String(b.prepaid_anticipo_id)===String(anticipo.id))
+  const monto = cuotas.reduce((a,b)=>a+(b.amount||0),0)
+  const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
+  const fl={fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:400,padding:18,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+        <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:3}}>Emitir una factura por el bloque</div>
+        <div style={{fontSize:11.5,color:'#99ABB4',marginBottom:12}}>{cliente?.name||'Cliente'} · {cuotas.length} cuota{cuotas.length!==1?'s':''} anticipada{cuotas.length!==1?'s':''}</div>
+        <div style={{textAlign:'center',fontSize:26,fontWeight:600,letterSpacing:'-.5px',color:C.text,marginBottom:14}}>{fmt(monto)}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+          <div><span style={fl}>N° Factura</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder='367...' style={inp}/></div>
+          <div><span style={fl}>Fecha emisión</span><input type='date' value={issued} onChange={e=>setIssued(e.target.value)} style={inp}/></div>
+        </div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.4}}>Se crea <strong style={{color:C.text}}>una factura</strong> por el total, marcada Pagada (con el anticipo). Las cuotas siguen como referencia, sin emitirse por separado.</div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={busy} onClick={async()=>{ setBusy(true); const r=await onConfirm({invoice_no:invoiceNo.trim()||null,issued_at:issued}); setBusy(false); if(r) onClose() }} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1}}>{busy?'Emitiendo...':'Emitir factura'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Cubrir cuotas programadas con un anticipo. Sugiere por monto (consume desde la 1ª) y se puede ajustar a mano.
 function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,onClose}) {
   const cliente = clients.find(c=>String(c.id)===String(anticipo.client_id))
@@ -4640,7 +4676,7 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
   )
 }
 
-function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir}) {
+function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onFacturar}) {
   const [fil,setFil] = useState('disponible')
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
@@ -4700,7 +4736,12 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
                   </div>
                 </div>
                 {disp&&onCubrir&&<button onClick={()=>onCubrir(a)} style={{marginTop:7,fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Aplicar a cuotas programadas</button>}
-                {!disp&&cubreCuotas&&onDescubrir&&<button onClick={()=>onDescubrir(a.id)} style={{marginTop:7,fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Deshacer cobertura</button>}
+                {!disp&&cubreCuotas&&(
+                  <div style={{display:'flex',gap:7,marginTop:7,flexWrap:'wrap'}}>
+                    {!a.billing_id&&onFacturar&&<button onClick={()=>onFacturar(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Emitir una factura</button>}
+                    {onDescubrir&&<button onClick={()=>onDescubrir(a.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Deshacer cobertura</button>}
+                  </div>
+                )}
               </div>
             )})}
           </div>
@@ -9933,6 +9974,25 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  // Emitir UNA factura por el bloque de cuotas que cubrió un anticipo (queda Pagada, pagada con el anticipo).
+  const handleFacturarBloqueAnticipo=useCallback(async(anticipo,{invoice_no,issued_at})=>{
+    try{
+      const cuotas=(billing||[]).filter(b=>String(b.prepaid_anticipo_id)===String(anticipo.id))
+      if(!cuotas.length){ alert('Este anticipo no cubre cuotas.'); return null }
+      const monto=cuotas.reduce((a,b)=>a+(b.amount||0),0)
+      const ref=cuotas[0]
+      const fecha=issued_at||new Date().toISOString().slice(0,10)
+      const venta=sales.find(s=>String(s.id)===String(anticipo.sale_id))
+      const payload={client_id:anticipo.client_id, sale_id:anticipo.sale_id||ref?.sale_id||null, entity_id:anticipo.entity_id||ref?.entity_id||null, concept:`${venta?.title||'Honorarios'} — anticipo (${cuotas.length} cuota${cuotas.length!==1?'s':''})`, amount:monto, status:'Pagado', issued_at:fecha, paid_at:fecha, invoice_no:invoice_no||null, billing_type:'honorarios', receptor_name:ref?.receptor_name||null, receptor_rut:ref?.receptor_rut||null}
+      const {data,error}=await supabase.from('billing').insert(payload).select().single()
+      if(error)throw error
+      await supabase.from('anticipos').update({billing_id:data.id}).eq('id',anticipo.id)
+      const {data:nb}=await getBilling(); if(nb)setBilling(nb)
+      setAnticipos(p=>p.map(a=>a.id===anticipo.id?{...a,billing_id:data.id}:a))
+      return data
+    }catch(e){alert('Error: '+e.message); return null}
+  },[billing,sales])
+
   // Proveedores (PP terceros): crear/editar un proveedor del catálogo
   const handleSaveProveedor=useCallback(async(f)=>{
     setSaving(true)
@@ -10141,7 +10201,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
@@ -10156,7 +10216,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}

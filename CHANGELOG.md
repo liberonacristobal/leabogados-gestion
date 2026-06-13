@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-13 — Una factura por el bloque anticipado — etapa 4
+- Para un anticipo que ya cubre cuotas, botón **"Emitir una factura"** (en Anticipos y en la ficha de la venta): crea **una sola factura** por el total del bloque, marcada Pagada (pagada con el anticipo), con N° y fecha. Las cuotas siguen como referencia (Anticipada), sin emitirse por separado. O puedes dejarlo sin factura. Cierra el flujo anticipos↔cuotas (etapas 1-4).
+
 ## 2026-06-13 — Anticipos↔cuotas desde la ficha de la venta — etapa 3
 - En la ficha de una venta/propuesta, nueva sección **"Anticipos y cuotas"**: muestra cuántas cuotas están anticipadas vs programadas y los anticipos del proyecto, con la misma acción **"Aplicar a cuotas"** (sugiere por monto + ajustas) y **"Deshacer"**. Así reflejas "anticipo recibido + resto en cuotas" desde la venta, no solo desde Anticipos.
 
