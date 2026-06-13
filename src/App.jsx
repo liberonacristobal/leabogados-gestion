@@ -3931,6 +3931,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
   const [filter,setFilter] = useState('emitidas')
+  const [impOpen,setImpOpen] = useState(false)
   const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
   const [showMeses,setShowMeses] = useState(false)
@@ -4231,10 +4232,17 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
           <div style={{display:'flex',gap:6}}>
             {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:descargando?'default':'pointer',opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
-            <button onClick={onImportExcel} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ Excel</button>
-            <button onClick={onUpload} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ PDFs</button>
-            <button onClick={onImport} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button>
-            <button onClick={()=>setSiiOpen(true)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ SII</button>
+            <div style={{position:'relative'}}>
+              <button onClick={()=>setImpOpen(o=>!o)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ Importar ▾</button>
+              {impOpen&&<>
+                <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
+                <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
+                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['SII',()=>setSiiOpen(true)]].map(([l,fn])=>(
+                    <div key={l} onClick={()=>{setImpOpen(false);fn()}} style={{padding:'10px 14px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{l}</div>
+                  ))}
+                </div>
+              </>}
+            </div>
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
