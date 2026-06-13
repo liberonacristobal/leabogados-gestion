@@ -114,7 +114,10 @@
       "Bash(perl -0pi -e 's/p\\\\?\\\\.razon_social\\\\?\\\\.trim\\\\\\(\\\\\\)\\\\|\\\\|p\\\\?\\\\.nombre\\\\?\\\\.trim\\\\\\(\\\\\\)\\\\|\\\\|.Proveedor./p?.nombre?.trim\\(\\)||p?.razon_social?.trim\\(\\)||\\\\x27Proveedor\\\\x27/g' src/App.jsx)",
       "Bash(perl -0pi -e \"s/const subtit = prov\\\\?\\\\.razon_social\\\\?\\\\.trim\\\\\\(\\\\\\) \\\\? \\\\`\\\\\\\\\\\\$\\\\{prov\\\\.nombre\\\\?\\\\`\\\\\\\\\\\\$\\\\{prov\\\\.nombre\\\\} · \\\\`:''\\\\}\\\\\\\\\\\\$\\\\{prov\\\\.rut\\\\|\\\\|''\\\\}\\\\`\\\\.replace\\\\\\(\\\\/ · \\\\\\\\\\\\$\\\\/,''\\\\\\) : \\\\\\(prov\\\\?\\\\.rut\\\\|\\\\|''\\\\\\)/const subtit = [prov?.razon_social?.trim\\(\\), prov?.rut].filter\\(Boolean\\).join\\(' · '\\)/g\" src/App.jsx)",
       "Bash(git ls-remote *)",
-      "Bash(pkill -f \"vite\")"
+      "Bash(pkill -f \"vite\")",
+      "Bash(python3 -c \"from PIL import Image, ImageDraw, ImageFont; print\\('PIL ok'\\)\")",
+      "Bash(cat)",
+      "Bash(python3 render_fact.py)"
     ]
   }
 }

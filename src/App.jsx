@@ -3967,6 +3967,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
     let r = bb
     if(filter==='emitidas') r = r.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status))
     else if(filter==='programadas') r = r.filter(b=>b.status==='Programada')
+    else if(filter==='vencido') r = r.filter(b=>b.status==='Vencido')
     else if(filter==='pagado') r = r.filter(b=>b.status==='Pagado')
     else if(filter==='terceros') r = r.filter(b=>tercerosByBilling.has(b.id))
     if(fYear) r = r.filter(b=>dateField(b)?.startsWith(fYear))
@@ -4234,17 +4235,17 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
-        {filter!=='anticipos'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
-          {[['Por cobrar',fmt(pending),'#E6EEF1',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FCEBEB',C.overdue],['Cobrado',fmt(paid),'#E1F5EE',C.normal]].map(([l,v,bg,col])=>(
-            <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
-              <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
-            </div>
-          ))}
+        {filter!=='anticipos'&&filter!=='checklist'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:9}}>
+          {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Programado',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=filter===fl; return (
+            <button key={l} onClick={()=>{setFilter(fl);clearSel()}} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 8px',border:`1.5px solid ${on?col:C.border}`,cursor:'pointer',minWidth:0}}>
+              <div style={{fontSize:8.5,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
+            </button>
+          )})}
         </div>}
         <div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
-          {[['emitidas','Emitidas'],['programadas','Programadas'],['pagado','Pagadas'],['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
-            <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'1 0 auto',padding:'7px 11px',borderRadius:8,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
+          {[['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos']].map(([v,l])=>(
+            <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'0 0 auto',padding:'6px 12px',borderRadius:20,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
         </div>
         {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onFacturar={setFacturarAnt}/>}

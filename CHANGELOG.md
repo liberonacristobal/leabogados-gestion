@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-13 — Facturación: KPIs compactos y tappables = navegación
+- Los 4 KPIs (Por cobrar / Programado / Vencido / Cobrado) ahora son **más chicos y tappables**: al tocar uno entras a su detalle (reemplazan las tabs Emitidas/Programadas/Pagadas). El activo queda resaltado con su color.
+- Tabs secundarias (Todas, Proveedores, Checklist, Anticipos) quedan en una fila de píldoras debajo.
+- Por defecto queda **"Por cobrar"** a la vista. Cifras en formato corto ($33,5M) para que entren las 4 columnas.
+
 ## 2026-06-13 — Proveedores inline (formato clientes) + pills de año en Facturación
 - **Proveedores** ya no abre un modal: se despliega **inline a pantalla completa con el mismo formato que clientes** (lista → ficha → editar), desde el chip en Clientes. La X vuelve a Clientes.
 - **Facturación**: el selector de año se reemplazó por **pills** (Todos · 2025 · 2026 · 2027…) para selección rápida; el mes queda en su selector. KPIs siguen el año elegido.
