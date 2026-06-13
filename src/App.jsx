@@ -4999,13 +4999,13 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate}) {
+function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,onClose,onClientsUpdate}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [rows,setRows] = useState(null)    // null = sin cargar
+  const [fileName,setFileName] = useState('')
   const [cargando,setCargando] = useState(false)
   const [guardando,setGuardando] = useState(false)
-  const [hechos,setHechos] = useState(0)
-  const [fallos,setFallos] = useState([])   // filas que fallaron al insertar (con motivo)
+  const [resultado,setResultado] = useState(null)   // {imported,dupOmit,sinCliente,sinFecha,batchId}
   const [genPlantilla,setGenPlantilla] = useState(false)
   const [matching,setMatching] = useState(false)        // análisis de matching/IA en curso
   const [matchProg,setMatchProg] = useState(null)       // {done,total} de lotes IA
@@ -5286,6 +5286,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 
   const onFile = async(e) => {
     const file = e.target.files?.[0]; if(!file) return
+    setFileName(file.name)
     setCargando(true)
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
@@ -5371,8 +5372,6 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const nAuto = (rows||[]).filter(r=>bucketOf(r)==='auto').length
   const nRev = (rows||[]).filter(r=>bucketOf(r)==='rev').length
   const nMan = (rows||[]).filter(r=>bucketOf(r)==='man').length
-  const porRevisar = (rows||[]).filter(r=>!r.error && !rowReady(r))   // sin cliente, o con varias razones sociales sin elegir
-  const conError = (rows||[]).filter(r=>r.error)
   const dups = (rows||[]).filter(r=>r.dup)
   const totalMonto = (rows||[]).filter(r=>!r.error).reduce((a,r)=>a+(r.monto||0),0)
   const editarCampo = (rowId,campo,valor) => setRows(p=>p.map(r=>r.id===rowId?{...r,[campo]:valor}:r))
@@ -5380,35 +5379,29 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const guardar = async(incluirTodo=false) => {
     const target = incluirTodo ? (rows||[]) : listas
     if(target.length===0){ alert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
-    setGuardando(true); let n=0; const fail=[]
-    for(const r of target){
-      try{
-        await onSave({client_id:r.client_id||null,entity_id:r.entity_id||null,type:tipo,amount:r.monto||0,concept:r.concepto||'',category:tipo==='fondo'?'Fondo':(r.categoria||'Otro'),date:r.fecha||new Date().toISOString().slice(0,10),sale_id:null,paid_by_client:tipo!=='fondo'&&r.categoria==='Notaria'})
-        n++
-      }catch(e){ fail.push({concepto:r.concepto||'(sin concepto)', cliente:r.clientName||'—', monto:r.monto, msg:e.message||'Error al insertar'}) }
-    }
-    setHechos(n)
-    setFallos(fail)
-    if(onClientsUpdate) await onClientsUpdate()
+    setGuardando(true)
+    try{
+      const res = await onBulkImport(target, {tipo, filename:fileName})
+      setResultado(res)
+    }catch(e){ alert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
 
   const inS = {padding:'7px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#F7F7F7',color:C.text,boxSizing:'border-box',outline:'none',width:'100%'}
 
-  if(hechos>0||fallos.length>0) return (
-    <div style={{textAlign:'center',padding:'20px 0'}}>
-      <div style={{fontSize:15,fontWeight:700,color:C.normal,marginBottom:6}}>{hechos} {tipo==='fondo'?'fondo(s)':'gasto(s)'} cargado(s)</div>
-      {porRevisar.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{porRevisar.length} fila(s) por revisar (sin cliente o sin razón social) no se cargaron.</div>}
-      {conError.length>0&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{conError.length} fila(s) con error de validación no se cargaron.</div>}
-      {fallos.length>0&&(
-        <div style={{textAlign:'left',background:'#FCEBEB',border:'1px solid #F7C1C1',borderRadius:8,padding:'10px 12px',margin:'12px 0',maxHeight:170,overflowY:'auto'}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.overdue,marginBottom:6}}>{fallos.length} fila(s) fallaron al insertar:</div>
-          {fallos.map((f,i)=>(
-            <div key={i} style={{fontSize:11,color:C.text,padding:'3px 0',borderBottom:'1px solid #F1D4D4'}}>{f.cliente} · {f.concepto} · {fmt(f.monto)} — <span style={{color:C.overdue}}>{f.msg}</span></div>
-          ))}
-        </div>
-      )}
-      <button onClick={onClose} style={{padding:'10px 20px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginTop:8}}>Listo</button>
+  if(resultado) return (
+    <div style={{textAlign:'center',padding:'8px 4px 4px'}}>
+      <div style={{width:54,height:54,borderRadius:'50%',background:'#E1F5EE',display:'flex',alignItems:'center',justifyContent:'center',margin:'4px auto 12px'}}>
+        <svg width='27' height='27' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
+      </div>
+      <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.imported} {tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:18}}>
+        {resultado.sinCliente>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinCliente}</b> sin cliente</span>}
+        {resultado.sinFecha>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinFecha}</b> sin fecha</span>}
+        {resultado.dupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FBF1DF',borderRadius:20,padding:'4px 11px'}}><b>{resultado.dupOmit}</b> duplicados omitidos</span>}
+      </div>
+      {resultado.sinCliente>0&&<div style={{fontSize:11.5,color:C.muted,marginBottom:14,lineHeight:1.45}}>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</div>}
+      <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Listo</button>
     </div>
   )
 
@@ -5534,8 +5527,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete}) {
+function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete}) {
   const [selectedClient,setSelectedClient] = useState(null)
+  const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
@@ -5614,6 +5608,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
     if(!selectedClient) return []
     return expenses.filter(e=>e.client_id===selectedClient.id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
   },[expenses,selectedClient])
+  // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
+  const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
 
   const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
 
@@ -5759,18 +5755,18 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {selectedClient&&(
-              <button onClick={()=>setSelectedClient(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+            {(selectedClient||showOrphans)&&(
+              <button onClick={()=>{setSelectedClient(null);setShowOrphans(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
             )}
             <div>
               <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                {selectedClient?selectedClient.name:'Gastos y Fondos'}
+                {showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
               </div>
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selEnts[0].name}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
             </div>
           </div>
           <div style={{display:'flex',gap:6}}>
-            {!selectedClient&&<button onClick={onBulk} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Carga masiva</button>}
+            {!selectedClient&&!showOrphans&&<button onClick={onBulk} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Carga masiva</button>}
             <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
             <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
             {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={{padding:'6px 12px',borderRadius:8,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>}
@@ -5781,15 +5777,46 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
         {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
 
         {/* Vista general: búsqueda */}
-        {!selectedClient&&(
+        {!selectedClient&&!showOrphans&&(
           <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:4}}/>
         )}
       </div>
 
-      {/* Vista general: lista de clientes con saldo */}
-      {!selectedClient&&(
+      {/* Vista "Sin cliente · por asignar": gastos huérfanos de la carga masiva */}
+      {showOrphans&&(
         <div style={{padding:'4px 20px 100px'}}>
-          {filteredClients.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin registros</div>}
+          {orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>No quedan gastos sin cliente.</div>}
+          {orphans.map(e=>(
+            <div key={e.id} style={{background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>{e.date?fmtFechaDMY(e.date):'sin fecha'} · {e.category||'Otro'}{e.type==='fondo'?' · Fondo':''}</div>
+                </div>
+                <span style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'flex-end'}}>
+                <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Vista general: lista de clientes con saldo */}
+      {!selectedClient&&!showOrphans&&(
+        <div style={{padding:'4px 20px 100px'}}>
+          {orphans.length>0&&(
+            <div onClick={()=>setShowOrphans(true)} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.text}}>Sin cliente · por asignar</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{orphans.length} gasto{orphans.length!==1?'s':''} importado{orphans.length!==1?'s':''} sin cliente — asígnalos cuando puedas</div>
+              </div>
+              <span style={{fontSize:13,fontWeight:700,color:C.soon}}>{fmt(orphans.reduce((a,e)=>a+(e.amount||0),0))}</span>
+              <span style={{fontSize:16,color:C.muted}}>›</span>
+            </div>
+          )}
+          {filteredClients.length===0&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin registros</div>}
           {filteredClients.map(c=>{
             const b=balances[c.id]||{fondos:0,gastos:0}
             const sal=b.fondos-b.gastos
@@ -9441,6 +9468,52 @@ export default function App() {
     setSaving(false)
   },[user])
 
+  // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
+  // Devuelve resumen. Cada gasto queda marcado con bulk_import_id para poder deshacer (commit 5).
+  const handleBulkImport=useCallback(async(filas,{tipo,filename})=>{
+    const keyOf = e => `${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}`
+    const vistos = new Set((expenses||[]).map(keyOf))
+    const batchId = crypto.randomUUID()
+    let dupOmit=0, sinCliente=0, sinFecha=0
+    const payloads=[]
+    for(const r of filas){
+      const row = {
+        type:tipo, client_id:r.client_id||null, entity_id:r.entity_id||null,
+        amount:r.monto||0, concept:r.concepto||'', notas:r.notas||null,
+        category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
+        date:r.fecha||null, project:r.proyecto||null, sale_id:null,
+        paid_by_client: tipo!=='fondo'&&r.categoria==='Notaria',
+        created_by:user?.name||null, bulk_import_id:batchId,
+      }
+      const k = keyOf(row)
+      if(vistos.has(k)){ dupOmit++; continue }
+      vistos.add(k)
+      if(!row.client_id) sinCliente++
+      if(!row.date) sinFecha++
+      payloads.push(row)
+    }
+    if(payloads.length===0) return {imported:0,dupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
+    const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null})
+    if(bErr) throw bErr
+    const inserted=[]
+    for(let i=0;i<payloads.length;i+=100){
+      const {data,error} = await supabase.from('expenses').insert(payloads.slice(i,i+100)).select()
+      if(error) throw error
+      if(data) inserted.push(...data)
+    }
+    setExpenses(p=>[...inserted,...p])
+    return {imported:inserted.length, dupOmit, sinCliente, sinFecha, batchId, filename}
+  },[expenses,user])
+
+  // Asignar (o cambiar) el cliente de un gasto ya guardado — para los huérfanos "Sin cliente".
+  const handleAssignClientToExpense=useCallback(async(expenseId,clientId)=>{
+    try{
+      const {data,error} = await supabase.from('expenses').update({client_id:clientId}).eq('id',expenseId).select().single()
+      if(error) throw error
+      setExpenses(p=>p.map(e=>e.id===data.id?data:e))
+    }catch(e){ alert('Error: '+e.message) }
+  },[])
+
   const handleDeleteExpense=useCallback(async(id)=>{
     const exp=expenses.find(x=>x.id===id)
     const msg=exp?.client_rendered_at
@@ -9808,7 +9881,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
@@ -9832,7 +9905,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
