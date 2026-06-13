@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-13 — Anticipo/Fondo: buscar cliente + autosafe carga masiva
+- **Anticipo y Fondo**: el cliente ahora se elige **buscando** (escribes el nombre → resultados), no con un menú desplegable (regla permanente: buscar, no seleccionar).
+- **Anticipo**: se quitaron los montos sugeridos (siempre eran distintos) → formulario más breve.
+- **Carga masiva**: el modal ya no se cierra al tocar fuera (autosafe) — no se pierde la previsualización por un toque accidental.
+
 ## 2026-06-13 — Cliente en el encabezado en todos los formularios
 - En **Anticipo, Fondo, Editar gasto** (y ya Editar cobro y Nueva tarea) el cliente se muestra en el **encabezado/título** y no se repite como campo en el cuerpo — más corto y consistente. Ninguno lleva "Cambiar". En Fondo se conserva el "Saldo actual" como una línea; en Editar gasto el cliente va en el título del modal.
 

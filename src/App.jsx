@@ -4474,6 +4474,7 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
 function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preClient}) {
   const hoy = new Date().toISOString().slice(0,10)
   const [f,setF] = useState({client_id:preClient?.id||'',sale_id:'',proyecto:'',entity_id:'',monto:'',fecha:hoy,nota:''})
+  const [clientQ,setClientQ] = useState('')
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const cliente = clients.find(c=>String(c.id)===String(f.client_id))
   const clientSales = (sales||[]).filter(s=>s.client_id===f.client_id&&s.title)
@@ -4498,10 +4499,14 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
         {!f.client_id&&(
           <div style={{marginBottom:13}}>
             <label style={flabel}>Cliente</label>
-            <select value={f.client_id} onChange={e=>{up('client_id',e.target.value);up('sale_id','');up('proyecto','');up('entity_id','')}} style={{...sel,height:42,borderRadius:10}}>
-              <option value=''>— Selecciona cliente —</option>
-              {[...clients].filter(c=>c.status!=='Terminado').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <input value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente por nombre...' style={{...inp,height:42,borderRadius:10}}/>
+            {clientQ.trim()&&(
+              <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10,marginTop:4,background:'#fff'}}>
+                {[...clients].filter(c=>c.status!=='Terminado'&&c.name.toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
+                  <div key={c.id} onClick={()=>{up('client_id',c.id);up('sale_id','');up('proyecto','');up('entity_id','');setClientQ('')}} style={{padding:'9px 11px',fontSize:13,color:'#3D3D3D',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -4531,10 +4536,6 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
           </div>
           <div><label style={flabel}>Monto</label><input type='number' value={f.monto} onChange={e=>up('monto',e.target.value)} placeholder='0' style={inp}/></div>
           <div><label style={flabel}>Fecha</label><input type='date' value={f.fecha} onChange={e=>up('fecha',e.target.value)} style={{...inp,fontSize:12,padding:'0 8px'}}/></div>
-        </div>
-
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:13}}>
-          {[100000,300000,500000,1000000].map(m=>(<button key={m} onClick={()=>up('monto',String(m))} style={pill(String(m)===f.monto)}>{fmtCLP0(m)}</button>))}
         </div>
 
         <div style={{marginBottom:18}}>
@@ -6045,6 +6046,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,preClient}) {
   const hoy = new Date().toISOString().slice(0,10)
   const [selectedClient,setSelectedClient] = useState(preClient||null)
+  const [clientQ,setClientQ] = useState('')
   const [f,setF] = useState({sale_id:'',project:'',entity_id:'',amount:'',date:hoy,concept:''})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientEnts = useMemo(()=>selectedClient?(clientEntities||[]).filter(e=>e.client_id===selectedClient.id):[],[clientEntities,selectedClient])
@@ -6071,10 +6073,14 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
         {!selectedClient ? (
           <div style={{marginBottom:14}}>
             <label style={flabel}>Cliente</label>
-            <select value='' onChange={e=>setSelectedClient(clients.find(c=>String(c.id)===e.target.value)||null)} style={{...sel,height:42,borderRadius:10}}>
-              <option value=''>— Selecciona cliente —</option>
-              {[...clients].filter(c=>c.status!=='Terminado').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <input value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente por nombre...' style={{...inp,height:42,borderRadius:10}}/>
+            {clientQ.trim()&&(
+              <div style={{maxHeight:180,overflowY:'auto',border:`0.5px solid ${C.border}`,borderRadius:10,marginTop:4,background:'#fff'}}>
+                {[...clients].filter(c=>c.status!=='Terminado'&&c.name.toLowerCase().includes(clientQ.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,30).map(c=>(
+                  <div key={c.id} onClick={()=>{setSelectedClient(c);setClientQ('')}} style={{padding:'9px 11px',fontSize:13,color:'#3D3D3D',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -10045,7 +10051,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
