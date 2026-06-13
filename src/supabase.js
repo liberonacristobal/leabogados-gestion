@@ -11,7 +11,7 @@ export const signInWithGoogle = () =>
     provider: 'google',
     options: {
       queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent' },
-      scopes: 'https://www.googleapis.com/auth/drive',
+      scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send',
       redirectTo: window.location.origin,
     },
   })
@@ -171,7 +171,7 @@ export const connectDrive = () =>
     provider: 'google',
     options: {
       queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent' },
-      scopes: 'https://www.googleapis.com/auth/drive',
+      scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send',
       redirectTo: window.location.origin,
     }
   })
