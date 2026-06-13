@@ -4489,26 +4489,21 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
   return (
     <>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Nuevo anticipo</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+        <span style={{fontSize:16,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Nuevo anticipo{cliente&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cliente.name}</span></>}</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
       <div style={{padding:'16px 20px 20px'}}>
-        <div style={{marginBottom:13}}>
-          <label style={flabel}>Cliente</label>
-          {preClient ? (
-            <div style={{display:'flex',alignItems:'center',gap:9,height:42,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'0 11px'}}>
-              <span style={{width:26,height:26,borderRadius:7,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>{cIni(cliente?.name)}</span>
-              <span style={{flex:1,fontSize:13,fontWeight:500,color:'#3D3D3D'}}>{cliente?.name||'Cliente'}</span>
-            </div>
-          ) : (
+        {!f.client_id&&(
+          <div style={{marginBottom:13}}>
+            <label style={flabel}>Cliente</label>
             <select value={f.client_id} onChange={e=>{up('client_id',e.target.value);up('sale_id','');up('proyecto','');up('entity_id','')}} style={{...sel,height:42,borderRadius:10}}>
               <option value=''>— Selecciona cliente —</option>
               {[...clients].filter(c=>c.status!=='Terminado').sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-          )}
-        </div>
+          </div>
+        )}
 
         {f.client_id&&(
           <div style={{marginBottom:13}}>
@@ -6083,14 +6078,7 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
           </div>
         ) : (
           <>
-            <div style={{marginBottom:13}}>
-              <label style={flabel}>Cliente</label>
-              <div style={{display:'flex',alignItems:'center',gap:9,height:42,border:`0.5px solid ${C.border}`,borderRadius:10,padding:'0 11px'}}>
-                <span style={{width:26,height:26,borderRadius:7,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>{cIni(selectedClient.name)}</span>
-                <span style={{flex:1,fontSize:13,fontWeight:500,color:'#3D3D3D'}}>{selectedClient.name}</span>
-                {balance!==null&&<span style={{fontSize:11,color:balance<0?C.overdue:C.normal}}>Saldo actual {fmt(balance)}</span>}
-              </div>
-            </div>
+            {balance!==null&&<div style={{fontSize:11,color:balance<0?C.overdue:C.normal,marginBottom:11}}>Saldo actual {fmt(balance)}</div>}
 
             <div style={{marginBottom:13}}>
               <label style={flabel}>Proyecto <span style={{color:C.overdue}}>*</span></label>
@@ -6328,9 +6316,6 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,onSave,onClose
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
   return (
     <>
-      <div style={{padding:'8px 14px',borderRadius:8,background:'#F5F7F9',marginBottom:14,fontSize:13,color:C.muted}}>
-        Cliente: <span style={{fontWeight:600,color:C.text}}>{client?.name||'—'}</span>
-      </div>
       {!isFondo&&(
         <Fld label='Tipo'>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -10063,7 +10048,7 @@ export default function App() {
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal title='Editar registro' onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
