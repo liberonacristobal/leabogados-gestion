@@ -2469,47 +2469,71 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
 
 // Reparto del costo de terceros entre colaboradores (cuentas por pagar).
 // Cada fila = un colaborador + monto (CLP) + cuota ancla (la factura cuyo pago libera el fee).
-function RepartoTerceros({proveedores=[],rows=[],setRows,cuotaOptions=[],costCLP=0,anchorKey='cuotaIdx'}) {
+// Reparto del costo a colaboradores. Cada fila: proveedor + tipo (% / UF / $) + valor.
+// El costo se reparte en las MISMAS cuotas que el cobro (se distribuye al guardar).
+// Por defecto el tipo = la unidad de la venta. La reconciliación y los montos se muestran en esa unidad.
+function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,saleTotal=0,costTotal=0}) {
   const titulo = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
   const provs = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
+  const esUF = moneda!=='CLP'
+  const defTipo = esUF ? 'uf' : 'clp'
   const inp={width:'100%',height:36,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 9px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none',fontSize:12}
-  const suma = rows.reduce((a,r)=>a+(parseInt(r.monto)||0),0)
-  const desc = costCLP>0 ? Math.round(costCLP)-suma : 0
-  const cuadra = Math.abs(desc)<=1
+  const fmtU = v => esUF ? fmtUF(v) : fmt(Math.round(v))
+  // Aporte de una fila en la UNIDAD de la venta (UF si la venta es UF; CLP si es CLP).
+  const enUnidad = r => {
+    const v = parseFloat(r.valor)||0
+    if(r.tipo==='pct') return saleTotal*v/100
+    if(esUF) return r.tipo==='uf' ? v : (ufVal>0 ? v/ufVal : 0)   // clp sobre venta UF (raro)
+    return r.tipo==='uf' ? v*ufVal : v                            // venta CLP
+  }
+  const suma = rows.reduce((a,r)=>a+enUnidad(r),0)
+  const tol = esUF ? 0.01 : 1
+  const desc = costTotal>0 ? costTotal-suma : 0
+  const cuadra = Math.abs(desc)<=tol
+  const hayClpEnUF = esUF && rows.some(r=>r.tipo==='clp' && (parseFloat(r.valor)||0)>0)
   const up=(i,k,v)=>setRows(rows.map((r,j)=>j===i?{...r,[k]:v}:r))
-  const addRow=()=>setRows([...rows,{proveedor_id:'',monto:'',[anchorKey]:cuotaOptions[0]?.value||'0'}])
+  const addRow=()=>setRows([...rows,{proveedor_id:'',tipo:defTipo,valor:''}])
   const delRow=i=>setRows(rows.filter((_,j)=>j!==i))
-  const showCuota = cuotaOptions.length>1
+  const tipos=[['pct','%'],['uf','UF'],['clp','$']]
   return (
     <div style={{background:'#F7F9FA',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
       <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>¿A quién le pagas?</div>
       {provs.length===0?(
         <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes colaboradores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
       ):(<>
-        {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Agrega a quién le pagas parte de este honorario.</div>}
-        {rows.map((r,i)=>(
-          <div key={i} style={{display:'grid',gridTemplateColumns:showCuota?'1.3fr 0.9fr 1fr 24px':'1.5fr 1fr 24px',gap:6,marginBottom:7,alignItems:'center'}}>
+        {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Agrega a quién le pagas parte de este honorario. Se reparte en las mismas cuotas que te pagan a ti.</div>}
+        {rows.map((r,i)=>{
+          const tipo=r.tipo||defTipo
+          return (
+          <div key={i} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 24px',gap:6,marginBottom:7,alignItems:'center'}}>
             <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
               <option value=''>— Colaborador —</option>
               {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
             </select>
-            <input type='number' value={r.monto} onChange={e=>up(i,'monto',e.target.value)} placeholder='$ monto' style={inp}/>
-            {showCuota&&(
-              <select value={r[anchorKey]??cuotaOptions[0]?.value} onChange={e=>up(i, anchorKey, e.target.value)} style={sel}>
-                {cuotaOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            )}
+            <div style={{display:'flex',height:36,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff'}}>
+              <input type='number' value={r.valor??''} onChange={e=>up(i,'valor',e.target.value)} placeholder={tipo==='pct'?'%':tipo==='uf'?'UF':'$'} style={{flex:1,minWidth:0,border:'none',padding:'0 8px',fontSize:13,color:C.text,outline:'none'}}/>
+              <div style={{display:'flex',flexShrink:0}}>
+                {tipos.map(([v,l])=>(
+                  <button key={v} type='button' onClick={()=>up(i,'tipo',v)} style={{padding:'0 7px',border:'none',borderLeft:`1px solid ${C.border}`,background:tipo===v?C.accent:'#EFF3F5',color:tipo===v?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+                ))}
+              </div>
+            </div>
             <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
           </div>
-        ))}
+        )})}
         <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:2}}>+ Agregar colaborador</button>
-        {rows.length>0&&costCLP>0&&!cuadra&&(
-          <div style={{fontSize:11,color:'#B8860B',background:'#FFF8E1',border:'0.5px solid #F0D88A',borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
-            El reparto suma <strong>{fmt(suma)}</strong>, pero el costo de terceros es <strong>{fmt(Math.round(costCLP))}</strong> ({desc>0?`faltan ${fmt(desc)}`:`sobran ${fmt(-desc)}`}).
+        {hayClpEnUF&&(
+          <div style={{fontSize:11,color:C.muted,background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
+            Hay un costo en <strong>pesos fijos</strong> y la venta es en UF: ese monto no se reajusta con la factura. Si quieres que suba junto con la UF, usa <strong>%</strong> o <strong>UF</strong>.
           </div>
         )}
-        {rows.length>0&&costCLP>0&&cuadra&&<div style={{fontSize:11,color:C.normal,marginTop:9}}>Reparto cuadra con el costo de terceros: {fmt(suma)}.</div>}
+        {rows.length>0&&costTotal>0&&!cuadra&&(
+          <div style={{fontSize:11,color:'#B8860B',background:'#FFF8E1',border:'0.5px solid #F0D88A',borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
+            El reparto suma <strong>{fmtU(suma)}</strong>, pero el costo de terceros es <strong>{fmtU(costTotal)}</strong> ({desc>0?`faltan ${fmtU(desc)}`:`sobran ${fmtU(-desc)}`}).
+          </div>
+        )}
+        {rows.length>0&&costTotal>0&&cuadra&&<div style={{fontSize:11,color:C.normal,marginTop:9}}>Reparto cuadra con el costo de terceros: {fmtU(suma)}.</div>}
       </>)}
     </div>
   )
@@ -2538,7 +2562,14 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   const [costSwitch,setCostSwitch] = useState(!!(sale?.cost_uf||sale?.cost_clp))
   // Reparto del costo de terceros entre colaboradores. Para venta existente se ancla por billing_id;
   // para venta nueva por índice de cuota (cuotaIdx), que se resuelve a billing_id al guardar.
-  const [reparto,setReparto] = useState(()=> (terceros||[]).filter(t=>String(t.sale_id)===String(sale?.id)).map(t=>({id:t.id,proveedor_id:t.proveedor_id,monto:t.monto,billing_id:t.billing_id,estado:t.estado})) )
+  // Reconstruye las filas del reparto agrupando los terceros_pagos por proveedor+tipo+valor
+  // (cada fila se reparte en N cuotas, así que varios registros = una fila del formulario).
+  const [reparto,setReparto] = useState(()=>{
+    const mine=(terceros||[]).filter(t=>String(t.sale_id)===String(sale?.id))
+    const g={}
+    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??''} })
+    return Object.values(g)
+  })
   const [tariffs,setTariffs] = useState([])
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
   const fmtMesAno = d => d ? d.slice(5,7)+'/'+d.slice(0,4) : '—'
@@ -2771,16 +2802,6 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     return cobros
   }
   const cobros = generarCobros()
-
-  // Reparto a colaboradores: opciones de cuota ancla y costo total en CLP para reconciliar.
-  const costCLP = moneda==='UF' ? costVal*ufVal : costVal
-  const repartoEsExistente = !!sale?.id
-  const anchorKey = repartoEsExistente ? 'billing_id' : 'cuotaIdx'
-  const cuotaOptions = repartoEsExistente
-    ? (billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.billing_type!=='reembolso')
-        .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
-        .map(b=>({value:b.id, label:`${b.invoice_no?`F° ${b.invoice_no}`:'Programada'} · ${fmtFechaDMY(b.due)}`}))
-    : cobros.map((c,i)=>({value:String(i), label:`${c.label} · ${fmtFechaDMY(c.fecha)}`}))
 
   const handleSave = () => {
     const saveF = {...f}
@@ -3156,7 +3177,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
         )}
         {costSwitch&&costMode==='pct'&&costVal>0&&<div style={{fontSize:11,color:C.muted,marginBottom:14}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
-        {costSwitch&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} cuotaOptions={cuotaOptions} costCLP={costCLP} anchorKey={anchorKey}/>}
+        {costSwitch&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>}
 
       </>)}
 
@@ -3263,7 +3284,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               {row('Costos de terceros',curCost,'costos',false)}
               {openCondicion==='costos'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`}}>
-                  <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} cuotaOptions={cuotaOptions} costCLP={costCLP} anchorKey={anchorKey}/>
+                  <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>
                   <div style={{fontSize:11,color:C.muted,lineHeight:1.4}}>Se guarda al tocar <strong style={{color:C.text}}>Guardar</strong>. Es comisión de tu honorario; no se le cobra al cliente.</div>
                 </div>
               )}
@@ -9401,35 +9422,40 @@ export default function App() {
       const {data:newBilling} = await getBilling()
       if(newBilling) setBilling(newBilling)
       // Reparto a colaboradores (terceros_pagos): comisión de tu honorario, NO toca monto_terceros.
-      // Cada fila se ancla a una cuota (billing_id); en venta nueva el ancla viene por índice (cuotaIdx).
+      // Cada fila (proveedor + tipo % / UF / $ + valor) se REPARTE en todas las cuotas de la venta,
+      // proporcional al monto de cada cuota. %/UF se calculan como fracción de la cuota real → reajustan con la UF.
       if(Array.isArray(f.repartoTerceros)){
         try{
           const cuotasVenta = (newBilling||[]).filter(b=>String(b.sale_id)===String(data.id)&&b.billing_type!=='reembolso')
             .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
-          const resolverBilling = row => {
-            if(row.billing_id) return row.billing_id
-            const idx = parseInt(row.cuotaIdx)
-            if(!isNaN(idx)&&cuotasVenta[idx]) return cuotasVenta[idx].id
-            return cuotasVenta[0]?.id || null
+          const totalCuotas = cuotasVenta.reduce((a,b)=>a+(b.amount||0),0)
+          const sUf = parseFloat(data.amount_uf)||0, sUfVal = parseFloat(data.uf_value)||0
+          const esCLPventa = (data.moneda||'UF')==='CLP'
+          const montoCuota = (row,cuota) => {
+            const v = parseFloat(row.valor)||0
+            const frac = totalCuotas>0 ? (cuota.amount||0)/totalCuotas : (cuotasVenta.length?1/cuotasVenta.length:0)
+            if(row.tipo==='pct') return Math.round((cuota.amount||0)*v/100)
+            if(row.tipo==='uf') return (!esCLPventa && sUf>0) ? Math.round((cuota.amount||0)*(v/sUf)) : Math.round(v*sUfVal*frac)
+            return Math.round(v*frac)   // clp fijo, repartido proporcional
           }
           const previas = (terceros||[]).filter(t=>String(t.sale_id)===String(data.id))
-          const keep = new Set()
+          const pagadas = new Set(previas.filter(t=>t.estado==='pagado').map(t=>`${t.proveedor_id}|${t.billing_id}`))
+          const borrar = previas.filter(t=>t.estado!=='pagado')   // recrea todo lo no pagado
+          if(borrar.length) await supabase.from('terceros_pagos').delete().in('id', borrar.map(t=>t.id))
+          const nuevos=[]
           for(const row of f.repartoTerceros){
-            if(!row.proveedor_id || !((parseInt(row.monto)||0)>0)) continue
+            if(!row.proveedor_id || !((parseFloat(row.valor)||0)>0)) continue
             const prov = proveedores.find(p=>String(p.id)===String(row.proveedor_id))
-            const payload = {sale_id:data.id, billing_id:resolverBilling(row), proveedor_id:row.proveedor_id,
-              proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null, monto:parseInt(row.monto)||0}
-            if(row.id){
-              const {data:u} = await supabase.from('terceros_pagos').update(payload).eq('id',row.id).select().single()
-              if(u) keep.add(u.id)
-            } else {
-              const {data:ins} = await supabase.from('terceros_pagos').insert({...payload, estado:'pendiente', created_by:user?.name||null}).select().single()
-              if(ins) keep.add(ins.id)
+            for(const cuota of cuotasVenta){
+              if(pagadas.has(`${row.proveedor_id}|${cuota.id}`)) continue
+              const m = montoCuota(row,cuota); if(m<=0) continue
+              nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,
+                proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null,
+                tipo_costo:row.tipo||null, valor:parseFloat(row.valor)||null, monto:m,
+                estado: cuota.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null})
             }
           }
-          // Eliminar las filas quitadas (nunca borra una ya pagada).
-          const borrar = previas.filter(t=>!keep.has(t.id)&&t.estado!=='pagado')
-          if(borrar.length) await supabase.from('terceros_pagos').delete().in('id', borrar.map(t=>t.id))
+          if(nuevos.length) await supabase.from('terceros_pagos').insert(nuevos)
           const {data:nt} = await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
           if(nt) setTerceros(nt)
         }catch(te){ alert('La venta se guardó, pero hubo un problema al guardar el reparto de terceros: '+te.message) }
