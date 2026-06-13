@@ -96,6 +96,14 @@ const saldoCajaChica = (pettyCash, expenses, userName) => {
   return entregado - gastado
 }
 
+// Fuente única para "fondos − gastos" de un cliente. Siempre con guarda ||0 (nunca NaN).
+function fgCliente(expenses, clientId){
+  let fondos=0, gastos=0
+  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId) return; if(e.type==='fondo') fondos+=(e.amount||0); else gastos+=(e.amount||0) })
+  return {fondos, gastos, saldo:fondos-gastos}
+}
+const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
+
 // Saldos por razón social (entity) de un cliente. Con 1 RS, todo (incl. sin entity_id) va a esa RS.
 // Con 2+ RS, los movimientos sin entity_id quedan en un grupo "Sin razón social". total = suma de todo.
 function rsBalances(clientId, expenses, entities){
@@ -289,7 +297,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
   }).sort((a,b)=>a.name.localeCompare(b.name))
 
   const ClientRow = ({cl}) => {
-    const saldo = (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===cl.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })()
+    const saldo = saldoCliente(expenses, cl.id)
     return (
       <div onClick={()=>{setFtab('resumen');setSelected(cl)}} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid #E8E8E8`,cursor:'pointer',borderLeft:`3px solid ${saldo<0?'#E24B4A':'#1D9E75'}`}}
         onMouseEnter={e=>e.currentTarget.style.borderColor='#537281'}
@@ -305,8 +313,8 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
 
   const Ficha = ({cl}) => {
     const clientExpenses = expenses.filter(e=>e.client_id===cl.id).sort((a,b)=>b.date>a.date?1:-1)
-    const fondos = clientExpenses.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
-    const gastos = clientExpenses.filter(e=>e.type!=='fondo').reduce((a,e)=>a+e.amount,0)
+    const fondos = clientExpenses.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+    const gastos = clientExpenses.filter(e=>e.type!=='fondo').reduce((a,e)=>a+(e.amount||0),0)
     const saldo = fondos - gastos
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
@@ -724,7 +732,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       <div class='kpi'><div class='kpi-label'>Total a rendir</div><div class='kpi-value'>${fmtN(totalSel)}</div></div>
     </div>`
     Object.entries(porCliente).forEach(([cname,gastos])=>{
-      const tot=gastos.reduce((a,e)=>a+e.amount,0)
+      const tot=gastos.reduce((a,e)=>a+(e.amount||0),0)
       html+=`<div class='section-title'>${cname} — ${fmtN(tot)}</div>
       <table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`
       gastos.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` })
@@ -899,7 +907,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                         const porCliente={}
                         gastosR.forEach(e=>{ const cn=clients.find(x=>x.id===e.client_id)?.name||'Sin cliente'; if(!porCliente[cn])porCliente[cn]=[]; porCliente[cn].push(e) })
                         let html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Liquidación — ${r.user_name} — ${r.periodo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',sans-serif;color:#3D3D3D;font-size:11px}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.header{background:${A};color:#fff;padding:20px 24px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}.firma{font-size:16px;font-weight:700}.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}.kpi{background:${A4};border-radius:6px;padding:10px 12px}.kpi-label{font-size:9px;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;font-weight:600}.kpi-value{font-size:15px;font-weight:700;color:${A}}table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:16px}thead tr{background:${A};color:#fff}thead th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase}tbody tr:nth-child(even){background:${A4}}tbody td{padding:6px 10px;border-bottom:1px solid ${A4}}tfoot tr{background:${A4};font-weight:700}tfoot td{padding:7px 10px;border-top:2px solid ${A2}}.section-title{font-size:12px;font-weight:700;color:${A};border-bottom:2px solid ${A};padding-bottom:4px;margin:16px 0 10px}.footer{margin-top:24px;padding-top:10px;border-top:1px solid ${A4};display:flex;justify-content:space-between;font-size:9px;color:${A2}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='header'><div><div class='firma'>Liberona Escala Abogados</div><div style='font-size:9px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Liquidación de Caja Chica</div><div style='font-size:11px;opacity:.8;margin-top:2px'>${r.user_name} · ${r.periodo}</div></div></div><div class='kpi-row'><div class='kpi'><div class='kpi-label'>Gastos</div><div class='kpi-value'>${gastosR.length}</div></div><div class='kpi'><div class='kpi-label'>Clientes</div><div class='kpi-value'>${Object.keys(porCliente).length}</div></div><div class='kpi'><div class='kpi-label'>Total</div><div class='kpi-value'>${fmtN(r.total)}</div></div></div>`
-                        Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+e.amount,0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#E24B4A'>-${fmtN(tot)}</td></tr></tfoot></table>` })
+                        Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+(e.amount||0),0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#E24B4A'>-${fmtN(tot)}</td></tr></tfoot></table>` })
                         html+=`<div class='footer'><span>Liberona Escala Abogados</span><span>${r.user_name} · ${r.periodo}</span><span>CONFIDENCIAL</span></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / PDF</button></body></html>`
                         const w=window.open('','_blank'); w.document.write(html); w.document.close()
                       }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:'#F5F7F9',color:'#003C50',fontSize:11,fontWeight:500,cursor:'pointer'}}>PDF</button>
@@ -1703,7 +1711,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
   const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso'&&!['Programada','Anulada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
-  const tasaCobro = facturado>0 ? Math.round((cobrado/facturado)*100) : 0
+  // Tasa de cobro: del facturado de ESTE año, cuánto está pagado (mismo universo numerador/denominador → nunca pasa de 100%).
+  const cobradoDelFacturado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
+  const tasaCobro = facturado>0 ? Math.min(100,Math.round((cobradoDelFacturado/facturado)*100)) : 0
 
   const porCobrar = bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrar.reduce((a,b)=>a+(b.amount||0),0)
@@ -1717,7 +1727,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const topAreas = Object.entries(byArea).sort((a,b)=>b[1]-a[1]).slice(0,3)
 
   const balances = {}
-  expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) })
+  expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [openOficina,setOpenOficina] = useState(false)
@@ -1860,7 +1870,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   return (
                   <div key={y} style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,alignItems:'center',padding:'7px 0',borderTop:'1px solid #F0F2F4'}}>
                     <span style={{fontSize:12,fontWeight:500,color:col}}>{y}</span>
-                    <div style={{height:5,background:'#E4E8EB',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,my.pct)}%`,borderRadius:3}}/></div>
+                    <div style={{height:5,background:'#E4E8EB',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,pctMetaNeto)}%`,borderRadius:3}}/></div>
                     <div style={{textAlign:'right'}}>
                       <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:'#1a1a1a'}}>{fmtMon(my.neto)}</div>
                       <div style={{fontSize:10,color:'#537281'}}>{esActual?`${pctMetaNeto}% · en curso`:`${pctMetaNeto}% meta`}</div>
@@ -4378,7 +4388,9 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
           const totalSel = antDisp.filter(a=>selAnt.has(a.id)).reduce((s,a)=>s+(a.monto||0),0)
           const fmtF = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
           const toggle = id => setSelAnt(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
-          const aplicar = () => { const ids=[...selAnt]; if(!ids.length) return; onConsume&&onConsume(ids,bill.id); up('status','Pagado'); setSelAnt(new Set()) }
+          const montoFac = parseInt(f.amount)||0
+          const cubre = montoFac>0 ? totalSel>=montoFac : totalSel>0
+          const aplicar = () => { const ids=[...selAnt]; if(!ids.length) return; onConsume&&onConsume(ids,bill.id); if(cubre) up('status','Pagado'); setSelAnt(new Set()) }
           return (
             <div>
               <label style={flabel}>Anticipos disponibles</label>
@@ -4400,8 +4412,8 @@ function BillingForm({bill,clients,clientEntities,anticipos=[],onConsume,onSave,
                   </div>
                 )})}
                 <div style={{background:'#F5F7F9',padding:'9px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                  <span style={{fontSize:11,color:C.muted}}>Aplicar: <b style={{color:'#1a1a1a'}}>{fmt(totalSel)}</b></span>
-                  <button onClick={aplicar} disabled={totalSel<=0} style={{height:26,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:11,fontWeight:500,padding:'0 12px',cursor:totalSel>0?'pointer':'not-allowed',opacity:totalSel>0?1:.6}}>Marcar como pagado</button>
+                  <span style={{fontSize:11,color:C.muted}}>Aplicar: <b style={{color:'#1a1a1a'}}>{fmt(totalSel)}</b>{totalSel>0&&!cubre&&montoFac>0&&<span style={{color:C.soon}}> · abono, queda {fmt(montoFac-totalSel)}</span>}</span>
+                  <button onClick={aplicar} disabled={totalSel<=0} style={{height:26,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:11,fontWeight:500,padding:'0 12px',cursor:totalSel>0?'pointer':'not-allowed',opacity:totalSel>0?1:.6}}>{cubre?'Marcar como pagado':'Aplicar abono'}</button>
                 </div>
               </div>
             </div>
@@ -4811,8 +4823,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
   const headEnt = (entityIds&&entityIds.length===1) ? entsCli.find(e=>e.id===entityIds[0]) : (singleRS?entsCli[0]:null)
   const inScope = e => (!entityIds||entityIds.length===0) ? true : (singleRS ? true : (!!e.entity_id && entityIds.includes(e.entity_id)))
   const allMovs = expenses.filter(e=>e.client_id===client.id && inScope(e))
-  const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
-  const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+e.amount,0)
+  const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+  const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
   const saldoActual = fondosDisp - gastosYaRend
 
   // Gastos disponibles para rendir (no rendidos aun)
@@ -4823,7 +4835,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     return true
   }).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
 
-  const totalSel = disponibles.filter(e=>selected.has(e.id)).reduce((a,e)=>a+e.amount,0)
+  const totalSel = disponibles.filter(e=>selected.has(e.id)).reduce((a,e)=>a+(e.amount||0),0)
   const saldoTrasRendicion = saldoActual - totalSel
   const fondosList = allMovs.filter(e=>e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
 
@@ -5671,8 +5683,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
     const m={}
     expenses.forEach(e=>{
       if(!m[e.client_id]) m[e.client_id]={fondos:0,gastos:0,sinAsignar:0}
-      if(e.type==='fondo') m[e.client_id].fondos+=e.amount
-      else m[e.client_id].gastos+=e.amount
+      if(e.type==='fondo') m[e.client_id].fondos+=(e.amount||0)
+      else m[e.client_id].gastos+=(e.amount||0)
       if(!e.entity_id) m[e.client_id].sinAsignar+=1
     })
     return m
@@ -6164,7 +6176,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
   },[tasks,sales,selectedClient])
   useEffect(()=>{ setProject(clientProjects[0]||''); setNewProject(false) },[clientProjects])   // pre-poblar con el proyecto más reciente
   const matches = useMemo(()=>{ if(!q.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).slice(0,6) },[clients,q])
-  const balance = selectedClient ? (()=>{ let b=0; expenses.forEach(e=>{ if(e.client_id===selectedClient.id) b+=e.type==='fondo'?e.amount:-e.amount }); return b })() : null
+  const balance = selectedClient ? saldoCliente(expenses, selectedClient.id) : null
   const total = rows.reduce((a,r)=>a+(parseInt(r.amount)||0),0)
 
   const addRow = () => setRows(p=>[...p,{id:Date.now(),category:'CBR',concept:'',amount:'',date:p[p.length-1]?.date||hoy}])
@@ -7048,8 +7060,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
   const porCobrar = clientBilling.filter(b=>['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrar.reduce((a,b)=>a+(b.amount||0),0)
-  const fondos = clientExpenses.filter(e=>e.type==='fondo').reduce((a,e)=>a+e.amount,0)
-  const gastos = clientExpenses.filter(e=>e.type==='gasto').reduce((a,e)=>a+e.amount,0)
+  const fondos = clientExpenses.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+  const gastos = clientExpenses.filter(e=>e.type==='gasto').reduce((a,e)=>a+(e.amount||0),0)
   const saldoFondos = fondos - gastos
 
   // Tareas agrupadas por proyecto
@@ -7356,7 +7368,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
     return [...base].sort((a,b)=>{ const ta=tareasDe[a.id]||0,tb=tareasDe[b.id]||0; if((ta>0)!==(tb>0)) return tb>0?1:-1; return tb-ta })
   },[clients,sFilter,q,respSel,responsableDe,tareasDe])
   const balances = useMemo(()=>{
-    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?e.amount:-e.amount) }); return m
+    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) }); return m
   },[expenses])
 
   if(selected) return (
@@ -8513,6 +8525,11 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
 
 // ─── REPORT BUILDER ──────────────────────────────────────────────────────────
 function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
+  const {uf:ufHoy} = useUF()
+  // Misma fuente de verdad que el Dashboard: ventaUF anualiza recurrentes y convierte CLP→UF.
+  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
+  const esRec = s => esRecurrente(s)
+  const costoVentaUF = s => ((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1)) + (s.moneda==='CLP'&&s.cost_clp&&ufRef>0 ? (parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1) : 0)
   const [sections,setSections] = useState({ventas:true,cobranza:true,gastos:true,tareas:false})
   const [period,setPeriod] = useState('month')
   const [selYear,setSelYear] = useState(String(currentYear))
@@ -8602,10 +8619,10 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
     // ── VENTAS
     if(sections.ventas){
       const ss=filterByPeriod(sales.filter(s=>s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada').map(s=>({...s,date:`${s.year}-${String(s.month||1).padStart(2,'0')}-01`})),'date')
-      const brutoUF=ss.reduce((a,s)=>a+(parseFloat(s.amount_uf)||0),0)
-      const costoUF=ss.reduce((a,s)=>a+(parseFloat(s.cost_uf)||0),0)
+      const brutoUF=ss.reduce((a,s)=>a+ventaUF(s,ufRef),0)
+      const costoUF=ss.reduce((a,s)=>a+costoVentaUF(s),0)
       const netoUF=brutoUF-costoUF
-      const pct=Math.min(100,Math.round((netoUF/9800)*100))
+      const pct=META_UF>0?Math.min(100,Math.round((netoUF/META_UF)*100)):0
       html+=`<div class="section">
         <div class="section-title">Ventas</div>
         <div class="kpi-grid">
@@ -8615,7 +8632,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         </div>
         <div style="margin-bottom:16px;padding:10px 14px;background:${A4};border-radius:6px">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-            <span style="font-size:10px;font-weight:600;color:${A}">Avance meta anual UF 9.800</span>
+            <span style="font-size:10px;font-weight:600;color:${A}">Avance meta anual UF ${META_UF.toLocaleString('es-CL')}</span>
             <span style="font-size:13px;font-weight:700;color:${A}">${pct}%</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
@@ -8624,8 +8641,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         html+=`<table><thead><tr><th>Cliente</th><th>Proyecto</th><th>Área</th><th>Estado</th><th style="text-align:right">UF Bruto</th><th style="text-align:right">UF Costo</th><th style="text-align:right">UF Neto</th></tr></thead><tbody>`
         ss.forEach(s=>{
           const c=clients.find(x=>x.id===s.client_id)
-          const neto=(parseFloat(s.amount_uf)||0)-(parseFloat(s.cost_uf)||0)
-          html+=`<tr><td>${c?.name||'—'}</td><td>${s.title||'—'}</td><td><span class="badge badge-area">${s.area||'—'}</span></td><td>${s.status||'—'}</td><td style="text-align:right">${fmtUFN(s.amount_uf)}</td><td style="text-align:right;color:#E24B4A">${s.cost_uf>0?fmtUFN(s.cost_uf):'—'}</td><td style="text-align:right;color:#1D9E75;font-weight:600">${fmtUFN(neto)}</td></tr>`
+          const bru=ventaUF(s,ufRef), cos=costoVentaUF(s), neto=bru-cos
+          html+=`<tr><td>${c?.name||'—'}</td><td>${s.title||'—'}</td><td><span class="badge badge-area">${s.area||'—'}</span></td><td>${s.status||'—'}</td><td style="text-align:right">${fmtUFN(bru)}</td><td style="text-align:right;color:#E24B4A">${cos>0?fmtUFN(cos):'—'}</td><td style="text-align:right;color:#1D9E75;font-weight:600">${fmtUFN(neto)}</td></tr>`
         })
         html+=`</tbody><tfoot><tr><td colspan="4">TOTAL</td><td style="text-align:right">${fmtUFN(brutoUF)}</td><td style="text-align:right;color:#E24B4A">${fmtUFN(costoUF)}</td><td style="text-align:right;color:#1D9E75">${fmtUFN(netoUF)}</td></tr></tfoot></table>`
       } else {
@@ -8666,7 +8683,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
     // ── GASTOS
     if(sections.gastos){
       const balances={}
-      expenses.forEach(e=>{ if(!balances[e.client_id])balances[e.client_id]={fondos:0,gastos:0}; e.type==='fondo'?balances[e.client_id].fondos+=e.amount:balances[e.client_id].gastos+=e.amount })
+      expenses.forEach(e=>{ if(!balances[e.client_id])balances[e.client_id]={fondos:0,gastos:0}; e.type==='fondo'?balances[e.client_id].fondos+=(e.amount||0):balances[e.client_id].gastos+=(e.amount||0) })
       const clientsWithMovs=clients.filter(c=>balances[c.id])
       html+=`<div class="section page-break">
         <div class="section-title">Gastos y Fondos</div>
@@ -9787,14 +9804,23 @@ export default function App() {
   const handleConsumeAnticipos=useCallback(async(ids,billingId)=>{
     if(!ids?.length) return
     try{
+      // Solo se marca Pagada si los anticipos aplicados CUBREN el monto de la factura; si no, queda como abono parcial.
+      const consumido = (anticipos||[]).filter(a=>ids.includes(a.id)).reduce((s,a)=>s+(a.monto||0),0)
+      const fac = billing.find(b=>String(b.id)===String(billingId))
+      const cubre = !fac || consumido >= (fac.amount||0)
       const { error } = await supabase.from('anticipos').update({estado:'consumido',billing_id:billingId}).in('id',ids)
       if(error)throw error
       setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'consumido',billing_id:billingId}:a))
-      const { data, error:be } = await supabase.from('billing').update({status:'Pagado',updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
-      if(be)throw be
-      setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
+      if(cubre){
+        const { data, error:be } = await supabase.from('billing').update({status:'Pagado',updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
+        if(be)throw be
+        setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
+      } else {
+        const resta = (fac.amount||0)-consumido
+        alert(`Abono aplicado: ${fmt(consumido)}. La factura queda pendiente por ${fmt(resta)} (no se marcó pagada).`)
+      }
     }catch(e){alert('Error: '+e.message)}
-  },[clients])
+  },[clients,billing,anticipos])
 
   // Proveedores (PP terceros): crear/editar un proveedor del catálogo
   const handleSaveProveedor=useCallback(async(f)=>{
