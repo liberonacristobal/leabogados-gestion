@@ -2315,7 +2315,55 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
+// Reparto del costo de terceros entre colaboradores (cuentas por pagar).
+// Cada fila = un colaborador + monto (CLP) + cuota ancla (la factura cuyo pago libera el fee).
+function RepartoTerceros({proveedores=[],rows=[],setRows,cuotaOptions=[],costCLP=0,anchorKey='cuotaIdx'}) {
+  const titulo = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+  const provs = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
+  const inp={width:'100%',height:36,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 9px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
+  const sel={...inp,appearance:'none',fontSize:12}
+  const suma = rows.reduce((a,r)=>a+(parseInt(r.monto)||0),0)
+  const desc = costCLP>0 ? Math.round(costCLP)-suma : 0
+  const cuadra = Math.abs(desc)<=1
+  const up=(i,k,v)=>setRows(rows.map((r,j)=>j===i?{...r,[k]:v}:r))
+  const addRow=()=>setRows([...rows,{proveedor_id:'',monto:'',[anchorKey]:cuotaOptions[0]?.value||'0'}])
+  const delRow=i=>setRows(rows.filter((_,j)=>j!==i))
+  const showCuota = cuotaOptions.length>1
+  return (
+    <div style={{background:'#F7F9FA',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 12px',marginBottom:14}}>
+      <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>¿A quién le pagas?</div>
+      {provs.length===0?(
+        <div style={{fontSize:12,color:C.muted,lineHeight:1.45}}>Aún no tienes colaboradores. Créalos en <strong style={{color:C.accent}}>Facturación → Proveedores</strong> y vuelve a abrir la venta.</div>
+      ):(<>
+        {rows.length===0&&<div style={{fontSize:12,color:C.muted,marginBottom:8}}>Agrega a quién le pagas parte de este honorario.</div>}
+        {rows.map((r,i)=>(
+          <div key={i} style={{display:'grid',gridTemplateColumns:showCuota?'1.3fr 0.9fr 1fr 24px':'1.5fr 1fr 24px',gap:6,marginBottom:7,alignItems:'center'}}>
+            <select value={r.proveedor_id||''} onChange={e=>up(i,'proveedor_id',e.target.value)} style={sel}>
+              <option value=''>— Colaborador —</option>
+              {provs.map(p=><option key={p.id} value={p.id}>{titulo(p)}</option>)}
+            </select>
+            <input type='number' value={r.monto} onChange={e=>up(i,'monto',e.target.value)} placeholder='$ monto' style={inp}/>
+            {showCuota&&(
+              <select value={r[anchorKey]??cuotaOptions[0]?.value} onChange={e=>up(i, anchorKey, e.target.value)} style={sel}>
+                {cuotaOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            )}
+            <button type='button' onClick={()=>delRow(i)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
+          </div>
+        ))}
+        <button type='button' onClick={addRow} style={{fontSize:12,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,padding:0,marginTop:2}}>+ Agregar colaborador</button>
+        {rows.length>0&&costCLP>0&&!cuadra&&(
+          <div style={{fontSize:11,color:'#B8860B',background:'#FFF8E1',border:'0.5px solid #F0D88A',borderRadius:8,padding:'7px 9px',marginTop:9,lineHeight:1.4}}>
+            El reparto suma <strong>{fmt(suma)}</strong>, pero el costo de terceros es <strong>{fmt(Math.round(costCLP))}</strong> ({desc>0?`faltan ${fmt(desc)}`:`sobran ${fmt(-desc)}`}).
+          </div>
+        )}
+        {rows.length>0&&costCLP>0&&cuadra&&<div style={{fontSize:11,color:C.normal,marginTop:9}}>Reparto cuadra con el costo de terceros: {fmt(suma)}.</div>}
+      </>)}
+    </div>
+  )
+}
+
+function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedores=[],terceros=[],onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Si estamos activando una propuesta, guardar el honorario original antes de que el usuario lo edite
@@ -2336,6 +2384,9 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,onSaveTari
   const [costMode,setCostMode] = useState('fijo')
   const [costPct,setCostPct] = useState('')
   const [costSwitch,setCostSwitch] = useState(!!(sale?.cost_uf||sale?.cost_clp))
+  // Reparto del costo de terceros entre colaboradores. Para venta existente se ancla por billing_id;
+  // para venta nueva por índice de cuota (cuotaIdx), que se resuelve a billing_id al guardar.
+  const [reparto,setReparto] = useState(()=> (terceros||[]).filter(t=>String(t.sale_id)===String(sale?.id)).map(t=>({id:t.id,proveedor_id:t.proveedor_id,monto:t.monto,billing_id:t.billing_id,estado:t.estado})) )
   const [tariffs,setTariffs] = useState([])
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
   const fmtMesAno = d => d ? d.slice(5,7)+'/'+d.slice(0,4) : '—'
@@ -2569,6 +2620,16 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   }
   const cobros = generarCobros()
 
+  // Reparto a colaboradores: opciones de cuota ancla y costo total en CLP para reconciliar.
+  const costCLP = moneda==='UF' ? costVal*ufVal : costVal
+  const repartoEsExistente = !!sale?.id
+  const anchorKey = repartoEsExistente ? 'billing_id' : 'cuotaIdx'
+  const cuotaOptions = repartoEsExistente
+    ? (billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.billing_type!=='reembolso')
+        .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
+        .map(b=>({value:b.id, label:`${b.invoice_no?`F° ${b.invoice_no}`:'Programada'} · ${fmtFechaDMY(b.due)}`}))
+    : cobros.map((c,i)=>({value:String(i), label:`${c.label} · ${fmtFechaDMY(c.fecha)}`}))
+
   const handleSave = () => {
     const saveF = {...f}
     if(!costSwitch) { saveF.cost_uf = null; saveF.cost_clp = null }
@@ -2583,7 +2644,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       saveF.status = 'Activo'
     }
     clearDraft()
-    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
+    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false, repartoTerceros:reparto})
   }
 
   const handleSaveDraft = () => {
@@ -2943,6 +3004,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
         )}
         {costSwitch&&costMode==='pct'&&costVal>0&&<div style={{fontSize:11,color:C.muted,marginBottom:14}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
+        {costSwitch&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} cuotaOptions={cuotaOptions} costCLP={costCLP} anchorKey={anchorKey}/>}
 
       </>)}
 
@@ -3047,6 +3109,12 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
               {row('Honorarios',curHon,'honorarios',false)}
               {row('Costos de terceros',curCost,'costos',false)}
+              {openCondicion==='costos'&&(
+                <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`}}>
+                  <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} cuotaOptions={cuotaOptions} costCLP={costCLP} anchorKey={anchorKey}/>
+                  <div style={{fontSize:11,color:C.muted,lineHeight:1.4}}>Se guarda al tocar <strong style={{color:C.text}}>Guardar</strong>. Es comisión de tu honorario; no se le cobra al cliente.</div>
+                </div>
+              )}
               {row('Forma de cobro',curCobro,'cobro',false)}
               {row('Notas',notasPrev,'notas',true)}
               {openCondicion==='notas'&&(
@@ -4506,7 +4574,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
                 <div key={t.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:500,color:'#1a1a1a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}</div>
-                    <div style={{fontSize:11,color:'#99ABB4'}}>{fac?.invoice_no?`F° ${fac.invoice_no} · `:''}{t.estado==='pagado'&&t.pagado_fecha?`Pagado ${fmtD(t.pagado_fecha)}`:(t.created_at?fmtD(String(t.created_at).slice(0,10)):'')}</div>
+                    <div style={{fontSize:11,color:'#99ABB4'}}>{fac?.invoice_no?`F° ${fac.invoice_no} · `:''}{t.estado==='pagado'&&t.pagado_at?`Pagado ${fmtD(String(t.pagado_at).slice(0,10))}`:(t.created_at?fmtD(String(t.created_at).slice(0,10)):'')}</div>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <span style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{fmt0(t.monto)}</span>
@@ -8814,6 +8882,40 @@ export default function App() {
       }
       const {data:newBilling} = await getBilling()
       if(newBilling) setBilling(newBilling)
+      // Reparto a colaboradores (terceros_pagos): comisión de tu honorario, NO toca monto_terceros.
+      // Cada fila se ancla a una cuota (billing_id); en venta nueva el ancla viene por índice (cuotaIdx).
+      if(Array.isArray(f.repartoTerceros)){
+        try{
+          const cuotasVenta = (newBilling||[]).filter(b=>String(b.sale_id)===String(data.id)&&b.billing_type!=='reembolso')
+            .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
+          const resolverBilling = row => {
+            if(row.billing_id) return row.billing_id
+            const idx = parseInt(row.cuotaIdx)
+            if(!isNaN(idx)&&cuotasVenta[idx]) return cuotasVenta[idx].id
+            return cuotasVenta[0]?.id || null
+          }
+          const previas = (terceros||[]).filter(t=>String(t.sale_id)===String(data.id))
+          const keep = new Set()
+          for(const row of f.repartoTerceros){
+            if(!row.proveedor_id || !((parseInt(row.monto)||0)>0)) continue
+            const prov = proveedores.find(p=>String(p.id)===String(row.proveedor_id))
+            const payload = {sale_id:data.id, billing_id:resolverBilling(row), proveedor_id:row.proveedor_id,
+              proveedor: prov?(prov.razon_social||prov.nombre):null, rut:prov?.rut||null, monto:parseInt(row.monto)||0}
+            if(row.id){
+              const {data:u} = await supabase.from('terceros_pagos').update(payload).eq('id',row.id).select().single()
+              if(u) keep.add(u.id)
+            } else {
+              const {data:ins} = await supabase.from('terceros_pagos').insert({...payload, estado:'pendiente', created_by:user?.name||null}).select().single()
+              if(ins) keep.add(ins.id)
+            }
+          }
+          // Eliminar las filas quitadas (nunca borra una ya pagada).
+          const borrar = previas.filter(t=>!keep.has(t.id)&&t.estado!=='pagado')
+          if(borrar.length) await supabase.from('terceros_pagos').delete().in('id', borrar.map(t=>t.id))
+          const {data:nt} = await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
+          if(nt) setTerceros(nt)
+        }catch(te){ alert('La venta se guardó, pero hubo un problema al guardar el reparto de terceros: '+te.message) }
+      }
       // Al activar una propuesta: si el cliente era Prospecto, pasa a Activo automáticamente
       if(_activandoPropuesta && data.client_id) {
         const cliente = clients.find(c=>c.id===data.client_id)
@@ -8825,7 +8927,7 @@ export default function App() {
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[clients,clientEntities])
+  },[clients,clientEntities,terceros,proveedores,user])
 
   const handleRechazarPropuesta=useCallback(async(s)=>{
     if(!confirm(`¿Marcar como rechazada la propuesta "${s.title}"?`)) return
@@ -9282,7 +9384,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={13}/>Drive</button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} onSave={handleSaveProveedor} onClose={()=>setModal(null)} saving={saving}/></Modal>}
