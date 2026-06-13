@@ -7310,6 +7310,11 @@ Saludos cordiales,
 ${user?.name||''}
 Liberona Escala Abogados`
   }
+  const verPDF = () => {
+    const w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para ver el PDF.'); return }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición ${client?.name||''} ${r.periodo||''}</title><style>@page{size:letter portrait;margin:16mm 18mm}body{margin:0;padding:22px;font-family:'DM Sans',Arial,sans-serif}@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body>${buildHTML()}<button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`)
+    w.document.close()
+  }
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
     const texto = cuerpoCorreo()
@@ -7326,6 +7331,7 @@ Liberona Escala Abogados`
         }catch(_){ /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
       if(!conAdjunto){
+        verPDF()   // abre el PDF para que el usuario lo guarde y lo adjunte manualmente
         const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
         const win=window.open(gmailUrl,'_blank')
         if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
@@ -7333,7 +7339,7 @@ Liberona Escala Abogados`
       const now = new Date().toISOString()
       await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
       onSent && onSent(r.id, now)
-      if(conAdjunto) alert('Rendición enviada al cliente con el PDF adjunto.')
+      alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se abrió tu correo y el PDF en otra pestaña. Adjunta ese PDF antes de enviar.')
       onClose()
     }catch(e){ alert('Error: '+e.message) }
     setSending(false)
@@ -7348,6 +7354,7 @@ Liberona Escala Abogados`
       <div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:10,maxHeight:240,overflowY:'auto',marginBottom:14}} dangerouslySetInnerHTML={{__html:buildHTML()}}/>
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={verPDF} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
         <button onClick={enviar} disabled={sending||!para.trim()} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':'Enviar'}</button>
       </div>
     </Modal>
