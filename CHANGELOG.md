@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Editar cobro más corto + adjuntar solo ícono
+- **Editar cobro**: el campo Notas pasó a una **sola línea** (antes era un recuadro alto) → la vista queda más corta.
+- **Adjuntar archivo** (en toda la app): ahora es **solo el ícono** (sin el texto "Adjuntar archivo" ni la línea "Máx. 15 MB"); el detalle queda en el tooltip. Ahorra espacio en todos los formularios.
+
 ## 2026-06-13 — Tanda D (UX) parte 2: tarjeta de factura → editar
 - En Facturación, **tocar la tarjeta de una factura abre Editar** (antes había que ir al menú ⋯). Los controles internos (checkbox, Registrar pago/Ya emitida, asignar cliente, ⋯) siguen funcionando aparte (no abren editar). El menú ⋯ mantiene Editar/Anular.
 
