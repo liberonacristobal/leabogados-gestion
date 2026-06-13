@@ -5117,16 +5117,57 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
     return null
   }
 
+  // Fecha tolerante: Date nativo, serial Excel, dd.mm.yy(yy), dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd. Vacío → ''.
   const parseFecha = v => {
-    if(!v) return ''
-    if(v instanceof Date) return v.toISOString().slice(0,10)
-    const str = v.toString().trim()
-    // dd-mm-yyyy o dd/mm/yyyy
-    const m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/)
-    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
-    // yyyy-mm-dd ya viene bien
+    if(v===null||v===undefined||v==='') return ''
+    if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10)
+    // Número serial de Excel (días desde 1899-12-30). Se acepta como número o string puramente numérico.
+    if(typeof v==='number' || /^\d{3,6}$/.test(String(v).trim())){
+      const n = Number(v)
+      if(n>20000 && n<80000){ const d=new Date(Date.UTC(1899,11,30)+n*86400000); if(!isNaN(d)) return d.toISOString().slice(0,10) }
+    }
+    const str = String(v).trim()
+    // dd[.-/]mm[.-/]yy(yy)
+    const m = str.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})$/)
+    if(m){ let y=m[3]; if(y.length===2) y='20'+y; return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` }
     if(/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0,10)
-    return str
+    return ''   // formato no reconocido → null (no bloquea; Commit 4 importa igual)
+  }
+
+  // Monto tolerante: separadores de miles (1.234.567), símbolo $, espacios. Vacío/no numérico → null.
+  const parseMonto = v => {
+    if(v===null||v===undefined||v==='') return null
+    if(typeof v==='number') return Math.round(v)
+    const limpio = String(v).replace(/[^\d-]/g,'')   // quita $, puntos de miles, espacios
+    if(limpio===''||limpio==='-') return null
+    const n = parseInt(limpio,10)
+    return isNaN(n) ? null : n
+  }
+
+  // Sinónimos de columna (lowercased). El parser reconoce cualquiera de estos encabezados, en cualquier orden.
+  const COLALIAS = {
+    cliente:   ['cliente','nombre','nombre cliente','razón social','razon social','client'],
+    rut:       ['rut','rut cliente'],
+    fecha:     ['fecha','fecha gasto','date'],
+    concepto:  ['concepto','actividad','descripción','descripcion','detalle','glosa','detail'],
+    detalle:   ['detalle proveedor','detalle prov','proveedor detalle'],
+    categoria: ['categoría','categoria','tipo','proveedor','category'],
+    monto:     ['monto','importe','valor','amount','total'],
+    notas:     ['notas','nota','observaciones','observación','observacion','comments'],
+    proyecto:  ['proyecto','propuesta','propuesta - proyecto','project'],
+  }
+  // Mapea un valor de categoría de la planilla a una categoría válida del sistema (mantiene Registro Civil).
+  const CAT_SINONIMOS = {
+    'notaria':'Notaria','notaría':'Notaria','notario':'Notaria',
+    'cbr':'CBR','conservador':'CBR','conservador de bienes raices':'CBR','conservador de bienes raíces':'CBR',
+    'diario oficial':'Diario Oficial','d.o.':'Diario Oficial','do':'Diario Oficial',
+    'registro civil':'Registro Civil','r. civil':'Registro Civil','rcivil':'Registro Civil',
+  }
+  const mapCategoria = raw => {
+    const k = catNorm(raw)
+    if(!k) return 'Otro'
+    if(CAT_SINONIMOS[k]) return CAT_SINONIMOS[k]
+    return CAT_OPCIONES.find(c=>catNorm(c)===k) || 'Otro'
   }
 
   const onFile = async(e) => {
@@ -5139,26 +5180,50 @@ function CargaMasivaModal({clients,clientEntities,onSave,onClose,onClientsUpdate
       // Hoja según el tipo elegido (Gastos/Fondos); si no existe esa hoja, la primera
       const target = tipo==='fondo' ? 'fondos' : 'gastos'
       const sheetName = wb.SheetNames.find(n=>n.toLowerCase().trim()===target) || wb.SheetNames[0]
-      const data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:''})
-      const parsed = data.map((r,i)=>{
-        const get = (...keys)=>{ for(const k of Object.keys(r)){ if(keys.some(kk=>k.toLowerCase().trim()===kk)) return r[k] } return '' }
-        const rut = get('rut','rut cliente')
-        const nombre = get('nombre','nombre cliente','cliente')
-        const fecha = parseFecha(get('fecha'))
-        const rawMonto = (get('monto')??'').toString().trim()
-        const montoNum = parseInt(rawMonto.replace(/[^\d-]/g,''),10)  // conserva el signo: un negativo NO se vuelve positivo
-        const concepto = (get('concepto','descripcion','descripción','glosa')||'').toString()
-        const categoria = canonCat(get('categoria','categoría','tipo'))  // solo categorías válidas; el resto cae a "Otro"
+      // Lectura como matriz para detectar el encabezado en las primeras filas (tolera filas de título arriba).
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true})
+      const norm = s => String(s??'').toLowerCase().trim()
+      const aliasFlat = Object.values(COLALIAS).flat()
+      let hIdx=-1, best=0
+      for(let i=0;i<Math.min(5,aoa.length);i++){
+        const score = (aoa[i]||[]).filter(c=>aliasFlat.includes(norm(c))).length
+        if(score>best){ best=score; hIdx=i }
+      }
+      const resolveCols = headerArr => {
+        const map={}
+        ;(headerArr||[]).forEach((cell,idx)=>{ const n=norm(cell); for(const [field,aliases] of Object.entries(COLALIAS)){ if(aliases.includes(n)&&map[field]===undefined) map[field]=idx } })
+        return map
+      }
+      let colMap = resolveCols(hIdx>=0?aoa[hIdx]:(aoa[0]||[]))
+      let startRow = (hIdx>=0?hIdx:0)+1
+      // Sin encabezado reconocible → orden estándar Cliente, Fecha, Concepto, Categoría, Monto.
+      if(!['cliente','rut','monto'].some(f=>colMap[f]!==undefined)){ colMap={cliente:0,fecha:1,concepto:2,categoria:3,monto:4}; startRow=0 }
+      const getC = (row,field) => colMap[field]!==undefined ? row[colMap[field]] : ''
+      const dataRows = aoa.slice(startRow)
+      const parsed = []
+      dataRows.forEach((row,i)=>{
+        if(!Array.isArray(row)) return
+        const rut = String(getC(row,'rut')||'').trim()
+        const nombre = String(getC(row,'cliente')||'').trim()
+        const cBase = String(getC(row,'concepto')||'').trim()
+        const cDet  = String(getC(row,'detalle')||'').trim()
+        const concepto = cBase&&cDet ? `${cBase} — ${cDet}` : (cBase||cDet)
+        const notas = String(getC(row,'notas')||'').trim()
+        const proyecto = String(getC(row,'proyecto')||'').trim()
+        const fecha = parseFecha(getC(row,'fecha'))
+        const monto = parseMonto(getC(row,'monto'))
+        // Fila completamente vacía → se ignora
+        if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return
+        const categoria = tipo==='fondo' ? 'Fondo' : mapCategoria(getC(row,'categoria'))
         const cli = matchCliente(rut,nombre)
         const ents = cli ? entsOf(cli.id) : []
-        // Validación de monto (no se descarta en silencio: la fila queda marcada como Error)
         let error=null
-        if(rawMonto===''||isNaN(montoNum)) error='Monto inválido o vacío'
-        else if(montoNum<0) error='Monto negativo no permitido'
-        else if(montoNum===0) error='Monto debe ser mayor a 0'
-        return {id:i, rut, nombre, fecha, monto:isNaN(montoNum)?0:montoNum, concepto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ents.length===1?ents[0].id:null, error, dup:false}
+        if(monto==null) error='Monto vacío o inválido'
+        else if(monto<0) error='Monto negativo no permitido'
+        else if(monto===0) error='Monto debe ser mayor a 0'
+        parsed.push({id:parsed.length, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: ents.length===1?ents[0].id:null, error, dup:false})
       })
-      // Detección de duplicados (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
+      // Detección de duplicados dentro del archivo (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
       const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}`
       const counts={}
       parsed.forEach(r=>{ const k=keyOf(r); counts[k]=(counts[k]||0)+1 })
