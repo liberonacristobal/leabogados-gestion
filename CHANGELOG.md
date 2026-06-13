@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-13 — Diagnóstico: aprende, deshacer y paleta
+- **Gasto huérfano que aprende (de verdad)**: al asignar cliente a un gasto sin cliente, se aplica a todos los gastos sin cliente con la misma descripción. Antes leía el campo `notas` (casi siempre vacío) → nunca disparaba; ahora usa `concept`.
+- **Eliminar sin fricción + Deshacer**: eliminar venta, cobro o gasto ya no pregunta con un confirm redundante — se hace al toque y aparece un **toast "Deshacer"** que restaura de inmediato (siguen yendo a Papelera igual). Se conserva la confirmación solo en el caso de riesgo (gasto ya rendido al cliente, que descuadra).
+- **Paleta**: el verde de cifras `#0F6E56` se oficializó como token `C.greenText` (era un hex suelto repetido 24 veces).
+
 ## 2026-06-13 — Dashboard: KPIs y Tareas
 - **Espacios uniformes entre KPIs** (bloque Facturación pasa a `gap:8`, igual que Cobranza y meta) y título "Cobranza" en el grid accionable.
 - **Rediseño de Tareas**: cada persona muestra de un vistazo si tiene tareas **vencidas** (pill roja) o **prontas** ≤7 días (pill ámbar) sin expandir, con contador y jerarquía más limpia (avatar 28px, nombre en grafito, fila resaltada al abrir).
