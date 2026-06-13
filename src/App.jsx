@@ -21,7 +21,7 @@ const C = {
   accent:'#003C50',overdue:'#E24B4A',urgent:'#E24B4A',soon:'#C77F18',normal:'#1D9E75',done:'#99ABB4',
 }
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
-const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—'
+const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}` : '—'
 // CLP abreviado para KPIs ($216,2M / $30K). Conserva el signo.
 const fmtShort = n => { const a=Math.abs(n||0), s=n<0?'-':''; if(a>=1000000) return s+'$'+(a/1000000).toFixed(a>=10000000?0:1).replace('.',',')+'M'; if(a>=1000) return s+'$'+Math.round(a/1000)+'K'; return s+'$'+a.toLocaleString('es-CL') }
 // UF abreviada para KPIs (UF 9.800 / UF 6.309), sin decimales para no recargar.
@@ -1736,6 +1736,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payGroup,setPayGroup] = useState(null)        // varias cuentas del mismo proveedor pagadas juntas
   const [payFecha,setPayFecha] = useState('')
   const [payRef,setPayRef] = useState('')
+  const [payDoc,setPayDoc] = useState('')          // N° documento fiscal del proveedor (factura/boleta)
+  const [payDocF,setPayDocF] = useState('')        // fecha del documento
   const [payingNow,setPayingNow] = useState(false)
   const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
@@ -2136,7 +2138,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       {(()=>{
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
-        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+        const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
         const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
         const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar').reduce((a,t)=>a+(t.monto||0),0)
@@ -2186,13 +2188,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       <span style={{width:34,height:34,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(g.prov)}</div>
-                        <div style={{fontSize:11,color:'#99ABB4'}}>{g.prov?.razon_social?.trim()?(g.prov.nombre||''):(g.prov?.rut||'')}</div>
+                        <div style={{fontSize:11,color:'#99ABB4'}}>{g.prov?.razon_social?.trim()||g.prov?.rut||''}</div>
                       </div>
                       <div style={{marginLeft:'auto',textAlign:'right',flexShrink:0}}>
                         <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Le debes</div>
                         <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(g.total)}</div>
                         {ppCuentas.length>=2&&(
-                          <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('')}} style={{marginTop:6,height:28,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:11.5,fontWeight:600,padding:'0 11px',cursor:'pointer',whiteSpace:'nowrap'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
+                          <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{marginTop:6,height:28,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:11.5,fontWeight:600,padding:'0 11px',cursor:'pointer',whiteSpace:'nowrap'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
                         )}
                       </div>
                     </div>
@@ -2212,7 +2214,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                           <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(t.monto)}</span>
                           <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
                           {pp
-                            ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
+                            ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
                             : <span style={{fontSize:11,color:'#99ABB4',flexShrink:0,whiteSpace:'nowrap'}}>espera cobro</span>}
                         </div>
                       )
@@ -2227,15 +2229,15 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {payTercero&&(()=>{
         const prov=(proveedores||[]).find(p=>String(p.id)===String(payTercero.proveedor_id))
-        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+        const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
         const fac=(billing||[]).find(b=>String(b.id)===String(payTercero.billing_id))
         const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
         const venta=(sales||[]).find(s=>String(s.id)===String(payTercero.sale_id))
         const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}${fac?.invoice_no?` · F° ${fac.invoice_no}`:''}`
-        const subtit = prov?.razon_social?.trim() ? `${prov.nombre?`${prov.nombre} · `:''}${prov.rut||''}`.replace(/ · $/,'') : (prov?.rut||'')
+        const subtit = [prov?.razon_social?.trim(), prov?.rut].filter(Boolean).join(' · ')
         const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
-        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercero(payTercero.id,{pagado_at:payFecha,referencia:payRef}); setPayingNow(false); if(r) setPayTercero(null) }
+        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercero(payTercero.id,{pagado_at:payFecha,referencia:payRef,factura_numero:payDoc,factura_fecha:payDocF}); setPayingNow(false); if(r) setPayTercero(null) }
         const fl={fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
         const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#3D3D3D',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
         return (
@@ -2275,6 +2277,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <div><span style={fl}>Fecha de pago</span><input type='date' value={payFecha} onChange={e=>setPayFecha(e.target.value)} style={inp}/></div>
                   <div><span style={fl}>Referencia</span><input value={payRef} onChange={e=>setPayRef(e.target.value)} placeholder='N° transferencia' style={inp}/></div>
                 </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+                  <div><span style={fl}>Documento del proveedor</span><input value={payDoc} onChange={e=>setPayDoc(e.target.value)} placeholder='N° factura/boleta' style={inp}/></div>
+                  <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
+                </div>
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>setPayTercero(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':'Marcar pagado'}</button>
@@ -2287,12 +2293,12 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {payGroup&&(()=>{
         const prov=payGroup.prov
-        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+        const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
         const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
-        const subtit = prov?.razon_social?.trim() ? `${prov.nombre?`${prov.nombre} · `:''}${prov.rut||''}`.replace(/ · $/,'') : (prov?.rut||'')
+        const subtit = [prov?.razon_social?.trim(), prov?.rut].filter(Boolean).join(' · ')
         const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
-        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercerosBulk(payGroup.cuentas.map(t=>t.id),{pagado_at:payFecha,referencia:payRef}); setPayingNow(false); if(r) setPayGroup(null) }
+        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercerosBulk(payGroup.cuentas.map(t=>t.id),{pagado_at:payFecha,referencia:payRef,factura_numero:payDoc,factura_fecha:payDocF}); setPayingNow(false); if(r) setPayGroup(null) }
         const fl={fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
         const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#3D3D3D',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
         return (
@@ -2340,6 +2346,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
                   <div><span style={fl}>Fecha de pago</span><input type='date' value={payFecha} onChange={e=>setPayFecha(e.target.value)} style={inp}/></div>
                   <div><span style={fl}>Referencia</span><input value={payRef} onChange={e=>setPayRef(e.target.value)} placeholder='N° transferencia' style={inp}/></div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+                  <div><span style={fl}>Documento del proveedor</span><input value={payDoc} onChange={e=>setPayDoc(e.target.value)} placeholder='N° factura/boleta' style={inp}/></div>
+                  <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>setPayGroup(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -2556,7 +2566,7 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
 // El costo se reparte en las MISMAS cuotas que el cobro (se distribuye al guardar).
 // Por defecto el tipo = la unidad de la venta. La reconciliación y los montos se muestran en esa unidad.
 function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,saleTotal=0,costTotal=0}) {
-  const titulo = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+  const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const provs = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
   const esUF = moneda!=='CLP'
   const defTipo = esUF ? 'uf' : 'clp'
@@ -4303,7 +4313,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
       )})()}
 
       <div style={{padding:'10px 20px 100px'}}>
-        {filter==='checklist' ? (
+        {filter==='anticipos' ? null
+        : filter==='checklist' ? (
           <ChecklistFacturacion billing={billing} clients={clients} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
         ) : filter==='emitidas' ? (
           <>
@@ -4361,7 +4372,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                           {rs.name&&<div style={{fontSize:10,color:C.muted,marginTop:1,textTransform:'uppercase',letterSpacing:.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.name}{rs.rut?` · ${rs.rut}`:''}</div>}
                           <div style={{fontSize:12,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
                           <div style={{fontSize:11,color:C.muted,marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
-                            <span>{esCLP?'—':(ufEq?`UF ${ufEq.toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—')}</span>
+                            <span>{esCLP?'—':(ufEq?`UF ${ufEq.toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}`:'—')}</span>
                             <span>Vence {fmtDate(b.due)}</span>
                           </div>
                           {emitiendo===b.id ? (
@@ -4408,7 +4419,7 @@ function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],ant
   const tercerosBill = (terceros||[]).filter(t=>String(t.billing_id)===String(bill?.id))
   const [terceroProv,setTerceroProv] = useState(()=>{ const t=tercerosBill.find(x=>x.estado!=='pagado')||tercerosBill[0]; return t?String(t.proveedor_id):'' })
   const terceroPagado = tercerosBill.some(t=>t.estado==='pagado')
-  const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+  const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const provsOrd = [...(proveedores||[])].sort((a,b)=>tituloProv(a).localeCompare(tituloProv(b),'es'))
   const [selAnt,setSelAnt] = useState(new Set())
   const [anularOpen,setAnularOpen] = useState(false)
@@ -4846,7 +4857,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
   const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
   const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-  const titulo = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Proveedor')
+  const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const debeDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
   const pagadoDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0)
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
@@ -4900,7 +4911,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
                   <span style={{width:32,height:32,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(titulo(p))}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo(p)}</div>
-                    <div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()?`Contacto: ${p.nombre||'—'}`:(p.rut||'Sin RUT')}</div>
+                    <div style={{fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social?.trim()||p.rut||'Sin RUT'}</div>
                   </div>
                   {debe>0&&<span style={{fontSize:12,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmt0(debe)}</span>}
                 </div>
@@ -4954,7 +4965,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],onSa
           <span style={{width:46,height:46,borderRadius:12,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,flexShrink:0}}>{cIni(titulo(sel))}</span>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:17,fontWeight:600,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo(sel)}</div>
-            {sel?.razon_social?.trim()&&<div style={{fontSize:12,color:'#99ABB4'}}>Contacto: {sel.nombre||'—'}</div>}
+            {sel?.razon_social?.trim()&&<div style={{fontSize:12,color:'#99ABB4'}}>{sel.razon_social}</div>}
             {sel?.rut&&<div style={{fontSize:12,color:'#99ABB4'}}>{sel.rut}</div>}
           </div>
           <button onClick={()=>abrirEditar(sel)} style={{height:32,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Editar</button>
@@ -10150,19 +10161,19 @@ export default function App() {
   },[terceros])
 
   // Pagar a un proveedor: la cuenta pasa a 'pagado' con fecha y referencia (transferencia manual).
-  const handlePagarTercero=useCallback(async(terceroId,{pagado_at,referencia})=>{
+  const handlePagarTercero=useCallback(async(terceroId,{pagado_at,referencia,factura_numero,factura_fecha})=>{
     try{
-      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null}).eq('id',terceroId).select().single()
+      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null,factura_numero:factura_numero||null,factura_fecha:factura_fecha||null}).eq('id',terceroId).select().single()
       if(error)throw error
       setTerceros(p=>p.map(t=>t.id===data.id?data:t))
       return data
     }catch(e){alert('Error: '+e.message); return null}
   },[])
   // Pagar varias cuentas del mismo proveedor en una sola transferencia (mismo fecha y referencia).
-  const handlePagarTercerosBulk=useCallback(async(ids,{pagado_at,referencia})=>{
+  const handlePagarTercerosBulk=useCallback(async(ids,{pagado_at,referencia,factura_numero,factura_fecha})=>{
     try{
       if(!ids?.length) return null
-      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null}).in('id',ids).select()
+      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null,factura_numero:factura_numero||null,factura_fecha:factura_fecha||null}).in('id',ids).select()
       if(error)throw error
       setTerceros(p=>p.map(t=>{const u=(data||[]).find(d=>d.id===t.id); return u||t}))
       return data
