@@ -318,7 +318,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
     const saldo = fondos - gastos
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
-    const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+    const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
 
     return (
       <div style={{paddingBottom:100}}>
@@ -357,7 +357,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
               </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
-              <div style={{background:'#E4F1EA',borderRadius:8,padding:'8px 10px'}}>
+              <div style={{background:'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:'#888',marginBottom:2}}>FONDOS</div>
                 <div style={{fontSize:12,fontWeight:700,color:'#1D9E75'}}>${fondos.toLocaleString('es-CL')}</div>
               </div>
@@ -365,7 +365,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
                 <div style={{fontSize:10,color:'#888',marginBottom:2}}>GASTOS</div>
                 <div style={{fontSize:12,fontWeight:700,color:'#E24B4A'}}>${gastos.toLocaleString('es-CL')}</div>
               </div>
-              <div style={{background:saldo<0?'#FBE9E7':'#E4F1EA',borderRadius:8,padding:'8px 10px'}}>
+              <div style={{background:saldo<0?'#FBE9E7':'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:'#888',marginBottom:2}}>SALDO</div>
                 <div style={{fontSize:12,fontWeight:700,color:saldo<0?'#E24B4A':'#0F6E56'}}>${saldo.toLocaleString('es-CL')}</div>
               </div>
@@ -377,7 +377,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
                 <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:'1px solid #E4E8EB'}}>
                   <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
                     {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
-                    {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:'#1D9E75',fontWeight:600,flexShrink:0}}>Fondo</span>}
+                    {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E1F5EE',color:'#1D9E75',fontWeight:600,flexShrink:0}}>Fondo</span>}
                     <span style={{fontSize:12,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                   </div>
                   <div style={{fontSize:12,fontWeight:600,color:isFondo?'#1D9E75':'#E24B4A',flexShrink:0,marginLeft:8}}>{isFondo?'+':'-'}${e.amount.toLocaleString('es-CL')}</div>
@@ -602,7 +602,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const totalSel = seleccionados.reduce((a,e)=>a+(e.amount||0),0)
 
   const fmtCLP = fmtN
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
   // Pills de categoría en PENDIENTES: [valor en DB, etiqueta mostrada]
   const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
   const catLabel = c => c==='Diario Oficial'?'DO':c==='Registro Civil'?'R. Civil':(c||'Otro')
@@ -775,7 +775,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'0 0 130px'}}>
           {/* Resumen: saldo de caja + total sin liquidar */}
           <div style={{display:'flex',gap:8,padding:'2px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E4F1EA'}}>
+            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E1F5EE'}}>
               <div style={kpiLbl}>Saldo caja</div>
               <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
             </div>
@@ -843,7 +843,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'4px 0 100px'}}>
           {/* KPIs */}
           <div style={{display:'flex',gap:8,padding:'4px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E4F1EA'}}>
+            <div style={{...kpiCard,background:saldoCaja<0?'#FBE9E7':'#E1F5EE'}}>
               <div style={kpiLbl}>Saldo</div>
               <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
               <div style={{...kpiSub,color:saldoCaja<0?C.overdue:C.muted}}>{saldoCaja<0?'Te debemos':'Disponible'}</div>
@@ -3596,7 +3596,7 @@ function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
           <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Por facturar</div>
           <div style={{fontSize:13,fontWeight:700,color:'#C77F18'}}>{fmt(porFacturarCLP)}</div>
         </div>
-        <div style={{background:'#E4F1EA',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+        <div style={{background:'#E1F5EE',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
           <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Ya emitidas</div>
           <div style={{fontSize:13,fontWeight:700,color:'#0F6E56'}}>{fmt(emitidasCLP)}</div>
         </div>
@@ -4154,7 +4154,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
         {filter!=='anticipos'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:10}}>
-          {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E4F1EA',C.normal]].map(([l,v,bg,col])=>(
+          {[['Por cobrar',fmt(pending),'#E3EEF3',C.accent],['Programado',fmt(programado),'#E4E8EB','#537281'],['Vencido',fmt(overdue),'#FBE9E7',C.overdue],['Cobrado',fmt(paid),'#E1F5EE',C.normal]].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{l}</div>
               <div style={{fontSize:13,fontWeight:700,color:col}}>{v}</div>
@@ -5038,8 +5038,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
   }
 
   const lblG = {fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:2}
-  const fK = fondosDisp>0?{c:'#1D9E75',bg:'#E4F1EA'}:fondosDisp===0?{c:'#C77F18',bg:'#FEF6EE'}:{c:'#E24B4A',bg:'#FBE9E7'}
-  const sK = saldoActual>0?{c:'#1D9E75',bg:'#E4F1EA'}:{c:'#E24B4A',bg:'#FBE9E7'}
+  const fK = fondosDisp>0?{c:'#1D9E75',bg:'#E1F5EE'}:fondosDisp===0?{c:'#C77F18',bg:'#FEF6EE'}:{c:'#E24B4A',bg:'#FBE9E7'}
+  const sK = saldoActual>0?{c:'#1D9E75',bg:'#E1F5EE'}:{c:'#E24B4A',bg:'#FBE9E7'}
 
   return (
     <div>
@@ -5833,7 +5833,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
   const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
 
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
@@ -5850,8 +5850,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const multiRS = selEnts.length>=2
 
   // Colores de KPI según reglas (labels siempre gris #99ABB4)
-  const cFondos = v => v>0?{c:C.normal,bg:'#E4F1EA'} : v===0?{c:'#C77F18',bg:'#FEF6EE'} : {c:C.overdue,bg:'#FBE9E7'}
-  const cSaldo = v => v>0?{c:C.normal,bg:'#E4F1EA'} : {c:C.overdue,bg:'#FBE9E7'}
+  const cFondos = v => v>0?{c:C.normal,bg:'#E1F5EE'} : v===0?{c:'#C77F18',bg:'#FEF6EE'} : {c:C.overdue,bg:'#FBE9E7'}
+  const cSaldo = v => v>0?{c:C.normal,bg:'#E1F5EE'} : {c:C.overdue,bg:'#FBE9E7'}
   const KpiRect = ({label,value,c,bg}) => (
     <div style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
       <div style={{fontSize:10,color:'#99ABB4',marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</div>
@@ -5886,8 +5886,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
-              {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600}}>Fondo</span>}
-              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>Rendido <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>}
+              {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600}}>Fondo</span>}
+              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:'#0F6E56',fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>Rendido <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -6332,7 +6332,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
           {selectedClient&&<div style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>}
           <div style={{fontSize:16,fontWeight:700,color:'#003C50'}}>Registrar gastos</div>
         </div>
-        <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:12}}>x</button>
+        <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,flexShrink:0,marginLeft:4,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center'}}>x</button>
       </div>
       {!selectedClient&&(
         <Fld label='Cliente'>
@@ -6622,7 +6622,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
           {task?'Editar tarea':'Nueva tarea'}
           {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}
         </span>
-        <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1}}>x</button>
+        <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-8}}>x</button>
       </div>
 
       <div className='qt-body'>
@@ -7181,7 +7181,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const taskGroups = {}
   clientTasks.forEach(t=>{ const k=t.project||'__none__'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
 
-  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+  const CATS = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
 
   return (
     <div style={{paddingBottom:100}}>
@@ -7226,8 +7226,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           {[
             ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E3EEF3',C.accent],
             ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?'#FBE9E7':'#F5F7F9',totalPorCobrar>0?C.overdue:C.muted],
-            ['Cobrado',fmt(cobrado),'#E4F1EA',C.normal],
-            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?'#FBE9E7':'#E4F1EA',saldoFondos<0?C.overdue:C.normal],
+            ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal],
+            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?'#FBE9E7':'#E1F5EE',saldoFondos<0?C.overdue:C.normal],
           ].map(([l,v,bg,col])=>(
             <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
@@ -7315,7 +7315,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           </div>
           {clientExpenses.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin movimientos</div>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
-            <div style={{background:'#E4F1EA',borderRadius:8,padding:'8px 10px'}}>
+            <div style={{background:'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>FONDOS</div>
               <div style={{fontSize:12,fontWeight:700,color:C.normal}}>{fmt(fondos)}</div>
             </div>
@@ -7323,7 +7323,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS</div>
               <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>{fmt(gastos)}</div>
             </div>
-            <div style={{background:saldoFondos<0?'#FBE9E7':'#E4F1EA',borderRadius:8,padding:'8px 10px'}}>
+            <div style={{background:saldoFondos<0?'#FBE9E7':'#E1F5EE',borderRadius:8,padding:'8px 10px'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
               <div style={{fontSize:12,fontWeight:700,color:saldoFondos<0?C.overdue:C.normal}}>{fmt(saldoFondos)}</div>
             </div>
@@ -7335,8 +7335,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
                 <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
                   {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
-                  {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:C.normal,fontWeight:600,flexShrink:0}}>Fondo</span>}
-                  {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E4F1EA',color:'#0F6E56',fontWeight:600,flexShrink:0}}>Rendido</span>}
+                  {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600,flexShrink:0}}>Fondo</span>}
+                  {!isFondo&&e.client_rendered_at&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E1F5EE',color:'#0F6E56',fontWeight:600,flexShrink:0}}>Rendido</span>}
                   <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                 </div>
                 <div style={{fontSize:12,fontWeight:600,color:isFondo?C.normal:C.overdue,flexShrink:0,marginLeft:8}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
@@ -8715,7 +8715,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
   .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700}
   .badge-pending{background:#E3EEF3;color:${A}}
   .badge-overdue{background:#FBE9E7;color:#E24B4A}
-  .badge-paid{background:#E4F1EA;color:#1D9E75}
+  .badge-paid{background:#E1F5EE;color:#1D9E75}
   .badge-area{background:${A4};color:${A2}}
   .who-section{margin-bottom:16px}
   .who-title{font-size:11px;font-weight:700;color:${A2};text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding:4px 0;border-bottom:1px solid ${A4}}
@@ -9255,7 +9255,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           }).slice(0,3)
           const fmtCLP = fmtN
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
-          const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E4F1EA','Otro':'#ECECEC'}
+          const CAT_BG = {'Notaria':'#E3EEF3','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#ECECEC'}
           const GREEN={num:'#1D9E75',bg:'#F0F9F5',bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:'#C77F18',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C77F18'}
           const RED={num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5',label:C.muted}
