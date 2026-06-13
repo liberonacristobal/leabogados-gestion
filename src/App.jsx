@@ -1681,7 +1681,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,setTab,user,onEditTask,onCompleteTask,onPreviewTask}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onEditTask,onCompleteTask,onPreviewTask}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -1721,6 +1721,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [openOficina,setOpenOficina] = useState(false)
+  const [openPagar,setOpenPagar] = useState(false)
+  const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
+  const [payFecha,setPayFecha] = useState('')
+  const [payRef,setPayRef] = useState('')
+  const [payingNow,setPayingNow] = useState(false)
   const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
@@ -2112,6 +2117,153 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 )}
               </div>
             )}
+          </div>
+        )
+      })()}
+
+      {/* Cuentas por pagar a colaboradores (costos de terceros) */}
+      {(()=>{
+        if((terceros||[]).length===0) return null
+        const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
+        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Colaborador')
+        const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+        const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
+        const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar').reduce((a,t)=>a+(t.monto||0),0)
+        const pendienteTot = (terceros||[]).filter(t=>t.estado==='pendiente').reduce((a,t)=>a+(t.monto||0),0)
+        const pagadoYr = (terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).reduce((a,t)=>a+(t.monto||0),0)
+        const nProvPorPagar = new Set((terceros||[]).filter(t=>t.estado==='por_pagar').map(t=>t.proveedor_id)).size
+        // Agrupar lo NO pagado por colaborador; por_pagar primero
+        const activos = (terceros||[]).filter(t=>t.estado!=='pagado')
+        const byProv = {}
+        activos.forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProv[k]) byProv[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProv[k].cuentas.push(t) })
+        const grupos = Object.values(byProv).map(g=>({...g, total:g.cuentas.reduce((a,t)=>a+(t.monto||0),0), urgente:g.cuentas.some(t=>t.estado==='por_pagar')}))
+          .sort((a,b)=> (b.urgente-a.urgente) || (b.total-a.total))
+        const ordCuentas = cs => [...cs].sort((a,b)=> (a.estado==='por_pagar'?0:1)-(b.estado==='por_pagar'?0:1))
+        const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.normal,bg:'#E1F5EE'}:{l:'Pendiente',c:'#B8860B',bg:'#FFF8E1'}
+        return (
+          <div style={{padding:'16px 20px 0'}}>
+            <button onClick={()=>setOpenPagar(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openPagar?10:0}}>
+              <span style={{fontSize:10,color:C.muted,transform:openPagar?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
+              <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Cuentas por pagar a colaboradores</span>
+              <span style={{fontSize:13,fontWeight:700,color:porPagarTot>0?C.normal:C.muted,marginLeft:'auto'}}>{fmt(porPagarTot)}</span>
+            </button>
+            {openPagar&&(
+              <div>
+                {porPagarTot>0&&(
+                  <div style={{display:'flex',alignItems:'center',gap:9,background:'#E1F5EE',borderRadius:10,padding:'10px 12px',marginBottom:12}}>
+                    <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg>
+                    </span>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:'#0F6E56'}}>Listo para transferir: {fmt(porPagarTot)}</div>
+                      <div style={{fontSize:11,color:C.normal,marginTop:1}}>{nProvPorPagar} colaborador{nProvPorPagar!==1?'es':''} · ya cobraste su factura</div>
+                    </div>
+                  </div>
+                )}
+                <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
+                  <div style={{flex:1,padding:'11px 12px'}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Por pagar</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.normal}}>{fmt(porPagarTot)}</div></div>
+                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Pendiente</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:'#B8860B'}}>{fmt(pendienteTot)}</div></div>
+                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Pagado {yr}</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.muted}}>{fmt(pagadoYr)}</div></div>
+                </div>
+                {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún colaborador.</div>}
+                {grupos.map((g,gi)=>(
+                  <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',background:C.neutro||'#F5F7F9'}}>
+                      <span style={{width:34,height:34,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(g.prov)}</div>
+                        <div style={{fontSize:11,color:'#99ABB4'}}>{g.prov?.razon_social?.trim()?(g.prov.nombre||''):(g.prov?.rut||'')}</div>
+                      </div>
+                      <div style={{marginLeft:'auto',textAlign:'right'}}>
+                        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Le debes</div>
+                        <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(g.total)}</div>
+                      </div>
+                    </div>
+                    {ordCuentas(g.cuentas).map(t=>{
+                      const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
+                      const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
+                      const venta=(sales||[]).find(s=>String(s.id)===String(t.sale_id))
+                      const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}`
+                      const pp=t.estado==='por_pagar', pi=estPill(t.estado)
+                      const metaFac = fac ? (pp? `F° ${fac.invoice_no||'—'} · cobrada ${fmtDMY(fac.paid_at)}` : `F° ${fac.invoice_no||'—'}${fac.due?` · vence ${fmtDMY(fac.due)}`:''}`) : '—'
+                      return (
+                        <div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
+                          <div style={{minWidth:0,flex:1}}>
+                            <div style={{fontSize:12.5,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ori}</div>
+                            <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>{metaFac}</div>
+                          </div>
+                          <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(t.monto)}</span>
+                          <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
+                          {pp
+                            ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
+                            : <span style={{fontSize:11,color:'#99ABB4',flexShrink:0,whiteSpace:'nowrap'}}>espera cobro</span>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {payTercero&&(()=>{
+        const prov=(proveedores||[]).find(p=>String(p.id)===String(payTercero.proveedor_id))
+        const tituloProv = p => (p?.razon_social?.trim()||p?.nombre?.trim()||'Colaborador')
+        const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+        const fac=(billing||[]).find(b=>String(b.id)===String(payTercero.billing_id))
+        const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
+        const venta=(sales||[]).find(s=>String(s.id)===String(payTercero.sale_id))
+        const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}${fac?.invoice_no?` · F° ${fac.invoice_no}`:''}`
+        const subtit = prov?.razon_social?.trim() ? `${prov.nombre?`${prov.nombre} · `:''}${prov.rut||''}`.replace(/ · $/,'') : (prov?.rut||'')
+        const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
+        const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercero(payTercero.id,{pagado_at:payFecha,referencia:payRef}); setPayingNow(false); if(r) setPayTercero(null) }
+        const fl={fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
+        const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#1a1a1a',outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
+        return (
+          <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>e.target===e.currentTarget&&setPayTercero(null)}>
+            <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:400,maxHeight:'90vh',overflowY:'auto'}}>
+              <div style={{display:'flex',alignItems:'center',gap:11,padding:'16px 18px',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:1}}>
+                <span style={{width:42,height:42,borderRadius:11,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(prov))}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(prov)}</div>
+                  {subtit&&<div style={{fontSize:11.5,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subtit}</div>}
+                </div>
+                <button onClick={()=>setPayTercero(null)} style={{marginLeft:'auto',width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+                </button>
+              </div>
+              <div style={{padding:'16px 18px'}}>
+                <div style={{textAlign:'center',marginBottom:14}}>
+                  <div style={{fontSize:30,fontWeight:600,letterSpacing:-.6,color:C.text}}>{fmt(payTercero.monto)}</div>
+                  <div style={{fontSize:12,color:'#99ABB4',marginTop:3}}>Por: {ori}</div>
+                </div>
+                <div style={{marginBottom:13}}>
+                  <span style={fl}>Datos de transferencia</span>
+                  {prov?.datos_pago?.trim()?(
+                    <div style={{background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'11px 12px',position:'relative'}}>
+                      <button onClick={copiar} style={{position:'absolute',top:9,right:9,fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Copiar</button>
+                      <pre style={{fontFamily:'ui-monospace,Menlo,monospace',fontSize:12,color:'#3D3D3D',whiteSpace:'pre-wrap',lineHeight:1.55,margin:0,paddingRight:54}}>{prov.datos_pago}</pre>
+                    </div>
+                  ):(
+                    <div style={{fontSize:12,color:'#99ABB4',background:'#F5F7F9',borderRadius:10,padding:'11px 12px'}}>Este colaborador no tiene datos de pago. Agrégalos en Proveedores.</div>
+                  )}
+                </div>
+                <div style={{marginBottom:13}}>
+                  <span style={fl}>Factura del colaborador</span>
+                  {user&&<Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={payTercero.id} folderKind='facturas' namePrefix={`${tituloProv(prov)} · ${fac?.invoice_no?`F° ${fac.invoice_no}`:'pago'}`} user={user}/>}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+                  <div><span style={fl}>Fecha de pago</span><input type='date' value={payFecha} onChange={e=>setPayFecha(e.target.value)} style={inp}/></div>
+                  <div><span style={fl}>Referencia</span><input value={payRef} onChange={e=>setPayRef(e.target.value)} placeholder='N° transferencia' style={inp}/></div>
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>setPayTercero(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':'Marcar pagado'}</button>
+                </div>
+              </div>
+            </div>
           </div>
         )
       })()}
@@ -9239,6 +9391,15 @@ export default function App() {
     }catch(e){alert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
   },[terceros])
 
+  // Pagar a un colaborador: la cuenta pasa a 'pagado' con fecha y referencia (transferencia manual).
+  const handlePagarTercero=useCallback(async(terceroId,{pagado_at,referencia})=>{
+    try{
+      const {data,error}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:pagado_at||new Date().toISOString().slice(0,10),referencia:referencia||null}).eq('id',terceroId).select().single()
+      if(error)throw error
+      setTerceros(p=>p.map(t=>t.id===data.id?data:t))
+      return data
+    }catch(e){alert('Error: '+e.message); return null}
+  },[])
   const handleDeleteBilling=useCallback(async(id)=>{
     if(!confirm('¿Eliminar este cobro?')) return
     try{
@@ -9410,7 +9571,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
