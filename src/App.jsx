@@ -9,8 +9,9 @@ import {
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
   getDriveToken, connectDrive, saveDriveToken,
   upsertClient, deleteClient as dbDeleteClient,
-  upsertBilling, updateBillingStatus
+  upsertBilling, updateBillingStatus, DEMO
 } from './supabase'
+import { demoData } from './demoData'
 import logoBlanco from './le-logo-blanco.png'
 
 const FONT = "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
@@ -10350,6 +10351,7 @@ export default function App() {
   }
 
   useEffect(()=>{
+    if(DEMO){ setSession({user:{email:'demo@demo.cl'}}); setUser({email:'demo@demo.cl',name:'Demo'}); setActualRole('admin'); setUserRole('admin'); setLoadingAuth(false); return }
     getSession().then(({data:{session}})=>{
       setSession(session)
       if(session){ loadUserRole(session.user.email).then(u=>setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})) }
@@ -10375,6 +10377,11 @@ export default function App() {
   const [clientEntities,setClientEntities] = useState([])
 
   useEffect(()=>{
+    if(DEMO){
+      const d=demoData
+      setPettyCash(d.petty_cash||[]); setRendiciones(d.rendiciones||[]); setClients(d.clients||[]); setSales(d.sales||[]); setBilling(d.billing||[]); setExpenses(d.expenses||[]); setTasks(d.tasks||[]); setClientEntities(d.client_entities||[]); setExpenseAttachments([]); setBillingAttachments([]); setAnticipos(d.anticipos||[]); setProveedores(d.proveedores||[]); setTerceros(d.terceros_pagos||[]); setBulkImports([]); setImportAliases([]); setLoading(false)
+      return
+    }
     if(!session) return
     setLoading(true)
     // Cada query reporta si falló (en vez de tragar el error y dejar [] → ceros falsos que invitan a recargar y duplicar).
