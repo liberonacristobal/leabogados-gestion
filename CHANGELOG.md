@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14 — Dashboard: Cobranza con detalle inline + años con ventas
+- **Cobranza**: tocar Por cobrar / Vencido / Cobrado / Programado ya no manda a otra pestaña; despliega inline las facturas que componen el número (cliente · concepto · monto · días/fecha) con total y acceso a Facturación.
+- **Años anteriores (Revenue target)**: la lista ahora incluye cualquier año con ventas registradas, no solo los que tienen meta cargada.
+
 ## 2026-06-14 — Dashboard interactivo (Parte A): Revenue target, Ingreso recurrente, Sin fondos
 - **Revenue target**: nuevo desplegable "Ventas {año}" que lista las ventas que componen el Vendido (cliente · proyecto · monto) y reconcilia con el total.
 - **Ingreso recurrente**: al tocar se despliegan las asesorías permanentes (cliente · proyecto · monto/mes) que suman el ingreso recurrente.

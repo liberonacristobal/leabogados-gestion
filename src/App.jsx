@@ -1787,6 +1787,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
+  const [cobKpi,setCobKpi] = useState(null)   // KPI de cobranza abierto para ver su detalle inline
   const [openOficina,setOpenOficina] = useState(false)
   const [openPagar,setOpenPagar] = useState(true)
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
@@ -1823,7 +1824,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   }
   const m = metricasAnio(selYear)
   const fmtMon = v => dashMoneda==='UF' ? (ufRef>0?fmtUFk(Math.round(v/ufRef)):'—') : fmtShort(v)
-  const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year)])].sort((a,b)=>b-a)
+  // Años con meta cargada O con ventas registradas (así 2025/2024 aparecen al ingresar sus ventas, sin necesidad de meta)
+  const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year), ...sales.filter(s=>!['Borrador','Propuesta','Rechazada'].includes(s.status)).map(s=>s.year).filter(Boolean)])].sort((a,b)=>b-a)
   const prevM = metricasAnio(selYear-1)
   const tendenciaPP = (targets.some(t=>t.year===selYear-1) && prevM.bruto>0) ? (m.pct - prevM.pct) : null
   const ufFecha = ufState.asOf ? new Date(ufState.asOf+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}) : ''
@@ -1982,17 +1984,59 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      {/* KPIs accionables: tocar lleva a Facturación */}
+      {/* KPIs de cobranza: tocar despliega el detalle inline (como Aging) */}
       <div style={{padding:'16px 20px 0'}}>
         <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Cobranza</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {[['Por cobrar',kpiPendiente,C.accent],['Vencido',kpiVencido,C.overdue],['Cobrado '+yr,cobrado,C.normal],['Programado',kpiProgramado,'#537281']].map(([l,v,col])=>(
-            <button key={l} onClick={()=>setTab('billing')} style={{textAlign:'left',background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
-              <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+          {[['pendiente','Por cobrar',kpiPendiente,C.accent],['vencido','Vencido',kpiVencido,C.overdue],['cobrado','Cobrado '+yr,cobrado,C.normal],['programado','Programado',kpiProgramado,'#537281']].map(([k,l,v,col])=>{
+            const on=cobKpi===k
+            return (
+            <button key={k} onClick={()=>setCobKpi(on?null:k)} style={{textAlign:'left',background:on?'#F5F7F9':C.card,border:`1px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
+                <span style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span>
+                <span style={{fontSize:9,color:'#99ABB4',transform:on?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>▸</span>
+              </div>
               <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',marginTop:2}}>{fmtShort(v)}</div>
             </button>
-          ))}
+          )})}
         </div>
+        {cobKpi&&(()=>{
+          const lists={
+            pendiente: bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso').sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
+            vencido: bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso').sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
+            cobrado: bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).sort((a,b)=>(b.paid_at||'')<(a.paid_at||'')?-1:1),
+            programado: bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
+          }
+          const titulo={pendiente:'Por cobrar',vencido:'Vencido',cobrado:'Cobrado '+yr,programado:'Programado'}[cobKpi]
+          const col={pendiente:C.accent,vencido:C.overdue,cobrado:C.normal,programado:'#537281'}[cobKpi]
+          const rows=lists[cobKpi]||[]
+          const tot=rows.reduce((a,b)=>a+(b.amount||0),0)
+          return (
+            <div style={{marginTop:8,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
+                <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>{titulo} · {rows.length}</span>
+                <span style={{fontSize:12,fontWeight:700,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
+              </div>
+              {rows.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'14px'}}>Sin facturas.</div>}
+              <div style={{maxHeight:300,overflowY:'auto'}}>
+                {rows.map(b=>{
+                  const cn=clientesMap[b.client_id]||b.receptor_name||'—'
+                  const meta=cobKpi==='cobrado'?(b.paid_at?'Pagada '+fmtFechaDMY(b.paid_at):'Pagada'):(()=>{ const dl=daysLeft(b.due); return dl===null?'':dl<0?`${Math.abs(dl)}d vencida`:dl===0?'vence hoy':`vence en ${dl}d` })()
+                  return (
+                    <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'8px 14px',borderBottom:`1px solid ${C.border}`}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div>
+                        <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}{meta?` · ${meta}`:''}</div>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:600,color:col,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <button onClick={()=>setTab('billing')} style={{width:'100%',padding:'9px',border:'none',borderTop:`1px solid ${C.border}`,background:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Ver en Facturación →</button>
+            </div>
+          )
+        })()}
       </div>
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
