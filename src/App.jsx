@@ -21,6 +21,8 @@ const C = {
   accent:'#003C50',overdue:'#E24B4A',urgent:'#E24B4A',soon:'#C77F18',normal:'#1D9E75',done:'#99ABB4',
   // verde oscuro para TEXTO/cifras sobre fondos verde claro (#E1F5EE) — legible donde 'normal' (#1D9E75) quedaría bajo de contraste
   greenText:'#0F6E56',
+  // track "off" de los switches (gris-azul suave, deliberadamente más claro que 'done')
+  toggleOff:'#CBD5DB',
 }
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}` : '—'
@@ -67,12 +69,17 @@ async function reconcileProgramada(clientId, amount, issuedAt){
     // de otra venta del mismo cliente que casualmente tiene el mismo monto.
     if(!issuedAt) return
     const cands = data.filter(b=>b.due && Math.abs(new Date(b.due)-new Date(issuedAt))/86400000 <= 45)
+      .map(b=>({...b, d:Math.abs(new Date(b.due)-new Date(issuedAt))/86400000})).sort((a,b)=>a.d-b.d)
     if(!cands.length) return
-    const best = cands.reduce((a,b)=> Math.abs(new Date(a.due)-new Date(issuedAt)) <= Math.abs(new Date(b.due)-new Date(issuedAt)) ? a : b)
-    await supabase.from('billing').delete().eq('id',best.id)
+    // Empate temporal: si dos candidatas quedan casi igual de cerca (±7 días), es ambiguo → no tocar nada (queda el botón manual "Ya emitida").
+    if(cands[1] && (cands[1].d - cands[0].d) <= 7) return
+    // Soft-delete (no borrado físico) para que sea reversible desde la Papelera si reconcilió la cuota equivocada.
+    await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',cands[0].id)
   }catch(_){}
 }
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
+// Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
+const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
 const ddItem = { padding:'9px 14px', fontSize:13, color:'#3D3D3D', cursor:'pointer', display:'flex', alignItems:'center', gap:8, borderRadius:6, margin:'0 4px' }
@@ -210,7 +217,7 @@ const FirmDeskLockup = ({mark=30,font=19,gap=10}) => (
   </span>
 )
 const Switch = ({on,onToggle,disabled}) => (
-  <button type='button' disabled={disabled} onClick={disabled?undefined:onToggle} style={{width:34,height:20,borderRadius:10,border:'none',background:on?'#1D9E75':'#CBD5DB',position:'relative',cursor:disabled?'not-allowed':'pointer',padding:0,flexShrink:0,transition:'background .15s',opacity:disabled?.7:1}}>
+  <button type='button' disabled={disabled} onClick={disabled?undefined:onToggle} style={{width:34,height:20,borderRadius:10,border:'none',background:on?'#1D9E75':C.toggleOff,position:'relative',cursor:disabled?'not-allowed':'pointer',padding:0,flexShrink:0,transition:'background .15s',opacity:disabled?.7:1}}>
     <span style={{position:'absolute',top:2,left:on?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
   </button>
 )
@@ -909,7 +916,8 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                       <button onClick={async()=>{
                         if(!confirm('¿Anular esta liquidación? Los gastos vuelven a Pendientes.')) return
                         try {
-                          await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
+                          const {error:ue}=await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
+                          if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendición (quedarían huérfanos)
                           await supabase.from('rendiciones').delete().eq('id',r.id)
                           if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
                           if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
@@ -1543,7 +1551,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
             <option value='cliente'>Orden: cliente</option>
             <option value='alfabetico'>Orden: alfab\u00e9tico</option>
           </select>}
-          <button onClick={()=>setShowList(s=>!s)} title={showList?'Ocultar tareas':'Mostrar tareas'} style={{width:34,height:20,borderRadius:11,border:'none',background:showList?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0}}><span style={{position:'absolute',top:2,left:showList?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></button>
+          <button onClick={()=>setShowList(s=>!s)} title={showList?'Ocultar tareas':'Mostrar tareas'} style={{width:34,height:20,borderRadius:11,border:'none',background:showList?C.accent:C.toggleOff,position:'relative',cursor:'pointer',padding:0,flexShrink:0}}><span style={{position:'absolute',top:2,left:showList?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></button>
         </div>
       </div>
       {showList&&(<>
@@ -1712,7 +1720,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
 
-  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso'&&!['Programada','Anulada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&esFacturada(b)).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
   // Tasa de cobro: del facturado de ESTE año, cuánto está pagado (mismo universo numerador/denominador → nunca pasa de 100%).
   const cobradoDelFacturado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
@@ -1768,7 +1776,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const costo = Math.round(sy.reduce((a,s)=>a+(((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))*ufRef)+((s.moneda==='CLP'&&s.cost_clp)?((parseFloat(s.cost_clp)||0)*(esRec(s)?12:1)):0),0))
     const neto = bruto - costo
     const meta = Number(targets.find(t=>t.year===year)?.target_amount) || (year===currentYear?META_CLP:0)
-    const pct = meta>0 ? Math.round((bruto/meta)*100) : 0
+    const pct = meta>0 ? Math.round((neto/meta)*100) : 0   // % meta sobre NETO (igual que el historial y pctMeta) — no mezclar bruto/neto
     return {year,bruto,costo,neto,meta,pct}
   }
   const m = metricasAnio(selYear)
@@ -2568,7 +2576,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   const delRow=i=>setRows(rows.filter((_,j)=>j!==i))
   const tipos=[['pct','%'],['uf','UF'],['clp','$']]
   const Switch = ({on,onClick,title}) => (
-    <button type='button' onClick={onClick} title={title} style={{width:30,height:17,borderRadius:9,border:'none',background:on?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0,transition:'background .15s'}}>
+    <button type='button' onClick={onClick} title={title} style={{width:30,height:17,borderRadius:9,border:'none',background:on?C.accent:C.toggleOff,position:'relative',cursor:'pointer',padding:0,flexShrink:0,transition:'background .15s'}}>
       <span style={{position:'absolute',top:2,left:on?15:2,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/>
     </button>
   )
@@ -2871,7 +2879,9 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       for(let i=0;i<12;i++){ cobros.push({monto:Math.round(totalCLP), fecha:`${cy}-${String(cm).padStart(2,'0')}-01`, label:`Mensual ${MONTHS[cm-1]} ${cy}`}); cm++; if(cm>12){cm=1;cy++} }
     } else if(cobroType==='cuotas' && cobroInicio && nCuotas>0) {
       const mc = Math.round(totalCLP/nCuotas)
-      for(let i=0;i<nCuotas;i++) { const d=new Date(cobroInicio+'T12:00'); d.setMonth(d.getMonth()+i); cobros.push({monto:mc, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${nCuotas}`}) }
+      const totR = Math.round(totalCLP)
+      // La última cuota absorbe el residuo de redondeo para que la suma de cuotas == total exacto.
+      for(let i=0;i<nCuotas;i++) { const d=new Date(cobroInicio+'T12:00'); d.setMonth(d.getMonth()+i); cobros.push({monto: i===nCuotas-1?(totR-mc*(nCuotas-1)):mc, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${nCuotas}`}) }
     } else if(cobroType==='porcentaje') {
       tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:t.fecha, label:`${t.pct}%`}) })
     } else if(cobroType==='personalizada') {
@@ -2933,7 +2943,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       const nuevasCuotas=[]
       if(newFmt==='cuotas'&&newCobroInicio&&newNCuotas>0&&totalC>0){
         const mc=Math.round(totalC/newNCuotas)
-        for(let i=0;i<newNCuotas;i++){const d=new Date(newCobroInicio+'T12:00');d.setMonth(d.getMonth()+i);nuevasCuotas.push({due:d.toISOString().slice(0,10),amount:mc,concept:`${sale.title} — Cuota ${i+1}/${newNCuotas}`})}
+        const totR=Math.round(totalC)
+        for(let i=0;i<newNCuotas;i++){const d=new Date(newCobroInicio+'T12:00');d.setMonth(d.getMonth()+i);nuevasCuotas.push({due:d.toISOString().slice(0,10),amount:i===newNCuotas-1?(totR-mc*(newNCuotas-1)):mc,concept:`${sale.title} — Cuota ${i+1}/${newNCuotas}`})}
       } else if(newFmt==='mensual'&&newVig&&totalC>0){
         const [y,m]=newVig.split('-').map(Number);let cy=y,cm=m
         for(let i=0;i<12;i++){nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:Math.round(totalC),concept:`${sale.title} — Mensual ${MONTHS[cm-1]} ${cy}`});cm++;if(cm>12){cm=1;cy++}}
@@ -4626,7 +4637,7 @@ function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],ant
             <input value={obsBaja} onChange={e=>setObsBaja(e.target.value)} placeholder='Detalle adicional...' style={{...inp,marginBottom:14}}/>
             <div style={{display:'flex',gap:8}}>
               <button onClick={()=>setAnularOpen(false)} style={{flex:1,height:40,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:40,borderRadius:10,border:'none',background:motivoBaja?C.overdue:'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>Confirmar baja</button>
+              <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:40,borderRadius:10,border:'none',background:motivoBaja?C.overdue:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>Confirmar baja</button>
             </div>
           </div>
         </div>
@@ -4797,7 +4808,7 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
           </>)}
           <div style={{display:'flex',gap:8}}>
             <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-            <button disabled={sel.size===0||sumSel>(anticipo.monto||0)} onClick={()=>onConfirm([...sel])} style={{flex:2,height:42,borderRadius:10,border:'none',background:(sel.size&&sumSel<=(anticipo.monto||0))?C.accent:'#ccc',color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&sumSel<=(anticipo.monto||0))?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
+            <button disabled={sel.size===0||sumSel>(anticipo.monto||0)} onClick={()=>onConfirm([...sel])} style={{flex:2,height:42,borderRadius:10,border:'none',background:(sel.size&&sumSel<=(anticipo.monto||0))?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&sumSel<=(anticipo.monto||0))?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
           </div>
         </div>
       </div>
@@ -5162,7 +5173,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     else setSelected(new Set(disponibles.map(e=>e.id)))
   }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
-  const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Otro':'#F5F7F9'}
+  const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
 
@@ -5253,10 +5264,10 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
       {/* Filtro por fecha */}
       <div style={{display:'flex',gap:6,marginBottom:10,alignItems:'center'}}>
         <input type='date' value={fDesde} onChange={e=>setFDesde(e.target.value)}
-          style={{flex:1,padding:'5px 8px',borderRadius:6,border:'0.5px solid #D0D5DB',fontSize:11,outline:'none'}}/>
+          style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
         <span style={{fontSize:11,color:'#537281'}}>→</span>
         <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)}
-          style={{flex:1,padding:'5px 8px',borderRadius:6,border:'0.5px solid #D0D5DB',fontSize:11,outline:'none'}}/>
+          style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
         {(fDesde||fHasta)&&<button onClick={()=>{setFDesde('');setFHasta('')}} style={{fontSize:10,color:'#537281',background:'none',border:'none',cursor:'pointer'}}>×</button>}
       </div>
 
@@ -5284,7 +5295,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
             <div key={e.id} onClick={()=>toggleOne(e.id)}
               style={{background:isSel?'#E6F1FB':'#fff',borderRadius:7,padding:'8px 10px',marginBottom:5,
                 border:`1px solid ${isSel?'#003C50':'#E4E8EB'}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
-              <div style={{width:16,height:16,borderRadius:3,border:`2px solid ${isSel?'#003C50':'#ccc'}`,
+              <div style={{width:16,height:16,borderRadius:3,border:`2px solid ${isSel?'#003C50':C.done}`,
                 background:isSel?'#003C50':'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 {isSel&&<span style={{color:'#fff',fontSize:10}}>&#10003;</span>}
               </div>
@@ -5321,11 +5332,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={!selected.size||saving} onClick={()=>handleGenerar('pdf')}
-          style={{flex:1.3,padding:11,borderRadius:10,border:`1px solid ${selected.size?C.accent:'#ccc'}`,background:'#fff',color:selected.size?C.accent:'#ccc',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+          style={{flex:1.3,padding:11,borderRadius:10,border:`1px solid ${selected.size?C.accent:C.done}`,background:'#fff',color:selected.size?C.accent:C.done,fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
           {saving?'…':'↓ PDF'}
         </button>
         <button disabled={!selected.size||saving} onClick={()=>handleGenerar('enviar')}
-          style={{flex:1.7,padding:11,borderRadius:10,border:'none',background:selected.size?'#1D9E75':'#ccc',color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+          style={{flex:1.7,padding:11,borderRadius:10,border:'none',background:selected.size?'#1D9E75':C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
           {saving?'Generando…':'Enviar al cliente'}
         </button>
       </div>
@@ -5952,7 +5963,8 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
   const handleAnularRendicion = async(r) => {
     if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
     try {
-      await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
+      const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
+      if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendición (quedarían huérfanos)
       await supabase.from('rendiciones').delete().eq('id',r.id)
       if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
@@ -7111,7 +7123,7 @@ function ContactoTab({client, entities, onSaveFields}) {
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
 function FinancieroTab({client, clientBilling, entities, anticipos=[], billing=[], onNuevoAnticipo, onSaveFields}) {
   const real = (clientBilling||[]).filter(b=>b.billing_type!=='reembolso')
-  const facturado = real.filter(b=>b.issued_at).reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = real.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
   const porCobrar = real.filter(b=>['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
 
@@ -7359,7 +7371,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
   // Vendido UF: misma fuente que Dashboard/Ventas (recurrentes x12, CLP convertido a UF)
   const vendidoUF = clientSales.reduce((a,s)=>a+ventaUF(s,ufRef),0)
-  const facturado = clientBilling.reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = clientBilling.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
   const porCobrar = clientBilling.filter(b=>['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrar.reduce((a,b)=>a+(b.amount||0),0)
@@ -7639,7 +7651,8 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
   const handleAnularRendicion = async(r) => {
     if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
     try {
-      await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
+      const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
+      if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendici\u00f3n (quedar\u00edan hu\u00e9rfanos)
       await supabase.from('rendiciones').delete().eq('id',r.id)
       if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
@@ -8012,7 +8025,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
       <Fld label='Contacto' mb={8}><Inp value={f.contact||''} onChange={e=>up('contact',e.target.value)} placeholder='Persona de contacto...'/></Fld>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8}}>
         <span style={{fontSize:13,color:C.text}}>Cliente interno <span style={{fontSize:11,color:C.muted}}>(gastos de oficina)</span></span>
-        <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{width:34,height:20,borderRadius:11,border:'none',background:f.is_internal?C.accent:'#CBD5DB',position:'relative',cursor:'pointer',padding:0,flexShrink:0}}><span style={{position:'absolute',top:2,left:f.is_internal?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></button>
+        <button type='button' onClick={()=>up('is_internal',!f.is_internal)} style={{width:34,height:20,borderRadius:11,border:'none',background:f.is_internal?C.accent:C.toggleOff,position:'relative',cursor:'pointer',padding:0,flexShrink:0}}><span style={{position:'absolute',top:2,left:f.is_internal?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .15s'}}/></button>
       </div>
       <Fld label='Notas' mb={8}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Contexto relevante...'/></Fld>
       {client?.id?(<>
@@ -8699,7 +8712,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
         let matchedClient = null
         if(parsed.rut) {
           const rutClean = parsed.rut.replace(/[.\-\s]/g,'')
-          const entity = (clientEntities||[]).find(e=>e.rut.replace(/[.\-\s]/g,'')===rutClean)
+          const entity = (clientEntities||[]).find(e=>e.rut&&e.rut.replace(/[.\-\s]/g,'')===rutClean)
           if(entity) matchedClient = clients.find(c=>c.id===entity.client_id)
           if(!matchedClient) matchedClient = clients.find(c=>c.rut&&c.rut.replace(/[.\-\s]/g,'')===rutClean)
         }
@@ -9111,11 +9124,11 @@ function printTasks(tasks, clients, filterLabel) {
     const due = t.due ? new Date(t.due+'T00:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : '—'
     const urgent = t.due && daysLeft(t.due)<0 ? 'color:#E24B4A;font-weight:600' : ''
     return `<tr>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:12px">${t.title}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${client?.name||'—'}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${t.project||'—'}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;${urgent}">${due}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#666">${taskAssignees(t).join(', ')||'—'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid ${C.border};font-size:12px">${t.title}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid ${C.border};font-size:11px;color:${C.muted}">${client?.name||'—'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid ${C.border};font-size:11px;color:${C.muted}">${t.project||'—'}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid ${C.border};font-size:11px;${urgent}">${due}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid ${C.border};font-size:11px;color:${C.muted}">${taskAssignees(t).join(', ')||'—'}</td>
     </tr>`
   }).join('')
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -9194,7 +9207,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
           <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Subtareas · {subsDone}/{subs.length}</div>
           {subs.map((s,i)=>(
             <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0'}}>
-              <span style={{width:14,height:14,borderRadius:3,border:`2px solid ${s.done?'#1D9E75':'#ccc'}`,background:s.done?'#1D9E75':'#fff',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{s.done&&<span style={{color:'#fff',fontSize:9}}>&#10003;</span>}</span>
+              <span style={{width:14,height:14,borderRadius:3,border:`2px solid ${s.done?'#1D9E75':C.done}`,background:s.done?'#1D9E75':'#fff',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{s.done&&<span style={{color:'#fff',fontSize:9}}>&#10003;</span>}</span>
               <span style={{fontSize:12,color:C.text,textDecoration:s.done?'line-through':'none',opacity:s.done?.6:1}}>{s.text}</span>
             </div>
           ))}
@@ -9405,7 +9418,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                     <div key={i} onClick={()=>onAddTask(iso)} title='Nueva tarea este día' style={{minHeight:90,background:esHoy?'#E6EEF1':'#F5F7F9',borderRadius:8,padding:'5px 6px',border:`1px solid ${esHoy?C.accent:C.border}`,cursor:'pointer'}}>
                       <div style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.muted,textTransform:'uppercase'}}>{DIAS[i]}</div>
                       <div style={{fontSize:10,fontWeight:600,color:esHoy?C.accent:C.text,marginBottom:4}}>{String(dia.getDate()).padStart(2,'0')}</div>
-                      {tareasDelDia.length===0&&<div style={{fontSize:8,color:'#bbb',fontStyle:'italic'}}>—</div>}
+                      {tareasDelDia.length===0&&<div style={{fontSize:8,color:C.done,fontStyle:'italic'}}>—</div>}
                       {tareasDelDia.map(t=>{
                         const cl=clients.find(x=>x.id===t.client_id)
                         const asignadaPorMi = !isAssignee(t,me) && t.assigned_by===me
@@ -9677,10 +9690,20 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
     }catch(err){ alert('Error al leer el Excel: '+err.message) }
     setCargando(false)
   }
-  const asignar = (rowId, clientId) => {
+  const asignar = async (rowId, clientId) => {
     const c=clients.find(x=>String(x.id)===String(clientId))
     const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(clientId))
-    setRows(p=>p.map(r=>r.id===rowId?{...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:r.entity_id,fuzzy:false}:r))
+    const row=(rows||[]).find(r=>r.id===rowId)
+    const rut=row?.rut?String(row.rut).trim():''
+    // Aprende: guarda el RUT como razón social del cliente para que próximas importaciones lo reconozcan solas (no repetir el trabajo).
+    if(rut){
+      const ya=(clientEntities||[]).some(e=>String(e.client_id)===String(clientId)&&e.rut&&normRut(e.rut)===normRut(rut))
+      if(!ya){ try{ await supabase.from('client_entities').insert({client_id:clientId,name:row?.nombre||c?.name||null,rut}) }catch(_){} }
+    }
+    // Aplica el cliente a TODAS las filas con el mismo RUT que aún no lo tienen (no asignar a mano una por una).
+    setRows(p=>p.map(r=>(r.id===rowId || (rut && String(r.rut).trim()===rut && !r.client_id))
+      ? {...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:r.entity_id,fuzzy:false}
+      : r))
     setEditRow(null); setQ('')
   }
   const toggleEx = id => setRows(p=>p.map(r=>r.id===id?{...r,_skip:!r._skip}:r))
@@ -9791,7 +9814,7 @@ function PapeleraModal({clients=[],onClose,onChanged}){
   const restaurar = async(tipo,row)=>{
     setBusy(true)
     try{
-      if(tipo==='ventas'){ await supabase.from('sales').update({deleted_at:null}).eq('id',row.id); await supabase.from('billing').update({deleted_at:null}).eq('sale_id',row.id) }
+      if(tipo==='ventas'){ await supabase.from('sales').update({deleted_at:null}).eq('id',row.id); /* solo las cuotas borradas EN CASCADA con la venta (mismo deleted_at), no las que se borraron por separado antes */ const cq=supabase.from('billing').update({deleted_at:null}).eq('sale_id',row.id); await (row.deleted_at?cq.eq('deleted_at',row.deleted_at):cq) }
       else if(tipo==='cobros'){ await supabase.from('billing').update({deleted_at:null}).eq('id',row.id) }
       else { await supabase.from('expenses').update({deleted_at:null}).eq('id',row.id) }
       await cargar(); onChanged&&onChanged()
@@ -9917,24 +9940,28 @@ export default function App() {
   useEffect(()=>{
     if(!session) return
     setLoading(true)
+    // Cada query reporta si falló (en vez de tragar el error y dejar [] → ceros falsos que invitan a recargar y duplicar).
+    const loadErrs=[]
+    const q=(label,builder)=>builder.then(({data,error})=>{ if(error){ loadErrs.push(label); return [] } return data||[] })
     Promise.all([
-      supabase.from('petty_cash').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
-      supabase.from('rendiciones').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
+      q('caja chica', supabase.from('petty_cash').select('*').order('created_at',{ascending:false})),
+      q('rendiciones', supabase.from('rendiciones').select('*').order('created_at',{ascending:false})),
       getClients(),
-      supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(({data})=>data||[]),
+      q('ventas', supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false})),
       getBilling(),
-      supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(({data})=>data||[]),
-      supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}).then(({data})=>data||[]),
-      supabase.from('client_entities').select('*').then(({data})=>data||[]),
-      supabase.from('expense_attachments').select('id,expense_id').then(({data})=>data||[]),
-      supabase.from('billing_attachments').select('id,billing_id').then(({data})=>data||[]),
-      supabase.from('anticipos').select('*').order('fecha',{ascending:false}).then(({data})=>data||[]),
-      supabase.from('proveedores').select('*').order('nombre').then(({data})=>data||[]),
-      supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).then(({data})=>data||[]),
-      supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10).then(({data})=>data||[]),
-      supabase.from('import_aliases').select('*').then(({data})=>data||[]),
-    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia)})
-      .catch(console.error).finally(()=>setLoading(false))
+      q('gastos', supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false})),
+      q('tareas', supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false})),
+      q('razones sociales', supabase.from('client_entities').select('*')),
+      q('adjuntos gastos', supabase.from('expense_attachments').select('id,expense_id')),
+      q('adjuntos cobros', supabase.from('billing_attachments').select('id,billing_id')),
+      q('anticipos', supabase.from('anticipos').select('*').order('fecha',{ascending:false})),
+      q('proveedores', supabase.from('proveedores').select('*').order('nombre')),
+      q('cuentas por pagar', supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})),
+      q('importaciones', supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10)),
+      q('memoria de alias', supabase.from('import_aliases').select('*')),
+    ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia)
+      if(loadErrs.length) alert('No se pudieron cargar: '+loadErrs.join(', ')+'.\nAlgunas cifras pueden verse incompletas. Recarga la página antes de ingresar datos para no duplicar.')})
+      .catch(err=>{ console.error(err); alert('Error al cargar datos: '+(err?.message||err)+'\nRecarga la página.') }).finally(()=>setLoading(false))
   },[session])
 
   const handleSaveSale=useCallback(async(f)=>{
@@ -10124,7 +10151,8 @@ export default function App() {
       setModal(null)
       setUndoToast({msg:'Venta eliminada', onUndo:async()=>{
         await supabase.from('sales').update({deleted_at:null}).eq('id',id)
-        await supabase.from('billing').update({deleted_at:null}).eq('sale_id',id)
+        // restaurar SOLO las cuotas que estaban vivas al borrar (no resucitar cuotas borradas por separado)
+        if(cuotasRows.length) await supabase.from('billing').update({deleted_at:null}).in('id',cuotasRows.map(c=>c.id))
         if(saleRow) setSales(p=>p.some(x=>x.id===id)?p:[saleRow,...p])
         if(cuotasRows.length) setBilling(p=>[...cuotasRows.filter(c=>!p.some(x=>x.id===c.id)),...p])
       }})
@@ -10135,8 +10163,12 @@ export default function App() {
     try{
       const{data,error}=await supabase.from('expenses').update({entity_id:entityId}).eq('client_id',clientId).is('entity_id',null).select()
       if(error)throw error
-      const ids=new Set((data||[]).map(d=>d.id))
+      const idList=(data||[]).map(d=>d.id), ids=new Set(idList)
       setExpenses(p=>p.map(x=>ids.has(x.id)?{...x,entity_id:entityId}:x))
+      if(idList.length) setUndoToast({msg:`Razón social asignada a ${idList.length} gasto${idList.length!==1?'s':''}`, onUndo:async()=>{
+        await supabase.from('expenses').update({entity_id:null}).in('id',idList)
+        setExpenses(p=>p.map(x=>ids.has(x.id)?{...x,entity_id:null}:x))
+      }})
     }catch(e){alert('Error al asignar razón social: '+e.message)}
   },[])
 
@@ -10227,7 +10259,11 @@ export default function App() {
       const {error} = await supabase.from('expenses').update({client_id:clientId}).in('id',ids)
       if(error) throw error
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:clientId}:e))
-      if(ids.length>1) alert(`Se asignó el cliente a ${ids.length} gastos con la misma descripción.`)
+      // Deshacer: si el match por descripción fue demasiado amplio, revierte los gastos a "sin cliente".
+      setUndoToast({msg: ids.length>1?`Cliente asignado a ${ids.length} gastos`:'Cliente asignado', onUndo:async()=>{
+        await supabase.from('expenses').update({client_id:null}).in('id',ids)
+        setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:null}:e))
+      }})
     }catch(e){ alert('Error: '+e.message) }
   },[expenses])
 
@@ -10421,16 +10457,29 @@ export default function App() {
     if(!ids?.length) return
     try{
       // Solo se marca Pagada si los anticipos aplicados CUBREN el monto de la factura; si no, queda como abono parcial.
-      const consumido = (anticipos||[]).filter(a=>ids.includes(a.id)).reduce((s,a)=>s+(a.monto||0),0)
+      const antList = (anticipos||[]).filter(a=>ids.includes(a.id))
+      const consumido = antList.reduce((s,a)=>s+(a.monto||0),0)
       const fac = billing.find(b=>String(b.id)===String(billingId))
       const cubre = !fac || consumido >= (fac.amount||0)
+      // Si los anticipos superan la factura, el excedente NO se pierde: se reduce el último anticipo y el sobrante vuelve como anticipo disponible (igual que handleCubrirCuotas).
+      const surplus = (cubre && fac) ? Math.max(0, consumido-(fac.amount||0)) : 0
       const { error } = await supabase.from('anticipos').update({estado:'consumido',billing_id:billingId}).in('id',ids)
       if(error)throw error
       setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'consumido',billing_id:billingId}:a))
+      let saldoRow=null
+      if(surplus>0){
+        const base=antList[antList.length-1]
+        const reduced=Math.max(0,(base.monto||0)-surplus)
+        await supabase.from('anticipos').update({monto:reduced}).eq('id',base.id)
+        const {data:sr}=await supabase.from('anticipos').insert({client_id:base.client_id,entity_id:base.entity_id||null,monto:surplus,fecha:base.fecha,nota:'Saldo de anticipo',proyecto:base.proyecto||null,sale_id:base.sale_id||null,estado:'disponible',created_by:base.created_by||null}).select().single()
+        saldoRow=sr
+        setAnticipos(p=>{ let n=p.map(a=>a.id===base.id?{...a,monto:reduced}:a); if(saldoRow) n=[saldoRow,...n]; return n })
+      }
       if(cubre){
         const { data, error:be } = await supabase.from('billing').update({status:'Pagado',updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
         if(be)throw be
         setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
+        if(surplus>0) alert(`Factura pagada. El excedente de ${fmt(surplus)} quedó como anticipo disponible.`)
       } else {
         const resta = (fac.amount||0)-consumido
         alert(`Abono aplicado: ${fmt(consumido)}. La factura queda pendiente por ${fmt(resta)} (no se marcó pagada).`)
@@ -10563,7 +10612,8 @@ export default function App() {
     if(!clientId) return
     try{
       // 1. Asignar el cliente a la factura
-      await supabase.from('billing').update({client_id:clientId,updated_at:new Date().toISOString()}).eq('id',bill.id)
+      const {error}=await supabase.from('billing').update({client_id:clientId,updated_at:new Date().toISOString()}).eq('id',bill.id)
+      if(error)throw error
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,client_id:clientId}:x))
       // 2. Aprender el RUT/razón social ↔ cliente (para que próximas facturas se asocien solas)
       if(bill.receptor_rut||bill.receptor_name){
@@ -10582,7 +10632,8 @@ export default function App() {
     const arr=Array.isArray(ids)?ids:[ids]
     if(arr.length===0) return
     try{
-      await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',arr)
+      const {error}=await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',arr)
+      if(error)throw error
       setBilling(p=>p.filter(x=>!arr.includes(x.id)))
     }catch(e){alert('Error: '+e.message)}
   },[])
@@ -10590,7 +10641,8 @@ export default function App() {
   const handleStatusChange=useCallback(async(id,status,paid_at)=>{
     const updates={status}
     if(paid_at!==undefined) updates.paid_at=paid_at
-    await supabase.from('billing').update(updates).eq('id',id)
+    const {error}=await supabase.from('billing').update(updates).eq('id',id)
+    if(error){ alert('No se pudo cambiar el estado: '+error.message); return }   // no actualizar UI si la DB no cambió
     setBilling(p=>p.map(x=>x.id===id?{...x,status,...(paid_at!==undefined?{paid_at}:{})}:x))
   },[])
 
@@ -10779,9 +10831,9 @@ export default function App() {
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
-        {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
-        {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
@@ -10791,7 +10843,7 @@ export default function App() {
             supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).then(r=>r.data||[]),
           ]); setSales(s); if(b)setBilling(b); setExpenses(e)
         }}/></Modal>}
-        {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>{handleSaveTask({...t,status:'Terminado'});setModal(null)}}/></Modal>}
         {modal?.type==='client'&&<Modal title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}

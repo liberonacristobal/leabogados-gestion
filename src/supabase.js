@@ -151,11 +151,13 @@ export const getAllEntities = async () => {
     .select('id, name, rut')
     .order('name')
   if (error) throw error
-  // deduplicar por nombre
+  // deduplicar por nombre (ignora entidades sin nombre para no romper el autocomplete)
   const seen = new Set()
   return data.filter(e => {
-    if (seen.has(e.name.toLowerCase())) return false
-    seen.add(e.name.toLowerCase())
+    if (!e.name) return false
+    const k = e.name.toLowerCase()
+    if (seen.has(k)) return false
+    seen.add(k)
     return true
   })
 }
