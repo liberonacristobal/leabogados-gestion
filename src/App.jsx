@@ -1667,7 +1667,9 @@ function computeAgingCartera(billingRows, clientesMap){
   const pct = m => total>0?Math.round(m/total*100):0
   const sumB = k => pend.filter(b=>bucketDe(b)===k).reduce((a,b)=>a+(b.amount||0),0)
   const cur=sumB('current'), war=sumB('warning'), over=sumB('overdue')
-  const buckets = { current:{monto:cur,pct:pct(cur)}, warning:{monto:war,pct:pct(war)}, overdue:{monto:over,pct:pct(over)} }
+  // Facturas que componen cada tramo (para el detalle al hacer click), ordenadas por monto desc.
+  const itemsB = k => pend.filter(b=>bucketDe(b)===k).map(b=>{ const cid=b.client_id||'__none__'; const nombre=(clientesMap&&clientesMap[cid])||b.receptor_name||'Sin cliente'; return {id:b.id, nombre, monto:b.amount||0, concept:b.concept||'', due:b.due, dias:diasVenc(b)} }).sort((a,b)=>b.monto-a.monto)
+  const buckets = { current:{monto:cur,pct:pct(cur),items:itemsB('current')}, warning:{monto:war,pct:pct(war),items:itemsB('warning')}, overdue:{monto:over,pct:pct(over),items:itemsB('overdue')} }
 
   // Delta: pendiente actual vs total facturado el mes anterior (por created_at)
   const now = new Date()
@@ -1792,6 +1794,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   // --- Aging de cartera ---
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const [top5Open,setTop5Open] = useState(false)
+  const [agingBucket,setAgingBucket] = useState(null)   // tramo del aging abierto para ver su detalle
   const agingData = useMemo(()=>computeAgingCartera(billing.filter(b=>b.billing_type!=='reembolso'), clientesMap),[billing,clientesMap])
 
   // --- Clientes sin fondos: detalle por cliente ---
@@ -1812,7 +1815,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     <div>
 
       {/* Meta anual */}
-      <div style={{padding:'0 20px 16px'}}>
+      <div style={{padding:'0 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <div style={{display:'flex',alignItems:'center',position:'relative'}}>
             <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Revenue target</span>
@@ -1969,14 +1972,33 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <div style={{width:`${agingData.buckets.overdue.pct}%`,background:'#E24B4A'}}/>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:12}}>
-            {[['Al día',agingData.buckets.current,'#1D9E75'],['31-60 días',agingData.buckets.warning,'#C77F18'],['+60 días',agingData.buckets.overdue,'#E24B4A']].map(([l,bk,col])=>(
-              <div key={l} style={{background:'#F5F7F9',borderRadius:0,borderLeft:`3px solid ${col}`,padding:'10px 12px'}}>
-                <div style={{fontSize:11,color:'#99ABB4'}}>{l}</div>
-                <div style={{fontSize:13,fontWeight:500,color:bk.monto===0?'#99ABB4':col}}>{fmt(bk.monto)}</div>
+            {[['Al día','current',agingData.buckets.current,'#1D9E75'],['31-60 días','warning',agingData.buckets.warning,'#C77F18'],['+60 días','overdue',agingData.buckets.overdue,'#E24B4A']].map(([l,k,bk,col])=>{
+              const abierto=agingBucket===k, vacio=bk.monto===0
+              return (
+              <button key={l} onClick={()=>!vacio&&setAgingBucket(abierto?null:k)} style={{textAlign:'left',background:abierto?'#fff':'#F5F7F9',border:abierto?`1px solid ${col}`:'1px solid transparent',borderLeft:`3px solid ${col}`,borderRadius:abierto?8:0,padding:'10px 12px',cursor:vacio?'default':'pointer',width:'100%'}}>
+                <div style={{fontSize:11,color:'#99ABB4',display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>{l}{!vacio&&<span style={{fontSize:9,color:col,transform:abierto?'rotate(180deg)':'none',transition:'transform .15s'}}>{'▾'}</span>}</div>
+                <div style={{fontSize:13,fontWeight:500,color:vacio?'#99ABB4':col}}>{fmt(bk.monto)}</div>
                 <div style={{fontSize:11,color:'#99ABB4'}}>{bk.pct}%</div>
-              </div>
-            ))}
+              </button>
+            )})}
           </div>
+          {agingBucket&&agingData.buckets[agingBucket]?.items?.length>0&&(()=>{
+            const col={current:'#1D9E75',warning:'#C77F18',overdue:'#E24B4A'}[agingBucket]
+            const items=agingData.buckets[agingBucket].items
+            return (
+              <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
+                {items.map((it,i)=>(
+                  <div key={it.id} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:i>0?`1px solid ${C.border}`:'none'}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:12.5,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.nombre}</div>
+                      <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.concept||'—'}{it.dias>0?` · ${it.dias} días vencida`:it.due?` · vence ${fmtDate(it.due)}`:''}</div>
+                    </div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:col,whiteSpace:'nowrap',flexShrink:0}}>{fmt(it.monto)}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
           <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:14}}>
             <div style={{background:'#F5F7F9',borderRadius:8,padding:'10px 12px'}}>
               <div style={{fontSize:11,color:'#99ABB4'}}>DSO</div>
