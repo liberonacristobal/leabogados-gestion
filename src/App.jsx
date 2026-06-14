@@ -1833,6 +1833,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [yearMenu,setYearMenu] = useState(false)
   const [histOpen,setHistOpen] = useState(false)
   useEffect(()=>{
+    if(DEMO){ setTargets(demoData.annual_targets||[]); return }
     supabase.from('annual_targets').select('*').order('year',{ascending:false}).then(({data})=>{
       const rows = (data&&data.length)?[...data]:[]
       if(!rows.some(t=>t.year===currentYear)) rows.unshift({year:currentYear,target_amount:META_CLP,currency:'CLP'})
