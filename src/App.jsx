@@ -4945,10 +4945,14 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
 const MOTIVOS_BAJA = ['Servicio no prestado','Cliente canceló el servicio','Error al programar','Facturado por otro medio','Otro']
 
 // ─── PROVEEDORES (catálogo + ficha de proveedores, costos de terceros) ──────
-function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sales=[],onSave,onRevertirPago,onOpenSale,onClose,saving}) {
+function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sales=[],onSave,onRevertirPago,onAsignarFacturas,onOpenSale,onClose,saving}) {
   const [view,setView] = useState('list')   // list | ficha | form
   const [selId,setSelId] = useState(null)
   const [q,setQ] = useState('')
+  const [asgOpen,setAsgOpen] = useState(false)   // panel de asignar facturas
+  const [facQ,setFacQ] = useState('')
+  const [montos,setMontos] = useState({})        // billing_id → monto a asignar
+  const [asgBusy,setAsgBusy] = useState(null)    // billing_id en curso
   const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
   const {uf:ufHoy} = useUF()
   const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -4973,6 +4977,19 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const canSave = f.nombre?.trim()
   const guardar = async () => { const d=await onSave(f); if(d){ setSelId(d.id); setView('ficha') } }
+
+  // Facturas que se pueden asignar a este proveedor (excluye anuladas, reembolsos y las ya asignadas a él)
+  const yaAsignadas = useMemo(()=>new Set(terceros.filter(t=>String(t.proveedor_id)===String(selId)).map(t=>String(t.billing_id))),[terceros,selId])
+  const facturasAsignables = useMemo(()=>{ if(!facQ.trim()) return []; const t=facQ.trim().toLowerCase(); return billing.filter(b=>{
+    if(b.status==='Anulada'||b.billing_type==='reembolso'||yaAsignadas.has(String(b.id))) return false
+    const cli=clients.find(c=>String(c.id)===String(b.client_id))
+    return `${cli?.name||''} ${b.concept||''} ${b.invoice_no||''} ${b.receptor_name||''}`.toLowerCase().includes(t)
+  }).slice(0,12) },[facQ,billing,clients,yaAsignadas])
+  const asignarFac = async(bid) => {
+    const m=parseInt(montos[bid])||0; if(!m||!onAsignarFacturas) return
+    setAsgBusy(bid); const ok=await onAsignarFacturas(selId,[{billing_id:bid,monto:m}]); setAsgBusy(null)
+    if(ok) setMontos(p=>{const n={...p};delete n[bid];return n})
+  }
 
   const headerBack = (titleTxt,onBack) => (
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
@@ -5139,8 +5156,29 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
             <div style={{fontSize:18,fontWeight:600,color:C.normal,letterSpacing:-.5}}>{fmt0(pagado)}</div>
           </div>
         </div>
+        {/* Asignar facturas a este proveedor */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+          <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5}}>Movimientos</span>
+          {onAsignarFacturas&&<button onClick={()=>{setAsgOpen(o=>!o);setFacQ('')}} style={chipBtn(asgOpen?'primary':'soft')}>{asgOpen?'Cerrar':'+ Asignar factura'}</button>}
+        </div>
+        {asgOpen&&(
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:10,background:'#F5F7F9'}}>
+            <ChipSearch value={facQ} onChange={e=>setFacQ(e.target.value)} placeholder='Buscar factura: cliente, concepto, N°…' style={{background:'#fff',marginBottom:facQ.trim()?8:0}}/>
+            {facQ.trim()&&facturasAsignables.length===0&&<div style={{fontSize:12,color:'#99ABB4',padding:'6px 2px'}}>Sin facturas (o ya están asignadas a este proveedor).</div>}
+            {facturasAsignables.map(b=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); return (
+              <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||b.receptor_name||'Sin cliente'}</div>
+                  <div style={{fontSize:10.5,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`F° ${b.invoice_no} · `:''}{b.concept||'—'} · {fmt0(b.amount)}</div>
+                </div>
+                <input type='number' value={montos[b.id]||''} onChange={e=>setMontos(p=>({...p,[b.id]:e.target.value}))} placeholder='Su parte $' style={{width:96,height:30,border:`0.5px solid ${C.border}`,borderRadius:7,fontSize:12,padding:'0 8px',background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',flexShrink:0}}/>
+                <button onClick={()=>asignarFac(b.id)} disabled={asgBusy===b.id||!(parseInt(montos[b.id])||0)} style={{...chipBtn('primary'),height:30,opacity:(asgBusy===b.id||!(parseInt(montos[b.id])||0))?.5:1}}>{asgBusy===b.id?'…':'Asignar'}</button>
+              </div>
+            )})}
+          </div>
+        )}
         {histo.length===0?(
-          <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos. Aparecen al asignar costos en una venta.</div>
+          <div style={{textAlign:'center',padding:'24px 12px',color:'#99ABB4',fontSize:12.5,background:'#F5F7F9',borderRadius:10}}>Sin movimientos. Asigna una factura arriba o agrega costos en una venta.</div>
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:1,border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {histo.map(t=>{
@@ -7697,7 +7735,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   )
 }
 
-function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete}) {
+function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete}) {
   const [verProv,setVerProv] = useState(false)
 
   const handleAnularRendicion = async(r) => {
@@ -7742,7 +7780,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
 
   // Proveedores inline (mismo formato que clientes: lista → ficha, pantalla completa)
   if(verProv) return (
-    <ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={onSaveProveedor} onRevertirPago={onRevertirPagoProveedor} onOpenSale={onOpenSale} onClose={()=>setVerProv(false)} saving={provSaving}/>
+    <ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={onSaveProveedor} onRevertirPago={onRevertirPagoProveedor} onAsignarFacturas={onAsignarFacturas} onOpenSale={onOpenSale} onClose={()=>setVerProv(false)} saving={provSaving}/>
   )
 
   if(selected) return (
@@ -10678,6 +10716,24 @@ export default function App() {
     }catch(e){alert('Error: '+e.message); setSaving(false); return null}
   },[])
 
+  // Asignar facturas a un proveedor desde Mis Proveedores: crea las cuentas por pagar (terceros_pagos) ancladas a cada factura.
+  const handleAsignarFacturasProveedor=useCallback(async(proveedorId,items)=>{
+    const prov=(proveedores||[]).find(p=>String(p.id)===String(proveedorId))
+    const limpio=(items||[]).filter(it=>it.billing_id&&(parseInt(it.monto)||0)>0)
+    if(!prov||!limpio.length) return false
+    try{
+      const payload=limpio.map(it=>{ const fac=(billing||[]).find(b=>String(b.id)===String(it.billing_id)); const m=parseInt(it.monto)||0
+        return {sale_id:fac?.sale_id||null, billing_id:it.billing_id, proveedor_id:proveedorId,
+          proveedor:prov.razon_social||prov.nombre||null, rut:prov.rut||null, tipo_costo:'clp', valor:m, monto:m,
+          estado: fac?.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null} })
+      const {error}=await supabase.from('terceros_pagos').insert(payload)
+      if(error)throw error
+      const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
+      if(nt)setTerceros(nt)
+      return true
+    }catch(e){ alert('No se pudo asignar la factura: '+e.message); return false }
+  },[proveedores,billing,user])
+
   // Conciliación: al cobrar la factura ancla, las cuentas por pagar de esa factura pasan
   // de 'pendiente' (cliente no ha pagado) a 'por_pagar' (ya tienes el fee, falta transferir al proveedor).
   const handleConciliarTerceros=useCallback(async(billingId)=>{
@@ -10933,7 +10989,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
           </div>
         )}
         {userRole==='limited'&&tab==='tasks'&&(
