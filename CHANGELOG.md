@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-14 (noche) — Backlog: datos, chips y consistencia visual
+- **BM Soluciones**: marcadas como pagadas las 6 cuotas adelantadas (ene–jun 2026); jul–dic quedan programadas.
+- **Chips** también en los botones dentro de las fichas de cliente (+ Fondo / + Gasto / + Tarea / Rendir).
+- **Tints unificados**: variantes sueltas de ámbar/rojo/verde colapsadas al tint canónico (se preservó el esquema del banner "Recuperar borrador"); tokens `soonBg/overdueBg/greenBg` en la paleta.
+- **Modales**: título en color corporativo (accent) y botón de cerrar más grande (44px) para el dedo.
+
 ## 2026-06-14 — Importar facturas: revisión con IA (Opus 4.8)
 - En **Importar facturas (Excel)**, nuevo botón **"Revisar con IA (Opus 4.8)"**: antes de cargar, Opus audita el lote y muestra resumen, alertas (huérfanas, notas de crédito, montos negativos, RUT mal formateados, conceptos raros), lista de clientes a crear y una recomendación. Solo audita, no modifica datos.
 
