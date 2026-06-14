@@ -92,6 +92,8 @@ const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20
 const chipSearch = {height:32,width:'100%',background:'#F5F7F9',border:'none',borderRadius:20,fontSize:13,padding:'0 14px',color:'#3D3D3D',outline:'none',boxSizing:'border-box'}
 // Botón de Drive: solo el logo, sin recuadro
 const driveBtn = {border:'none',background:'transparent',cursor:'pointer',padding:4,display:'inline-flex',alignItems:'center',justifyContent:'center'}
+// Pill de filtro (segmentos tipo Todas/Proveedores/Anticipos): borde, acento al activo
+const filterPill = (active) => ({flex:'0 0 auto',padding:'6px 12px',borderRadius:20,border:`1px solid ${active?'#003C50':'#E4E8EB'}`,background:active?'#E6EEF1':'transparent',color:active?'#003C50':'#537281',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'})
 // Buscador de cabecera con lupa (píldora tintada)
 function ChipSearch({value,onChange,placeholder='Buscar...',autoFocus,style}){
   return (
@@ -2865,6 +2867,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     }catch(e){ alert('No se pudo agregar la razón social: '+e.message) }
     setSavingRS(false)
   }
+  // Cobro mensual: el inicio se toma del Año/Mes de la venta por defecto (evita años distintos, como pasó con BM Soluciones).
+  useEffect(()=>{ if(cobroType==='mensual' && !mensualInicio && f.year && f.month) setMensualInicio(`${f.year}-${String(f.month).padStart(2,'0')}-01`) },[cobroType,f.year,f.month])
   const moneda = f.moneda||'UF'
   const ufVal = parseFloat(f.uf_value)||0
   const amountUF = parseFloat(f.amount_uf)||0
@@ -3293,6 +3297,12 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 <Fld label='Inicio cobro'><Inp type='date' value={mensualInicio} onChange={e=>setMensualInicio(e.target.value)}/></Fld>
               </div>
               {mensualInicio&&totalCLP>0&&<div style={{fontSize:11,color:C.muted}}>Genera <strong style={{color:C.text}}>12 cobros</strong> de <strong style={{color:C.text}}>{fmt(Math.round(totalCLP))}</strong>/mes desde {mensualInicio.slice(0,7)}</div>}
+              {(()=>{ const ym=f.year&&f.month?`${f.year}-${String(f.month).padStart(2,'0')}`:''; if(!mensualInicio||!ym||mensualInicio.slice(0,7)===ym) return null; return (
+                <div style={{fontSize:11,color:'#854F0B',background:'#FFF8E1',border:'1px solid #FAC775',borderRadius:8,padding:'7px 10px',marginTop:8,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                  <span>El inicio mensual ({mensualInicio.slice(0,7)}) no coincide con el Año/Mes de la venta ({ym}).</span>
+                  <button type='button' onClick={()=>setMensualInicio(`${ym}-01`)} style={{...chipBtn('soft'),height:22}}>Usar {ym}</button>
+                </div>
+              )})()}
             </div>
           )}
           {cobroType==='cuotas'&&(
@@ -4889,11 +4899,11 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
       </div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
         <div style={{display:'flex',gap:6}}>
-          {[['disponible','Disponibles'],['consumido','Consumidos'],['todos','Todos']].map(([v,l])=>{ const on=fil===v; return (
-            <button key={v} onClick={()=>setFil(v)} style={{height:26,padding:'0 11px',borderRadius:8,fontSize:11,cursor:'pointer',border:on?'none':`0.5px solid ${C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button>
-          )})}
+          {[['disponible','Disponibles'],['consumido','Consumidos'],['todos','Todos']].map(([v,l])=>(
+            <button key={v} onClick={()=>setFil(v)} style={filterPill(fil===v)}>{l}</button>
+          ))}
         </div>
-        <button onClick={()=>onNuevo&&onNuevo()} style={{height:30,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>+ Anticipo</button>
+        <button onClick={()=>onNuevo&&onNuevo()} style={{padding:'6px 14px',borderRadius:20,background:'#1D9E75',color:'#fff',border:'none',fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>+ Anticipo</button>
       </div>
       {lista.length===0&&<div style={{textAlign:'center',color:'#99ABB4',fontSize:13,padding:30}}>No hay anticipos {fil==='disponible'?'disponibles':fil==='consumido'?'consumidos':'registrados'}</div>}
       {Object.keys(grupos).map(cid=>{
@@ -7779,7 +7789,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
           <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1}}/>
-          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Proveedores</button>
+          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Mis Proveedores</button>
         </div>
         {sFilter ? (
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
