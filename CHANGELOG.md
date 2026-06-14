@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14 — Modo demo (?demo=1)
+- Nuevo **modo demo**: abrir la app con `?demo=1` salta el login y carga un set de **datos ficticios** (clientes, ventas, facturas, gastos, tareas, caja chica) para mostrar la app sin información real.
+- **Seguridad**: en demo el cliente de Supabase queda inerte — ninguna lectura ni escritura toca la base real.
+
 ## 2026-06-14 — Tareas fuera del Dashboard + acceso desde el encabezado
 - Se quitó la lista de tareas del Dashboard (lo descongestiona).
 - Nuevo botón **"Tareas" (ícono ojo)** en el encabezado de Inicio (admin) que abre la vista de tareas por persona — la misma que ven los usuarios limited.

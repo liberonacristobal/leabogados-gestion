@@ -3,7 +3,38 @@ import { createClient } from '@supabase/supabase-js'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+// Modo demo (?demo=1): salta el login y usa datos ficticios. El cliente queda INERTE para
+// garantizar que NINGUNA lectura/escritura toque la base real (toda llamada resuelve vacío/no-op).
+export const DEMO = typeof window!=='undefined' && new URLSearchParams(window.location.search).get('demo')==='1'
+
+const ok = (data=null) => Promise.resolve({ data, error: null })
+function demoQuery(){
+  const b = {}
+  const chain = () => b
+  ;['select','insert','update','upsert','delete','eq','neq','in','is','not','or','and','gte','lte','gt','lt','like','ilike','filter','match','order','limit','range','contains','overlaps'].forEach(m=>{ b[m]=chain })
+  b.single = () => ok(null)
+  b.maybeSingle = () => ok(null)
+  b.then = (f,r) => ok([]).then(f,r)
+  b.catch = (f) => ok([]).catch(f)
+  b.finally = (f) => ok([]).finally(f)
+  return b
+}
+const demoClient = {
+  supabaseKey: '',
+  from: () => demoQuery(),
+  auth: {
+    getSession: () => ok({ session: { user:{ email:'demo@demo.cl' }, access_token:'demo' } }),
+    getUser: () => ok({ user:{ email:'demo@demo.cl' } }),
+    onAuthStateChange: () => ({ data:{ subscription:{ unsubscribe(){} } } }),
+    signInWithOAuth: () => ok({}),
+    signOut: () => ok({}),
+  },
+  storage: { from: () => ({ upload: async()=>({data:null,error:null}), remove: async()=>({error:null}), getPublicUrl: () => ({ data:{ publicUrl:'' } }), createSignedUrl: async()=>({ data:{ signedUrl:'' }, error:null }) }) },
+  channel: () => ({ on(){ return this }, subscribe(){ return this } }),
+  removeChannel: () => {},
+}
+
+export const supabase = DEMO ? demoClient : createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 export const signInWithGoogle = () =>
