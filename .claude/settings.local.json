@@ -126,7 +126,8 @@
       "Bash(curl -sI \"https://gestion.leabogados.cl/\")",
       "Bash(perl -0pi -e \"s/\\\\Q.padStart\\(2,'0'\\)+'\\\\/'+String\\(d.getMonth\\(\\)+1\\).padStart\\(2,'0'\\)+'\\\\/'+d.getFullYear\\(\\)\\\\E/.padStart\\(2,'0'\\)+'-'+String\\(d.getMonth\\(\\)+1\\).padStart\\(2,'0'\\)+'-'+d.getFullYear\\(\\)/g\" src/App.jsx)",
       "Bash(perl -0pi -e \"s/\\\\Q.padStart\\(2,'0'\\)+'\\\\/'+String\\(\\\\E/.padStart\\(2,'0'\\)+'-'+String\\(/g\" src/App.jsx)",
-      "Bash(curl -s \"https://gestion.leabogados.cl/?cb=$\\(date +%s\\)\")"
+      "Bash(curl -s \"https://gestion.leabogados.cl/?cb=$\\(date +%s\\)\")",
+      "Bash(python3 -c \"import openpyxl; print\\('openpyxl ok'\\)\")"
     ]
   }
 }

@@ -1484,7 +1484,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         </div>
       </div>
       {showList&&(<>
-      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div data-tv="tareas-cards-v2" style={{display:'flex',flexDirection:'column',gap:10}}>
       {personas.map((persona,pi)=>{
         const [avBg,avColor]=avatarColor(persona)
         const isOpen=!!openPersonas[persona]
@@ -9584,6 +9584,8 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   const [resultado,setResultado] = useState(null)
   const [editRow,setEditRow] = useState(null)   // id de fila en modo "asignar cliente"
   const [q,setQ] = useState('')
+  const [iaBusy,setIaBusy] = useState(false)
+  const [iaReport,setIaReport] = useState(null)   // auditoría de Opus 4.8 antes de importar
   const norm = s => String(s??'').toLowerCase().trim()
   const normRut = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
   const inp = {width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
@@ -9692,6 +9694,36 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
     onImported&&await onImported()
     setImportando(false)
   }
+  // Auditoría con IA (Opus 4.8) ANTES de importar: solo lee y opina, no modifica nada.
+  const revisarIA = async() => {
+    if(!rows?.length) return
+    if(!import.meta.env.VITE_ANTHROPIC_API_KEY){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
+    setIaBusy(true); setIaReport(null)
+    try{
+      const muestra = rows.map((r,i)=>`${i+1}|${(r.nombre||'').slice(0,40)}|${r.rut||''}|${r.monto??''}|${r.emision||''}|${r.pago||''}|${r.status||''}|${(r.concepto||'').slice(0,45)}|${r.client_id?'match':'SIN'}`).join('\n')
+      const prompt = `Eres auditor de datos de facturación de un estudio de abogados chileno. Revisa este lote de facturas ANTES de importarlo y advierte problemas. Cada fila es: idx|cliente|rut|monto(CLP)|fechaEmision(AAAA-MM-DD)|fechaPago|estado|concepto|match (match=el cliente YA existe en la base; SIN=no existe y quedaría huérfana).
+
+Devuelve SOLO un JSON válido (sin markdown ni backticks):
+{"resumen":"2-3 frases con totales y estado general","alertas":[{"tipo":"corto","detalle":"qué pasa y por qué","n":cantidad_de_filas}],"clientes_a_crear":["NOMBRE (RUT)"],"recomendacion":"go o no-go y por qué, 1-2 frases"}
+
+Enfócate en: filas SIN cliente (cuántas y agrupar por cliente nuevo), montos negativos o notas de crédito, facturas anuladas, fechas fuera de un rango razonable, RUT mal formateados (espacios), conceptos truncados o ambiguos, y cualquier inconsistencia. En "clientes_a_crear" lista (máx 60) los clientes con estado SIN, sin repetir, formato "NOMBRE (RUT)". NO inventes datos; básate solo en las filas. Sé conciso y útil.
+
+FILAS (${rows.length}):
+${muestra}`
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':import.meta.env.VITE_ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+      })
+      if(!resp.ok) throw new Error('API '+resp.status)
+      const j = await resp.json()
+      let txt = (j?.content?.[0]?.text||'').replace(/```json|```/g,'').trim()
+      const rep = JSON.parse(txt)
+      setIaReport(rep)
+    }catch(e){ alert('No se pudo analizar con IA: '+e.message) }
+    setIaBusy(false)
+  }
+
   // ── render ──
   if(resultado) return (
     <div style={{padding:'20px',textAlign:'center'}}>
@@ -9722,8 +9754,32 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:8}}>
         <div style={{fontSize:12,color:C.muted}}><strong style={{color:C.text}}>{validas.length}</strong> a importar · {fmt0(totalImp)}{sinCli>0&&<span style={{color:C.soon}}> · {sinCli} sin cliente</span>}</div>
-        <button onClick={()=>{setRows(null);setFileName('')}} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Otro archivo</button>
+        <button onClick={()=>{setRows(null);setFileName('');setIaReport(null)}} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Otro archivo</button>
       </div>
+      {/* Revisión con IA (Opus 4.8) — solo audita, no modifica */}
+      <button onClick={revisarIA} disabled={iaBusy} style={{width:'100%',marginBottom:10,height:38,borderRadius:9,border:`1px solid ${C.accent}`,background:iaBusy?'#F5F7F9':'#E6EEF1',color:C.accent,fontSize:12.5,fontWeight:600,cursor:iaBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{iaBusy?<Spin/>:null}{iaBusy?'Analizando con Opus 4.8…':(iaReport?'Volver a revisar con IA':'Revisar con IA (Opus 4.8)')}</button>
+      {iaReport&&(
+        <div style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'12px 13px',marginBottom:12,background:'#F5F7F9'}}>
+          <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Revisión IA · Opus 4.8</div>
+          {iaReport.resumen&&<div style={{fontSize:12.5,color:C.text,lineHeight:1.45,marginBottom:9}}>{iaReport.resumen}</div>}
+          {Array.isArray(iaReport.alertas)&&iaReport.alertas.length>0&&<div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:9}}>
+            {iaReport.alertas.map((a,i)=>(
+              <div key={i} style={{display:'flex',gap:7,fontSize:11.5,color:C.text,alignItems:'baseline'}}>
+                <span style={{color:C.soon,fontWeight:700,flexShrink:0}}>!</span>
+                <span><strong style={{fontWeight:600}}>{a.tipo}{a.n?` (${a.n})`:''}:</strong> {a.detalle}</span>
+              </div>
+            ))}
+          </div>}
+          {Array.isArray(iaReport.clientes_a_crear)&&iaReport.clientes_a_crear.length>0&&(
+            <details style={{marginBottom:9}}>
+              <summary style={{fontSize:11.5,fontWeight:600,color:C.accent,cursor:'pointer'}}>Clientes a crear ({iaReport.clientes_a_crear.length})</summary>
+              <div style={{fontSize:11,color:C.muted,marginTop:5,lineHeight:1.6,maxHeight:160,overflowY:'auto'}}>{iaReport.clientes_a_crear.map((c,i)=><div key={i}>{c}</div>)}</div>
+            </details>
+          )}
+          {iaReport.recomendacion&&<div style={{fontSize:12,fontWeight:600,color:C.accent,borderTop:`1px solid ${C.border}`,paddingTop:8}}>{iaReport.recomendacion}</div>}
+          <div style={{fontSize:10,color:'#99ABB4',marginTop:8}}>La IA solo revisa; no cambia tus datos. Tú decides qué importar.</div>
+        </div>
+      )}
       <div style={{maxHeight:'52vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:6}}>
         {rows.map(r=>{ const [sl,sc,sb]=stPill(r); return (
           <div key={r.id} style={{border:`0.5px solid ${C.border}`,borderRadius:9,padding:'9px 11px',opacity:(r._skip||r.error||r.dup)?.6:1}}>
