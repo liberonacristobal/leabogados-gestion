@@ -2293,23 +2293,30 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           const dl = ult?daysLeft(ult):null
           return {u,saldo,sinLiqMonto,sinLiqN:sinLiq.length,alertaSinLiq:sinLiqNoNotaria>10,ult,alertaUlt:dl!==null&&dl<-7}
         })
+        const mini = {display:'flex',justifyContent:'space-between',gap:6,fontSize:11.5}
         return (
           <div style={{padding:'16px 20px 0'}}>
             <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Gestión caja chica</div>
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {/* Lado a lado; en iPhone el detalle baja bajo el saldo (clase .cc-body) */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               {filas.map(f=>{
                 const [avBg,avCol]=av[f.u]||['#F1EFE8','#537281']
                 const alerta = f.alertaSinLiq||f.alertaUlt||f.saldo<0
                 return (
-                <div key={f.u} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${alerta?C.soon:C.normal}`,borderRadius:12,padding:'13px 14px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:11}}>
+                <div key={f.u} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${alerta?C.soon:C.normal}`,borderRadius:12,padding:'12px 13px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                     <span style={{width:28,height:28,borderRadius:'50%',background:avBg,color:avCol,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>{f.u[0]}</span>
-                    <span style={{fontSize:13,fontWeight:500,color:C.text}}>{f.u}</span>
+                    <span style={{fontSize:12.5,fontWeight:500,color:C.text}}>{f.u}</span>
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-                    <div style={{minWidth:0}}><div style={lbl}>Saldo caja</div><div style={{fontSize:15,fontWeight:600,color:f.saldo<0?C.overdue:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div></div>
-                    <div style={{minWidth:0}}><div style={lbl}>Sin liquidar</div><div style={{fontSize:13,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={f.alertaSinLiq?'Más de 10 gastos sin liquidar (excl. Notaría)':undefined}>{f.alertaSinLiq?'(!) ':''}{money(f.sinLiqMonto)} · {f.sinLiqN}</div></div>
-                    <div style={{minWidth:0}}><div style={lbl}>Últ. gasto</div><div style={{fontSize:13,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={f.alertaUlt?'Más de 7 días sin ingresar un gasto':undefined}>{f.alertaUlt?'(!) ':''}{f.ult?fmtDate(f.ult):'—'}</div></div>
+                  <div className='cc-body'>
+                    <div style={{flexShrink:0,minWidth:0}}>
+                      <div style={lbl}>Saldo</div>
+                      <div style={{fontSize:18,fontWeight:600,color:f.saldo<0?C.overdue:C.normal,lineHeight:1.05,whiteSpace:'nowrap'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div>
+                    </div>
+                    <div className='cc-stats'>
+                      <div style={mini} title={f.alertaSinLiq?'Más de 10 gastos sin liquidar (excl. Notaría)':undefined}><span style={{color:C.muted}}>Sin liq.</span><span style={{fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,whiteSpace:'nowrap'}}>{f.alertaSinLiq?'(!) ':''}{money(f.sinLiqMonto)}·{f.sinLiqN}</span></div>
+                      <div style={mini} title={f.alertaUlt?'Más de 7 días sin ingresar un gasto':undefined}><span style={{color:C.muted}}>Últ.</span><span style={{fontWeight:600,color:f.alertaUlt?C.soon:C.muted,whiteSpace:'nowrap'}}>{f.alertaUlt?'(!) ':''}{f.ult?fmtDate(f.ult):'—'}</span></div>
+                    </div>
                   </div>
                 </div>
                 )
@@ -10727,11 +10734,15 @@ export default function App() {
         .fecha-short{display:none}
         .qt-head{padding:18px 20px 14px}
         .qt-body{padding:16px 20px}
+        .cc-body{display:flex;align-items:center;gap:10px}
+        .cc-stats{flex:1;min-width:0;border-left:1px solid ${C.border};padding-left:11px;display:flex;flex-direction:column;gap:4px}
         @media(max-width:560px){
           .fecha-full{display:none} .fecha-short{display:inline}
           .qt-head{padding:13px 15px 10px}
           .qt-body{padding:11px 15px}
           .qt-body .fld{margin-bottom:10px!important}
+          .cc-body{flex-direction:column;align-items:stretch;gap:7px}
+          .cc-stats{border-left:none;border-top:1px solid #F5F7F9;padding-left:0;padding-top:7px}
         }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
