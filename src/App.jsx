@@ -2828,10 +2828,13 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     try {
       let client = propClientMatch
       if(!client || propClientMode==='crear') {
-        const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null,razon_social:propNewClient.razon_social.trim()||null}).select().single()
+        // clients NO tiene columna razon_social: el cliente se crea con nombre/RUT y la razón social va a client_entities.
+        const {data:nc,error} = await supabase.from('clients').insert({name:propNewClient.name.trim(),rut:propNewClient.rut.trim()||null}).select().single()
         if(error) throw error
         client = nc
         setClients(p=>[...p,nc])
+        const rs=propNewClient.razon_social.trim()
+        if(rs){ try{ await supabase.from('client_entities').insert({client_id:nc.id,name:rs,rut:propNewClient.rut.trim()||null}) }catch(_){} }
       }
       setSelectedClient(client)
       up('client_id',client.id)
