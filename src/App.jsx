@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import mammoth from 'mammoth'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
@@ -1443,7 +1443,7 @@ function UFStamp({uf,isToday,asOf,loading}){
   return <span style={{...base,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC'}}>UF no disponible</span>
 }
 
-function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
+function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview,user}) {
   const [sortBy,setSortBy] = useState('encargo')
   const [showList,setShowList] = useState(true)
   const [openPersonas,setOpenPersonas] = useState({})
@@ -1470,6 +1470,13 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   }
   Object.keys(porPersona).forEach(w=>porPersona[w].sort(cmp))
   const personas = Object.keys(porPersona).sort()
+  const me = user?.name
+  // Lo importante: lo que YO encargué a otros. Lo mío son recordatorios.
+  const equipo = personas.filter(p=>p!==me)
+  const mias = personas.filter(p=>p===me)
+  const ordered = [...equipo, ...mias]
+  const encargoN = activas.filter(t=>taskAssignees(t).some(w=>w!==me)).length
+  const miasN = (porPersona[me]||[]).length
   const fmtInicio = iso => iso?fmtFechaDMY(iso):''   // 13-06-2026
   const fmtVence = iso => iso?fmtFechaDMY(iso):''    // 13-06-2026 (formato oficial, con año)
   const avatarColor = name => {
@@ -1510,15 +1517,19 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
       </div>
       {showList&&(<>
       <div data-tv="tareas-cards-v2" style={{display:'flex',flexDirection:'column',gap:10}}>
-      {personas.map((persona,pi)=>{
+      {ordered.map((persona,pi)=>{
         const [avBg,avColor]=avatarColor(persona)
         const isOpen=!!openPersonas[persona]
         const lista=porPersona[persona]
         const vencidas=lista.filter(t=>{const d=daysLeft(t.due); return d!==null&&d<0}).length
         const prontas=lista.filter(t=>{const d=daysLeft(t.due); return d!==null&&d>=0&&d<=7}).length
         const accent = vencidas>0?C.overdue:prontas>0?C.soon:C.normal   // color de la tarjeta según urgencia
+        const secLbl = {fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',margin:'4px 2px 1px'}
         return (
-          <div key={persona} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${accent}`,borderRadius:12,overflow:'hidden'}}>
+          <Fragment key={persona}>
+          {pi===0&&equipo.length>0&&<div style={secLbl}>Encargué <span style={{color:C.muted,fontWeight:500}}>· {encargoN}</span></div>}
+          {mias.length>0&&persona===mias[0]&&<div style={secLbl}>Mis recordatorios <span style={{color:C.muted,fontWeight:500}}>· {miasN}</span></div>}
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${accent}`,borderRadius:12,overflow:'hidden'}}>
             <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer',userSelect:'none',background:isOpen?'#F5F7F9':'transparent'}}>
               <div style={{width:28,height:28,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
               <span style={{fontSize:13.5,fontWeight:600,color:C.text,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{persona}</span>
@@ -1556,6 +1567,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
               )
             })}
           </div>
+          </Fragment>
         )
       })}
       {(()=>{
@@ -2057,7 +2069,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {tasks?.filter(t=>t.status==='Activo'||t.status==='Terminado').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
-          <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask} onComplete={onCompleteTask} onPreview={onPreviewTask}/>
+          <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask} onComplete={onCompleteTask} onPreview={onPreviewTask} user={user}/>
         </div>
       )}
 
