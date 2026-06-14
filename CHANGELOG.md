@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: Alt 3 (neto destacado) + barra fina interactiva
+- Datos: chips de color en una fila y **Neto firma destacado** abajo con Tasa como píldora (Alt 3).
+- **Barra más fina** (13px) e **interactiva**: tocar el tramo Facturado o Cobrado abre su detalle; separadores blancos entre tramos; el tramo activo se resalta.
+
 ## 2026-06-14 — Resultado del año: datos en grilla de mini-stats (Alt 2)
 - Bajo la barra, los datos pasan a una **grilla 2×2** de tarjetitas con borde de color (Vendido / Facturado / Cobrado / Costo oficina); Facturado y Cobrado tocables. Neto firma y Tasa cobro en una línea al pie.
 
