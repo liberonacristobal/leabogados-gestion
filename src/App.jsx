@@ -674,6 +674,15 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),7000); return ()=>clearTimeout(t) } },[toast])
 
   const periodoActual = () => new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'})
+  // Período de la liquidación = mes(es) de los GASTOS, no el de hoy. Mismo criterio que la rendición al cliente.
+  const periodoDeGastos = (gs) => {
+    const fechas = (gs||[]).map(e=>e.date).filter(Boolean).sort()
+    if(!fechas.length) return periodoActual()
+    const mesAno = d => new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'})
+    const dia = d => new Date(d+'T12:00').toLocaleDateString('es-CL')
+    const ini=fechas[0], fin=fechas[fechas.length-1]
+    return mesAno(ini)===mesAno(fin) ? mesAno(ini) : `${dia(ini)} – ${dia(fin)}`
+  }
 
   const handleLiquidar = async(abrirCorreo=false) => {
     if(!selected.size) return
@@ -681,35 +690,42 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
     try {
       const renderId = crypto.randomUUID()
       const now = new Date().toISOString()
-      const periodo = periodoActual()
       const gastosSel = seleccionados
+      const periodo = periodoDeGastos(gastosSel)   // #2: período = mes(es) de los gastos, no el de hoy
       const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
-      const selIds = new Set(gastosSel.map(e=>e.id))
       const clientesIds = [...new Set(gastosSel.map(e=>e.client_id).filter(Boolean))]
       // Registrar la liquidación PRIMERO — si falla, ningún gasto queda marcado
       const {error:rErr} = await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length })
       if(rErr) throw rErr
-      // Marcar gastos — acumular errores parciales en vez de silenciarlos
-      const erroresMarcado = []
+      // Marcar gastos — registrar cuáles SÍ se marcaron (marcados) para no inflar la rendición ante fallas parciales
+      const erroresMarcado = [], marcados = []
       for(const e of gastosSel) {
         const {error} = await supabase.from('expenses').update({ rendered_at: now, render_id: renderId, rendered_by: me }).eq('id',e.id)
-        if(error) erroresMarcado.push(e.concept||e.id)
+        if(error) erroresMarcado.push(e.concept||e.id); else marcados.push(e)
       }
-      if(erroresMarcado.length) alert(`Liquidación creada, pero ${erroresMarcado.length} gasto(s) no se marcaron: ${erroresMarcado.join(', ')}.\nPuedes anularla y reintentar.`)
-      // Estado local: agregar rendición y marcar gastos (salen de pendientes y entran a liquidados sin recargar)
-      setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalLiq,n_gastos:gastosSel.length,n_clientes:clientesIds.length,created_at:now},...p])
-      if(setExpenses) setExpenses(p=>p.map(e=>selIds.has(e.id)?{...e,rendered_at:now,render_id:renderId,rendered_by:me}:e))
+      const totalReal = marcados.reduce((a,e)=>a+(e.amount||0),0)
+      // #1: ajustar la rendición a los gastos REALMENTE marcados (no dejar total/n inflados); si no se marcó ninguno, cancelarla
+      if(erroresMarcado.length){
+        if(marcados.length===0){ await supabase.from('rendiciones').delete().eq('id',renderId); alert('No se pudo marcar ningún gasto. La liquidación se canceló; reintenta.'); setSaving(false); return }
+        const nClientesReal = [...new Set(marcados.map(e=>e.client_id).filter(Boolean))].length
+        await supabase.from('rendiciones').update({ total: totalReal, n_gastos: marcados.length, n_clientes: nClientesReal }).eq('id',renderId)
+        alert(`Liquidación creada con ${marcados.length} gasto(s) por ${fmtCLP(totalReal)}. ${erroresMarcado.length} no se marcaron y siguen pendientes: ${erroresMarcado.join(', ')}.`)
+      }
+      // Estado local: usar SOLO los marcados (los que fallaron siguen en pendientes sin recargar)
+      const marcadosIds = new Set(marcados.map(e=>e.id))
+      setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalReal,n_gastos:marcados.length,n_clientes:[...new Set(marcados.map(e=>e.client_id).filter(Boolean))].length,created_at:now},...p])
+      if(setExpenses) setExpenses(p=>p.map(e=>marcadosIds.has(e.id)?{...e,rendered_at:now,render_id:renderId,rendered_by:me}:e))
       setSelected(new Set())
       setConfirmLiq(false)
       let correoOk = false
       if(abrirCorreo) {
         const dest = (enviarA||'').trim() || 'ee@leabogados.cl,cl@leabogados.cl'
         const asunto = encodeURIComponent('Liquidación caja chica — ' + me + ' — ' + periodo)
-        const lineas = gastosSel.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+(e.date||'—')+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
+        const lineas = marcados.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+(e.date||'—')+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
         const cuerpo = encodeURIComponent(
           'Estimados,\n\nAdjunto el detalle de la liquidación de caja chica.\n\n'
-          + 'Responsable: ' + me + '\nPeríodo: ' + periodo + '\nN° de gastos: ' + gastosSel.length + '\n\n'
-          + 'Detalle:\n' + lineas + '\n\nTOTAL: $' + totalLiq.toLocaleString('es-CL') + '\n\nQuedo a disposición para cualquier consulta.'
+          + 'Responsable: ' + me + '\nPeríodo: ' + periodo + '\nN° de gastos: ' + marcados.length + '\n\n'
+          + 'Detalle:\n' + lineas + '\n\nTOTAL: $' + totalReal.toLocaleString('es-CL') + '\n\nQuedo a disposición para cualquier consulta.'
         )
         const ccStr = (cc||'').trim() ? '&cc=' + encodeURIComponent(cc.trim()) : ''
         const mailLink = document.createElement('a')
@@ -717,7 +733,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         mailLink.click()
         correoOk = true
       }
-      setToast({ n: gastosSel.length, total: totalLiq, correo: correoOk })
+      setToast({ n: marcados.length, total: totalReal, correo: correoOk })
     } catch(e) { alert('Error: '+e.message) }
     setSaving(false)
   }
@@ -9027,8 +9043,9 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
   const [selYear,setSelYear] = useState(String(currentYear))
   const [selMonth,setSelMonth] = useState(String(currentMonth))
   const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const years=[...new Set([...sales.map(s=>s.year),...billing.map(b=>b.issued_at?.slice(0,4)).filter(Boolean)].filter(Boolean))].sort((a,b)=>b-a)
-  if(!years.includes(currentYear)) years.unshift(currentYear)
+  // Años normalizados a string (sales.year es número y billing da string → evita el año duplicado en el dropdown)
+  const years=[...new Set([...sales.map(s=>s.year?String(s.year):null),...billing.map(b=>b.issued_at?.slice(0,4))].filter(Boolean))].sort((a,b)=>Number(b)-Number(a))
+  if(!years.includes(String(currentYear))) years.unshift(String(currentYear))
   const toggle=k=>setSections(p=>({...p,[k]:!p[k]}))
   const getPeriodLabel=()=>period==='year'?`Año ${selYear}`:`${MONTHS[parseInt(selMonth)-1]} ${selYear}`
 
@@ -9114,7 +9131,10 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
       const brutoUF=ss.reduce((a,s)=>a+ventaUF(s,ufRef),0)
       const costoUF=ss.reduce((a,s)=>a+costoVentaUF(s),0)
       const netoUF=brutoUF-costoUF
-      const pct=META_UF>0?Math.min(100,Math.round((netoUF/META_UF)*100)):0
+      // En modo mes la barra compara contra la meta MENSUAL (META_UF/12), no la anual (si no, un mes siempre marca ~8%).
+      const metaRef = period==='year' ? META_UF : META_UF/12
+      const metaTxt = period==='year' ? `meta anual UF ${META_UF.toLocaleString('es-CL')}` : `meta mensual UF ${Math.round(META_UF/12).toLocaleString('es-CL')}`
+      const pct=metaRef>0?Math.min(100,Math.round((netoUF/metaRef)*100)):0
       html+=`<div class="section">
         <div class="section-title">Ventas</div>
         <div class="kpi-grid">
@@ -9124,7 +9144,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
         </div>
         <div style="margin-bottom:16px;padding:10px 14px;background:${A4};border-radius:6px">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-            <span style="font-size:10px;font-weight:600;color:${A}">Avance meta anual UF ${META_UF.toLocaleString('es-CL')}</span>
+            <span style="font-size:10px;font-weight:600;color:${A}">Avance ${metaTxt}</span>
             <span style="font-size:13px;font-weight:700;color:${A}">${pct}%</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
@@ -9172,19 +9192,30 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
       html+=`</div>`
     }
 
-    // ── GASTOS
+    // ── GASTOS (híbrido: movimientos DEL PERÍODO + saldo acumulado a la fecha de fin del período)
     if(sections.gastos){
-      const balances={}
-      expenses.forEach(e=>{ if(!balances[e.client_id])balances[e.client_id]={fondos:0,gastos:0}; e.type==='fondo'?balances[e.client_id].fondos+=(e.amount||0):balances[e.client_id].gastos+=(e.amount||0) })
-      const clientsWithMovs=clients.filter(c=>balances[c.id])
-      html+=`<div class="section page-break">
-        <div class="section-title">Gastos y Fondos</div>
-        <table style="margin-bottom:16px"><thead><tr><th>Cliente</th><th style="text-align:right">Fondos recibidos</th><th style="text-align:right">Gastos realizados</th><th style="text-align:right">Saldo</th></tr></thead><tbody>`
-      clientsWithMovs.forEach(c=>{
-        const b=balances[c.id]
-        const sal=b.fondos-b.gastos
-        html+=`<tr><td>${c.name}</td><td style="text-align:right;color:#1D9E75">${fmtN(b.fondos)}</td><td style="text-align:right;color:#E24B4A">${fmtN(b.gastos)}</td><td style="text-align:right;font-weight:700;color:${sal<0?'#E24B4A':'#1D9E75'}">${fmtN(sal)}</td></tr>`
+      const periodEnd = period==='year' ? `${selYear}-12-31` : `${selYear}-${String(selMonth).padStart(2,'0')}-31`
+      const inPeriod = d => d && (period==='year' ? d.startsWith(selYear) : d.startsWith(`${selYear}-${String(selMonth).padStart(2,'0')}`))
+      const acc={}
+      expenses.forEach(e=>{
+        if(!acc[e.client_id]) acc[e.client_id]={fMes:0,gMes:0,fAcc:0,gAcc:0}
+        const a=acc[e.client_id]
+        if(inPeriod(e.date)){ e.type==='fondo'?a.fMes+=(e.amount||0):a.gMes+=(e.amount||0) }
+        // saldo a la fecha: movimientos con fecha <= fin del período (sin fecha se incluyen, para no perder plata)
+        if(!e.date || e.date<=periodEnd){ e.type==='fondo'?a.fAcc+=(e.amount||0):a.gAcc+=(e.amount||0) }
       })
+      // Solo clientes con movimiento EN el período
+      const filas=clients.filter(c=>acc[c.id]&&(acc[c.id].fMes||acc[c.id].gMes))
+      html+=`<div class="section page-break">
+        <div class="section-title">Gastos y Fondos · ${label}</div>
+        <table style="margin-bottom:16px"><thead><tr><th>Cliente</th><th style="text-align:right">Fondos (período)</th><th style="text-align:right">Gastos (período)</th><th style="text-align:right">Saldo a la fecha</th></tr></thead><tbody>`
+      if(filas.length){
+        filas.forEach(c=>{ const a=acc[c.id]; const sal=a.fAcc-a.gAcc
+          html+=`<tr><td>${c.name}</td><td style="text-align:right;color:#1D9E75">${fmtN(a.fMes)}</td><td style="text-align:right;color:#E24B4A">${fmtN(a.gMes)}</td><td style="text-align:right;font-weight:700;color:${sal<0?'#E24B4A':'#1D9E75'}">${fmtN(sal)}</td></tr>`
+        })
+      } else {
+        html+=`<tr><td colspan="4" style="color:${A3};font-style:italic;text-align:center;padding:16px">Sin movimientos de gastos en este período</td></tr>`
+      }
       html+=`</tbody></table></div>`
     }
 
