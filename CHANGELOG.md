@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Tareas: pill de responsable con color por persona
+- En las tarjetas de tareas, la pill del responsable ahora tiene **color distinto por persona** (Martin verde, Martina morado, Rodrigo ambar, Erasmo azul, Cristobal azul corporativo). Si hay varios responsables, cada uno con su pill.
+
 ## 2026-06-14 — Resultado del año: los 4 indicadores en una grilla ordenada
 - Facturado, Cobrado, Costo oficina y Tasa de cobro quedan en una misma grilla 2x2, en orden logico por columnas: izquierda Facturado entonces Costo (facturado menos costo = neto), derecha Cobrado entonces Tasa. Todos con su color; Facturado/Cobrado/Costo tocables.
 
