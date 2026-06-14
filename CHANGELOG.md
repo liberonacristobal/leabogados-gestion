@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 — Dashboard interactivo (Parte A): Revenue target, Ingreso recurrente, Sin fondos
+- **Revenue target**: nuevo desplegable "Ventas {año}" que lista las ventas que componen el Vendido (cliente · proyecto · monto) y reconcilia con el total.
+- **Ingreso recurrente**: al tocar se despliegan las asesorías permanentes (cliente · proyecto · monto/mes) que suman el ingreso recurrente.
+- **Clientes sin fondos**: se agregó la flecha de "tocar para ver" (el detalle por cliente ya existía pero no se notaba que era desplegable).
+
 ## 2026-06-14 — Tipografía: escala consistente (tamaños huérfanos ajustados)
 - Los 7 tamaños de fuente "huérfanos" (8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 15.5) se ajustaron al rung estándar más cercano (9/10/11/12/13/15), eliminando la deriva de medios puntos. Cambio de 0,5–1 px, sin mover layouts. (Migración de colores literales a la paleta C: descartada por ahora — paleta congelada.)
 
