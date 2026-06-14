@@ -2029,27 +2029,34 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             // y el Costo oficina (terceros) desde la derecha. La leyenda con los montos va color a color debajo.
             const pw = v => m.bruto>0?Math.min(100,Math.max(0,v/m.bruto*100)):0
             const wFac=pw(facturadoSel), wCob=pw(cobradoSel), wCosto=Math.max(tercerosSel>0?1.5:0, pw(tercerosSel))
-            const leg = (col,l,v,k)=>{
+            const pctFV = m.bruto>0?Math.round(facturadoSel/m.bruto*100):0
+            // Alt 1: lista alineada (punto color + label izq · monto der). Facturado y Cobrado tocables; cierra con Neto firma.
+            const Fila = (col,l,v,{sub,k,neg}={})=>{
               const on=funnelKpi===k
-              const inner=<span style={{display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}><span style={{width:8,height:8,borderRadius:2,background:col,display:'inline-block',flexShrink:0}}/><span style={{fontSize:11,color:C.muted}}>{l}</span><b style={{fontSize:12,fontWeight:700,color:col}}>{mS(v)}</b>{k?<span style={{fontSize:8,color:'#99ABB4',transform:on?'rotate(90deg)':'none'}}>▸</span>:null}</span>
+              const inner=(<>
+                <span style={{width:8,height:8,borderRadius:2,background:col,flexShrink:0}}/>
+                <span style={{flex:1,minWidth:0,color:C.muted}}>{l}{sub?<span style={{color:'#99ABB4',fontSize:11}}> · {sub}</span>:null}{k?<span style={{fontSize:8,color:'#99ABB4',marginLeft:4,transform:on?'rotate(90deg)':'none',display:'inline-block'}}>▸</span>:null}</span>
+                <b style={{color:col,fontWeight:700,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{neg?'−':''}{mS(v)}</b>
+              </>)
+              const st={display:'flex',alignItems:'center',gap:8,width:'100%',fontSize:13,textAlign:'left',background:on?'#F5F7F9':'transparent',border:'none',borderRadius:6,padding:'5px 6px',margin:'0 -6px'}
               return k
-                ? <button key={l} onClick={()=>setFunnelKpi(on?null:k)} style={{background:on?'#F5F7F9':'transparent',border:'none',borderRadius:6,padding:'2px 5px',margin:'-2px 0',cursor:'pointer'}}>{inner}</button>
-                : <span key={l} style={{padding:'2px 5px'}}>{inner}</span>
+                ? <button key={l} onClick={()=>setFunnelKpi(on?null:k)} style={{...st,cursor:'pointer'}}>{inner}</button>
+                : <div key={l} style={st}>{inner}</div>
             }
             return (<>
-              <div style={{position:'relative',height:20,background:'#EEF1F3',borderRadius:10,overflow:'hidden'}}>
+              <div style={{position:'relative',height:20,background:'#EEF1F3',borderRadius:10,overflow:'hidden',marginBottom:12}}>
                 <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${wFac}%`,background:C.normal,opacity:.4}}/>
                 <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${wCob}%`,background:C.greenText}}/>
                 {wCosto>0&&<div style={{position:'absolute',right:0,top:0,height:'100%',width:`${wCosto}%`,background:C.overdue}} title='Costo oficina'/>}
               </div>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:9,alignItems:'center'}}>
-                {leg(C.accent,'Vendido',m.bruto)}
-                {leg(C.normal,'Facturado',facturadoSel,'facturado')}
-                {leg(C.greenText,'Cobrado',cobradoSel,'cobrado')}
-                {leg(C.overdue,'Costo of.',tercerosSel)}
+              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                {Fila(C.accent,'Vendido',m.bruto)}
+                {Fila(C.normal,'Facturado',facturadoSel,{sub:`${pctFV}% de lo vendido`,k:'facturado'})}
+                {Fila(C.greenText,'Cobrado',cobradoSel,{sub:`${tasaSel}% del facturado`,k:'cobrado'})}
+                {Fila(C.overdue,'Costo oficina',tercerosSel,{neg:true})}
               </div>
-              <div style={{marginTop:6,fontSize:11,color:C.muted}}>
-                Neto firma <b style={{color:C.accent,fontWeight:700}}>{mS(netoFirma)}</b> · Tasa cobro <b style={{color:tasaCol,fontWeight:700}}>{tasaSel}%</b>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginTop:8,paddingTop:9,borderTop:`1px solid ${C.border}`}}>
+                <span style={{fontSize:12,color:C.muted}}>Neto firma</span><b style={{fontSize:15,fontWeight:700,color:C.accent}}>{mS(netoFirma)}</b>
               </div>
               {funnelKpi&&(()=>{
                 const lists={

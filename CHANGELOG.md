@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: datos en lista alineada bajo la barra
+- Bajo la barra, los datos pasan a una **lista alineada**: punto de color + etiqueta a la izquierda y monto a la derecha (Facturado con % de lo vendido, Cobrado con % del facturado, Costo oficina en rojo). Cierra con Neto firma destacado. Facturado y Cobrado siguen tocables.
+
 ## 2026-06-14 — Resultado del año: una sola barra con los valores marcados
 - Reemplazo a **una sola barra** = Vendido (track); sobre ella se marcan Facturado y Cobrado (desde la izquierda) y Costo oficina (desde la derecha), cada uno en su color. Leyenda con los montos color a color debajo; Facturado y Cobrado tocables. Neto firma · Tasa cobro al pie.
 
