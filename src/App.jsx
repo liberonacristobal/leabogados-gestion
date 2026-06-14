@@ -80,6 +80,22 @@ async function reconcileProgramada(clientId, amount, issuedAt){
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
+// Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
+const chipBtn = (variant='soft') => ({height:30,padding:'0 13px',border:'none',borderRadius:20,fontSize:12,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,
+  ...({soft:{background:'#F5F7F9',color:'#537281'},primary:{background:'#003C50',color:'#fff'},green:{background:'#E1F5EE',color:'#0F6E56'}}[variant]||{})})
+// Buscador de cabecera (mismo lenguaje: fondo suave, sin borde, píldora)
+const chipSearch = {height:36,width:'100%',background:'#F5F7F9',border:'none',borderRadius:20,fontSize:13,padding:'0 14px',color:'#3D3D3D',outline:'none',boxSizing:'border-box'}
+// Botón de Drive: solo el logo, sin recuadro
+const driveBtn = {border:'none',background:'transparent',cursor:'pointer',padding:4,display:'inline-flex',alignItems:'center',justifyContent:'center'}
+// Buscador de cabecera con lupa (píldora tintada)
+function ChipSearch({value,onChange,placeholder='Buscar...',autoFocus,style}){
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:8,height:36,background:'#F5F7F9',borderRadius:20,padding:'0 14px',boxSizing:'border-box',...style}}>
+      <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
+      <input value={value} onChange={onChange} placeholder={placeholder} autoFocus={autoFocus} style={{flex:1,minWidth:0,border:'none',background:'transparent',outline:'none',fontSize:13,color:'#3D3D3D'}}/>
+    </div>
+  )
+}
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth()+1
 const ddItem = { padding:'9px 14px', fontSize:13, color:'#3D3D3D', cursor:'pointer', display:'flex', alignItems:'center', gap:8, borderRadius:6, margin:'0 4px' }
@@ -469,12 +485,12 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F5F7F9',zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
-          <div style={{display:'flex',gap:6}}>
-            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid #003C50`,background:'transparent',color:'#003C50',fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button>
-            <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:'none',background:'#003C50',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={onImportDrive} title='Importar desde Drive' style={driveBtn}><DriveIcon size={20}/></button>
+            <button onClick={onAdd} style={chipBtn('primary')}>+ Cliente</button>
           </div>
         </div>
-        <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',marginBottom:8}}/>
+        <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:8}}/>
         <ClientStatusTabs value={sFilter} onChange={setSFilter} activeN={activeN} endedN={endedN} prospectoN={prospectoN}/>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
@@ -2365,8 +2381,8 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={onAdd} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva venta</button>
-            <button onClick={onAddPropuesta} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Nueva propuesta</button>
+            <button onClick={onAdd} style={chipBtn('soft')}>Nueva venta</button>
+            <button onClick={onAddPropuesta} style={chipBtn('primary')}>Nueva propuesta</button>
           </div>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8,marginTop:10,flexWrap:'wrap'}}>
@@ -4191,10 +4207,10 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
-          <div style={{display:'flex',gap:6}}>
-            {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:descargando?'default':'pointer',opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
-              <button onClick={()=>setImpOpen(o=>!o)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↑ Importar ▾</button>
+              <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
               {impOpen&&<>
                 <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
                 <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
@@ -6147,9 +6163,9 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
             </div>
           </div>
           <div style={{display:'flex',gap:6}}>
-            {!selectedClient&&!showOrphans&&<button onClick={onBulk} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Carga masiva</button>}
-            <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
-            <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Gastos</button>
+            {!selectedClient&&!showOrphans&&<button onClick={onBulk} style={chipBtn('soft')}>+ Carga masiva</button>}
+            <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>
+            <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>
             {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={{padding:'6px 12px',borderRadius:8,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>}
           </div>
         </div>
@@ -6159,7 +6175,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 
         {/* Vista general: búsqueda */}
         {!selectedClient&&!showOrphans&&(
-          <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:4}}/>
+          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:4}}/>
         )}
       </div>
 
@@ -7693,16 +7709,16 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
-          <div style={{display:'flex',gap:6}}>
-            <button onClick={onImportDrive} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button>
-            <button onClick={onAdd} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Cliente</button>
-            <button onClick={()=>onAddTask(null)} style={{padding:'6px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={onImportDrive} title='Importar desde Drive' style={driveBtn}><DriveIcon size={20}/></button>
+            <button onClick={onAdd} style={chipBtn('soft')}>+ Cliente</button>
+            <button onClick={()=>onAddTask(null)} style={chipBtn('primary')}>+ Tarea</button>
           </div>
         </div>
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
-          <Inp value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1,marginBottom:0}}/>
-          <button onClick={()=>setVerProv(true)} style={{flexShrink:0,padding:'0 14px',borderRadius:8,border:`1px solid #99ABB4`,background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Proveedores</button>
+          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1}}/>
+          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:36,color:C.accent}}>Proveedores</button>
         </div>
         {sFilter ? (
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
