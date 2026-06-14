@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 — Rendiciones: saldo único auditable + anular reembolso al anular rendición
+- **Saldo del fondo, una sola fuente**: `rendicionSaldo()` = fondos recibidos − gastos ya rendidos (acotado a la razón social). El modal, el PDF y el correo al cliente muestran ahora **la misma cifra** (antes divergían: el PDF ignoraba rendiciones anteriores y el correo restaba gastos aún no rendidos).
+- **PDF — recuadro "Resumen del fondo"**: ledger auditable al pie (Fondos recibidos − cada rendición anterior − esta rendición = Saldo disponible), para que el cliente entienda de dónde sale el saldo.
+- **Anular rendición anula su reembolso**: al anular una rendición se anula también el cobro de reembolso asociado (queda Anulada, reversible) y se avisa el monto — antes quedaba huérfano y seguía cobrable en cartera.
+
 ## 2026-06-14 — Integridad: guards doble-submit + cuentas por pagar coherentes + deshacer anticipo
 - **Doble envío bloqueado**: Pagar factura y Guardar asignaciones (Drive/PDF) quedan deshabilitados mientras guardan, evitando duplicados por doble toque.
 - **Cuentas por pagar**: las cuentas a proveedores de una factura **anulada** ya no se cuentan como deuda (Dashboard y "Mis Proveedores").
