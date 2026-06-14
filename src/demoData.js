@@ -2,6 +2,10 @@
 // Empresas, RUTs, montos y personas inventados. El modo demo nunca toca la base real.
 
 export const demoData = {
+  annual_targets: [
+    { year:2026, target_amount:800000000, currency:'CLP' },
+    { year:2025, target_amount:600000000, currency:'CLP' },
+  ],
   clients: [
     { id:'c1', name:'Comercial Andes SpA',        rut:'76.111.222-3', status:'Activo',    type:'Empresa', abogado_responsable:'Cristóbal', is_internal:false },
     { id:'c2', name:'Inversiones Ríofrío Ltda',    rut:'77.333.444-5', status:'Activo',    type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
@@ -17,41 +21,49 @@ export const demoData = {
     { id:'e1b', client_id:'c1', name:'Andes Retail SpA',    rut:'76.111.999-1' },
     { id:'e2',  client_id:'c2', name:'Inversiones Ríofrío Ltda', rut:'77.333.444-5' },
   ],
+  // Vendido 2026 ≈ $527M (≈63% de la meta de $800M)
   sales: [
-    { id:'s1',  client_id:'c1', entity_id:'e1', title:'Asesoría corporativa permanente', area:'Corporativo', moneda:'UF',  amount_uf:30,  cost_uf:0,  uf_value:39000, year:2026, month:1, status:'Activo', cobro_type:'mensual',       responsible:'Cristóbal', created_at:'2026-01-05' },
-    { id:'s2',  client_id:'c2', entity_id:'e2', title:'Reorganización societaria',         area:'Corporativo', moneda:'UF',  amount_uf:200, cost_uf:20, uf_value:39000, year:2026, month:2, status:'Activo', cobro_type:'cuotas',        responsible:'Erasmo',    created_at:'2026-02-10' },
-    { id:'s3',  client_id:'c3',               title:'Litigio laboral colectivo',          area:'Litigios',    moneda:'CLP', amount_clp:12000000, cost_clp:0, year:2026, month:3, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2026-03-02' },
-    { id:'s4',  client_id:'c4',               title:'Asesoría legal permanente',          area:'Corporativo', moneda:'CLP', amount_clp:1500000,  cost_clp:0, year:2026, month:1, status:'Activo', cobro_type:'mensual',       responsible:'Erasmo',    created_at:'2026-01-15' },
-    { id:'s5',  client_id:'c5',               title:'Constitución y registro de marcas',  area:'Propiedad Industrial', moneda:'UF', amount_uf:80, cost_uf:8, uf_value:39000, year:2026, month:4, status:'Activo', cobro_type:'cuotas', responsible:'Cristóbal', created_at:'2026-04-08' },
-    { id:'s6',  client_id:'c6',               title:'Contratos con proveedores',          area:'Corporativo', moneda:'CLP', amount_clp:6500000, cost_clp:0, year:2026, month:5, status:'Activo', cobro_type:'unico',         responsible:'Erasmo',    created_at:'2026-05-12' },
-    { id:'s7',  client_id:'c7',               title:'Defensa tributaria SII',             area:'Tributario',  moneda:'UF',  amount_uf:150, cost_uf:30, uf_value:39000, year:2026, month:2, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2026-02-20' },
-    { id:'s8',  client_id:'c2',               title:'Due diligence adquisición',          area:'Corporativo', moneda:'UF',  amount_uf:60,  cost_uf:0,  uf_value:39000, year:2026, month:5, status:'Activo', cobro_type:'unico',         responsible:'Erasmo',    created_at:'2026-05-03' },
-    { id:'s9',  client_id:'c1',               title:'Asesoría corporativa 2025',          area:'Corporativo', moneda:'UF',  amount_uf:120, cost_uf:0,  uf_value:37500, year:2025, month:6, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2025-06-01' },
-    { id:'s10', client_id:'c3',               title:'Litigio civil 2025',                 area:'Litigios',    moneda:'CLP', amount_clp:8000000, cost_clp:0, year:2025, month:9, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2025-09-10' },
+    { id:'s1',  client_id:'c1', entity_id:'e1', title:'Asesoría corporativa permanente', area:'Corporativo', moneda:'UF',  amount_uf:90,   cost_uf:0,   uf_value:39000, year:2026, month:1, status:'Activo', cobro_type:'mensual',       responsible:'Cristóbal', created_at:'2026-01-05' },
+    { id:'s2',  client_id:'c2', entity_id:'e2', title:'Reorganización societaria',         area:'Corporativo', moneda:'UF',  amount_uf:1500, cost_uf:150, uf_value:39000, year:2026, month:2, status:'Activo', cobro_type:'cuotas',        responsible:'Erasmo',    created_at:'2026-02-10' },
+    { id:'s3',  client_id:'c3',               title:'Litigio laboral colectivo',          area:'Litigios',    moneda:'CLP', amount_clp:75000000,  cost_clp:0, year:2026, month:3, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2026-03-02' },
+    { id:'s4',  client_id:'c4',               title:'Asesoría legal permanente',          area:'Corporativo', moneda:'CLP', amount_clp:4000000,   cost_clp:0, year:2026, month:1, status:'Activo', cobro_type:'mensual',       responsible:'Erasmo',    created_at:'2026-01-15' },
+    { id:'s5',  client_id:'c5',               title:'Constitución y registro de marcas',  area:'Propiedad Industrial', moneda:'UF', amount_uf:600,  cost_uf:60, uf_value:39000, year:2026, month:4, status:'Activo', cobro_type:'cuotas', responsible:'Cristóbal', created_at:'2026-04-08' },
+    { id:'s6',  client_id:'c6',               title:'Contratos con proveedores',          area:'Corporativo', moneda:'CLP', amount_clp:40000000, cost_clp:0, year:2026, month:5, status:'Activo', cobro_type:'unico',         responsible:'Erasmo',    created_at:'2026-05-12' },
+    { id:'s7',  client_id:'c7',               title:'Defensa tributaria SII',             area:'Tributario',  moneda:'UF',  amount_uf:2000, cost_uf:300, uf_value:39000, year:2026, month:2, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2026-02-20' },
+    { id:'s8',  client_id:'c2',               title:'Due diligence adquisición',          area:'Corporativo', moneda:'UF',  amount_uf:1200, cost_uf:0,  uf_value:39000, year:2026, month:5, status:'Activo', cobro_type:'unico',         responsible:'Erasmo',    created_at:'2026-05-03' },
+    { id:'s11', client_id:'c5',               title:'Asesoría M&A — venta de activos',     area:'Corporativo', moneda:'UF',  amount_uf:1800, cost_uf:0,  uf_value:39000, year:2026, month:4, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2026-04-20' },
+    { id:'s12', client_id:'c6',               title:'Reestructuración financiera',         area:'Corporativo', moneda:'CLP', amount_clp:45000000, cost_clp:0, year:2026, month:6, status:'Activo', cobro_type:'cuotas',        responsible:'Erasmo',    created_at:'2026-06-02' },
+    // 2025 (para el selector de año)
+    { id:'s9',  client_id:'c1',               title:'Asesoría corporativa 2025',          area:'Corporativo', moneda:'UF',  amount_uf:1200, cost_uf:0,  uf_value:37500, year:2025, month:6, status:'Activo', cobro_type:'cuotas',        responsible:'Cristóbal', created_at:'2025-06-01' },
+    { id:'s10', client_id:'c3',               title:'Litigio civil 2025',                 area:'Litigios',    moneda:'CLP', amount_clp:60000000, cost_clp:0, year:2025, month:9, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2025-09-10' },
   ],
+  // Facturado 2026 ≈ $271M · Cobrado ≈ $143M · Por cobrar ≈ $128M · Programado ≈ $65M
   billing: [
     // Pagadas (cobrado 2026)
-    { id:'b1',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios enero',        amount:1170000,  status:'Pagado',     invoice_no:'1201', issued_at:'2026-01-31', due:'2026-02-15', paid_at:'2026-02-10', billing_type:'honorarios', monto_terceros:0 },
-    { id:'b2',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios febrero',      amount:1170000,  status:'Pagado',     invoice_no:'1230', issued_at:'2026-02-28', due:'2026-03-15', paid_at:'2026-03-12', billing_type:'honorarios', monto_terceros:0 },
-    { id:'b3',  client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 1/3',          amount:1950000,  status:'Pagado',     invoice_no:'1245', issued_at:'2026-03-05', due:'2026-03-25', paid_at:'2026-03-22', billing_type:'honorarios', monto_terceros:600000 },
-    { id:'b4',  client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 1/4', amount:1950000, status:'Pagado',   invoice_no:'1260', issued_at:'2026-03-20', due:'2026-04-10', paid_at:'2026-04-05', billing_type:'honorarios', monto_terceros:0 },
-    { id:'b5',  client_id:'c4', sale_id:'s4', concept:'Asesoría permanente — abril',             amount:1500000,  status:'Pagado',     invoice_no:'1288', issued_at:'2026-04-30', due:'2026-05-15', paid_at:'2026-05-14', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b1',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios enero',        amount:3510000,  status:'Pagado',     invoice_no:'1201', issued_at:'2026-01-31', due:'2026-02-15', paid_at:'2026-02-10', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b2',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios febrero',      amount:3510000,  status:'Pagado',     invoice_no:'1230', issued_at:'2026-02-28', due:'2026-03-15', paid_at:'2026-03-12', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b3',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios marzo',        amount:3510000,  status:'Pagado',     invoice_no:'1255', issued_at:'2026-03-31', due:'2026-04-15', paid_at:'2026-04-11', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b4',  client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 1/3',          amount:26000000, status:'Pagado',     invoice_no:'1245', issued_at:'2026-03-05', due:'2026-03-25', paid_at:'2026-03-22', billing_type:'honorarios', monto_terceros:4000000 },
+    { id:'b5',  client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 1/4', amount:19500000, status:'Pagado',  invoice_no:'1260', issued_at:'2026-03-20', due:'2026-04-10', paid_at:'2026-04-05', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b6',  client_id:'c4', sale_id:'s4', concept:'Asesoría permanente — abril',             amount:4000000,  status:'Pagado',     invoice_no:'1288', issued_at:'2026-04-30', due:'2026-05-15', paid_at:'2026-05-14', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b7',  client_id:'c3', sale_id:'s3', concept:'Litigio laboral — anticipo',             amount:30000000, status:'Pagado',     invoice_no:'1262', issued_at:'2026-03-15', due:'2026-04-05', paid_at:'2026-04-02', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b8',  client_id:'c2', sale_id:'s8', entity_id:'e2', concept:'Due diligence',           amount:23400000, status:'Pagado',     invoice_no:'1295', issued_at:'2026-05-10', due:'2026-05-30', paid_at:'2026-05-27', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b9',  client_id:'c5', sale_id:'s11', concept:'Asesoría M&A — cuota 1/2',               amount:30000000, status:'Pagado',     invoice_no:'1300', issued_at:'2026-05-05', due:'2026-05-25', paid_at:'2026-05-23', billing_type:'honorarios', monto_terceros:0 },
     // Pendientes (por cobrar, al día)
-    { id:'b6',  client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 2/4', amount:1950000, status:'Pendiente', invoice_no:'1305', issued_at:'2026-05-20', due:'2026-06-25', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
-    { id:'b7',  client_id:'c6', sale_id:'s6', concept:'Contratos con proveedores',               amount:6500000,  status:'Pendiente',  invoice_no:'1312', issued_at:'2026-05-28', due:'2026-07-10', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
-    { id:'b8',  client_id:'c5', sale_id:'s5', concept:'Marcas — cuota 1/2',                      amount:1560000,  status:'Pendiente',  invoice_no:'1320', issued_at:'2026-06-02', due:'2026-06-30', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b10', client_id:'c6', sale_id:'s6', concept:'Contratos con proveedores',               amount:40000000, status:'Pendiente',  invoice_no:'1312', issued_at:'2026-05-28', due:'2026-07-10', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b11', client_id:'c5', sale_id:'s5', concept:'Marcas — cuota 1/2',                      amount:23400000, status:'Pendiente',  invoice_no:'1320', issued_at:'2026-06-02', due:'2026-06-30', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b12', client_id:'c4', sale_id:'s4', concept:'Asesoría permanente — mayo',              amount:4000000,  status:'Pendiente',  invoice_no:'1330', issued_at:'2026-05-31', due:'2026-06-20', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     // Vencidas (aging)
-    { id:'b9',  client_id:'c3', sale_id:'s3', concept:'Litigio laboral — anticipo',             amount:4000000,  status:'Vencido',    invoice_no:'1270', issued_at:'2026-04-01', due:'2026-05-05', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
-    { id:'b10', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 2/3',          amount:1950000,  status:'Vencido',    invoice_no:'1248', issued_at:'2026-03-10', due:'2026-03-25', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b13', client_id:'c3', sale_id:'s3', concept:'Litigio laboral — cuota 2',              amount:35000000, status:'Vencido',    invoice_no:'1270', issued_at:'2026-04-01', due:'2026-05-05', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b14', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 2/3',          amount:26000000, status:'Vencido',    invoice_no:'1248', issued_at:'2026-03-10', due:'2026-03-25', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     // Programadas (futuro, cash flow)
-    { id:'b11', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 3/4', amount:1950000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-07-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
-    { id:'b12', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 4/4', amount:1950000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-08-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
-    { id:'b13', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 3/3',          amount:1950000,  status:'Programada', invoice_no:null, issued_at:null, due:'2026-09-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
-    { id:'b14', client_id:'c5', sale_id:'s5', concept:'Marcas — cuota 2/2',                      amount:1560000,  status:'Programada', invoice_no:null, issued_at:null, due:'2026-08-30', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b15', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 3/4', amount:19500000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-07-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b16', client_id:'c2', sale_id:'s2', entity_id:'e2', concept:'Reorganización — cuota 4/4', amount:19500000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-08-15', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'b17', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 3/3',          amount:26000000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-09-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     // Reembolso (excluido de facturado)
-    { id:'b15', client_id:'c1', concept:'Reembolso gastos notariales',                          amount:120000,   status:'Pendiente',  invoice_no:null, issued_at:'2026-06-01', due:'2026-06-20', paid_at:null, billing_type:'reembolso', monto_terceros:0, notes:'Rendición ID demo' },
+    { id:'b18', client_id:'c1', concept:'Reembolso gastos notariales',                          amount:320000,   status:'Pendiente',  invoice_no:null, issued_at:'2026-06-01', due:'2026-06-20', paid_at:null, billing_type:'reembolso', monto_terceros:0, notes:'Rendición ID demo' },
     // 2025 (para el selector de año)
-    { id:'b16', client_id:'c1', sale_id:'s9', concept:'Asesoría 2025 — cuota final',            amount:2300000,  status:'Pagado',     invoice_no:'1120', issued_at:'2025-11-30', due:'2025-12-15', paid_at:'2025-12-12', billing_type:'honorarios', monto_terceros:0 },
+    { id:'b19', client_id:'c1', sale_id:'s9', concept:'Asesoría 2025 — cuota final',            amount:18000000, status:'Pagado',     invoice_no:'1120', issued_at:'2025-11-30', due:'2025-12-15', paid_at:'2025-12-12', billing_type:'honorarios', monto_terceros:0 },
   ],
   expenses: [
     // Fondos de clientes
@@ -89,8 +101,8 @@ export const demoData = {
     { id:'pv2', nombre:'Estudio Contable MJ', razon_social:'MJ Asesorías Ltda.',     rut:'76.500.300-4' },
   ],
   terceros_pagos: [
-    { id:'tp1', billing_id:'b3', proveedor_id:'pv1', proveedor:'Notaría Edwards', monto:600000, estado:'por_pagar', tipo_costo:'Notaría', sale_id:'s7', created_at:'2026-03-22' },
-    { id:'tp2', billing_id:'b6', proveedor_id:'pv2', proveedor:'Estudio Contable MJ', monto:450000, estado:'pendiente', tipo_costo:'Contabilidad', sale_id:'s2', created_at:'2026-05-20' },
+    { id:'tp1', billing_id:'b4',  proveedor_id:'pv1', proveedor:'Notaría Edwards',     monto:4000000, estado:'por_pagar', tipo_costo:'Notaría',      sale_id:'s7', created_at:'2026-03-22' },
+    { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'Estudio Contable MJ', monto:3000000, estado:'pendiente', tipo_costo:'Contabilidad', sale_id:'s6', created_at:'2026-05-28' },
   ],
   anticipos: [],
   rendiciones: [],
