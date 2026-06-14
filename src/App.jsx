@@ -81,7 +81,7 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
-const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:11.5,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
+const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:11.5,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
   ...({
     soft:{background:'#F5F7F9',color:'#537281',border:'0.5px solid #E4E8EB'},
     primary:{background:'#003C50',color:'#fff',border:'none'},
