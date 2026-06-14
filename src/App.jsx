@@ -1811,7 +1811,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
-  const [cobKpi,setCobKpi] = useState(null)   // KPI de cobranza abierto para ver su detalle inline
+  const [funnelKpi,setFunnelKpi] = useState(null)   // paso del funnel (facturado/cobrado/programado) abierto para ver su detalle
   const [cajaExp,setCajaExp] = useState(null)  // persona de caja chica con su detalle desplegado
   const [cpExp,setCpExp] = useState(null)       // cuenta por pagar a proveedor con su origen desplegado
   const [openOficina,setOpenOficina] = useState(false)
@@ -1935,12 +1935,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{height:5,background:'#E4E8EB',overflow:'hidden'}}>
             <div style={{height:'100%',background:C.accent,width:`${Math.min(100,m.pct)}%`,borderRadius:3,transition:'width .5s ease'}}/>
           </div>
-          {/* KPIs */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,padding:'12px 16px'}}>
+          {/* KPIs — Bruto se omite (es idéntico a "Vendido" del encabezado); Neto se rotula "venta" para no confundir con el "Neto firma" del funnel */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,padding:'12px 16px'}}>
             {[
-              ['Bruto',m.bruto,'#3D3D3D','vendido'],
-              ['Costo',m.costo,C.overdue,`${m.bruto>0?Math.round(m.costo/m.bruto*100):0}% del bruto`],
-              ['Neto',m.neto,C.greenText,`margen ${m.bruto>0?Math.round(m.neto/m.bruto*100):0}%`],
+              ['Costo terceros',m.costo,C.overdue,`${m.bruto>0?Math.round(m.costo/m.bruto*100):0}% de la venta`],
+              ['Neto venta',m.neto,C.greenText,`margen ${m.bruto>0?Math.round(m.neto/m.bruto*100):0}%`],
             ].map(([l,v,col,sub])=>(
               <div key={l} style={{background:'#f5f7f9',borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:3}}>{l}</div>
@@ -2010,94 +2009,82 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      {/* KPIs de cobranza: tocar despliega el detalle inline (como Aging) */}
+      {/* Resultado del año: funnel Vendido → Facturado → Cobrado (consolida lo que antes estaba en Cobranza + Facturación) */}
       <div style={{padding:'16px 20px 0'}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Cobranza</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {[['pendiente','Por cobrar',kpiPendiente,C.accent],['vencido','Vencido',kpiVencido,C.overdue],['cobrado','Cobrado '+yr,cobrado,C.normal],['programado','Programado',kpiProgramado,'#537281']].map(([k,l,v,col])=>{
-            const on=cobKpi===k
-            return (
-            <button key={k} onClick={()=>setCobKpi(on?null:k)} style={{textAlign:'left',background:on?'#F5F7F9':C.card,border:`1px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
-                <span style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span>
-                <span style={{fontSize:9,color:'#99ABB4',transform:on?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>▸</span>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Resultado del año {yr}</div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px'}}>
+          {(()=>{
+            const tercerosYr = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
+            const netoFirma = facturado - tercerosYr
+            const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
+            const mS = clp => dashMoneda==='UF'?(ufRef>0?fmtUFk(clp/ufRef):'—'):fmtShort(clp)
+            const steps=[['vendido','Vendido',vendidoBrutoCLP,C.accent,false],['facturado','Facturado',facturado,C.normal,true],['cobrado','Cobrado',cobrado,C.greenText,true]]
+            const lbl={fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}
+            return (<>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 14px 1fr 14px 1fr',alignItems:'center'}}>
+                {steps.map(([k,l,v,col,tap],idx)=>(
+                  <Fragment key={k}>
+                    {idx>0&&<span style={{textAlign:'center',color:'#99ABB4',fontSize:13}}>→</span>}
+                    {tap
+                      ? <button onClick={()=>setFunnelKpi(funnelKpi===k?null:k)} style={{textAlign:'left',background:funnelKpi===k?'#F5F7F9':'transparent',border:'none',borderRadius:8,padding:'4px 6px',cursor:'pointer',minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:3}}><span style={lbl}>{l}</span><span style={{fontSize:8,color:'#99ABB4',transform:funnelKpi===k?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span></div>
+                          <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',marginTop:1}}>{mS(v)}</div>
+                        </button>
+                      : <div style={{padding:'4px 6px',minWidth:0}}>
+                          <div style={lbl}>{l}</div>
+                          <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',marginTop:1}}>{mS(v)}</div>
+                        </div>}
+                  </Fragment>
+                ))}
               </div>
-              <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',marginTop:2}}>{fmtShort(v)}</div>
-            </button>
-          )})}
-        </div>
-        {cobKpi&&(()=>{
-          const lists={
-            pendiente: bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso').sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
-            vencido: bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso').sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
-            cobrado: bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).sort((a,b)=>(b.paid_at||'')<(a.paid_at||'')?-1:1),
-            programado: bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
-          }
-          const titulo={pendiente:'Por cobrar',vencido:'Vencido',cobrado:'Cobrado '+yr,programado:'Programado'}[cobKpi]
-          const col={pendiente:C.accent,vencido:C.overdue,cobrado:C.normal,programado:'#537281'}[cobKpi]
-          const rows=lists[cobKpi]||[]
-          const tot=rows.reduce((a,b)=>a+(b.amount||0),0)
-          return (
-            <div style={{marginTop:8,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
-                <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>{titulo} · {rows.length}</span>
-                <span style={{fontSize:12,fontWeight:700,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
+              <div style={{display:'flex',gap:16,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,flexWrap:'wrap',alignItems:'baseline'}}>
+                <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={lbl}>Tasa cobro</span><span style={{fontSize:13,fontWeight:700,color:tasaCol}}>{tasaCobro}%</span></div>
+                <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={lbl}>Neto firma</span><span style={{fontSize:13,fontWeight:700,color:C.text}}>{mS(netoFirma)}</span></div>
+                <button onClick={()=>setFunnelKpi(funnelKpi==='programado'?null:'programado')} style={{display:'flex',alignItems:'baseline',gap:5,background:'none',border:'none',padding:0,cursor:'pointer'}}><span style={lbl}>Programado</span><span style={{fontSize:13,fontWeight:700,color:'#537281'}}>{mS(kpiProgramado)}</span><span style={{fontSize:8,color:'#99ABB4',transform:funnelKpi==='programado'?'rotate(90deg)':'none'}}>▸</span></button>
               </div>
-              {rows.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'14px'}}>Sin facturas.</div>}
-              <div style={{maxHeight:300,overflowY:'auto'}}>
-                {rows.map(b=>{
-                  const cn=clientesMap[b.client_id]||b.receptor_name||'—'
-                  const meta=cobKpi==='cobrado'?(b.paid_at?'Pagada '+fmtFechaDMY(b.paid_at):'Pagada'):(()=>{ const dl=daysLeft(b.due); return dl===null?'':dl<0?`${Math.abs(dl)}d vencida`:dl===0?'vence hoy':`vence en ${dl}d` })()
-                  return (
-                    <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'8px 14px',borderBottom:`1px solid ${C.border}`}}>
-                      <div style={{minWidth:0}}>
-                        <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div>
-                        <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}{meta?` · ${meta}`:''}</div>
-                      </div>
-                      <span style={{fontSize:12,fontWeight:600,color:col,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</span>
+              {funnelKpi&&(()=>{
+                const lists={
+                  facturado: bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(String(yr))).sort((a,b)=>(b.issued_at||'')<(a.issued_at||'')?-1:1),
+                  cobrado: bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).sort((a,b)=>(b.paid_at||'')<(a.paid_at||'')?-1:1),
+                  programado: bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
+                }
+                const titulo={facturado:'Facturado',cobrado:'Cobrado',programado:'Programado'}[funnelKpi]
+                const col={facturado:C.normal,cobrado:C.greenText,programado:'#537281'}[funnelKpi]
+                const rows=lists[funnelKpi]||[]
+                const tot=rows.reduce((a,b)=>a+(b.amount||0),0)
+                return (
+                  <div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 12px',borderBottom:`1px solid ${C.border}`}}>
+                      <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>{titulo} · {rows.length}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
                     </div>
-                  )
-                })}
-              </div>
-              <button onClick={()=>setTab('billing')} style={{width:'100%',padding:'9px',border:'none',borderTop:`1px solid ${C.border}`,background:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Ver en Facturación →</button>
-            </div>
-          )
-        })()}
+                    {rows.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'14px'}}>Sin facturas.</div>}
+                    <div style={{maxHeight:300,overflowY:'auto'}}>
+                      {rows.map(b=>{
+                        const cn=clientesMap[b.client_id]||b.receptor_name||'—'
+                        const meta=funnelKpi==='cobrado'?(b.paid_at?'Pagada '+fmtFechaDMY(b.paid_at):'Pagada'):funnelKpi==='facturado'?(b.issued_at?'Emitida '+fmtFechaDMY(b.issued_at):''):(()=>{const dl=daysLeft(b.due);return dl===null?'':dl<0?`${Math.abs(dl)}d vencida`:`vence en ${dl}d`})()
+                        return (
+                          <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'8px 12px',borderBottom:`1px solid ${C.border}`}}>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div>
+                              <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}{meta?` · ${meta}`:''}</div>
+                            </div>
+                            <span style={{fontSize:12,fontWeight:600,color:col,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+            </>)
+          })()}
+        </div>
       </div>
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
       <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients}/>
 
-      {/* Facturación */}
-      <div style={{padding:'16px 20px 16px'}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Facturación {yr}</div>
-        <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-        {(()=>{
-          const terceros = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
-          const netoFirma = facturado - terceros
-          const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
-          const m = clp => dashMoneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
-          const cell = acc => ({background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${acc}`,borderRadius:10,padding:'10px 12px',minWidth:0})
-          const clbl = {fontSize:9,color:'#99ABB4',marginBottom:4,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
-          const cnum = {fontSize:17,fontWeight:600,whiteSpace:'nowrap'}
-          return (
-            <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:terceros>0?8:0}}>
-                <div style={cell(C.normal)} title={fmt(facturado)}><div style={clbl}>Facturado</div><div style={{...cnum,color:C.normal}}>{m(facturado)}</div></div>
-                <div style={cell(C.normal)} title={fmt(cobrado)}><div style={clbl}>Cobrado</div><div style={{...cnum,color:C.normal}}>{m(cobrado)}</div></div>
-                <div style={cell(tasaCol)}><div style={clbl}>Tasa cobro</div><div style={{...cnum,color:tasaCol}}>{tasaCobro}%</div></div>
-              </div>
-              {terceros>0&&(
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <div style={cell(C.accent)} title={fmt(netoFirma)}><div style={clbl}>Neto firma</div><div style={{...cnum,color:C.accent}}>{m(netoFirma)}</div></div>
-                  <div style={cell('#C77F18')} title={fmt(terceros)}><div style={clbl}>Proveedores</div><div style={{...cnum,color:'#C77F18'}}>{m(terceros)}</div></div>
-                </div>
-              )}
-            </>
-          )
-        })()}
-        </div>
-      </div>
 
       {/* Aging de cartera */}
       <div style={{padding:'0 20px'}}>
