@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-14 — Pulido menor: signo de saldo, fechas de correo, restaurar y limpieza
+- **Signo −**: el saldo del modal de rendición (Saldo actual y Saldo tras rendición) muestra el signo negativo cuando corresponde.
+- **Correo de liquidación**: las fechas del detalle van en formato `14-06-2026` (antes ISO crudo).
+- **Restaurar gasto**: si su rendición ya no existe, vuelve como PENDIENTE en vez de quedar con un vínculo muerto que lo mostraba "rendido"; cubre rendición de cliente y de caja chica.
+- **Limpieza**: eliminado el código muerto `handleTogglePagado`.
+
 ## 2026-06-14 — Cifras: liquidación caja chica + reporte coherentes con el período
 - **Liquidación parcial sin descuadre**: si al liquidar caja chica algún gasto no se marca, la rendición se ajusta al total y N° de gastos REALMENTE marcados (antes quedaba con el total inflado); si no se marca ninguno, se cancela.
 - **Período de la liquidación = mes de los gastos**, no el mes de hoy (igual criterio que la rendición al cliente; muestra rango si cruza meses).
