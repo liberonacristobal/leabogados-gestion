@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14 — Dashboard interactivo (Parte B): caja chica y cuentas por pagar
+- **Gestión caja chica**: las tarjetas por persona ahora son tocables; despliegan la lista de gastos sin liquidar (fecha · concepto · cliente · monto) con acceso directo a liquidar.
+- **Cuentas por pagar a proveedores**: cada cuenta se puede tocar para ver su origen (venta · cliente · monto) y una explicación clara del estado — incluido qué significa \"espera cobro\".
+
 ## 2026-06-14 — Dashboard: Cobranza con detalle inline + años con ventas
 - **Cobranza**: tocar Por cobrar / Vencido / Cobrado / Programado ya no manda a otra pestaña; despliega inline las facturas que componen el número (cliente · concepto · monto · días/fecha) con total y acceso a Facturación.
 - **Años anteriores (Revenue target)**: la lista ahora incluye cualquier año con ventas registradas, no solo los que tienen meta cargada.
