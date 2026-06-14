@@ -1484,16 +1484,17 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         </div>
       </div>
       {showList&&(<>
-      <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
       {personas.map((persona,pi)=>{
         const [avBg,avColor]=avatarColor(persona)
         const isOpen=!!openPersonas[persona]
         const lista=porPersona[persona]
         const vencidas=lista.filter(t=>{const d=daysLeft(t.due); return d!==null&&d<0}).length
         const prontas=lista.filter(t=>{const d=daysLeft(t.due); return d!==null&&d>=0&&d<=7}).length
+        const accent = vencidas>0?C.overdue:prontas>0?C.soon:C.normal   // color de la tarjeta según urgencia
         return (
-          <div key={persona}>
-            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:pi===0?'none':`1px solid #E4E8EB`,cursor:'pointer',userSelect:'none',background:isOpen?'#F5F7F9':'transparent'}}>
+          <div key={persona} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${accent}`,borderRadius:12,overflow:'hidden'}}>
+            <div onClick={()=>togglePersona(persona)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer',userSelect:'none',background:isOpen?'#F5F7F9':'transparent'}}>
               <div style={{width:28,height:28,borderRadius:'50%',background:avBg,color:avColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>{persona[0]}</div>
               <span style={{fontSize:13.5,fontWeight:600,color:C.text,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{persona}</span>
               {vencidas>0&&<span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:9,background:'#FCEBEB',color:'#E24B4A',flexShrink:0}}>{vencidas} vencida{vencidas!==1?'s':''}</span>}
@@ -1539,7 +1540,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
         termTasks.forEach(t=>{ const ws=taskAssignees(t); (ws.length?ws:['Sin asignar']).forEach(w=>{ (porPersonaTerm[w]=porPersonaTerm[w]||[]).push(t) }) })
         const personasTerm = Object.keys(porPersonaTerm).sort()
         return (
-          <div style={{borderTop:`1px solid ${C.border}`}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <div onClick={()=>setOpenTerminadas(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',userSelect:'none'}}>
               <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',flex:1}}>Terminadas · {termTasks.length}</span>
               <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:openTerminadas?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:openTerminadas?-2:2,flexShrink:0}}></span>
