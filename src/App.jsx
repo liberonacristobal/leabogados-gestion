@@ -2048,13 +2048,22 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Vendido</span>
                 <b style={{fontSize:20,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{mS(m.bruto)}</b>
               </div>
-              <div style={{position:'relative',height:13,background:'#EEF1F3',borderRadius:7,overflow:'hidden',marginBottom:10}}>
+              {(()=>{
+                // Globito: aparece sobre la barra mostrando el tramo tocado (monto + %)
+                const tip = funnelKpi==='facturado' ? {pos:Math.min(86,Math.max(14,wFac/2)),txt:`Facturado ${mS(facturadoSel)} · ${pctFV}%`}
+                  : funnelKpi==='cobrado' ? {pos:Math.min(86,Math.max(14,wCob/2)),txt:`Cobrado ${mS(cobradoSel)} · ${tasaSel}%`}
+                  : funnelKpi==='costo' ? {pos:Math.min(92,Math.max(20,100-wCosto/2)),txt:`Costo oficina ${mS(tercerosSel)}`}
+                  : null
+                return (
+              <div style={{position:'relative',marginBottom:10}}>
+                {tip&&<div style={{position:'absolute',bottom:'calc(100% + 5px)',left:`${tip.pos}%`,transform:'translateX(-50%)',background:C.accent,color:'#fff',fontSize:10,fontWeight:600,padding:'3px 8px',borderRadius:5,whiteSpace:'nowrap',pointerEvents:'none',zIndex:5,boxShadow:'0 2px 6px rgba(0,0,0,.18)'}}>{tip.txt}</div>}
+              <div style={{position:'relative',height:13,background:'#EEF1F3',borderRadius:7,overflow:'hidden'}}>
                 <button title='Facturado' onClick={()=>setFunnelKpi(funnelKpi==='facturado'?null:'facturado')} style={{...segBtn('facturado'),left:0,width:`${wFac}%`,background:C.normal,opacity:.4}}/>
                 <button title='Cobrado' onClick={()=>setFunnelKpi(funnelKpi==='cobrado'?null:'cobrado')} style={{...segBtn('cobrado'),left:0,width:`${wCob}%`,background:C.greenText}}/>
                 <div style={{position:'absolute',top:0,height:'100%',left:`${wCob}%`,width:1.5,background:'#fff'}}/>
                 <div style={{position:'absolute',top:0,height:'100%',left:`${wFac}%`,width:1.5,background:'#fff'}}/>
                 {wCosto>0&&<button title='Costo oficina' onClick={()=>setFunnelKpi(funnelKpi==='costo'?null:'costo')} style={{...segBtn('costo'),right:0,width:`${wCosto}%`,background:C.overdue}}/>}
-              </div>
+              </div></div>) })()}
               <div style={{display:'flex',flexDirection:'column',gap:2}}>
                 {Fila(C.normal,'Facturado',facturadoSel,{sub:`${pctFV}% de lo vendido`,k:'facturado'})}
                 {Fila(C.greenText,'Cobrado',cobradoSel,{sub:`${tasaSel}% del facturado`,k:'cobrado'})}
