@@ -23,6 +23,8 @@ const C = {
   greenText:'#0F6E56',
   // track "off" de los switches (gris-azul suave, deliberadamente más claro que 'done')
   toggleOff:'#CBD5DB',
+  // tints canónicos de estado (consolidados): fondo + texto para ámbar/rojo/verde
+  soonBg:'#FFF8E1', soonText:'#854F0B', overdueBg:'#FCEBEB', overdueText:'#A32D2D', greenBg:'#E1F5EE',
 }
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}` : '—'
@@ -384,8 +386,8 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Gastos y Fondos</div>
               <div style={{display:'flex',gap:6}}>
-                <button onClick={()=>onAddFondo(cl)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid #E4E8EB',background:'#fff',color:'#1D9E75',fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
-                <button onClick={()=>onAddGasto(cl)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Gasto</button>
+                <button onClick={()=>onAddFondo(cl)} style={chipBtn('green')}>+ Fondo</button>
+                <button onClick={()=>onAddGasto(cl)} style={chipBtn('soft')}>+ Gasto</button>
               </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
@@ -464,7 +466,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
           <div style={{marginBottom:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Tareas</div>
-              <button onClick={()=>onAddTask(cl)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid #537281',background:'transparent',color:'#537281',fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+              <button onClick={()=>onAddTask(cl)} style={chipBtn('soft')}>+ Tarea</button>
             </div>
             {clientTasks.length===0&&<div style={{fontSize:12,color:'#537281'}}>Sin tareas activas</div>}
             {clientTasks.map(t=>(
@@ -1129,7 +1131,7 @@ function TasksByPerson({tasks,clients}) {
                 {mine.map(t=>{
                   const client=clients.find(c=>c.id===t.client_id)
                   const u=urgency(t.due,t.status)
-                  const rowColor = u==='overdue'?'#FCEBEB':u==='urgent'?'#FFF8EC':u==='soon'?'#FFFBF0':'#fff'
+                  const rowColor = u==='overdue'?'#FCEBEB':u==='urgent'?'#FFF8E1':u==='soon'?'#FFFBF0':'#fff'
                   return (
                     <div key={t.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,background:rowColor,display:'flex',gap:10,alignItems:'flex-start'}}>
                       <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
@@ -2476,8 +2478,8 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
                   {clpA>0&&<div style={{fontSize:11,color:C.muted}}>{fmt(clpA)}</div>}
                   {isPropuesta&&(
                     <div style={{display:'flex',gap:4,justifyContent:'flex-end',marginTop:4}} onClick={e=>e.stopPropagation()}>
-                      <span onClick={()=>onRechazar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FDEAEA',color:C.overdue,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Rechazar</span>
-                      <span onClick={()=>onActivar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#DCF5EC',color:C.greenText,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
+                      <span onClick={()=>onRechazar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FCEBEB',color:C.overdue,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Rechazar</span>
+                      <span onClick={()=>onActivar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.greenText,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
                     </div>
                   )}
                 </div>
@@ -3915,7 +3917,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
               </div>
             : <>
                 {result.actualizadas?.length>0&&<>
-                  <Hdr label='Conciliadas' color={C.greenText} bg='#EFFAF5'/>
+                  <Hdr label='Conciliadas' color={C.greenText} bg='#E1F5EE'/>
                   {result.actualizadas.map((it,i)=><Fila key={i}><div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:500,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente}</div><div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>F° {it.folio}</div></div><span style={{fontSize:13,fontWeight:500,color:'#3D3D3D',marginLeft:'auto',marginRight:8,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span><CheckVerde/></Fila>)}
                 </>}
                 {result.corregirFolio?.length>0&&<>
@@ -5882,7 +5884,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       <div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:18}}>
         {resultado.sinCliente>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinCliente}</b> sin cliente</span>}
         {resultado.sinFecha>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinFecha}</b> sin fecha</span>}
-        {resultado.dupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FBF1DF',borderRadius:20,padding:'4px 11px'}}><b>{resultado.dupOmit}</b> duplicados omitidos</span>}
+        {resultado.dupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.dupOmit}</b> duplicados omitidos</span>}
       </div>
       {resultado.sinCliente>0&&<div style={{fontSize:11.5,color:C.muted,marginBottom:14,lineHeight:1.45}}>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</div>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
@@ -7486,7 +7488,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
               {client.type}
               {client.status==='Terminado'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#F5F7F9',color:C.muted,fontWeight:600}}>Terminado</span>}
-              {client.status==='Prospecto'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#FFF4E0',color:'#C77F18',fontWeight:600}}>Prospecto</span>}
+              {client.status==='Prospecto'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#FFF8E1',color:'#C77F18',fontWeight:600}}>Prospecto</span>}
             </div>
           </div>
           <button onClick={()=>onEdit(client)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
@@ -7601,8 +7603,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text}}>Gastos y Fondos</div>
             <div style={{display:'flex',gap:6}}>
-              <button onClick={()=>onAddFondo(client)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.normal,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Fondo</button>
-              <button onClick={()=>onAddGasto(client)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Gasto</button>
+              <button onClick={()=>onAddFondo(client)} style={chipBtn('green')}>+ Fondo</button>
+              <button onClick={()=>onAddGasto(client)} style={chipBtn('soft')}>+ Gasto</button>
             </div>
           </div>
           {clientExpenses.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin movimientos</div>}
@@ -7637,7 +7639,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           })}
           {clientExpenses.length>5&&<div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'8px 0'}}>+{clientExpenses.length-5} más en Gastos y Fondos</div>}
           {clientExpenses.length>0&&(
-            <button onClick={()=>onRendicion(client)} style={{marginTop:8,width:'100%',padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir fondos</button>
+            <button onClick={()=>onRendicion(client)} style={{...chipBtn('greenSolid'),width:'100%',height:34,marginTop:8}}>↓ Rendir fondos</button>
           )}
           {(()=>{
             const rends=(rendiciones||[]).filter(r=>r.client_id===client.id&&r.tipo==='cliente').sort((a,b)=>b.created_at>a.created_at?1:-1)
@@ -7670,7 +7672,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         <div style={{marginBottom:20}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text}}>Proyectos y Tareas</div>
-            <button onClick={onAddTask} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Tarea</button>
+            <button onClick={onAddTask} style={chipBtn('soft')}>+ Tarea</button>
           </div>
           {clientTasks.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin tareas activas</div>}
 
@@ -9556,7 +9558,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const CAT_BG = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
           const GREEN={num:'#1D9E75',bg:'#E1F5EE',bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:'#C77F18',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C77F18'}
-          const RED={num:'#E24B4A',bg:'#FDF1F1',bd:'#F2D5D5',label:C.muted}
+          const RED={num:'#E24B4A',bg:'#FCEBEB',bd:'#F2D5D5',label:C.muted}
           const saldoSch = saldo<0 ? RED : saldo<=50000 ? ORANGE : GREEN
           const sinLiqNoNotaria = porLiquidar.filter(e=>e.category!=='Notaria').length
           const liqSch = sinLiqNoNotaria>10 ? RED : ORANGE
