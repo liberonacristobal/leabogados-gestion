@@ -2025,31 +2025,30 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             const tasaSel = facturadoSel>0?Math.min(100,Math.round(cobradoSel/facturadoSel*100)):0
             const tasaCol = tasaSel>=80?C.normal:tasaSel>=50?C.soon:C.overdue
             const mS = clp => dashMoneda==='UF'?(ufRef>0?fmtUFk(clp/ufRef):'—'):fmtShort(clp)
-            const lbl0={fontSize:8,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}
-            // Las 3 etapas resumidas en UNA fila: cada celda con su monto + mini-barra (% de lo vendido). Costo oficina (terceros) marcado.
-            const wPct = v => m.bruto>0?Math.min(100,Math.max(2,Math.round(v/m.bruto*100))):0
-            const celdas=[
-              {k:'vendido',  l:'Vendido',   v:m.bruto,      col:C.accent,    tap:false},
-              {k:'facturado',l:'Facturado', v:facturadoSel, col:C.normal,    tap:true},
-              {k:'cobrado',  l:'Cobrado',   v:cobradoSel,   col:C.greenText, tap:true},
-              {k:'costo',    l:'Costo of.', v:tercerosSel,  col:C.overdue,   tap:false},
-            ]
-            const Celda = (s) => {
-              const on=funnelKpi===s.k
-              const inner=(<>
-                <div style={{display:'flex',alignItems:'center',gap:2}}><span style={lbl0}>{s.l}</span>{s.tap?<span style={{fontSize:8,color:'#99ABB4',transform:on?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>:null}</div>
-                <div style={{fontSize:15,fontWeight:700,color:s.col,whiteSpace:'nowrap',marginTop:1}}>{mS(s.v)}</div>
-                <div style={{height:4,background:'#EEF1F3',borderRadius:2,marginTop:4,overflow:'hidden'}}><div style={{height:'100%',width:`${wPct(s.v)}%`,background:s.col,borderRadius:2,transition:'width .5s ease'}}/></div>
-              </>)
-              return s.tap
-                ? <button key={s.k} onClick={()=>setFunnelKpi(on?null:s.k)} style={{textAlign:'left',background:on?'#F5F7F9':'transparent',border:'none',borderRadius:6,padding:'3px 5px',margin:'-3px -5px',cursor:'pointer',minWidth:0}}>{inner}</button>
-                : <div key={s.k} style={{minWidth:0}}>{inner}</div>
+            // UNA sola barra = Vendido (track). Sobre ella se marcan, cada uno en su color: Facturado y Cobrado (desde la izquierda)
+            // y el Costo oficina (terceros) desde la derecha. La leyenda con los montos va color a color debajo.
+            const pw = v => m.bruto>0?Math.min(100,Math.max(0,v/m.bruto*100)):0
+            const wFac=pw(facturadoSel), wCob=pw(cobradoSel), wCosto=Math.max(tercerosSel>0?1.5:0, pw(tercerosSel))
+            const leg = (col,l,v,k)=>{
+              const on=funnelKpi===k
+              const inner=<span style={{display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}><span style={{width:8,height:8,borderRadius:2,background:col,display:'inline-block',flexShrink:0}}/><span style={{fontSize:11,color:C.muted}}>{l}</span><b style={{fontSize:12,fontWeight:700,color:col}}>{mS(v)}</b>{k?<span style={{fontSize:8,color:'#99ABB4',transform:on?'rotate(90deg)':'none'}}>▸</span>:null}</span>
+              return k
+                ? <button key={l} onClick={()=>setFunnelKpi(on?null:k)} style={{background:on?'#F5F7F9':'transparent',border:'none',borderRadius:6,padding:'2px 5px',margin:'-2px 0',cursor:'pointer'}}>{inner}</button>
+                : <span key={l} style={{padding:'2px 5px'}}>{inner}</span>
             }
             return (<>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,alignItems:'start'}}>
-                {celdas.map(Celda)}
+              <div style={{position:'relative',height:20,background:'#EEF1F3',borderRadius:10,overflow:'hidden'}}>
+                <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${wFac}%`,background:C.normal,opacity:.4}}/>
+                <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${wCob}%`,background:C.greenText}}/>
+                {wCosto>0&&<div style={{position:'absolute',right:0,top:0,height:'100%',width:`${wCosto}%`,background:C.overdue}} title='Costo oficina'/>}
               </div>
-              <div style={{marginTop:9,paddingTop:8,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:9,alignItems:'center'}}>
+                {leg(C.accent,'Vendido',m.bruto)}
+                {leg(C.normal,'Facturado',facturadoSel,'facturado')}
+                {leg(C.greenText,'Cobrado',cobradoSel,'cobrado')}
+                {leg(C.overdue,'Costo of.',tercerosSel)}
+              </div>
+              <div style={{marginTop:6,fontSize:11,color:C.muted}}>
                 Neto firma <b style={{color:C.accent,fontWeight:700}}>{mS(netoFirma)}</b> · Tasa cobro <b style={{color:tasaCol,fontWeight:700}}>{tasaSel}%</b>
               </div>
               {funnelKpi&&(()=>{

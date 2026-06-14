@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: una sola barra con los valores marcados
+- Reemplazo a **una sola barra** = Vendido (track); sobre ella se marcan Facturado y Cobrado (desde la izquierda) y Costo oficina (desde la derecha), cada uno en su color. Leyenda con los montos color a color debajo; Facturado y Cobrado tocables. Neto firma · Tasa cobro al pie.
+
 ## 2026-06-14 — Resultado del año: las 4 etapas resumidas en una fila
 - Las etapas (Vendido · Facturado · Cobrado · Costo oficina) ahora van en **una sola fila**, cada una con su monto y mini-barra (% de lo vendido). Costo oficina = terceros, en rojo. Debajo, en línea: Neto firma · Tasa cobro.
 
