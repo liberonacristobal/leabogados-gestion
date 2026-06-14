@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: costo dentro del Facturado (ubicación lógica)
+- El **Costo oficina** ya no se marca al extremo derecho de la barra (zona de lo no facturado), sino **dentro del Facturado, en su borde derecho** — porque el costo (terceros) sale de lo facturado, no de lo vendido aún sin facturar. Lo verde de Facturado = Neto firma. Globito aclara "de lo facturado".
+
 ## 2026-06-14 — Resultado del año: globito al tocar un tramo de la barra
 - Al tocar Facturado / Cobrado / Costo oficina en la barra aparece un **globito** sobre el tramo con su monto y % (Facturado % de lo vendido, Cobrado % del facturado).
 
