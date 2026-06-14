@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14 — Tareas fuera del Dashboard + acceso desde el encabezado
+- Se quitó la lista de tareas del Dashboard (lo descongestiona).
+- Nuevo botón **"Tareas" (ícono ojo)** en el encabezado de Inicio (admin) que abre la vista de tareas por persona — la misma que ven los usuarios limited.
+
 ## 2026-06-14 — Dashboard: espacio Cash flow/Aging + título de Aging afuera
 - Se separó la tarjeta de Aging de la de Cash flow (faltaba el espacio superior, quedaban pegadas).
 - El título "Aging de cartera" salió de la tarjeta (va arriba como las demás secciones); dentro queda el total con el subtítulo "Por cobrar".

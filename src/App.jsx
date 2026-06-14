@@ -2244,11 +2244,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       )}
 
-      {tasks?.filter(t=>t.status==='Activo'||t.status==='Terminado').length>0&&(
-        <div style={{padding:'16px 20px 0'}}>
-          <DashboardTasks tasks={tasks} clients={clients} onEdit={onEditTask} onComplete={onCompleteTask} onPreview={onPreviewTask} user={user}/>
-        </div>
-      )}
 
 
 
@@ -11241,6 +11236,12 @@ export default function App() {
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
               <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+                {userRole==='admin'&&tab==='dashboard'&&(
+                  <button onClick={()=>setTab('tasks')} title='Ver tareas del equipo' style={{display:'flex',alignItems:'center',gap:5,height:32,padding:'0 11px',borderRadius:8,background:'#fff',border:`0.5px solid ${C.border}`,color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+                    <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
+                    Tareas
+                  </button>
+                )}
                 <span className='fecha-full' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaFull}</span>
                 <span className='fecha-short' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaShort}</span>
                 <div style={{width:1,height:18,background:C.border,flexShrink:0}}/>
