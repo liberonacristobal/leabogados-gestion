@@ -2039,51 +2039,63 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       {negatives.length>0&&(
         <div style={{padding:'16px 20px 0'}}>
           <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Clientes sin fondos</div>
-          <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-            {/* Header */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'12px 14px',borderBottom:`1px solid ${C.border}`}}>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:20,fontWeight:600,color:C.overdue,lineHeight:1.1}}>{fmt(totalNeg)}</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{negatives.length} cliente{negatives.length!==1?'s':''} con saldo negativo</div>
-              </div>
-              <span style={{fontSize:10,fontWeight:600,padding:'3px 9px',borderRadius:10,background:'#FCEBEB',color:C.overdue,whiteSpace:'nowrap',flexShrink:0}}>Requieren fondos</span>
-            </div>
-            {/* Filas */}
-            {negatives.map(c=>{
-              const d = datosCliente(c)
-              const abierto = expSinFondos===c.id
-              const prop = Math.min(100, Math.abs(d.saldo)/maxDeficit*100)
+          <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.overdue}`,overflow:'hidden'}}>
+            {(()=>{
+              // Lista ordenada por gravedad (mayor déficit primero); el punto se tiñe según qué tan grave es vs el peor.
+              const negSorted = negatives.map(c=>({c,d:datosCliente(c)})).sort((a,b)=>Math.abs(b.d.saldo)-Math.abs(a.d.saldo))
+              const sevColor = r => r>=0.66?'#A32D2D':r>=0.33?C.overdue:r>=0.10?'#F09595':'#F7C1C1'
               return (
-              <div key={c.id} style={{borderBottom:`1px solid ${C.border}`}}>
-                <button onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'9px 14px',background:abierto?'#F5F7F9':'none',border:'none',cursor:'pointer',textAlign:'left'}}>
-                  <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(d.saldo)}</div>
-                  <Chev open={abierto}/>
-                </button>
-                {abierto&&(
-                  <div style={{padding:'2px 14px 14px'}}>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:12}}>
-                      {[['Fondos',fmt(d.fondos),C.normal],['Gastos',fmt(d.gastos),C.text],['Saldo',fmt(d.saldo),C.overdue],['RS',String(d.rs.length||'—'),C.muted]].map(([l,v,col])=>(
-                        <div key={l} style={{background:'#f5f7f9',borderRadius:8,padding:'7px 8px'}}>
-                          <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:2}}>{l}</div>
-                          <div style={{fontSize:13,fontWeight:600,color:col}}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:5}}>Últimos movimientos</div>
-                    {d.movs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin movimientos</div>}
-                    {d.movs.map(mv=>(
-                      <div key={mv.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid #E4E8EB`,fontSize:12}}>
-                        <span style={{color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{mv.date?fmtFechaDMY(mv.date):'—'}</span>
-                        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{mv.concept||(mv.type==='fondo'?'Fondo':'Gasto')}</span>
-                        <span style={{fontWeight:600,color:mv.type==='fondo'?C.normal:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{mv.type==='fondo'?'+':'−'}{fmt(mv.amount).replace('-','')}</span>
+              <div style={{display:'flex',gap:14,padding:'14px 15px',alignItems:'stretch'}}>
+                {/* Izquierda: total + cantidad que requiere fondos */}
+                <div style={{flex:'0 0 40%',minWidth:0,display:'flex',flexDirection:'column',justifyContent:'center'}}>
+                  <div style={{fontSize:23,fontWeight:600,color:C.overdue,lineHeight:1.05,whiteSpace:'nowrap'}}>{fmt(totalNeg)}</div>
+                  <span style={{fontSize:10,fontWeight:600,padding:'3px 9px',borderRadius:20,background:'#FCEBEB',color:'#A32D2D',whiteSpace:'nowrap',width:'max-content',marginTop:9}}>{negatives.length} requiere{negatives.length!==1?'n':''} fondos</span>
+                </div>
+                {/* Derecha: lista con punto de gravedad, clickeable para ver detalle */}
+                <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:14,display:'flex',flexDirection:'column',justifyContent:'center',gap:1}}>
+                  {negSorted.map(({c,d})=>{
+                    const abierto = expSinFondos===c.id
+                    const col = sevColor(maxDeficit>0?Math.abs(d.saldo)/maxDeficit:0)
+                    return (
+                      <button key={c.id} onClick={()=>setExpSinFondos(abierto?null:c.id)} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'6px 7px',background:abierto?'#F5F7F9':'none',border:'none',borderRadius:7,cursor:'pointer',textAlign:'left'}}>
+                        <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
+                        <span style={{flex:1,minWidth:0,fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                        <span style={{fontSize:12.5,fontWeight:500,color:C.overdue,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(d.saldo)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              )
+            })()}
+            {/* Detalle del cliente seleccionado, ancho completo bajo el split */}
+            {expSinFondos&&(()=>{
+              const c = negatives.find(x=>x.id===expSinFondos); if(!c) return null
+              const d = datosCliente(c)
+              return (
+                <div style={{borderTop:`1px solid ${C.border}`,padding:'12px 15px 14px'}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:8}}>{c.name}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:12}}>
+                    {[['Fondos',fmt(d.fondos),C.normal],['Gastos',fmt(d.gastos),C.text],['Saldo',fmt(d.saldo),C.overdue],['RS',String(d.rs.length||'—'),C.muted]].map(([l,v,col])=>(
+                      <div key={l} style={{background:'#f5f7f9',borderRadius:8,padding:'7px 8px'}}>
+                        <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:2}}>{l}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:col}}>{v}</div>
                       </div>
                     ))}
-                    <button onClick={()=>setTab('expenses')} style={{marginTop:12,width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Rendir</button>
                   </div>
-                )}
-              </div>
-            )})}
+                  <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:5}}>Últimos movimientos</div>
+                  {d.movs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin movimientos</div>}
+                  {d.movs.map(mv=>(
+                    <div key={mv.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid #E4E8EB`,fontSize:12}}>
+                      <span style={{color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{mv.date?fmtFechaDMY(mv.date):'—'}</span>
+                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{mv.concept||(mv.type==='fondo'?'Fondo':'Gasto')}</span>
+                      <span style={{fontWeight:600,color:mv.type==='fondo'?C.normal:C.overdue,flexShrink:0,whiteSpace:'nowrap'}}>{mv.type==='fondo'?'+':'−'}{fmt(mv.amount).replace('-','')}</span>
+                    </div>
+                  ))}
+                  <button onClick={()=>setTab('expenses')} style={{marginTop:12,width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Rendir</button>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
