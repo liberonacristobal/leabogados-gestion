@@ -9592,6 +9592,8 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
   const fmtD = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
   const dueFromIssued = iso => { if(!iso) return null; const d=new Date(iso+'T12:00'); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10) }
+  // Pagada sin fecha de pago: se asume pagada a los 20 días de emitida (criterio del estudio).
+  const pagoInferido = iso => { if(!iso) return null; const d=new Date(iso+'T12:00'); d.setDate(d.getDate()+20); return d.toISOString().slice(0,10) }
   const parseMonto = v => { if(v==null||v==='') return null; if(typeof v==='number') return Math.round(v); let s=String(v).replace(/[^\d,.-]/g,''); if(s.includes(',')&&s.includes('.')) s=s.replace(/\./g,'').replace(',','.'); else if(s.includes(',')) s=s.replace(',','.'); const n=parseFloat(s); return isNaN(n)?null:Math.round(n) }
   const parseFecha = v => { if(!v) return null; if(v instanceof Date && !isNaN(v)) { const d=new Date(v.getTime()-v.getTimezoneOffset()*60000); return d.toISOString().slice(0,10) } const s=String(v).trim(); let m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/); if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/); if(m){ let[,d,mo,y]=m; if(y.length===2) y='20'+y; return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}` } return null }
   const COL = {
@@ -9646,7 +9648,10 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
         let error=null
         if(monto==null) error='Monto inválido'; else if(monto<=0) error='Monto debe ser > 0'
         const dup = factura && (billing||[]).some(b=>String(b.invoice_no||'').replace(/\.0$/,'')===factura)
-        return {id:idx, rut, nombre, factura, concepto, emision, pago:(status==='Pagado'&&!pago&&emision)?emision:pago, monto, status,
+        // Pagada sin fecha → se infiere emisión + 20 días (criterio del estudio); se marca como estimada.
+        const pagoFinal = pago || (status==='Pagado'&&emision?pagoInferido(emision):null)
+        const pagoEstimado = !pago && !!pagoFinal
+        return {id:idx, rut, nombre, factura, concepto, emision, pago:pagoFinal, pagoEstimado, monto, status,
           client_id:m.client?.id||null, clientName:m.client?.name||null, entity_id:m.ent?.id||null,
           receptor_name:(m.ent?.name)||nombre||null, receptor_rut:(m.ent?.rut)||rut||null, fuzzy:!!m.fuzzy, error, dup}
       }
@@ -9786,7 +9791,7 @@ ${muestra}`
             <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'flex-start'}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.clientName||r.nombre||'(sin cliente)'}{r.fuzzy&&<span style={{color:C.soon,fontWeight:500}}> ·aprox</span>}</div>
-                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.factura?`F° ${r.factura} · `:''}{r.concepto} · {fmtD(r.emision)}{r.pago?` · pagada ${fmtD(r.pago)}`:''}</div>
+                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.factura?`F° ${r.factura} · `:''}{r.concepto} · {fmtD(r.emision)}{r.pago?` · pagada ${fmtD(r.pago)}${r.pagoEstimado?' (estimada)':''}`:''}</div>
               </div>
               <div style={{textAlign:'right',flexShrink:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:C.text}}>{fmt0(r.monto)}</div>
