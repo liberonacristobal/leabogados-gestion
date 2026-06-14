@@ -8357,8 +8357,11 @@ function ClienteDriveImporter({clients,onImported,onClose}){
     setSaving(true);setStep('saving')
     let imported=0
     for(const f of toImport){
-      const isTerminado=terminados2024.find(x=>x.id===f.id)||terminados2025.find(x=>x.id===f.id)
-      const payload={name:f.name,area:isTerminado?'Terminado':''}
+      const t2024=terminados2024.find(x=>x.id===f.id), t2025=terminados2025.find(x=>x.id===f.id)
+      const isTerminado=t2024||t2025
+      // El estado va en `status` (la tabla clients NO tiene columna `area`); los terminados quedan con fecha de término del año de su carpeta.
+      const payload={name:f.name, status:isTerminado?'Terminado':'Activo'}
+      if(isTerminado) payload.ended_at = (t2024?'2024':'2025')+'-12-31'
       const {error}=await supabase.from('clients').insert(payload)
       if(!error){imported++;addLog(`${f.name}`)}
       else addLog(`Error: ${f.name}: ${error.message}`)
