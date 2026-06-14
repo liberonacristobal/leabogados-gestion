@@ -81,8 +81,13 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
-const chipBtn = (variant='soft') => ({height:26,padding:'0 12px',border:'none',borderRadius:20,fontSize:11.5,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,
-  ...({soft:{background:'#F5F7F9',color:'#537281'},primary:{background:'#003C50',color:'#fff'},green:{background:'#E1F5EE',color:'#0F6E56'}}[variant]||{})})
+const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:11.5,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
+  ...({
+    soft:{background:'#F5F7F9',color:'#537281',border:'0.5px solid #E4E8EB'},
+    primary:{background:'#003C50',color:'#fff',border:'none'},
+    green:{background:'#E1F5EE',color:'#0F6E56',border:'0.5px solid #CFE9DD'},
+    greenSolid:{background:'#1D9E75',color:'#fff',border:'none'},
+  }[variant]||{})})
 // Buscador de cabecera (mismo lenguaje: fondo suave, sin borde, píldora)
 const chipSearch = {height:32,width:'100%',background:'#F5F7F9',border:'none',borderRadius:20,fontSize:13,padding:'0 14px',color:'#3D3D3D',outline:'none',boxSizing:'border-box'}
 // Botón de Drive: solo el logo, sin recuadro
@@ -6166,7 +6171,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
             {!selectedClient&&!showOrphans&&<button onClick={onBulk} style={chipBtn('soft')}>+ Carga masiva</button>}
             <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>
             <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>
-            {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={{padding:'6px 12px',borderRadius:8,border:'none',background:'#1D9E75',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>↓ Rendir</button>}
+            {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
           </div>
         </div>
 
