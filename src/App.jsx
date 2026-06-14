@@ -2082,12 +2082,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
         const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
-        const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar').reduce((a,t)=>a+(t.monto||0),0)
-        const pendienteTot = (terceros||[]).filter(t=>t.estado==='pendiente').reduce((a,t)=>a+(t.monto||0),0)
+        // Una cuenta por pagar solo es deuda real si su factura existe (no borrada) y no está anulada. Las pagadas se conservan en el histórico.
+        const billOk = bid => { if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }
+        const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
+        const pendienteTot = (terceros||[]).filter(t=>t.estado==='pendiente'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
         const pagadoYr = (terceros||[]).filter(t=>t.estado==='pagado'&&String(t.pagado_at||'').startsWith(String(yr))).reduce((a,t)=>a+(t.monto||0),0)
-        const nProvPorPagar = new Set((terceros||[]).filter(t=>t.estado==='por_pagar').map(t=>t.proveedor_id)).size
-        // Agrupar lo NO pagado por proveedor; por_pagar primero
-        const activos = (terceros||[]).filter(t=>t.estado!=='pagado')
+        const nProvPorPagar = new Set((terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).map(t=>t.proveedor_id)).size
+        // Agrupar lo NO pagado por proveedor; por_pagar primero (excluye facturas borradas/anuladas)
+        const activos = (terceros||[]).filter(t=>t.estado!=='pagado'&&billOk(t.billing_id))
         const byProv = {}
         activos.forEach(t=>{ const k=t.proveedor_id||'__'; if(!byProv[k]) byProv[k]={prov:provById(t.proveedor_id),cuentas:[]}; byProv[k].cuentas.push(t) })
         const grupos = Object.values(byProv).map(g=>({...g, total:g.cuentas.reduce((a,t)=>a+(t.monto||0),0), urgente:g.cuentas.some(t=>t.estado==='por_pagar')}))
@@ -3988,7 +3990,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onRefresh}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
@@ -4000,6 +4002,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [showBuscar,setShowBuscar] = useState(false)
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
+  const [pagando,setPagando] = useState(false)
   const [payDate,setPayDate] = useState('')
   const [inclTerceros,setInclTerceros] = useState(true)   // al pagar la factura ancla: ¿el pago incluyó los terceros?
   const fmtDMY = iso => { if(!iso) return '—'; const p=iso.slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:iso }
@@ -4077,10 +4080,12 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
     else { setPayingId(b.id); setPayDate(new Date().toISOString().slice(0,10)); setInclTerceros(true) }
   }
   const confirmPago = async() => {
+    if(pagando) return   // evita doble submit
+    setPagando(true)
     const pend = (terceros||[]).filter(t=>String(t.billing_id)===String(payingId)&&t.estado==='pendiente')
     await onStatusChange(payingId,'Pagado',payDate)
     if(pend.length&&inclTerceros&&onConciliarTerceros) await onConciliarTerceros(payingId)
-    setPayingId(null)
+    setPagando(false); setPayingId(null)
   }
   // Unificado a "convertir": la cuota programada pasa a emitida (Pendiente de cobro), no se borra.
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
@@ -4326,7 +4331,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             {q&&<span onClick={e=>{e.stopPropagation();setQ('')}} style={{flexShrink:0,fontSize:13,lineHeight:1}}>×</span>}
           </button>}
         </div>
-        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onFacturar={setFacturarAnt}/>}
+        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&<>
@@ -4404,7 +4409,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             })()}
             <div style={{padding:'14px 20px 20px',display:'flex',gap:8}}>
               <button onClick={()=>setPayingId(null)} style={{flex:1,height:40,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={confirmPago} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer'}}>Confirmar pago</button>
+              <button onClick={confirmPago} disabled={pagando} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:pagando?'default':'pointer',opacity:pagando?.6:1}}>{pagando?'Guardando…':'Confirmar pago'}</button>
             </div>
           </div>
         </div>
@@ -4881,7 +4886,7 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
   )
 }
 
-function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onFacturar}) {
+function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar}) {
   const [fil,setFil] = useState('disponible')
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
@@ -4947,6 +4952,11 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
                     {onDescubrir&&<button onClick={()=>onDescubrir(a.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Deshacer cobertura</button>}
                   </div>
                 )}
+                {!disp&&!cubreCuotas&&a.billing_id&&onDeshacerConsumo&&(
+                  <div style={{display:'flex',gap:7,marginTop:7}}>
+                    <button onClick={()=>{ if(confirm('¿Deshacer este anticipo? Vuelve a Disponible y, si no hay otro que la cubra, la factura vuelve a Pendiente.')) onDeshacerConsumo(a) }} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Deshacer</button>
+                  </div>
+                )}
               </div>
             )})}
           </div>
@@ -4973,7 +4983,8 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
-  const debeDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='por_pagar').reduce((s,t)=>s+(t.monto||0),0)
+  const billOk = bid => { if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }
+  const debeDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='por_pagar'&&billOk(t.billing_id)).reduce((s,t)=>s+(t.monto||0),0)
   const pagadoDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0)
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
@@ -5083,8 +5094,8 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   // ── FICHA ──
   const histo = sel?[...terceros].filter(t=>String(t.proveedor_id)===String(sel.id)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))):[]
   // "Le debes" = solo lo que ya está por_pagar (cliente ya pagó su factura). Lo pendiente aún no se debe.
-  const debe = histo.filter(t=>t.estado==='por_pagar').reduce((a,t)=>a+(t.monto||0),0)
-  const pendienteFut = histo.filter(t=>t.estado==='pendiente').reduce((a,t)=>a+(t.monto||0),0)
+  const debe = histo.filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
+  const pendienteFut = histo.filter(t=>t.estado==='pendiente'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
   const pagado = histo.filter(t=>t.estado==='pagado').reduce((a,t)=>a+(t.monto||0),0)
   const estLbl = {pendiente:['Pendiente','#99ABB4','#F5F7F9'],por_pagar:['Por pagar',C.accent,'#E6EEF1'],pagado:['Pagado',C.normal,'#E1F5EE']}
   // Ventas en que participa el proveedor (agrupa sus terceros por venta). "Su parte" = suma de sus cuentas de esa venta.
@@ -8571,6 +8582,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
   const [selYear,setSelYear]=useState(null)
   const [unmatched,setUnmatched]=useState([])
   const [assignments,setAssignments]=useState({})
+  const [savingA,setSavingA]=useState(false)
   const [log,setLog]=useState([])
   const [progress,setProgress]=useState({done:0,total:0})
   const addLog=msg=>setLog(p=>[...p,msg])
@@ -8665,6 +8677,8 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
     }
   }
   const saveAssignmentsDrive = async() => {
+    if(savingA) return
+    setSavingA(true)
     for(const inv of unmatched){
       const clientId = assignments[inv.id]
       if(!clientId) continue
@@ -8704,7 +8718,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
           ))}
           <div style={{display:'flex',gap:8,marginTop:4}}>
             <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
-            <button onClick={saveAssignmentsDrive} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Guardar asignaciones</button>
+            <button onClick={saveAssignmentsDrive} disabled={savingA} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:savingA?'default':'pointer',opacity:savingA?.6:1}}>{savingA?'Guardando…':'Guardar asignaciones'}</button>
           </div>
         </div>
       )}
@@ -8773,6 +8787,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
   const [progress,setProgress] = useState({done:0,total:0})
   const [unmatched,setUnmatched] = useState([]) // [{invoiceId, folio, rut, cliente, amount, issued_at, concepto}]
   const [assignments,setAssignments] = useState({}) // {invoiceId: clientId}
+  const [savingA,setSavingA] = useState(false)
   const fileRef = useRef(null)
   const addLog = msg => setLog(p=>[...p,msg])
 
@@ -8880,6 +8895,8 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
   }
 
   const saveAssignments = async() => {
+    if(savingA) return
+    setSavingA(true)
     for(const inv of unmatched){
       const clientId = assignments[inv.id]
       if(!clientId) continue
@@ -8935,7 +8952,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
           ))}
           <div style={{display:'flex',gap:8,marginTop:4}}>
             <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
-            <button onClick={saveAssignments} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Guardar asignaciones</button>
+            <button onClick={saveAssignments} disabled={savingA} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:savingA?'default':'pointer',opacity:savingA?.6:1}}>{savingA?'Guardando…':'Guardar asignaciones'}</button>
           </div>
         </div>
       )}
@@ -10698,6 +10715,23 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  // Deshacer un anticipo CONSUMIDO contra una factura (no cuotas): vuelve a 'disponible' y, si ninguna otra anticipo cubre esa factura, la factura vuelve a Pendiente.
+  const handleDeshacerConsumoAnticipo=useCallback(async(a)=>{
+    if(!a?.id) return
+    try{
+      const {error}=await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).eq('id',a.id)
+      if(error)throw error
+      setAnticipos(p=>p.map(x=>x.id===a.id?{...x,estado:'disponible',billing_id:null}:x))
+      if(a.billing_id){
+        const otroCubre=(anticipos||[]).some(x=>x.id!==a.id&&String(x.billing_id)===String(a.billing_id)&&x.estado==='consumido')
+        if(!otroCubre){
+          await supabase.from('billing').update({status:'Pendiente',paid_at:null,updated_at:new Date().toISOString()}).eq('id',a.billing_id)
+          setBilling(p=>p.map(b=>String(b.id)===String(a.billing_id)?{...b,status:'Pendiente',paid_at:null}:b))
+        }
+      }
+    }catch(e){alert('No se pudo deshacer: '+e.message)}
+  },[anticipos])
+
   // Emitir UNA factura por el bloque de cuotas que cubrió un anticipo (queda Pagada, pagada con el anticipo).
   const handleFacturarBloqueAnticipo=useCallback(async(anticipo,{invoice_no,issued_at})=>{
     try{
@@ -10999,7 +11033,7 @@ export default function App() {
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
