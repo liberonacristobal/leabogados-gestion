@@ -829,7 +829,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       )}
 
       {tab==='caja'&&(()=>{
-        const misRend = rendiciones.filter(r=>r.user_name===me).sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1)
+        const misRend = rendiciones.filter(r=>r.user_name===me && r.tipo!=='cliente').sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1)   // excluye rendiciones al cliente (no son liquidaciones de caja chica) para no doble-contar
         const totalLiquidado = misRend.reduce((a,r)=>a+(r.total||0),0)
         const cajasOrd = [...miCaja].sort((a,b)=>(b.delivered_at||'')>(a.delivered_at||'')?1:-1)
         const totalRecibido = cajasOrd.reduce((a,p)=>a+(p.amount||0),0)
@@ -5167,7 +5167,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
   // Guarda el "Dirigido a" para reutilizarlo (insert si no hay contacto, update si cambió)
   const guardarDirigido = async()=>{
     const v=(atencion||'').trim(); if(!v) return
-    if(contacts[0]){ if(contacts[0].nombre!==v){ await supabase.from('contacts').update({nombre:v}).eq('id',contacts[0].id); setContacts(p=>p.map((c,i)=>i===0?{...c,nombre:v}:c)) } }
+    if(contacts[0]){ if(contacts[0].nombre!==v){ const {error}=await supabase.from('contacts').update({nombre:v}).eq('id',contacts[0].id); if(error){ alert('No se pudo guardar el contacto: '+error.message); return } setContacts(p=>p.map((c,i)=>i===0?{...c,nombre:v}:c)) } }
     else { const {data}=await supabase.from('contacts').insert({client_id:client.id,nombre:v}).select().single(); if(data) setContacts([data]) }
   }
 
@@ -7338,8 +7338,9 @@ Liberona Escala Abogados`
         if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
       }
       const now = new Date().toISOString()
-      await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
-      onSent && onSent(r.id, now)
+      const {error:seErr}=await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
+      if(seErr) console.error('No se pudo marcar la rendición como enviada:',seErr.message)
+      else onSent && onSent(r.id, now)
       alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se abrió tu correo y el PDF en otra pestaña. Adjunta ese PDF antes de enviar.')
       onClose()
     }catch(e){ alert('Error: '+e.message) }
@@ -9822,7 +9823,14 @@ function PapeleraModal({clients=[],onClose,onChanged}){
     try{
       if(tipo==='ventas'){ await supabase.from('sales').update({deleted_at:null}).eq('id',row.id); /* solo las cuotas borradas EN CASCADA con la venta (mismo deleted_at), no las que se borraron por separado antes */ const cq=supabase.from('billing').update({deleted_at:null}).eq('sale_id',row.id); await (row.deleted_at?cq.eq('deleted_at',row.deleted_at):cq) }
       else if(tipo==='cobros'){ await supabase.from('billing').update({deleted_at:null}).eq('id',row.id) }
-      else { await supabase.from('expenses').update({deleted_at:null}).eq('id',row.id) }
+      else {
+        await supabase.from('expenses').update({deleted_at:null}).eq('id',row.id)
+        // Si el gasto estaba en una rendición al cliente, reponer su total/contador (handleDeleteExpense los descontó al borrar).
+        if(row.client_render_id){
+          const {data:r}=await supabase.from('rendiciones').select('total,n_gastos').eq('id',row.client_render_id).single()
+          if(r) await supabase.from('rendiciones').update({total:(r.total||0)+(row.amount||0), n_gastos:(r.n_gastos||0)+1}).eq('id',row.client_render_id)
+        }
+      }
       await cargar(); onChanged&&onChanged()
     }catch(e){alert('Error: '+e.message)}
     setBusy(false)
@@ -10334,7 +10342,7 @@ export default function App() {
   const handleDelegateTask=useCallback(async(taskObj,{to,due})=>{
     setSaving(true)
     try{
-      const patch={ delegated_to:to, delegated_by:user?.name||null, delegated_due:due||null, delegated_at:new Date().toISOString(), updated_at:new Date().toISOString() }
+      const patch={ delegated_to:to, delegated_by:user?.name||null, delegated_due:due||null, delegated_at:new Date().toISOString() }   // tasks NO tiene columna updated_at
       const{data,error}=await supabase.from('tasks').update(patch).eq('id',taskObj.id).select().single()
       if(error)throw error
       setTasks(p=>p.map(x=>x.id===data.id?data:x))
@@ -10436,8 +10444,8 @@ export default function App() {
         const yaExiste=(clientEntities||[]).some(e=>e.client_id===saved.client_id&&((e.rut&&e.rut===saved.receptor_rut)||(e.name?.toLowerCase()===saved.receptor_name?.toLowerCase())))
         if(!yaExiste){
           await supabase.from('client_entities').insert({client_id:saved.client_id,name:saved.receptor_name||null,rut:saved.receptor_rut||null})
-          const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[])
-          setClientEntities(ce)
+          const {data:ce}=await supabase.from('client_entities').select('*')
+          if(ce) setClientEntities(ce)   // no vaciar el catálogo si el refetch falla
         }
       }
       setModal(null)
@@ -10626,8 +10634,8 @@ export default function App() {
         const yaExiste=(clientEntities||[]).some(e=>e.client_id===clientId&&((e.rut&&e.rut===bill.receptor_rut)||(e.name?.toLowerCase()===bill.receptor_name?.toLowerCase())))
         if(!yaExiste){
           await supabase.from('client_entities').insert({client_id:clientId,name:bill.receptor_name||null,rut:bill.receptor_rut||null})
-          const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[])
-          setClientEntities(ce)
+          const {data:ce}=await supabase.from('client_entities').select('*')
+          if(ce) setClientEntities(ce)   // no vaciar el catálogo si el refetch falla
         }
       }
     }catch(e){alert('Error: '+e.message)}
@@ -10833,12 +10841,12 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const ce=await supabase.from('client_entities').select('*').then(({data})=>data||[]);setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
