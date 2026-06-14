@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Tipografía: escala consistente (tamaños huérfanos ajustados)
+- Los 7 tamaños de fuente "huérfanos" (8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 15.5) se ajustaron al rung estándar más cercano (9/10/11/12/13/15), eliminando la deriva de medios puntos. Cambio de 0,5–1 px, sin mover layouts. (Migración de colores literales a la paleta C: descartada por ahora — paleta congelada.)
+
 ## 2026-06-14 — Pulido menor: signo de saldo, fechas de correo, restaurar y limpieza
 - **Signo −**: el saldo del modal de rendición (Saldo actual y Saldo tras rendición) muestra el signo negativo cuando corresponde.
 - **Correo de liquidación**: las fechas del detalle van en formato `14-06-2026` (antes ISO crudo).
