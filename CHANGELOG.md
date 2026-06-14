@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-13 — Auditoría 2: integridad de datos, cifras y robustez
+- **Anticipos**: si aplicas anticipos por más que la factura, el excedente ya no se pierde — vuelve como anticipo disponible.
+- **Carga de datos**: si una tabla falla al cargar (red/permiso), ahora avisa en vez de mostrar todo en cero (evita recargar y duplicar).
+- **Cambios de estado** (marcar pagado, asignar cliente, borrar en lote): si la base falla, la pantalla ya no miente diciendo que se guardó.
+- **Cuotas**: la última cuota absorbe el residuo de redondeo → la suma de cuotas calza exacto con el honorario.
+- **"Facturado"**: una sola definición (`esFacturada`) en Dashboard, ficha de cliente y ficha de venta — antes el mismo cliente mostraba cifras distintas según la pantalla. El "% meta" del Dashboard ahora usa neto (igual que el historial).
+- **Restaurar venta**: solo revive las cuotas que estaban vivas al borrarla (ya no resucita cuotas que habías borrado aparte).
+- **Anular rendición**: si no se pueden liberar los gastos, no borra la rendición (evita gastos huérfanos).
+- **Importar facturas (Excel)**: al asignar un cliente a mano aprende el RUT (próximas importaciones lo reconocen solas) y lo aplica a las demás filas con el mismo RUT.
+- **Deshacer** en "Asignar razón social" y "Asignar cliente a gasto".
+- Importadores y reporte: ya no se cierran al tocar fuera. Reconciliación de programadas: reversible (Papelera) y no actúa si hay empate ambiguo. Match de PDF y autocomplete de razones sociales: ya no se rompen con RUT/nombre vacío.
+- **Paleta**: grises fuera de paleta reemplazados por tokens; colores de categoría completos en todas las vistas.
+
 ## 2026-06-13 — Diagnóstico: aprende, deshacer y paleta
 - **Gasto huérfano que aprende (de verdad)**: al asignar cliente a un gasto sin cliente, se aplica a todos los gastos sin cliente con la misma descripción. Antes leía el campo `notas` (casi siempre vacío) → nunca disparaba; ahora usa `concept`.
 - **Eliminar sin fricción + Deshacer**: eliminar venta, cobro o gasto ya no pregunta con un confirm redundante — se hace al toque y aparece un **toast "Deshacer"** que restaura de inmediato (siguen yendo a Papelera igual). Se conserva la confirmación solo en el caso de riesgo (gasto ya rendido al cliente, que descuadra).
