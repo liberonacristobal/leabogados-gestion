@@ -2620,6 +2620,10 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   const [clientQ,setClientQ] = useState('')
   const [showNewClient,setShowNewClient] = useState(false)
   const [selectedClient,setSelectedClient] = useState(initialClients.find(c=>c.id===sale?.client_id)||null)
+  const [rsMode,setRsMode] = useState(null)   // razón social: null=mostrar asignada · 'pick'=elegir otra · 'new'=agregar
+  const [newRS,setNewRS] = useState({name:'',rut:''})
+  const [extraEntities,setExtraEntities] = useState([])   // razones sociales creadas dentro de este form
+  const [savingRS,setSavingRS] = useState(false)
   const [cobroType,setCobroType] = useState(sale?.cobro_type||'cuotas')
   const [nCuotas,setNCuotas] = useState(sale?.cobro_config?.nCuotas||3)
   const [cobroInicio,setCobroInicio] = useState(sale?.cobro_config?.cobroInicio||'')
@@ -2843,7 +2847,24 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientMatches = useMemo(()=>{ if(!clientQ.trim()) return []; return clients.filter(c=>c.name.toLowerCase().includes(clientQ.toLowerCase())).slice(0,6) },[clients,clientQ])
-  const clientEntitiesList = useMemo(()=>{ if(!f.client_id) return []; return (clientEntities||[]).filter(e=>e.client_id===f.client_id) },[clientEntities,f.client_id])
+  const clientEntitiesList = useMemo(()=>{ if(!f.client_id) return []; const base=(clientEntities||[]).filter(e=>e.client_id===f.client_id); const extra=extraEntities.filter(e=>e.client_id===f.client_id&&!base.some(b=>String(b.id)===String(e.id))); return [...base,...extra] },[clientEntities,extraEntities,f.client_id])
+  // Regla: al elegir cliente, si tiene 1 razón social se asigna sola; si tiene varias se propone la primera. Siempre se puede Cambiar.
+  useEffect(()=>{
+    if(!f.client_id) return
+    const valida = f.entity_id && clientEntitiesList.some(e=>String(e.id)===String(f.entity_id))
+    if(!valida && clientEntitiesList.length>0){ up('entity_id', clientEntitiesList[0].id); setRsMode(null) }
+  },[clientEntitiesList])
+  // Agregar una razón social nueva al cliente desde el form de venta (se persiste y queda seleccionada).
+  const agregarRS = async() => {
+    const name=newRS.name.trim(); if(!name||!f.client_id) return
+    setSavingRS(true)
+    try{
+      const {data,error}=await supabase.from('client_entities').insert({client_id:f.client_id,name,rut:newRS.rut.trim()||null}).select().single()
+      if(error)throw error
+      setExtraEntities(p=>[...p,data]); up('entity_id',data.id); setNewRS({name:'',rut:''}); setRsMode(null)
+    }catch(e){ alert('No se pudo agregar la razón social: '+e.message) }
+    setSavingRS(false)
+  }
   const moneda = f.moneda||'UF'
   const ufVal = parseFloat(f.uf_value)||0
   const amountUF = parseFloat(f.amount_uf)||0
@@ -3164,18 +3185,34 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
       <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganizacion societaria...'/></Fld>
 
-      {/* 2. Razón social */}
+      {/* 2. Razón social — 1 se asigna sola · varias propone la 1ª · siempre se puede Cambiar / agregar */}
       {f.client_id&&(
-        clientEntitiesList.length>0?(
-          <Fld label='Razón social a facturar'>
-            <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}>
-              <option value=''>— Asociar después —</option>
+        <div style={{marginBottom:10}}>
+          <Lbl>Razón social a facturar</Lbl>
+          {rsMode==='new'?(
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+              <Inp value={newRS.name} onChange={e=>setNewRS(r=>({...r,name:e.target.value}))} placeholder='Nombre / razón social' style={{flex:'1 1 160px',marginBottom:0}}/>
+              <Inp value={newRS.rut} onChange={e=>setNewRS(r=>({...r,rut:e.target.value}))} placeholder='RUT' style={{width:120,marginBottom:0}}/>
+              <button type='button' disabled={savingRS||!newRS.name.trim()} onClick={agregarRS} style={{...chipBtn('primary'),opacity:(savingRS||!newRS.name.trim())?.5:1}}>{savingRS?'…':'Agregar'}</button>
+              <button type='button' onClick={()=>{setRsMode(null);setNewRS({name:'',rut:''})}} style={chipBtn('soft')}>Cancelar</button>
+            </div>
+          ):clientEntitiesList.length===0?(
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{fontSize:12.5,color:C.muted,flex:1}}>Sin razón social (se asocia al emitir la 1ª factura)</span>
+              <button type='button' onClick={()=>setRsMode('new')} style={chipBtn('soft')}>+ Agregar</button>
+            </div>
+          ):rsMode==='pick'?(
+            <select autoFocus value={f.entity_id||''} onChange={e=>{ if(e.target.value==='__new__'){setRsMode('new')} else {up('entity_id',e.target.value);setRsMode(null)} }} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}>
               {clientEntitiesList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
+              <option value='__new__'>+ Nueva razón social…</option>
             </select>
-          </Fld>
-        ):(
-          <div style={{marginBottom:10}}><Lbl><span>Razón social a facturar </span><span style={{textTransform:'none',fontWeight:400,letterSpacing:0}}>(se asocia al emitir la 1ª factura)</span></Lbl></div>
-        )
+          ):(
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{fontSize:13,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(()=>{const e=clientEntitiesList.find(x=>String(x.id)===String(f.entity_id));return e?`${e.name}${e.rut?' · '+e.rut:''}`:'— Elegir —'})()}{clientEntitiesList.length>1&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · propuesta</span>}</span>
+              <button type='button' onClick={()=>setRsMode('pick')} style={chipBtn('soft')}>Cambiar</button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 3. Área + Responsable */}
