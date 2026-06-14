@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: globito al tocar un tramo de la barra
+- Al tocar Facturado / Cobrado / Costo oficina en la barra aparece un **globito** sobre el tramo con su monto y % (Facturado % de lo vendido, Cobrado % del facturado).
+
 ## 2026-06-14 — Resultado del año: Vendido como encabezado + costo tocable + filas claras
 - **Vendido** ahora es el encabezado con su total a la derecha (la barra entera = lo vendido), para que se distinga.
 - **Todos los tramos tocables**, incluido **Costo oficina** (abre el detalle de terceros por factura).
