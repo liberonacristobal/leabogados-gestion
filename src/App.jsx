@@ -10412,13 +10412,22 @@ export default function App() {
       const p={...f,amount:parseInt(f.amount)||0,sale_id:f.sale_id||null}
       // Atribución automática: registra quién ingresó el gasto (solo al crear, nunca al editar)
       if(f.type==='gasto' && !f.id && !p.created_by) p.created_by = user?.name || null
+      const prev = f.id ? (expenses||[]).find(x=>x.id===f.id) : null   // estado anterior: para reajustar la rendición si cambió el monto
       const{data,error}=await supabase.from('expenses').upsert(p).select().single()
       if(error)throw error
       setExpenses(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
+      // Si se editó el MONTO de un gasto ya rendido/liquidado, reajusta el total de su rendición (no dejarlo stale).
+      const renderId = prev && (prev.client_render_id || prev.render_id)
+      if(renderId && (prev.amount||0)!==(data.amount||0)){
+        const r=(rendiciones||[]).find(x=>x.id===renderId)
+        if(r){ const nuevoTotal=(r.total||0)-(prev.amount||0)+(data.amount||0)
+          await supabase.from('rendiciones').update({total:nuevoTotal}).eq('id',r.id)
+          setRendiciones(prv=>prv.map(x=>x.id===r.id?{...x,total:nuevoTotal}:x)) }
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[user])
+  },[user,expenses,rendiciones])
 
   // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
   // Devuelve resumen. Cada gasto queda marcado con bulk_import_id para poder deshacer (commit 5).
