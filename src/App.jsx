@@ -81,16 +81,16 @@ const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
-const chipBtn = (variant='soft') => ({height:30,padding:'0 13px',border:'none',borderRadius:20,fontSize:12,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,
+const chipBtn = (variant='soft') => ({height:26,padding:'0 12px',border:'none',borderRadius:20,fontSize:11.5,fontWeight:500,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,
   ...({soft:{background:'#F5F7F9',color:'#537281'},primary:{background:'#003C50',color:'#fff'},green:{background:'#E1F5EE',color:'#0F6E56'}}[variant]||{})})
 // Buscador de cabecera (mismo lenguaje: fondo suave, sin borde, píldora)
-const chipSearch = {height:36,width:'100%',background:'#F5F7F9',border:'none',borderRadius:20,fontSize:13,padding:'0 14px',color:'#3D3D3D',outline:'none',boxSizing:'border-box'}
+const chipSearch = {height:32,width:'100%',background:'#F5F7F9',border:'none',borderRadius:20,fontSize:13,padding:'0 14px',color:'#3D3D3D',outline:'none',boxSizing:'border-box'}
 // Botón de Drive: solo el logo, sin recuadro
 const driveBtn = {border:'none',background:'transparent',cursor:'pointer',padding:4,display:'inline-flex',alignItems:'center',justifyContent:'center'}
 // Buscador de cabecera con lupa (píldora tintada)
 function ChipSearch({value,onChange,placeholder='Buscar...',autoFocus,style}){
   return (
-    <div style={{display:'flex',alignItems:'center',gap:8,height:36,background:'#F5F7F9',borderRadius:20,padding:'0 14px',boxSizing:'border-box',...style}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,height:32,background:'#F5F7F9',borderRadius:20,padding:'0 14px',boxSizing:'border-box',...style}}>
       <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
       <input value={value} onChange={onChange} placeholder={placeholder} autoFocus={autoFocus} style={{flex:1,minWidth:0,border:'none',background:'transparent',outline:'none',fontSize:13,color:'#3D3D3D'}}/>
     </div>
@@ -7718,7 +7718,7 @@ function ClientsView({clients,sales,billing,expenses,tasks,clientEntities,antici
         <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
           <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1}}/>
-          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:36,color:C.accent}}>Proveedores</button>
+          <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Proveedores</button>
         </div>
         {sFilter ? (
           <div style={{display:'flex',gap:6,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
