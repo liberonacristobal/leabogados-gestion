@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: las 4 etapas resumidas en una fila
+- Las etapas (Vendido · Facturado · Cobrado · Costo oficina) ahora van en **una sola fila**, cada una con su monto y mini-barra (% de lo vendido). Costo oficina = terceros, en rojo. Debajo, en línea: Neto firma · Tasa cobro.
+
 ## 2026-06-14 — Resultado del año en una línea + costo oficina marcado
 - La tarjeta pasó de funnel vertical (3 líneas) a **una sola línea**: Vendido › Facturado › Cobrado (Facturado y Cobrado siguen tocables).
 - Al pie: Tasa cobro · **Costo oficina** (terceros/proveedores, marcado en rojo) · Neto firma.
