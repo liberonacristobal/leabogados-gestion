@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 — Integridad: guards doble-submit + cuentas por pagar coherentes + deshacer anticipo
+- **Doble envío bloqueado**: Pagar factura y Guardar asignaciones (Drive/PDF) quedan deshabilitados mientras guardan, evitando duplicados por doble toque.
+- **Cuentas por pagar**: las cuentas a proveedores de una factura **anulada** ya no se cuentan como deuda (Dashboard y "Mis Proveedores").
+- **Anticipos**: el botón **Deshacer** ahora también revierte un anticipo consumido directo contra una factura (vuelve a disponible y la factura a Pendiente si nada más la cubre).
+
 ## 2026-06-14 (noche) — Backlog: datos, chips y consistencia visual
 - **BM Soluciones**: marcadas como pagadas las 6 cuotas adelantadas (ene–jun 2026); jul–dic quedan programadas.
 - **Chips** también en los botones dentro de las fichas de cliente (+ Fondo / + Gasto / + Tarea / Rendir).
