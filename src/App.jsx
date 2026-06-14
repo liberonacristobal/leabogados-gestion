@@ -2067,8 +2067,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               </div></div>) })()}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:2}}>
                 {Stat(C.normal,'Facturado',mS(facturadoSel),{sub:` ${pctFV}%`,k:'facturado'})}
-                {Stat(C.greenText,'Cobrado',mS(cobradoSel),{k:'cobrado'})}
                 {Stat(C.overdue,'Costo oficina','−'+mS(tercerosSel),{k:'costo'})}
+                {Stat(C.greenText,'Cobrado',mS(cobradoSel),{k:'cobrado'})}
                 {Stat(tasaCol,'Tasa cobro',`${tasaSel}%`)}
               </div>
               {funnelKpi&&(()=>{
