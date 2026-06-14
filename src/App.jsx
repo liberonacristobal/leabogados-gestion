@@ -2009,16 +2009,21 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      {/* Resultado del año: funnel Vendido → Facturado → Cobrado (consolida lo que antes estaba en Cobranza + Facturación) */}
+      {/* Resultado del año {selYear}: funnel Vendido → Facturado → Cobrado, TODO del mismo año (sigue el selector del Revenue target) */}
       <div style={{padding:'16px 20px 0'}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Resultado del año {yr}</div>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Resultado del año {selYear}</div>
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px'}}>
           {(()=>{
-            const tercerosYr = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
-            const netoFirma = facturado - tercerosYr
-            const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
+            const sy = String(selYear)
+            // Todo acotado a facturas EMITIDAS en el año (Cobrado = de esas facturas cuánto se pagó). No mezcla cobros de otros años.
+            const facturadoSel = bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(sy)).reduce((a,b)=>a+(b.amount||0),0)
+            const cobradoSel = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(sy)).reduce((a,b)=>a+(b.amount||0),0)
+            const tercerosSel = bb.filter(b=>b.issued_at?.startsWith(sy)&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
+            const netoFirma = facturadoSel - tercerosSel
+            const tasaSel = facturadoSel>0?Math.min(100,Math.round(cobradoSel/facturadoSel*100)):0
+            const tasaCol = tasaSel>=80?C.normal:tasaSel>=50?C.soon:C.overdue
             const mS = clp => dashMoneda==='UF'?(ufRef>0?fmtUFk(clp/ufRef):'—'):fmtShort(clp)
-            const steps=[['vendido','Vendido',vendidoBrutoCLP,C.accent,false],['facturado','Facturado',facturado,C.normal,true],['cobrado','Cobrado',cobrado,C.greenText,true]]
+            const steps=[['vendido','Vendido',m.bruto,C.accent,false],['facturado','Facturado',facturadoSel,C.normal,true],['cobrado','Cobrado',cobradoSel,C.greenText,true]]
             const lbl={fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}
             return (<>
               <div style={{display:'grid',gridTemplateColumns:'1fr 14px 1fr 14px 1fr',alignItems:'center'}}>
@@ -2038,18 +2043,16 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 ))}
               </div>
               <div style={{display:'flex',gap:16,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,flexWrap:'wrap',alignItems:'baseline'}}>
-                <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={lbl}>Tasa cobro</span><span style={{fontSize:13,fontWeight:700,color:tasaCol}}>{tasaCobro}%</span></div>
+                <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={lbl}>Tasa cobro</span><span style={{fontSize:13,fontWeight:700,color:tasaCol}}>{tasaSel}%</span></div>
                 <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={lbl}>Neto firma</span><span style={{fontSize:13,fontWeight:700,color:C.text}}>{mS(netoFirma)}</span></div>
-                <button onClick={()=>setFunnelKpi(funnelKpi==='programado'?null:'programado')} style={{display:'flex',alignItems:'baseline',gap:5,background:'none',border:'none',padding:0,cursor:'pointer'}}><span style={lbl}>Programado</span><span style={{fontSize:13,fontWeight:700,color:'#537281'}}>{mS(kpiProgramado)}</span><span style={{fontSize:8,color:'#99ABB4',transform:funnelKpi==='programado'?'rotate(90deg)':'none'}}>▸</span></button>
               </div>
               {funnelKpi&&(()=>{
                 const lists={
-                  facturado: bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(String(yr))).sort((a,b)=>(b.issued_at||'')<(a.issued_at||'')?-1:1),
-                  cobrado: bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).sort((a,b)=>(b.paid_at||'')<(a.paid_at||'')?-1:1),
-                  programado: bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1),
+                  facturado: bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(sy)).sort((a,b)=>(b.issued_at||'')<(a.issued_at||'')?-1:1),
+                  cobrado: bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(sy)).sort((a,b)=>(b.paid_at||'')<(a.paid_at||'')?-1:1),
                 }
-                const titulo={facturado:'Facturado',cobrado:'Cobrado',programado:'Programado'}[funnelKpi]
-                const col={facturado:C.normal,cobrado:C.greenText,programado:'#537281'}[funnelKpi]
+                const titulo={facturado:'Facturado '+sy,cobrado:'Cobrado (facturas '+sy+')'}[funnelKpi]
+                const col={facturado:C.normal,cobrado:C.greenText}[funnelKpi]
                 const rows=lists[funnelKpi]||[]
                 const tot=rows.reduce((a,b)=>a+(b.amount||0),0)
                 return (
@@ -2062,7 +2065,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     <div style={{maxHeight:300,overflowY:'auto'}}>
                       {rows.map(b=>{
                         const cn=clientesMap[b.client_id]||b.receptor_name||'—'
-                        const meta=funnelKpi==='cobrado'?(b.paid_at?'Pagada '+fmtFechaDMY(b.paid_at):'Pagada'):funnelKpi==='facturado'?(b.issued_at?'Emitida '+fmtFechaDMY(b.issued_at):''):(()=>{const dl=daysLeft(b.due);return dl===null?'':dl<0?`${Math.abs(dl)}d vencida`:`vence en ${dl}d`})()
+                        const meta=funnelKpi==='cobrado'?(b.paid_at?'Pagada '+fmtFechaDMY(b.paid_at):'Pagada'):(b.issued_at?'Emitida '+fmtFechaDMY(b.issued_at):'')
                         return (
                           <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'8px 12px',borderBottom:`1px solid ${C.border}`}}>
                             <div style={{minWidth:0}}>
