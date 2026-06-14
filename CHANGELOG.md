@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 — Dashboard interactivo (Parte C): cash flow rediseñado
+- **Cash flow histórico + proyección**: el gráfico ahora muestra meses pasados (cobrado real, línea gris) y futuros (proyección, línea azul) con la marca "Hoy" entre ambos, para ver tendencia.
+- **Meses tocables**: tocar un mes despliega las facturas/cuotas que lo componen (cliente · concepto · monto · estado).
+- **Etiquetas claras**: los KPIs ahora dicen su horizonte (Total 6M, Emitido por cobrar, Programado 6M) con una nota que explica que es proyección desde hoy — se acaba la confusión con el "Programado" anual de Cobranza.
+
 ## 2026-06-14 — Dashboard interactivo (Parte B): caja chica y cuentas por pagar
 - **Gestión caja chica**: las tarjetas por persona ahora son tocables; despliegan la lista de gastos sin liquidar (fecha · concepto · cliente · monto) con acceso directo a liquidar.
 - **Cuentas por pagar a proveedores**: cada cuenta se puede tocar para ver su origen (venta · cliente · monto) y una explicación clara del estado — incluido qué significa \"espera cobro\".

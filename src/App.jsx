@@ -1215,67 +1215,98 @@ function TasksByPerson({tasks,clients}) {
 const META_UF = 9800
 const META_CLP = 400000000
 
-function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
+function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[]}) {
   const [horizon,setHorizon] = useState(6)
-  const [openDetalle,setOpenDetalle] = useState(false)
   const [activePoint,setActivePoint] = useState(null)
+  const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due&&b.billing_type!=='reembolso')
   const programadas = billing.filter(b=>b.status==='Programada'&&b.due&&b.billing_type!=='reembolso')
+  const pagadas = billing.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.paid_at)
 
+  const pastN = horizon<=3?2:horizon<=6?3:6   // meses pasados (cobrado real) que se muestran a la izquierda de Hoy
   const months = useMemo(()=>{
     const result = []
     const now = new Date()
-    for(let i=0;i<horizon;i++){
+    for(let i=-pastN;i<horizon;i++){
       const d = new Date(now.getFullYear(), now.getMonth()+i, 1)
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
-      const label = d.toLocaleDateString('es-CL',{month:'short',year:'2-digit'})
+      const label = d.toLocaleDateString('es-CL',{month:'short'})
       const labelFull = d.toLocaleDateString('es-CL',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())
-      const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
-      const overdue = pending.filter(b=>b.due<key.slice(0,7)+'-01'&&i===0).reduce((a,b)=>a+(b.amount||0),0)
-      const emitido = i===0?emitidoMes+overdue:emitidoMes
-      const programado = programadas.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
-      result.push({key,label,labelFull,emitido,programado,total:emitido+programado,overdue:i===0?overdue:0})
+      if(i<0){
+        const cobrado = pagadas.filter(b=>b.paid_at?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+        result.push({key,label,labelFull,past:true,cobrado,emitido:0,programado:0,overdue:0,total:cobrado})
+      } else {
+        const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+        const overdue = i===0 ? pending.filter(b=>b.due<key.slice(0,7)+'-01').reduce((a,b)=>a+(b.amount||0),0) : 0
+        const emitido = emitidoMes+overdue
+        const programado = programadas.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+        result.push({key,label,labelFull,past:false,cobrado:0,emitido,programado,overdue,total:emitido+programado})
+      }
     }
     return result
-  },[billing,horizon])
+  },[billing,horizon,pastN])
 
+  const firstFut = pastN   // índice del mes actual (i=0) dentro de months
+  const future = months.filter(m=>!m.past)
   const maxVal = Math.max(...months.map(m=>m.total),1)
-  const totalHorizon = months.reduce((a,m)=>a+m.total,0)
-  const totalEmitido = months.reduce((a,m)=>a+m.emitido,0)
-  const totalProgramado = months.reduce((a,m)=>a+m.programado,0)
+  const totalHorizon = future.reduce((a,m)=>a+m.total,0)
+  const totalEmitido = future.reduce((a,m)=>a+m.emitido,0)
+  const totalProgramado = future.reduce((a,m)=>a+m.programado,0)
   const fmtKpi = clp => moneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
+  const hLbl = horizon===3?'3M':horizon===6?'6M':'12M'
 
-  // Geometria del grafico de linea
+  // Geometría del gráfico
   const W=470, padX=24, padTop=14, baseY=120, n=months.length
   const xAt = i => n>1 ? padX + i*(W-2*padX)/(n-1) : W/2
   const yAt = m => baseY - (m.total/maxVal)*(baseY-padTop)
-  const linePath = months.map((m,i)=>`${i?'L':'M'}${xAt(i).toFixed(1)},${yAt(m).toFixed(1)}`).join(' ')
-  const areaPath = `${linePath} L${xAt(n-1).toFixed(1)},${baseY} L${xAt(0).toFixed(1)},${baseY} Z`
+  const pastPath = months.slice(0,firstFut+1).map((m,i)=>`${i?'L':'M'}${xAt(i).toFixed(1)},${yAt(m).toFixed(1)}`).join(' ')
+  const futPath = months.slice(firstFut).map((m,i)=>`${i?'L':'M'}${xAt(firstFut+i).toFixed(1)},${yAt(m).toFixed(1)}`).join(' ')
+  const futArea = `${futPath} L${xAt(n-1).toFixed(1)},${baseY} L${xAt(firstFut).toFixed(1)},${baseY} Z`
+  const xHoy = xAt(firstFut)
+  const showLbl = i => horizon<=6 || i%2===0 || i===firstFut
+
+  // Detalle del mes activo: facturas/cuotas que componen ese punto
+  const activeDet = useMemo(()=>{
+    if(activePoint==null) return null
+    const m=months[activePoint]; if(!m) return null
+    let items=[]
+    if(m.past){
+      items = pagadas.filter(b=>b.paid_at?.startsWith(m.key)).map(b=>({b,tag:'Cobrado',col:C.normal}))
+    } else {
+      const over = activePoint===firstFut ? pending.filter(b=>b.due<m.key.slice(0,7)+'-01') : []
+      const emit = pending.filter(b=>b.due?.startsWith(m.key))
+      const prog = programadas.filter(b=>b.due?.startsWith(m.key))
+      items = [...over,...emit].map(b=>({b,tag:b.status==='Vencido'?'Vencido':'Emitido',col:b.status==='Vencido'?C.overdue:C.accent}))
+        .concat(prog.map(b=>({b,tag:'Programado',col:'#537281'})))
+    }
+    items.sort((a,b)=>(b.b.amount||0)-(a.b.amount||0))
+    return {m, items}
+  },[activePoint,months])
 
   const tcell = {borderRadius:10,padding:'10px 12px',background:'#F5F7F9',minWidth:0}
   const tlabel = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
-  const badge = {fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,whiteSpace:'nowrap'}
   return (
     <div style={{padding:'16px 20px 0'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'0.06em',textTransform:'uppercase'}}>Cash Flow Forecast</div>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'0.06em',textTransform:'uppercase'}}>Cash flow · proyección {hLbl}</div>
         <div style={{display:'flex',gap:4,flexShrink:0}}>
           {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
-            <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:'#99ABB4',fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
+            <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:'#99ABB4',fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
           ))}
         </div>
       </div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:12}}>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}><div style={tlabel}>Total</div><div style={{fontSize:17,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalHorizon)}</div></div>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`}}><div style={tlabel}>Emitido</div><div style={{fontSize:17,fontWeight:600,color:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalEmitido)}</div></div>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}><div style={tlabel}>Programado</div><div style={{fontSize:17,fontWeight:600,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalProgramado)}</div></div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:10}}>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}><div style={tlabel}>Total {hLbl}</div><div style={{fontSize:17,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalHorizon)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`}}><div style={tlabel}>Emitido (por cobrar)</div><div style={{fontSize:17,fontWeight:600,color:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalEmitido)}</div></div>
+          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}><div style={tlabel}>Programado {hLbl}</div><div style={{fontSize:17,fontWeight:600,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalProgramado)}</div></div>
         </div>
+        <div style={{fontSize:10,color:'#99ABB4',marginBottom:8}}>Proyección a {hLbl} desde hoy. A la izquierda de "Hoy", lo efectivamente cobrado.</div>
 
-        <div style={{display:'flex',gap:14,fontSize:10,color:'#537281',marginBottom:4}}>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:'50%',background:C.accent,display:'inline-block'}}/>Emitido</span>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:'50%',background:'#99ABB4',display:'inline-block'}}/>Programado</span>
+        <div style={{display:'flex',gap:14,fontSize:10,color:'#537281',marginBottom:4,flexWrap:'wrap'}}>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px solid #99ABB4',display:'inline-block'}}/>Cobrado real</span>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px solid #003C50',display:'inline-block'}}/>Proyección</span>
           <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px dashed #99ABB4',display:'inline-block'}}/>Hoy</span>
         </div>
 
@@ -1286,19 +1317,20 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
               <stop offset="100%" stopColor="#003C50" stopOpacity="0.02"/>
             </linearGradient>
           </defs>
-          <line x1={xAt(0)} y1="10" x2={xAt(0)} y2={baseY} stroke="#99ABB4" strokeWidth="1" strokeDasharray="3 3"/>
-          <text x={xAt(0)+4} y="16" fontSize="9" fill="#99ABB4" fontWeight="600">Hoy</text>
-          <path d={areaPath} fill="url(#cfArea)"/>
-          <path d={linePath} fill="none" stroke="#003C50" strokeWidth="2" strokeLinejoin="round"/>
+          <line x1={xHoy} y1="10" x2={xHoy} y2={baseY} stroke="#99ABB4" strokeWidth="1" strokeDasharray="3 3"/>
+          <text x={xHoy+4} y="16" fontSize="9" fill="#99ABB4" fontWeight="600">Hoy</text>
+          <path d={futArea} fill="url(#cfArea)"/>
+          <path d={pastPath} fill="none" stroke="#99ABB4" strokeWidth="2" strokeLinejoin="round"/>
+          <path d={futPath} fill="none" stroke="#003C50" strokeWidth="2" strokeLinejoin="round"/>
           {months.map((m,i)=>(
-            <g key={m.key} onMouseEnter={()=>setActivePoint(i)} onMouseLeave={()=>setActivePoint(null)} onClick={()=>setActivePoint(p=>p===i?null:i)} style={{cursor:'pointer'}}>
-              <rect x={xAt(i)-16} y="8" width="32" height={baseY} fill="transparent"/>
-              <circle cx={xAt(i)} cy={yAt(m)} r={activePoint===i?5.5:4} fill={m.emitido>0?'#003C50':'#99ABB4'} stroke="#fff" strokeWidth={activePoint===i?1.5:0}/>
+            <g key={m.key} onClick={()=>setActivePoint(p=>p===i?null:i)} style={{cursor:'pointer'}}>
+              <rect x={xAt(i)-14} y="8" width="28" height={baseY} fill="transparent"/>
+              <circle cx={xAt(i)} cy={yAt(m)} r={activePoint===i?5.5:4} fill={m.past?'#99ABB4':(m.emitido>0?'#003C50':'#537281')} stroke="#fff" strokeWidth={activePoint===i?1.5:0}/>
             </g>
           ))}
-          {months.map((m,i)=>(
-            <text key={m.key} x={xAt(i)} y={baseY+22} fontSize="9" fill={activePoint===i?'#003C50':'#99ABB4'} fontWeight={activePoint===i?600:400} textAnchor="middle">{m.label}</text>
-          ))}
+          {months.map((m,i)=>(showLbl(i)?(
+            <text key={m.key} x={xAt(i)} y={baseY+22} fontSize="9" fill={activePoint===i||i===firstFut?'#003C50':'#99ABB4'} fontWeight={activePoint===i||i===firstFut?600:400} textAnchor="middle">{m.label}</text>
+          ):null))}
           {activePoint!=null&&(()=>{
             const m=months[activePoint], x=xAt(activePoint), y=yAt(m)
             const txt=fmt(m.total), w=txt.length*6.2+14
@@ -1307,38 +1339,30 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
           })()}
         </svg>
 
-        <div onClick={()=>setOpenDetalle(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-          <span style={{fontSize:11,color:C.muted,transform:openDetalle?'rotate(90deg)':'none',transition:'transform .15s'}}>▶</span>
-          <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Detalle</span>
-        </div>
-        {openDetalle&&(
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,marginTop:8}}>
-            <thead><tr>
-              <th style={{textAlign:'left',fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,padding:'6px 4px',borderBottom:`1px solid ${C.border}`}}>Mes</th>
-              <th style={{textAlign:'left',fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,padding:'6px 4px',borderBottom:`1px solid ${C.border}`}}>Estado</th>
-              <th style={{textAlign:'right',fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,padding:'6px 4px',borderBottom:`1px solid ${C.border}`}}>Monto</th>
-            </tr></thead>
-            <tbody>
-              {months.map(m=>{
-                const emitNoVenc = m.emitido - m.overdue
-                return (
-                  <tr key={m.key}>
-                    <td style={{padding:'8px 4px',borderBottom:'1px solid #E4E8EB',color:C.text}}>{m.labelFull}</td>
-                    <td style={{padding:'8px 4px',borderBottom:'1px solid #E4E8EB'}}>
-                      <span style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                        {m.overdue>0&&<span style={{...badge,background:'#FCEBEB',color:'#E24B4A'}}>Vencido</span>}
-                        {emitNoVenc>0&&<span style={{...badge,background:'#E4E8EB',color:'#003C50'}}>Emitido</span>}
-                        {m.programado>0&&<span style={{...badge,background:'#E4E8EB',color:'#537281'}}>Programado</span>}
-                        {m.total===0&&<span style={{fontSize:11,color:'#99ABB4'}}>—</span>}
-                      </span>
-                    </td>
-                    <td style={{padding:'8px 4px',borderBottom:'1px solid #E4E8EB',textAlign:'right',fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{fmt(m.total)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        {activeDet&&(
+          <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <span style={{fontSize:11,fontWeight:600,color:C.text}}>{activeDet.m.labelFull}{activeDet.m.past?' · cobrado':''}</span>
+              <span style={{fontSize:12,fontWeight:700,color:activeDet.m.past?C.normal:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(activeDet.m.total)}</span>
+            </div>
+            {activeDet.items.length===0&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin movimientos este mes.</div>}
+            <div style={{maxHeight:240,overflowY:'auto'}}>
+              {activeDet.items.map(({b,tag,col})=>(
+                <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
+                    <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    <span style={{fontSize:9,fontWeight:600,color:col,whiteSpace:'nowrap'}}>{tag}</span>
+                    <span style={{fontSize:12,fontWeight:600,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
+        {activePoint==null&&<div style={{fontSize:10,color:'#99ABB4',textAlign:'center',marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>Toca un mes para ver las facturas que lo componen</div>}
       </div>
     </div>
   )
@@ -2042,7 +2066,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       </div>
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
-      <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef}/>
+      <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients}/>
 
       {/* Facturación */}
       <div style={{padding:'16px 20px 16px'}}>
