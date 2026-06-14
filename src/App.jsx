@@ -9408,7 +9408,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   // Orden por urgencia: vencimiento más cercano primero, sin fecha al final
   const porUrgencia = arr => [...arr].sort((a,b)=>(daysLeft(a.due)??99999)-(daysLeft(b.due)??99999))
 
-  const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
+  const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
   const bsCard = due => { const d=daysLeft(due); if(d===null) return {bg:'#E4E8EB',col:'#537281'}; if(d<0) return {bg:'#FCEBEB',col:'#E24B4A'}; if(d<=1) return {bg:'#FAEEDA',col:'#C77F18'}; if(d<=7) return {bg:'#FAEEDA',col:'#C77F18'}; return {bg:'#E4E8EB',col:'#537281'} }
   const Card = ({t,showWho,done}) => {
     const client=clients.find(c=>c.id===t.client_id)
@@ -10444,14 +10444,15 @@ export default function App() {
 
   const handleDeleteExpense=useCallback(async(id)=>{
     const exp=expenses.find(x=>x.id===id)
-    // Solo confirma el caso de alto riesgo (ya rendido al cliente → descuadra). El gasto normal va a Papelera con toast Deshacer.
-    if(exp?.client_rendered_at && !confirm('Este gasto ya fue incluido en una rendición enviada al cliente.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?')) return
+    // Avisa si ya fue rendido al cliente O liquidado en caja chica (ambos descuadran). El gasto normal va a Papelera con toast Deshacer.
+    if((exp?.client_rendered_at||exp?.rendered_at) && !confirm('Este gasto ya fue incluido en una rendición o liquidación.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?')) return
     const {error}=await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',id)
     if(error){ alert('No se pudo eliminar: '+error.message); return }
-    // Si estaba en una rendición, ajustar su total y contador para no descuadrarla
+    // Ajusta el total/contador de la rendición a la que pertenece — sea del cliente (client_render_id) o de caja chica (render_id).
     let rendBackup=null
-    if(exp?.client_render_id){
-      const r=(rendiciones||[]).find(x=>x.id===exp.client_render_id)
+    const renderId = exp?.client_render_id || exp?.render_id
+    if(renderId){
+      const r=(rendiciones||[]).find(x=>x.id===renderId)
       if(r){
         rendBackup={id:r.id,total:r.total,n_gastos:r.n_gastos}
         const nuevoTotal=(r.total||0)-(exp.amount||0), nuevoN=Math.max(0,(r.n_gastos||0)-1)
@@ -10904,7 +10905,7 @@ export default function App() {
     const {data,error}=await supabase.from('billing').insert(newBill).select().single()
     if(error){alert('No se pudo crear el cobro: '+error.message);return}
     setBilling(p=>[data,...p])
-  },[])
+  },[expenses,clientEntities])
 
   const overdueN=useMemo(()=>{
     return billing.filter(b=>b.status==='Vencido').length
