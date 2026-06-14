@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Rendiciones: total se reajusta al editar un gasto ya rendido
+- **Editar el monto** de un gasto ya rendido/liquidado ahora reajusta el total de su rendición (antes quedaba con el monto viejo → descuadre entre el total guardado y la suma del detalle).
+
 ## 2026-06-14 — Rendiciones: saldo único auditable + anular reembolso al anular rendición
 - **Saldo del fondo, una sola fuente**: `rendicionSaldo()` = fondos recibidos − gastos ya rendidos (acotado a la razón social). El modal, el PDF y el correo al cliente muestran ahora **la misma cifra** (antes divergían: el PDF ignoraba rendiciones anteriores y el correo restaba gastos aún no rendidos).
 - **PDF — recuadro "Resumen del fondo"**: ledger auditable al pie (Fondos recibidos − cada rendición anterior − esta rendición = Saldo disponible), para que el cliente entienda de dónde sale el saldo.
