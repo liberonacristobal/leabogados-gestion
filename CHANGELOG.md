@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Datos: BM Soluciones, quitar doble conteo (6 cuotas fantasma)
+- Se eliminaron (a Papelera) las 6 cuotas mensuales Ene-Jun 2026 marcadas pagadas SIN factura: duplicaban con la factura real 239 (Asesoria Legal Permanente Enero-Junio, 8.343.676) que cubre ese periodo. Se dejaron la 239 y las cuotas Programadas Jul-Dic.
+
 ## 2026-06-14 — Tareas: pill de responsable con color por persona
 - En las tarjetas de tareas, la pill del responsable ahora tiene **color distinto por persona** (Martin verde, Martina morado, Rodrigo ambar, Erasmo azul, Cristobal azul corporativo). Si hay varios responsables, cada uno con su pill.
 
