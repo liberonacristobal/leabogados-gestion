@@ -9754,7 +9754,7 @@ ${muestra}`
   const totalImp = validas.reduce((a,r)=>a+(r.monto||0),0)
   const sinCli = validas.filter(r=>!r.client_id).length
   const stPill = r => r.error?['Error',C.overdue,'#FCEBEB']:r.dup?['Ya existe','#C77F18','#FFF8E1']:r._skip?['Omitida',C.muted,'#F5F7F9']:r.status==='Pagado'?['Pagada',C.normal,'#E1F5EE']:['Pendiente',C.accent,'#E6EEF1']
-  const matches = q.trim()?clients.filter(c=>norm(c.name).includes(norm(q))).slice(0,6):[]
+  const matches = q.trim()?clients.filter(c=>norm(c.name).includes(norm(q))||normRut(c.rut).includes(normRut(q))||norm(c.razon_social).includes(norm(q))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es')).slice(0,8):[]
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:8}}>
@@ -9810,7 +9810,7 @@ ${muestra}`
               <div style={{marginTop:6}}>
                 <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={inp}/>
                 {matches.length>0&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:4,overflow:'hidden'}}>
-                  {matches.map(c=>(<div key={c.id} onClick={()=>asignar(r.id,c.id)} style={{padding:'8px 11px',fontSize:13,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>{c.name}</div>))}
+                  {matches.map(c=>(<div key={c.id} onClick={()=>asignar(r.id,c.id)} style={{padding:'8px 11px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}><div style={{fontSize:13,fontWeight:500,color:C.text}}>{c.name}</div>{c.rut&&<div style={{fontSize:10,color:C.muted}}>{c.rut}</div>}</div>))}
                 </div>}
               </div>
             )}
