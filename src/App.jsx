@@ -721,7 +721,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       if(abrirCorreo) {
         const dest = (enviarA||'').trim() || 'ee@leabogados.cl,cl@leabogados.cl'
         const asunto = encodeURIComponent('Liquidación caja chica — ' + me + ' — ' + periodo)
-        const lineas = marcados.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+(e.date||'—')+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
+        const lineas = marcados.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+fmtFechaDMY(e.date)+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
         const cuerpo = encodeURIComponent(
           'Estimados,\n\nAdjunto el detalle de la liquidación de caja chica.\n\n'
           + 'Responsable: ' + me + '\nPeríodo: ' + periodo + '\nN° de gastos: ' + marcados.length + '\n\n'
@@ -4125,10 +4125,6 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const nPagadas=bb.filter(b=>b.status==='Pagado').length
   const years=[...new Set(bb.flatMap(b=>[b.issued_at?.slice(0,4),b.due?.slice(0,4)]).filter(Boolean))].sort((a,b)=>b-a)
 
-  const handleTogglePagado = async(b) => {
-    if(b.status==='Pagado') { await onStatusChange(b.id,'Pendiente',null) }
-    else { setPayingId(b.id); setPayDate(new Date().toISOString().slice(0,10)); setInclTerceros(true) }
-  }
   const confirmPago = async() => {
     if(pagando) return   // evita doble submit
     setPagando(true)
@@ -5423,7 +5419,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
         </div>
         <div style={{background:sK.bg,borderRadius:10,padding:'10px 12px'}}>
           <div style={lblG}>Saldo actual</div>
-          <div style={{fontSize:13,fontWeight:700,color:sK.c}}>{fmtN(saldoActual)}</div>
+          <div style={{fontSize:13,fontWeight:700,color:sK.c}}>{saldoActual<0?'−':''}{fmtN(saldoActual)}</div>
         </div>
       </div>
 
@@ -5488,7 +5484,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
           <div style={{display:'flex',justifyContent:'space-between'}}>
             <span style={{fontSize:11,color:'#537281'}}>Saldo tras rendición</span>
             <span style={{fontSize:12,fontWeight:600,color:saldoTrasRendicion>=0?'#1D9E75':'#E24B4A'}}>
-              {fmtN(saldoTrasRendicion)}{saldoTrasRendicion<0?' (nos deben)':' (a favor cliente)'}
+              {saldoTrasRendicion<0?'−':''}{fmtN(saldoTrasRendicion)}{saldoTrasRendicion<0?' (nos deben)':' (a favor cliente)'}
             </span>
           </div>
         </div>
@@ -10075,11 +10071,16 @@ function PapeleraModal({clients=[],onClose,onChanged}){
       if(tipo==='ventas'){ await supabase.from('sales').update({deleted_at:null}).eq('id',row.id); /* solo las cuotas borradas EN CASCADA con la venta (mismo deleted_at), no las que se borraron por separado antes */ const cq=supabase.from('billing').update({deleted_at:null}).eq('sale_id',row.id); await (row.deleted_at?cq.eq('deleted_at',row.deleted_at):cq) }
       else if(tipo==='cobros'){ await supabase.from('billing').update({deleted_at:null}).eq('id',row.id) }
       else {
-        await supabase.from('expenses').update({deleted_at:null}).eq('id',row.id)
-        // Si el gasto estaba en una rendición al cliente, reponer su total/contador (handleDeleteExpense los descontó al borrar).
-        if(row.client_render_id){
-          const {data:r}=await supabase.from('rendiciones').select('total,n_gastos').eq('id',row.client_render_id).single()
-          if(r) await supabase.from('rendiciones').update({total:(r.total||0)+(row.amount||0), n_gastos:(r.n_gastos||0)+1}).eq('id',row.client_render_id)
+        const renderId = row.client_render_id || row.render_id
+        let r=null
+        if(renderId){ const {data}=await supabase.from('rendiciones').select('total,n_gastos').eq('id',renderId).single(); r=data }
+        if(renderId && !r){
+          // La rendición ya no existe: restaurar el gasto como PENDIENTE (no dejar un vínculo muerto que lo muestre "rendido").
+          await supabase.from('expenses').update({deleted_at:null, client_render_id:null, client_rendered_at:null, render_id:null, rendered_at:null, rendered_by:null}).eq('id',row.id)
+        } else {
+          await supabase.from('expenses').update({deleted_at:null}).eq('id',row.id)
+          // Si el gasto estaba en una rendición viva, reponer su total/contador (handleDeleteExpense los descontó al borrar).
+          if(r) await supabase.from('rendiciones').update({total:(r.total||0)+(row.amount||0), n_gastos:(r.n_gastos||0)+1}).eq('id',renderId)
         }
       }
       await cargar(); onChanged&&onChanged()
