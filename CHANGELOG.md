@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: los 4 indicadores en una grilla ordenada
+- Facturado, Cobrado, Costo oficina y Tasa de cobro quedan en una misma grilla 2x2, en orden logico por columnas: izquierda Facturado entonces Costo (facturado menos costo = neto), derecha Cobrado entonces Tasa. Todos con su color; Facturado/Cobrado/Costo tocables.
+
 ## 2026-06-14 — Resultado del año: Vendido y Neto firma grandes al mismo nivel
 - Arriba, las dos cifras protagonistas en grande y al mismo nivel: **Vendido** (izq) y **Neto firma** (der). Luego la barra, y **Facturado / Cobrado** como cifras de soporte con su porcentaje. Costo oficina y Tasa de cobro al pie (tocables).
 
