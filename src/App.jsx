@@ -2058,46 +2058,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       )}
 
-      {/* Gestión Caja Chica — control del equipo (el Dashboard ya es admin-only) */}
-      {(()=>{
-        // Siempre mostrar al equipo limited completo, aunque alguno no tenga movimientos aún (ej. Martín sin caja todavía).
-        const cajaUsers = ['Martín','Martina','Rodrigo']
-        const money = fmtN
-        const filas = cajaUsers.map(u=>{
-          const saldo = saldoCajaChica(pettyCash, expenses, u)
-          const misGastos = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===u)
-          const sinLiq = misGastos.filter(e=>!e.rendered_at)
-          const sinLiqMonto = sinLiq.reduce((a,e)=>a+(e.amount||0),0)
-          const sinLiqNoNotaria = sinLiq.filter(e=>e.category!=='Notaria').length
-          const fechas = misGastos.map(e=>e.date).filter(Boolean).sort()
-          const ult = fechas.length?fechas[fechas.length-1]:null
-          const dl = ult?daysLeft(ult):null
-          return {u,saldo,sinLiqMonto,sinLiqN:sinLiq.length,alertaSinLiq:sinLiqNoNotaria>10,ult,alertaUlt:dl!==null&&dl<-7}
-        })
-        const cols = '1fr 0.85fr 1.1fr 0.78fr'
-        const th = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4}
-        return (
-          <div style={{padding:'16px 20px 0'}}>
-            <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Gestión Caja Chica</div>
-            <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-              <div style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'8px 12px',borderBottom:`1px solid ${C.border}`,background:'#F5F7F9'}}>
-                <div style={th}>Usuario</div>
-                <div style={{...th,textAlign:'right'}}>Saldo caja</div>
-                <div style={{...th,textAlign:'right'}}>Sin liquidar</div>
-                <div style={{...th,textAlign:'right'}}>Últ. gasto</div>
-              </div>
-              {filas.map((f,i)=>(
-                <div key={f.u} style={{display:'grid',gridTemplateColumns:cols,gap:6,padding:'9px 12px',borderBottom:i<filas.length-1?`1px solid ${C.border}`:'none',alignItems:'center'}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.u}</div>
-                  <div style={{fontSize:12,fontWeight:600,color:f.saldo<0?C.overdue:C.normal,textAlign:'right',whiteSpace:'nowrap'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div>
-                  <div style={{fontSize:11,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaSinLiq&&<span title='Más de 10 gastos sin liquidar (excl. Notaría)'>(!) </span>}{money(f.sinLiqMonto)} / {f.sinLiqN}</div>
-                  <div style={{fontSize:11,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,textAlign:'right',whiteSpace:'nowrap'}}>{f.alertaUlt&&<span title='Más de 7 días sin ingresar un gasto'>(!) </span>}{f.ult?fmtDate(f.ult):'—'}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })()}
 
 
       {/* Cuentas por pagar a proveedores (costos de terceros) */}
@@ -2311,6 +2271,49 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':`Marcar ${payGroup.cuentas.length} pagadas`}</button>
                 </div>
               </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Gestión Caja Chica — al final del Dashboard. Tarjeta por persona (Martina, Rodrigo) con saldo/sin liquidar/últ. gasto en paralelo. */}
+      {(()=>{
+        const cajaUsers = ['Martina','Rodrigo']
+        const money = fmtN
+        const av = { 'Martina':['#EEEDFE','#534AB7'], 'Rodrigo':['#FAEEDA','#C77F18'] }
+        const lbl = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:3}
+        const filas = cajaUsers.map(u=>{
+          const saldo = saldoCajaChica(pettyCash, expenses, u)
+          const misGastos = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===u)
+          const sinLiq = misGastos.filter(e=>!e.rendered_at)
+          const sinLiqMonto = sinLiq.reduce((a,e)=>a+(e.amount||0),0)
+          const sinLiqNoNotaria = sinLiq.filter(e=>e.category!=='Notaria').length
+          const fechas = misGastos.map(e=>e.date).filter(Boolean).sort()
+          const ult = fechas.length?fechas[fechas.length-1]:null
+          const dl = ult?daysLeft(ult):null
+          return {u,saldo,sinLiqMonto,sinLiqN:sinLiq.length,alertaSinLiq:sinLiqNoNotaria>10,ult,alertaUlt:dl!==null&&dl<-7}
+        })
+        return (
+          <div style={{padding:'16px 20px 0'}}>
+            <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Gestión caja chica</div>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {filas.map(f=>{
+                const [avBg,avCol]=av[f.u]||['#F1EFE8','#537281']
+                const alerta = f.alertaSinLiq||f.alertaUlt||f.saldo<0
+                return (
+                <div key={f.u} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${alerta?C.soon:C.normal}`,borderRadius:12,padding:'13px 14px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:11}}>
+                    <span style={{width:28,height:28,borderRadius:'50%',background:avBg,color:avCol,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>{f.u[0]}</span>
+                    <span style={{fontSize:13,fontWeight:500,color:C.text}}>{f.u}</span>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                    <div style={{minWidth:0}}><div style={lbl}>Saldo caja</div><div style={{fontSize:15,fontWeight:600,color:f.saldo<0?C.overdue:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.saldo<0?'-':''}{money(f.saldo)}</div></div>
+                    <div style={{minWidth:0}}><div style={lbl}>Sin liquidar</div><div style={{fontSize:13,fontWeight:600,color:f.alertaSinLiq?C.soon:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={f.alertaSinLiq?'Más de 10 gastos sin liquidar (excl. Notaría)':undefined}>{f.alertaSinLiq?'(!) ':''}{money(f.sinLiqMonto)} · {f.sinLiqN}</div></div>
+                    <div style={{minWidth:0}}><div style={lbl}>Últ. gasto</div><div style={{fontSize:13,fontWeight:600,color:f.alertaUlt?C.soon:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={f.alertaUlt?'Más de 7 días sin ingresar un gasto':undefined}>{f.alertaUlt?'(!) ':''}{f.ult?fmtDate(f.ult):'—'}</div></div>
+                  </div>
+                </div>
+                )
+              })}
             </div>
           </div>
         )
