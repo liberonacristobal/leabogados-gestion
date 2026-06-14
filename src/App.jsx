@@ -1372,9 +1372,9 @@ function VentasPorMes({sales,ufHoy,moneda='CLP'}) {
   if(totalUF===0&&totalCLP===0) return null
 
   return (
-    <div style={{padding:'0 20px 16px'}}>
+    <div style={{padding:'16px 20px 0'}}>
       <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Ventas por mes {yr}</div>
-      <div style={{background:C.card,borderRadius:12,padding:'12px 14px',border:`1px solid ${C.border}`}}>
+      <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:8}}>
           <div style={{fontSize:11,color:C.muted}}>Total {yr}: <strong style={{color:C.text,fontSize:13}}>{moneda==='UF'?fmtUF(totalUF):fmt(totalCLP)}</strong></div>
           {sel!==null&&data[sel]&&val(data[sel])>0&&(
