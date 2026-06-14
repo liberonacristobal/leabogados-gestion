@@ -36,7 +36,7 @@ const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c
 const fmtFechaDMY = d => { if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(d) }
 // Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
 const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
-const fmtDate = d => { if(!d) return '—'; return new Date(d+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short'}) }
+const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-MM-AAAA con guiones) en toda la app
 const daysLeft = d => { if(!d) return null; return Math.round((new Date(d+'T12:00') - new Date()) / 86400000) }
 // Archivo automatico de tareas: una tarea Terminada se considera archivada cuando se completo
 // hace mas de DAYS_TO_ARCHIVE dias. Las terminadas sin completed_at (historicas) cuentan como archivadas.
@@ -835,7 +835,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         const totalRecibido = cajasOrd.reduce((a,p)=>a+(p.amount||0),0)
         const secLbl = {fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase'}
         const totRow = (lbl,val)=>(<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#F5F7F9',borderRadius:8,padding:'8px 11px',marginTop:8}}><span style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.02em',textTransform:'uppercase'}}>{lbl}</span><span style={{fontSize:12,fontWeight:600,color:'#003C50'}}>{fmtCLP(val)}</span></div>)
-        const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+        const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
         return (
         <div style={{padding:'4px 0 100px'}}>
           {/* KPIs */}
@@ -1452,24 +1452,8 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview}) {
   }
   Object.keys(porPersona).forEach(w=>porPersona[w].sort(cmp))
   const personas = Object.keys(porPersona).sort()
-  const fmtInicio = iso => {
-    if(!iso) return ''
-    try {
-      const d = new Date(iso)
-      const dd = String(d.getDate()).padStart(2,'0')
-      const mm = String(d.getMonth()+1).padStart(2,'0')
-      return dd+'/'+mm+'/'+d.getFullYear()
-    } catch(e) { return '' }
-  }
-  const fmtVence = iso => {
-    if(!iso) return ''
-    try {
-      const d = new Date(iso)
-      const dd = String(d.getDate()).padStart(2,'0')
-      const mm = String(d.getMonth()+1).padStart(2,'0')
-      return dd+'/'+mm
-    } catch(e) { return '' }
-  }
+  const fmtInicio = iso => iso?fmtFechaDMY(iso):''   // 13-06-2026
+  const fmtVence = iso => iso?fmtFechaDMY(iso):''    // 13-06-2026 (formato oficial, con año)
   const avatarColor = name => {
     const map = {
       'Crist\u00f3bal': ['#E6F1FB','#003C50'],
@@ -2278,9 +2262,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Gestión Caja Chica — al final del Dashboard. Tarjeta por persona (Martina, Rodrigo) con saldo/sin liquidar/últ. gasto en paralelo. */}
       {(()=>{
-        const cajaUsers = ['Martina','Rodrigo']
+        const cajaUsers = ['Martín','Martina']
         const money = fmtN
-        const av = { 'Martina':['#EEEDFE','#534AB7'], 'Rodrigo':['#FAEEDA','#C77F18'] }
+        const av = { 'Martín':['#EAF3DE','#3B6D11'], 'Martina':['#EEEDFE','#534AB7'] }
         const lbl = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:3}
         const filas = cajaUsers.map(u=>{
           const saldo = saldoCajaChica(pettyCash, expenses, u)
@@ -3373,7 +3357,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               const nAnt = cuotasV.filter(b=>b.status==='Anticipada').length
               const nProg = cuotasV.filter(b=>b.status==='Programada').length
               if(antVenta.length===0 && nAnt===0) return null
-              const fmtDA = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+              const fmtDA = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
               return (
                 <>
                   <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Anticipos y cuotas</div>
@@ -4492,7 +4476,7 @@ function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],ant
           if(antDisp.length===0) return null
           const totalDisp = antDisp.reduce((s,a)=>s+(a.monto||0),0)
           const totalSel = antDisp.filter(a=>selAnt.has(a.id)).reduce((s,a)=>s+(a.monto||0),0)
-          const fmtF = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+          const fmtF = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
           const toggle = id => setSelAnt(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
           const montoFac = parseInt(f.amount)||0
           const cubre = montoFac>0 ? totalSel>=montoFac : totalSel>0
@@ -4816,7 +4800,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
   const cliName = id => clients.find(c=>String(c.id)===String(id))?.name||'Sin cliente'
   const rsName = a => clientEntities.find(x=>String(x.id)===String(a.entity_id))?.name||''
   const folioDe = a => billing.find(b=>String(b.id)===String(a.billing_id))?.invoice_no
-  const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+  const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
   const flabel = {fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase'}
   return (
     <div>
@@ -4894,7 +4878,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const pagadoDe = id => terceros.filter(t=>String(t.proveedor_id)===String(id)&&t.estado==='pagado').reduce((s,t)=>s+(t.monto||0),0)
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
-  const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+  const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
 
   const lista = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
   const filtrados = q.trim()
@@ -7213,7 +7197,7 @@ function FinancieroTab({client, clientBilling, entities, anticipos=[], billing=[
         const antDisp = anticipos.filter(a=>a.estado==='disponible')
         const totalDisp = antDisp.reduce((s,a)=>s+(a.monto||0),0)
         const antSorted = [...anticipos].sort((a,b)=>((a.estado==='disponible'?0:1)-(b.estado==='disponible'?0:1))||(b.fecha||'').localeCompare(a.fecha||''))
-        const fmtF = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() }catch(e){return iso||'—'} }
+        const fmtF = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
         return (
           <div style={{marginBottom:20}}>
             <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.5px',fontWeight:600,marginBottom:10}}>Anticipos</div>
@@ -9239,7 +9223,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const diasSemana = Array.from({length:7},(_,i)=>{ const d=new Date(lunesSemana); d.setDate(lunesSemana.getDate()+i); return d })
   const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
   const fmtISO = d => d.toISOString().slice(0,10)
-  const fmtLabel = d => String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')
+  const fmtLabel = d => String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')
   const semanaLabel = fmtLabel(diasSemana[0])+' — '+fmtLabel(diasSemana[6])+' '+diasSemana[6].getFullYear()
 
   const [filterClient,setFilterClient] = useState('')
@@ -9291,7 +9275,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   // Orden por urgencia: vencimiento más cercano primero, sin fecha al final
   const porUrgencia = arr => [...arr].sort((a,b)=>(daysLeft(a.due)??99999)-(daysLeft(b.due)??99999))
 
-  const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
+  const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
   const bsCard = due => { const d=daysLeft(due); if(d===null) return {bg:'#E4E8EB',col:'#537281'}; if(d<0) return {bg:'#FCEBEB',col:'#E24B4A'}; if(d<=1) return {bg:'#FAEEDA',col:'#C77F18'}; if(d<=7) return {bg:'#FAEEDA',col:'#C77F18'}; return {bg:'#E4E8EB',col:'#537281'} }
   const Card = ({t,showWho,done}) => {
     const client=clients.find(c=>c.id===t.client_id)
@@ -9395,7 +9379,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           lunesSem.setHours(0,0,0,0)
           const dias = Array.from({length:5},(_,i)=>{ const d=new Date(lunesSem); d.setDate(lunesSem.getDate()+i); return d })
           const finSem = new Date(dias[4])
-          const tagLabel = String(dias[0].getDate()).padStart(2,'0')+'/'+String(dias[0].getMonth()+1).padStart(2,'0')+' — '+String(finSem.getDate()).padStart(2,'0')+'/'+String(finSem.getMonth()+1).padStart(2,'0')
+          const tagLabel = String(dias[0].getDate()).padStart(2,'0')+'-'+String(dias[0].getMonth()+1).padStart(2,'0')+' — '+String(finSem.getDate()).padStart(2,'0')+'-'+String(finSem.getMonth()+1).padStart(2,'0')
           return (
             <div key={semIdx} style={{marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:6}}>{semIdx===0?'Esta semana':'Próxima semana'} <span style={{color:C.muted}}>· {tagLabel}</span></div>
@@ -9449,7 +9433,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             return (b.created_at||'')<(a.created_at||'')?-1:1
           }).slice(0,3)
           const fmtCLP = fmtN
-          const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
+          const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
           const CAT_BG = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
           const GREEN={num:'#1D9E75',bg:'#E1F5EE',bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:'#C77F18',bg:'#FEF6EE',bd:'#F5E2CC',label:'#C77F18'}
