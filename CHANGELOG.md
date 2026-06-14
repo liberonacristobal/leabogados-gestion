@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: Vendido y Neto firma grandes al mismo nivel
+- Arriba, las dos cifras protagonistas en grande y al mismo nivel: **Vendido** (izq) y **Neto firma** (der). Luego la barra, y **Facturado / Cobrado** como cifras de soporte con su 
 ## 2026-06-14 — Resultado del año: costo dentro del Facturado (ubicación lógica)
 - El **Costo oficina** ya no se marca al extremo derecho de la barra (zona de lo no facturado), sino **dentro del Facturado, en su borde derecho** — porque el costo (terceros) sale de lo facturado, no de lo vendido aún sin facturar. Lo verde de Facturado = Neto firma. Globito aclara "de lo facturado".
 
