@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Importar facturas: revisión con IA (Opus 4.8)
+- En **Importar facturas (Excel)**, nuevo botón **"Revisar con IA (Opus 4.8)"**: antes de cargar, Opus audita el lote y muestra resumen, alertas (huérfanas, notas de crédito, montos negativos, RUT mal formateados, conceptos raros), lista de clientes a crear y una recomendación. Solo audita, no modifica datos.
+
 ## 2026-06-14 — Dashboard: aging con detalle, KPI sin fondos rediseñado, espaciado
 - **Aging de cartera**: ahora tocas cualquier tramo (Al día / 31-60 / +60 días) y se despliega el detalle de las facturas que componen ese número (cliente, concepto, días vencida, monto).
 - **Clientes sin fondos**: rediseñado a tarjeta dividida — a la izquierda el total y cuántos requieren fondos; a la derecha la lista ordenada por gravedad con un punto rojo según severidad. Al tocar un cliente se abre su detalle abajo.
