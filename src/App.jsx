@@ -2094,12 +2094,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
       {/* Aging de cartera */}
-      <div style={{padding:'0 20px'}}>
+      <div style={{padding:'16px 20px 0'}}>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Aging de cartera</div>
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase'}}>Aging de cartera</div>
-              <div style={{fontSize:26,fontWeight:500,color:'#003C50',lineHeight:1.1,marginTop:2}}>{fmt(agingData.total)}</div>
+              <div style={{fontSize:26,fontWeight:500,color:'#003C50',lineHeight:1.1}}>{fmt(agingData.total)}</div>
+              <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginTop:2}}>Por cobrar</div>
             </div>
             {agingData.delta.monto!==0&&(
               <div style={{textAlign:'right',flexShrink:0}}>

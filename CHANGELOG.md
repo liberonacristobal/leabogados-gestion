@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14 — Dashboard: espacio Cash flow/Aging + título de Aging afuera
+- Se separó la tarjeta de Aging de la de Cash flow (faltaba el espacio superior, quedaban pegadas).
+- El título "Aging de cartera" salió de la tarjeta (va arriba como las demás secciones); dentro queda el total con el subtítulo "Por cobrar".
+
 ## 2026-06-14 — Resultado del año: tarjeta rediseñada (funnel vertical)
 - La tarjeta pasó de 3 columnas apretadas con flechas a un **funnel vertical**: cada métrica (Vendido / Facturado / Cobrado) en su fila con monto y una barra que muestra el embudo como % de lo vendido. Tasa cobro y Neto firma quedan como cierre. Mejor distribución y legibilidad en móvil; Facturado y Cobrado siguen tocables.
 
