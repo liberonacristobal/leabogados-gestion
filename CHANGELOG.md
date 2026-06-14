@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: Vendido como encabezado + costo tocable + filas claras
+- **Vendido** ahora es el encabezado con su total a la derecha (la barra entera = lo vendido), para que se distinga.
+- **Todos los tramos tocables**, incluido **Costo oficina** (abre el detalle de terceros por factura).
+- Datos en **filas con swatch + etiqueta + monto** (Facturado/Cobrado/Costo), para no tener que adivinar el color. Cierra con Neto firma + Tasa.
+
 ## 2026-06-14 — Resultado del año: Alt 3 (neto destacado) + barra fina interactiva
 - Datos: chips de color en una fila y **Neto firma destacado** abajo con Tasa como píldora (Alt 3).
 - **Barra más fina** (13px) e **interactiva**: tocar el tramo Facturado o Cobrado abre su detalle; separadores blancos entre tramos; el tramo activo se resalta.
