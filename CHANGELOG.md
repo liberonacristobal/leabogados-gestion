@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 — Dashboard: aging con detalle, KPI sin fondos rediseñado, espaciado
+- **Aging de cartera**: ahora tocas cualquier tramo (Al día / 31-60 / +60 días) y se despliega el detalle de las facturas que componen ese número (cliente, concepto, días vencida, monto).
+- **Clientes sin fondos**: rediseñado a tarjeta dividida — a la izquierda el total y cuántos requieren fondos; a la derecha la lista ordenada por gravedad con un punto rojo según severidad. Al tocar un cliente se abre su detalle abajo.
+- **Espaciado**: corregido el hueco doble entre el bloque de meta y Cobranza; tarjetas KPI unificadas (mismo gap/radio/padding en Cobranza, Cash Flow y Facturación); quitado el banner verde "Listo para transferir" (duplicaba el KPI Por pagar).
+
 ## 2026-06-14 — Assessment de guardar/cargar: 3 bugs de datos
 - **Delegar tareas** fallaba siempre (intentaba escribir un campo inexistente). Ahora delega bien.
 - **Caja chica** sumaba por error las rendiciones al cliente en "Mis liquidaciones" → el total liquidado quedaba inflado. Corregido (ahora cuenta solo liquidaciones de caja chica).
