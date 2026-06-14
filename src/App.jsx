@@ -1144,10 +1144,6 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
   const [horizon,setHorizon] = useState(6)
   const [openDetalle,setOpenDetalle] = useState(false)
   const [activePoint,setActivePoint] = useState(null)
-  const _diasES=['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
-  const _mesesES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-  const _hoy=new Date()
-  const fechaTitulo=`Proyección al ${_diasES[_hoy.getDay()]} ${_hoy.getDate()} de ${_mesesES[_hoy.getMonth()]} de ${_hoy.getFullYear()}`
   const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due&&b.billing_type!=='reembolso')
   const programadas = billing.filter(b=>b.status==='Programada'&&b.due&&b.billing_type!=='reembolso')
 
@@ -1186,11 +1182,8 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
   const badge = {fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,whiteSpace:'nowrap'}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:8,gap:8}}>
-        <div>
-          <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'0.06em',textTransform:'uppercase'}}>Cash Flow Forecast</div>
-          <div style={{fontSize:10,color:'#99ABB4',marginTop:2,textTransform:'uppercase',letterSpacing:.3}}>{fechaTitulo}</div>
-        </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'0.06em',textTransform:'uppercase'}}>Cash Flow Forecast</div>
         <div style={{display:'flex',gap:4,flexShrink:0}}>
           {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
             <button key={v} onClick={()=>setHorizon(v)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?'#E6EEF1':'transparent',color:horizon===v?C.accent:'#99ABB4',fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
