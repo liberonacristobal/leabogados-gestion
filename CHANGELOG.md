@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-14 — Cifras: liquidación caja chica + reporte coherentes con el período
+- **Liquidación parcial sin descuadre**: si al liquidar caja chica algún gasto no se marca, la rendición se ajusta al total y N° de gastos REALMENTE marcados (antes quedaba con el total inflado); si no se marca ninguno, se cancela.
+- **Período de la liquidación = mes de los gastos**, no el mes de hoy (igual criterio que la rendición al cliente; muestra rango si cruza meses).
+- **Reporte — meta**: en modo mes la barra de avance compara contra la **meta mensual** (UF anual ÷ 12) y se reetiqueta; antes un mes siempre marcaba ~8% contra la meta anual completa.
+- **Reporte — Gastos y Fondos**: ahora respeta el período elegido (híbrido): fondos y gastos del mes + saldo acumulado a la fecha; solo lista clientes con movimiento en el período.
+- **Reporte — años**: el selector ya no duplica el año (se normalizó número vs string).
+
 ## 2026-06-14 — Rendiciones: total se reajusta al editar un gasto ya rendido
 - **Editar el monto** de un gasto ya rendido/liquidado ahora reajusta el total de su rendición (antes quedaba con el monto viejo → descuadre entre el total guardado y la suma del detalle).
 
