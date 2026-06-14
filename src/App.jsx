@@ -1182,7 +1182,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
   const areaPath = `${linePath} L${xAt(n-1).toFixed(1)},${baseY} L${xAt(0).toFixed(1)},${baseY} Z`
 
   const tcell = {borderRadius:10,padding:'10px 12px',background:'#F5F7F9',minWidth:0}
-  const tlabel = {fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}
+  const tlabel = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
   const badge = {fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,whiteSpace:'nowrap'}
   return (
     <div style={{padding:'16px 20px 0'}}>
@@ -1199,7 +1199,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
       </div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10,marginBottom:12}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:12}}>
           <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}><div style={tlabel}>Total</div><div style={{fontSize:17,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalHorizon)}</div></div>
           <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`}}><div style={tlabel}>Emitido</div><div style={{fontSize:17,fontWeight:600,color:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalEmitido)}</div></div>
           <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}><div style={tlabel}>Programado</div><div style={{fontSize:17,fontWeight:600,color:'#537281',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalProgramado)}</div></div>
@@ -1926,7 +1926,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           const netoFirma = facturado - terceros
           const tasaCol = tasaCobro>=80?C.normal:tasaCobro>=50?C.soon:C.overdue
           const m = clp => dashMoneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
-          const cell = acc => ({background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${acc}`,borderRadius:8,padding:'9px 9px',minWidth:0})
+          const cell = acc => ({background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${acc}`,borderRadius:10,padding:'10px 12px',minWidth:0})
           const clbl = {fontSize:9,color:'#99ABB4',marginBottom:4,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
           const cnum = {fontSize:17,fontWeight:600,whiteSpace:'nowrap'}
           return (
