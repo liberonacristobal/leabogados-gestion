@@ -1345,7 +1345,8 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
 }
 
 
-function VentasPorMes({sales,ufHoy,moneda='CLP'}) {
+function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
+  const [openRec,setOpenRec] = useState(false)
   const yr = currentYear
   const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   const data = useMemo(()=>{
@@ -1418,14 +1419,36 @@ function VentasPorMes({sales,ufHoy,moneda='CLP'}) {
           })}
         </div>
         {recurrentes.length>0&&(
-          <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Ingreso recurrente</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:1}}>{recurrentes.length} asesoría{recurrentes.length!==1?'s':''} permanente{recurrentes.length!==1?'s':''}</div>
-            </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{fontSize:16,fontWeight:600,color:C.normal}}>{moneda==='UF'?fmtUF(recUF):fmt(recCLP)}<span style={{fontSize:10,color:C.muted,fontWeight:500}}> /mes</span></div>
-            </div>
+          <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+            <button onClick={()=>setOpenRec(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',width:'100%',background:'none',border:'none',padding:0,cursor:'pointer',textAlign:'left',gap:8}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
+                <span style={{fontSize:11,color:C.muted,transform:openRec?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>▸</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Ingreso recurrente</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{recurrentes.length} asesoría{recurrentes.length!==1?'s':''} permanente{recurrentes.length!==1?'s':''}</div>
+                </div>
+              </div>
+              <div style={{fontSize:16,fontWeight:600,color:C.normal,flexShrink:0,whiteSpace:'nowrap'}}>{moneda==='UF'?fmtUF(recUF):fmt(recCLP)}<span style={{fontSize:10,color:C.muted,fontWeight:500}}> /mes</span></div>
+            </button>
+            {openRec&&(
+              <div style={{marginTop:8}}>
+                {[...recurrentes].map(s=>{
+                  const uref=ufHoy||s.uf_value||40000
+                  const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref)
+                  const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0)
+                  const cn=clients.find(c=>String(c.id)===String(s.client_id))?.name||'—'
+                  return (
+                    <div key={s.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div>
+                        <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'—'}</div>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:600,color:C.normal,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{moneda==='UF'?fmtUF(uf):fmt(clp)}<span style={{fontSize:9,color:C.muted,fontWeight:500}}> /mes</span></span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1808,6 +1831,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const Chev = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
   const HistIcon = () => <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg>
 
+  // --- Revenue target: detalle de las ventas que componen el "Vendido" (bruto) del año seleccionado ---
+  const [revOpen,setRevOpen] = useState(false)
+  const ventasDelAnio = useMemo(()=> sales
+    .filter(s=>s.year===selYear && !['Borrador','Propuesta','Rechazada'].includes(s.status))
+    .map(s=>({s, bruto: clpDeVenta(s)}))
+    .sort((a,b)=>b.bruto-a.bruto)
+  ,[sales,selYear,ufRef])
+
   // --- Aging de cartera ---
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const [top5Open,setTop5Open] = useState(false)
@@ -1890,6 +1921,36 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               </div>
             ))}
           </div>
+          {/* Trigger detalle de ventas del año (componen el Vendido) */}
+          <div style={{borderTop:`1px solid ${C.border}`}}>
+            <button onClick={()=>setRevOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',gap:8}}>
+              <span style={{display:'flex',alignItems:'center',gap:6,color:'#99ABB4',fontSize:10,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ventas {selYear} · {ventasDelAnio.length}</span>
+              <Chev open={revOpen}/>
+            </button>
+            {revOpen&&(
+              <div style={{padding:'0 16px 12px'}}>
+                {ventasDelAnio.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0 8px'}}>Sin ventas registradas este año.</div>}
+                {ventasDelAnio.map(({s,bruto})=>{
+                  const cn=clients.find(c=>String(c.id)===String(s.client_id))?.name||'—'
+                  return (
+                    <div key={s.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div>
+                        <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'—'}{esRec(s)?' · recurrente':''}</div>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:600,color:C.accent,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtMon(bruto)}</span>
+                    </div>
+                  )
+                })}
+                {ventasDelAnio.length>0&&(
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,paddingTop:8,fontWeight:700}}>
+                    <span style={{fontSize:11,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Vendido {selYear}</span>
+                    <span style={{fontSize:13,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(m.bruto)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           {/* Trigger años anteriores */}
           <div style={{borderTop:`1px solid ${C.border}`}}>
             <button onClick={()=>setHistOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',gap:8}}>
@@ -1934,7 +1995,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda}/>
+      <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
       <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef}/>
 
       {/* Facturación */}
@@ -2078,6 +2139,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                         <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
                         <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                         <span style={{fontSize:12,fontWeight:500,color:C.overdue,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(d.saldo)}</span>
+                        <span style={{fontSize:10,color:'#99ABB4',transform:abierto?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>▸</span>
                       </button>
                     )
                   })}
