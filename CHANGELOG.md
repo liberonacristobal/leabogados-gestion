@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: tarjeta rediseñada (funnel vertical)
+- La tarjeta pasó de 3 columnas apretadas con flechas a un **funnel vertical**: cada métrica (Vendido / Facturado / Cobrado) en su fila con monto y una barra que muestra el embudo como % de lo vendido. Tasa cobro y Neto firma quedan como cierre. Mejor distribución y legibilidad en móvil; Facturado y Cobrado siguen tocables.
+
 ## 2026-06-14 — Resultado del año: sin mezcla de años + sigue el selector
 - **Cobrado deja de mezclar años**: ahora "Cobrado" del funnel es lo pagado de las facturas EMITIDAS en ese año (antes el cálculo sumaba con un OR los cobros de facturas de años anteriores, inflando la cifra). El funnel queda coherente: Vendido ≥ Facturado ≥ Cobrado, todo del mismo año, y Tasa cobro = Cobrado/Facturado.
 - **Sigue el selector de año**: el bloque ahora responde al año elegido en Revenue target (2026/2025/2024…), no queda fijo en el año actual.

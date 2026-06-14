@@ -2023,28 +2023,32 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             const tasaSel = facturadoSel>0?Math.min(100,Math.round(cobradoSel/facturadoSel*100)):0
             const tasaCol = tasaSel>=80?C.normal:tasaSel>=50?C.soon:C.overdue
             const mS = clp => dashMoneda==='UF'?(ufRef>0?fmtUFk(clp/ufRef):'—'):fmtShort(clp)
-            const steps=[['vendido','Vendido',m.bruto,C.accent,false],['facturado','Facturado',facturadoSel,C.normal,true],['cobrado','Cobrado',cobradoSel,C.greenText,true]]
             const lbl={fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}
+            const pctFV = m.bruto>0?Math.round(facturadoSel/m.bruto*100):0
+            // Funnel vertical: barra de cada etapa como % de lo Vendido (se ve el embudo achicándose)
+            const rows=[
+              {k:'vendido',l:'Vendido',v:m.bruto,col:C.accent,w:100,sub:'',tap:false},
+              {k:'facturado',l:'Facturado',v:facturadoSel,col:C.normal,w:m.bruto>0?Math.min(100,facturadoSel/m.bruto*100):0,sub:`${pctFV}% de lo vendido`,tap:true},
+              {k:'cobrado',l:'Cobrado',v:cobradoSel,col:C.greenText,w:m.bruto>0?Math.min(100,cobradoSel/m.bruto*100):0,sub:`${tasaSel}% del facturado`,tap:true},
+            ]
+            const Fila = r => {
+              const on=funnelKpi===r.k
+              const inner=(<>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                  <span style={{fontSize:12,color:C.muted,minWidth:0,display:'flex',alignItems:'center',gap:4}}>{r.l}{r.sub?<span style={{color:'#99ABB4'}}>· {r.sub}</span>:null}{r.tap?<span style={{fontSize:8,color:'#99ABB4',transform:on?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>:null}</span>
+                  <span style={{fontSize:18,fontWeight:700,color:r.col,whiteSpace:'nowrap'}}>{mS(r.v)}</span>
+                </div>
+                <div style={{height:6,background:'#E4E8EB',borderRadius:3,marginTop:4,overflow:'hidden'}}><div style={{height:'100%',width:`${r.w}%`,background:r.col,borderRadius:3,transition:'width .5s ease'}}/></div>
+              </>)
+              return r.tap
+                ? <button key={r.k} onClick={()=>setFunnelKpi(on?null:r.k)} style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:0,cursor:'pointer'}}>{inner}</button>
+                : <div key={r.k}>{inner}</div>
+            }
             return (<>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 14px 1fr 14px 1fr',alignItems:'center'}}>
-                {steps.map(([k,l,v,col,tap],idx)=>(
-                  <Fragment key={k}>
-                    {idx>0&&<span style={{textAlign:'center',color:'#99ABB4',fontSize:13}}>→</span>}
-                    {tap
-                      ? <button onClick={()=>setFunnelKpi(funnelKpi===k?null:k)} style={{textAlign:'left',background:funnelKpi===k?'#F5F7F9':'transparent',border:'none',borderRadius:8,padding:'4px 6px',cursor:'pointer',minWidth:0}}>
-                          <div style={{display:'flex',alignItems:'center',gap:3}}><span style={lbl}>{l}</span><span style={{fontSize:8,color:'#99ABB4',transform:funnelKpi===k?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span></div>
-                          <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',marginTop:1}}>{mS(v)}</div>
-                        </button>
-                      : <div style={{padding:'4px 6px',minWidth:0}}>
-                          <div style={lbl}>{l}</div>
-                          <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',marginTop:1}}>{mS(v)}</div>
-                        </div>}
-                  </Fragment>
-                ))}
-              </div>
-              <div style={{display:'flex',gap:16,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,flexWrap:'wrap',alignItems:'baseline'}}>
-                <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={lbl}>Tasa cobro</span><span style={{fontSize:13,fontWeight:700,color:tasaCol}}>{tasaSel}%</span></div>
-                <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={lbl}>Neto firma</span><span style={{fontSize:13,fontWeight:700,color:C.text}}>{mS(netoFirma)}</span></div>
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>{rows.map(Fila)}</div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:14,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+                <div><div style={lbl}>Tasa cobro</div><div style={{fontSize:14,fontWeight:700,color:tasaCol,marginTop:1}}>{tasaSel}%</div></div>
+                <div style={{textAlign:'right'}}><div style={lbl}>Neto firma</div><div style={{fontSize:14,fontWeight:700,color:C.accent,marginTop:1}}>{mS(netoFirma)}</div></div>
               </div>
               {funnelKpi&&(()=>{
                 const lists={
