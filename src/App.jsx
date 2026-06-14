@@ -1788,6 +1788,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [cobKpi,setCobKpi] = useState(null)   // KPI de cobranza abierto para ver su detalle inline
+  const [cajaExp,setCajaExp] = useState(null)  // persona de caja chica con su detalle desplegado
+  const [cpExp,setCpExp] = useState(null)       // cuenta por pagar a proveedor con su origen desplegado
   const [openOficina,setOpenOficina] = useState(false)
   const [openPagar,setOpenPagar] = useState(true)
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
@@ -2293,17 +2295,37 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}`
                       const pp=t.estado==='por_pagar', pi=estPill(t.estado)
                       const metaFac = fac ? (pp? `F° ${fac.invoice_no||'—'} · cobrada ${fmtDMY(fac.paid_at)}` : `F° ${fac.invoice_no||'—'}${fac.due?` · vence ${fmtDMY(fac.due)}`:''}`) : '—'
+                      const on = cpExp===t.id
+                      const explica = pp
+                        ? `La factura al cliente ${fac?.invoice_no?`F° ${fac.invoice_no}`:'asociada'} ya fue cobrada${fac?.paid_at?` el ${fmtDMY(fac.paid_at)}`:''}, así que ya puedes pagarle al proveedor.`
+                        : `Aún no se cobra la factura al cliente${fac?.invoice_no?` (F° ${fac.invoice_no})`:''}${fac?.due?`, que vence el ${fmtDMY(fac.due)}`:''}. Esta cuenta se paga recién cuando ese cobro entre.`
                       return (
-                        <div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
-                          <div style={{minWidth:0,flex:1}}>
-                            <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ori}</div>
-                            <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>{metaFac}</div>
+                        <div key={t.id} style={{borderTop:`1px solid ${C.border}`}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px'}}>
+                            <div onClick={()=>setCpExp(on?null:t.id)} style={{minWidth:0,flex:1,cursor:'pointer'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                <span style={{fontSize:10,color:'#99ABB4',transform:on?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}>▸</span>
+                                <span style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ori}</span>
+                              </div>
+                              <div style={{fontSize:11,color:'#99ABB4',marginTop:1,paddingLeft:15}}>{metaFac}</div>
+                            </div>
+                            <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(t.monto)}</span>
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
+                            {pp
+                              ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
+                              : <span title='Esperando que el cliente pague su factura' style={{fontSize:11,color:'#99ABB4',flexShrink:0,whiteSpace:'nowrap'}}>espera cobro</span>}
                           </div>
-                          <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(t.monto)}</span>
-                          <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
-                          {pp
-                            ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
-                            : <span style={{fontSize:11,color:'#99ABB4',flexShrink:0,whiteSpace:'nowrap'}}>espera cobro</span>}
+                          {on&&(
+                            <div style={{padding:'0 12px 12px 27px',display:'flex',flexDirection:'column',gap:7}}>
+                              <div style={{fontSize:12,color:C.text,lineHeight:1.4}}>{explica}</div>
+                              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                                {venta&&<span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>Venta: {venta.title||'—'}</span>}
+                                {cli&&<span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>Cliente: {cli.name}</span>}
+                                {t.tipo_costo&&<span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>{t.tipo_costo}</span>}
+                                <span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>Monto a pagar: {fmt(t.monto)}</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -2464,9 +2486,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           const fechas = misGastos.map(e=>e.date).filter(Boolean).sort()
           const ult = fechas.length?fechas[fechas.length-1]:null
           const dl = ult?daysLeft(ult):null
-          return {u,saldo,sinLiqMonto,sinLiqN:sinLiq.length,alertaSinLiq:sinLiqNoNotaria>10,ult,alertaUlt:dl!==null&&dl<-7}
+          const sinLiqList = [...sinLiq].sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
+          return {u,saldo,sinLiqMonto,sinLiqN:sinLiq.length,sinLiqList,alertaSinLiq:sinLiqNoNotaria>10,ult,alertaUlt:dl!==null&&dl<-7}
         })
         const mini = {display:'flex',justifyContent:'space-between',gap:6,fontSize:12}
+        const expF = filas.find(f=>f.u===cajaExp)
         return (
           <div style={{padding:'16px 20px 0'}}>
             <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Gestión caja chica</div>
@@ -2475,11 +2499,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               {filas.map(f=>{
                 const [avBg,avCol]=av[f.u]||['#F1EFE8','#537281']
                 const alerta = f.alertaSinLiq||f.alertaUlt||f.saldo<0
+                const on = cajaExp===f.u
                 return (
-                <div key={f.u} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${alerta?C.soon:C.normal}`,borderRadius:12,padding:'12px 13px'}}>
+                <button key={f.u} onClick={()=>setCajaExp(on?null:f.u)} style={{textAlign:'left',width:'100%',background:on?'#F5F7F9':C.card,border:`1px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${alerta?C.soon:C.normal}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                     <span style={{width:28,height:28,borderRadius:'50%',background:avBg,color:avCol,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>{f.u[0]}</span>
                     <span style={{fontSize:12,fontWeight:500,color:C.text}}>{f.u}</span>
+                    <span style={{marginLeft:'auto',fontSize:10,color:'#99ABB4',transform:on?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
                   </div>
                   <div className='cc-body'>
                     <div style={{flexShrink:0,minWidth:0}}>
@@ -2491,10 +2517,35 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       <div style={mini} title={f.alertaUlt?'Más de 7 días sin ingresar un gasto':undefined}><span style={{color:C.muted}}>Últ.</span><span style={{fontWeight:600,color:f.alertaUlt?C.soon:C.muted,whiteSpace:'nowrap'}}>{f.alertaUlt?'(!) ':''}{f.ult?fmtDate(f.ult):'—'}</span></div>
                     </div>
                   </div>
-                </div>
+                </button>
                 )
               })}
             </div>
+            {/* Detalle ancho completo: gastos sin liquidar de la persona seleccionada */}
+            {expF&&(
+              <div style={{marginTop:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
+                  <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>{expF.u} · sin liquidar · {expF.sinLiqN}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:expF.sinLiqMonto>0?C.accent:C.muted,fontVariantNumeric:'tabular-nums'}}>{money(expF.sinLiqMonto)}</span>
+                </div>
+                {expF.sinLiqList.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'14px'}}>Nada pendiente de liquidar.</div>}
+                <div style={{maxHeight:300,overflowY:'auto'}}>
+                  {expF.sinLiqList.map(e=>{
+                    const cn=clientesMap[e.client_id]||'Sin cliente'
+                    return (
+                      <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'8px 14px',borderBottom:`1px solid ${C.border}`}}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                          <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.date?fmtFechaDMY(e.date):'—'} · {cn}{e.category?` · ${e.category}`:''}</div>
+                        </div>
+                        <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{money(e.amount)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <button onClick={()=>setTab('expenses')} style={{width:'100%',padding:'10px',border:'none',borderTop:`1px solid ${C.border}`,background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Ir a liquidar</button>
+              </div>
+            )}
           </div>
         )
       })()}
