@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: datos en grilla de mini-stats (Alt 2)
+- Bajo la barra, los datos pasan a una **grilla 2×2** de tarjetitas con borde de color (Vendido / Facturado / Cobrado / Costo oficina); Facturado y Cobrado tocables. Neto firma y Tasa cobro en una línea al pie.
+
 ## 2026-06-14 — Resultado del año: datos en lista alineada bajo la barra
 - Bajo la barra, los datos pasan a una **lista alineada**: punto de color + etiqueta a la izquierda y monto a la derecha (Facturado con % de lo vendido, Cobrado con % del facturado, Costo oficina en rojo). Cierra con Neto firma destacado. Facturado y Cobrado siguen tocables.
 
