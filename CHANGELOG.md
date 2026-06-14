@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año: sin mezcla de años + sigue el selector
+- **Cobrado deja de mezclar años**: ahora "Cobrado" del funnel es lo pagado de las facturas EMITIDAS en ese año (antes el cálculo sumaba con un OR los cobros de facturas de años anteriores, inflando la cifra). El funnel queda coherente: Vendido ≥ Facturado ≥ Cobrado, todo del mismo año, y Tasa cobro = Cobrado/Facturado.
+- **Sigue el selector de año**: el bloque ahora responde al año elegido en Revenue target (2026/2025/2024…), no queda fijo en el año actual.
+- **Se quitó "Programado" del funnel**: es plata futura (proyección), no un resultado del año; vive en Cash flow.
+
 ## 2026-06-14 — Dashboard: reorganización en 3 capas + funnel sin datos repetidos
 - **Nuevo bloque "Resultado del año"**: funnel Vendido → Facturado → Cobrado (Facturado/Cobrado/Programado tocables con su detalle) + Tasa cobro y Neto firma. Consolida lo que antes estaba disperso.
 - **De-duplicación**: se eliminaron los bloques "Cobranza" y "Facturación" (Cobrado aparecía dos veces; Por cobrar/Vencido ya viven en Aging; Proveedores en Cuentas por pagar).
