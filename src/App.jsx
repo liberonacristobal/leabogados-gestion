@@ -2044,9 +2044,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               return k ? <button key={l} onClick={()=>setFunnelKpi(on?null:k)} style={{...st,cursor:'pointer'}}>{inner}</button> : <div key={l} style={st}>{inner}</div>
             }
             return (<>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:7}}>
-                <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Vendido</span>
-                <b style={{fontSize:20,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{mS(m.bruto)}</b>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:12,marginBottom:9}}>
+                <div><div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Vendido</div><div style={{fontSize:24,fontWeight:700,color:C.accent,lineHeight:1,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{mS(m.bruto)}</div></div>
+                <div style={{textAlign:'right'}}><div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Neto firma</div><div style={{fontSize:24,fontWeight:700,color:C.greenText,lineHeight:1,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{mS(netoFirma)}</div></div>
               </div>
               {(()=>{
                 // Globito: aparece sobre la barra mostrando el tramo tocado (monto + %)
@@ -2066,14 +2066,19 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 {wCosto>0&&<div style={{position:'absolute',top:0,height:'100%',left:`${costoLeft}%`,width:1.5,background:'#fff'}}/>}
                 <div style={{position:'absolute',top:0,height:'100%',left:`${wFac}%`,width:1.5,background:'#fff'}}/>
               </div></div>) })()}
-              <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                {Fila(C.normal,'Facturado',facturadoSel,{sub:`${pctFV}% de lo vendido`,k:'facturado'})}
-                {Fila(C.greenText,'Cobrado',cobradoSel,{sub:`${tasaSel}% del facturado`,k:'cobrado'})}
-                {Fila(C.overdue,'Costo oficina',tercerosSel,{neg:true,k:'costo'})}
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>setFunnelKpi(funnelKpi==='facturado'?null:'facturado')} style={{flex:1,textAlign:'left',background:funnelKpi==='facturado'?'#F5F7F9':'transparent',border:'none',borderRadius:6,padding:'4px 6px',margin:'0 -6px',cursor:'pointer',minWidth:0}}>
+                  <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:2,background:C.normal,flexShrink:0}}/>Facturado <span style={{color:'#99ABB4'}}>{pctFV}%</span></div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.normal,marginTop:1,whiteSpace:'nowrap'}}>{mS(facturadoSel)}</div>
+                </button>
+                <button onClick={()=>setFunnelKpi(funnelKpi==='cobrado'?null:'cobrado')} style={{flex:1,textAlign:'left',background:funnelKpi==='cobrado'?'#F5F7F9':'transparent',border:'none',borderRadius:6,padding:'4px 6px',cursor:'pointer',minWidth:0}}>
+                  <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:2,background:C.greenText,flexShrink:0}}/>Cobrado <span style={{color:'#99ABB4'}}>{tasaSel}%</span></div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.greenText,marginTop:1,whiteSpace:'nowrap'}}>{mS(cobradoSel)}</div>
+                </button>
               </div>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginTop:8,paddingTop:9,borderTop:`1px solid ${C.border}`}}>
-                <div><div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Neto firma</div><div style={{fontSize:20,fontWeight:700,color:C.accent,lineHeight:1,marginTop:1}}>{mS(netoFirma)}</div></div>
-                <span style={{fontSize:11,fontWeight:700,color:tasaCol,background:'#FFF8E1',borderRadius:20,padding:'3px 10px'}}>Tasa cobro {tasaSel}%</span>
+              <div style={{display:'flex',gap:14,flexWrap:'wrap',marginTop:9,paddingTop:8,borderTop:`1px solid ${C.border}`,alignItems:'baseline'}}>
+                <button onClick={()=>setFunnelKpi(funnelKpi==='costo'?null:'costo')} style={{background:'none',border:'none',padding:0,cursor:'pointer',fontSize:11,color:C.muted}}><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:C.overdue,marginRight:4,verticalAlign:'middle'}}/>Costo oficina <b style={{color:C.overdue,fontWeight:700}}>{mS(tercerosSel)}</b></button>
+                <span style={{fontSize:11,color:C.muted}}>Tasa cobro <b style={{color:tasaCol,fontWeight:700}}>{tasaSel}%</b></span>
               </div>
               {funnelKpi&&(()=>{
                 const lists={
