@@ -606,7 +606,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const [fCat,setFCat] = useState('')
 
   // Gastos pendientes de liquidar DEL USUARIO (tipo gasto, no rendidos, created_by = me)
-  const misPendientes = expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&e.created_by===me)
+  const misPendientes = expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&!e.paid_by_client&&e.created_by===me)
   const pendientes = misPendientes.filter(e=>!fCat||e.category===fCat).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
   // "Sin liquidar": total pendiente del usuario, independiente del filtro de categoría
   const sinLiquidar = misPendientes.reduce((a,e)=>a+(e.amount||0),0)
@@ -2300,7 +2300,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const filas = cajaUsers.map(u=>{
           const saldo = saldoCajaChica(pettyCash, expenses, u)
           const misGastos = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===u)
-          const sinLiq = misGastos.filter(e=>!e.rendered_at)
+          const sinLiq = misGastos.filter(e=>!e.rendered_at&&!e.paid_by_client)
           const sinLiqMonto = sinLiq.reduce((a,e)=>a+(e.amount||0),0)
           const sinLiqNoNotaria = sinLiq.filter(e=>e.category!=='Notaria').length
           const fechas = misGastos.map(e=>e.date).filter(Boolean).sort()
@@ -9086,7 +9086,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
 
     // ── COBRANZA
     if(sections.cobranza){
-      const bb=filterByPeriod(billing,'issued_at').filter(b=>b.billing_type!=='reembolso')
+      const bb=filterByPeriod(billing,'issued_at').filter(b=>b.billing_type!=='reembolso'&&['Pendiente','Vencido','Pagado'].includes(b.status))
       const pending=bb.filter(b=>b.status==='Pendiente').reduce((a,b)=>a+(b.amount||0),0)
       const overdue=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
       const paid=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
@@ -9558,7 +9558,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
         {(()=>{
           const saldo = saldoCajaChica(pettyCash, expenses, me)
           const misGastos = (expenses||[]).filter(e=>e.type==='gasto' && e.created_by===me)
-          const porLiquidar = misGastos.filter(e=>!e.rendered_at)
+          const porLiquidar = misGastos.filter(e=>!e.rendered_at&&!e.paid_by_client)
           const totalPorLiquidar = porLiquidar.reduce((a,e)=>a+(e.amount||0),0)
           const ultimos = [...misGastos].sort((a,b)=>{
             const da=a.date||'', db=b.date||''
