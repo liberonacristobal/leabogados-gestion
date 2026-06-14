@@ -2144,17 +2144,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             </button>
             {openPagar&&(
               <div>
-                {porPagarTot>0&&(
-                  <div style={{display:'flex',alignItems:'center',gap:9,background:'#E1F5EE',borderRadius:10,padding:'10px 12px',marginBottom:12}}>
-                    <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg>
-                    </span>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:C.greenText}}>Listo para transferir: {fmt(porPagarTot)}</div>
-                      <div style={{fontSize:11,color:C.normal,marginTop:1}}>{nProvPorPagar} proveedor{nProvPorPagar!==1?'es':''} · ya cobraste su factura</div>
-                    </div>
-                  </div>
-                )}
                 <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
                   <div style={{flex:1,padding:'11px 12px'}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Por pagar</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.normal}}>{fmt(porPagarTot)}</div></div>
                   <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em'}}>Pendiente</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:'#C77F18'}}>{fmt(pendienteTot)}</div></div>
