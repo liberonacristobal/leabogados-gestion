@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-14 — Resultado del año en una línea + costo oficina marcado
+- La tarjeta pasó de funnel vertical (3 líneas) a **una sola línea**: Vendido › Facturado › Cobrado (Facturado y Cobrado siguen tocables).
+- Al pie: Tasa cobro · **Costo oficina** (terceros/proveedores, marcado en rojo) · Neto firma.
+
 ## 2026-06-14 — Modo demo (?demo=1)
 - Nuevo **modo demo**: abrir la app con `?demo=1` salta el login y carga un set de **datos ficticios** (clientes, ventas, facturas, gastos, tareas, caja chica) para mostrar la app sin información real.
 - **Seguridad**: en demo el cliente de Supabase queda inerte — ninguna lectura ni escritura toca la base real.
