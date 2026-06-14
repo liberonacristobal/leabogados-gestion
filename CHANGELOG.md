@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-14 — Dashboard: reorganización en 3 capas + funnel sin datos repetidos
+- **Nuevo bloque "Resultado del año"**: funnel Vendido → Facturado → Cobrado (Facturado/Cobrado/Programado tocables con su detalle) + Tasa cobro y Neto firma. Consolida lo que antes estaba disperso.
+- **De-duplicación**: se eliminaron los bloques "Cobranza" y "Facturación" (Cobrado aparecía dos veces; Por cobrar/Vencido ya viven en Aging; Proveedores en Cuentas por pagar).
+- **Revenue target**: se quitó "Bruto" (idéntico a Vendido) y el "Neto" se rotuló "Neto venta" para no confundirlo con el "Neto firma" del funnel.
+- **3 capas**: Estrategia (meta + funnel + ventas) → Cobranza y caja (cash flow + aging) → Operación (sin fondos, tareas, proveedores, caja chica).
+
 ## 2026-06-14 — Dashboard interactivo (Parte C): cash flow rediseñado
 - **Cash flow histórico + proyección**: el gráfico ahora muestra meses pasados (cobrado real, línea gris) y futuros (proyección, línea azul) con la marca "Hoy" entre ambos, para ver tendencia.
 - **Meses tocables**: tocar un mes despliega las facturas/cuotas que lo componen (cliente · concepto · monto · estado).
