@@ -113,6 +113,12 @@ const ddItem = { padding:'9px 14px', fontSize:13, color:'#3D3D3D', cursor:'point
 const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina':'MP','Rodrigo':'RD'}
 // Responsables de una tarea: usa assignees (multi); si no hay, cae a who (tareas antiguas).
 const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
+// Color de pill por persona, para distinguir responsables de un vistazo (Martín/Martina reusan los tonos de Caja Chica).
+const PERSON_CHIP = {
+  'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:'#EEEDFE',color:'#534AB7'},
+  'Rodrigo':{bg:'#FAEEDA',color:'#854F0B'}, 'Erasmo':{bg:'#E6F1FB',color:'#185FA5'}, 'Cristóbal':{bg:'#E6EEF1',color:'#003C50'},
+}
+const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:'#F1EFE8',color:'#5F5E5A'}
 const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 // "En mi lista": soy responsable o me delegaron la tarea (los delegados también la ven).
 const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
@@ -9705,7 +9711,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
                 {t.subproject&&<span>{(client||t.project)?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Sub.</span>{' '}{t.subproject}</span>}
               </div>
             )}
-            {showWho&&taskAssignees(t).length>0&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:'#E6EEF1',color:C.accent,fontWeight:600,marginTop:3,display:'inline-block'}}>{taskAssignees(t).join(', ')}</span>}
+            {showWho&&taskAssignees(t).length>0&&<span style={{display:'inline-flex',gap:4,flexWrap:'wrap',marginTop:3}}>{taskAssignees(t).map(w=>{const pc=personChip(w);return <span key={w} style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:pc.bg,color:pc.color,fontWeight:600}}>{w}</span>})}</span>}
             {(t.delegated_to||[]).length>0&&<div style={{fontSize:10,color:'#854F0B',background:'#FAEEDA',borderRadius:6,padding:'2px 7px',marginTop:4,display:'inline-block'}}>Delegada a {(t.delegated_to||[]).join(', ')}{t.delegated_due?` · vence ${fmtVenceShort(t.delegated_due)}`:''}</div>}
           </div>
           {!done&&(
