@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-14 — Assessment de guardar/cargar: 3 bugs de datos
+- **Delegar tareas** fallaba siempre (intentaba escribir un campo inexistente). Ahora delega bien.
+- **Caja chica** sumaba por error las rendiciones al cliente en "Mis liquidaciones" → el total liquidado quedaba inflado. Corregido (ahora cuenta solo liquidaciones de caja chica).
+- **Restaurar un gasto** desde la Papelera no devolvía su monto a la rendición de la que venía → el total de esa rendición quedaba descontado para siempre. Ahora lo repone.
+- Robustez: si falla recargar las razones sociales, ya no se vacía el catálogo en memoria; marcar "enviada" una rendición y guardar un contacto ahora avisan si la base falla.
+
 ## 2026-06-14 — Importar clientes (Drive y propuesta) no guardaba
 - **Importar clientes desde Drive**: no guardaba ninguno porque escribía en una columna inexistente (`area`). Ahora marca bien el estado (Activo/Terminado) y la fecha de término del año de la carpeta.
 - **Crear cliente al importar una propuesta**: fallaba si traía razón social (la escribía en `clients`, donde esa columna no existe). Ahora el cliente se crea y la razón social se guarda como entidad del cliente.
