@@ -3380,6 +3380,13 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginTop:8,marginBottom:6}}>Condiciones registradas</div>
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
               {row('Honorarios',curHon,'honorarios',false)}
+              {openCondicion==='honorarios'&&(
+                <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:'#F5F7F9'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Honorario</span><span style={{fontWeight:500,color:C.text}}>{curHon}</span></div>
+                  {curCost!=='—'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Costo</span><span style={{fontWeight:500,color:C.text}}>{curCost}</span></div>}
+                  <button type='button' onClick={()=>{ setModCobro(true); setModMode('ajustar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Ajustar honorario</button>
+                </div>
+              )}
               <div onClick={()=>setOpenCondicion(openCondicion==='costos'?null:'costos')} style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
                 <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>Costos de proveedores</div>
                 <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
@@ -3396,6 +3403,18 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 </div>
               )}
               {row('Forma de cobro',curCobro,'cobro',false)}
+              {openCondicion==='cobro'&&(()=>{
+                const mesLbl = iso => { if(!iso) return '—'; const p=String(iso).slice(0,7).split('-'); return p.length===2?`${MONTHS[parseInt(p[1])-1]||p[1]} ${p[0]}`:String(iso) }
+                return (
+                <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:'#F5F7F9'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Forma</span><span style={{fontWeight:500,color:C.text}}>{curCobro}</span></div>
+                  {cobroType==='mensual'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Inicio mensual</span><span style={{fontWeight:500,color:C.text}}>{mesLbl(mensualInicio)} · 12 meses</span></div>}
+                  {cobroType==='cuotas'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Cuotas</span><span style={{fontWeight:500,color:C.text}}>{nCuotas} desde {mesLbl(cobroInicio)}</span></div>}
+                  <div style={{fontSize:11,color:C.muted,marginTop:6,lineHeight:1.4}}>Para cambiar el formato o el inicio se regeneran las cuotas programadas (las emitidas/pagadas no se tocan).</div>
+                  <button type='button' onClick={()=>{ setModCobro(true); setModMode('cambiar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Cambiar forma de cobro</button>
+                </div>
+                )
+              })()}
               {row('Notas',notasPrev,'notas',true)}
               {openCondicion==='notas'&&(
                 <div style={{padding:'8px 12px 12px',borderTop:`1px solid ${C.border}`}}>
