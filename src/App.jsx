@@ -1276,54 +1276,6 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0}) {
   )
 }
 
-function PorFacturarMes({billing, moneda='CLP'}) {
-  const ufState = useUF()
-  const now = new Date()
-  const key = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
-  const mesLabel = `${now.toLocaleDateString('es-CL',{month:'long'})} ${now.getFullYear()}`.toUpperCase()
-  // Mismo universo y criterio que el checklist de Facturacion (single source of truth):
-  // anclaje por vencimiento (due) del mes; emitida = status != Programada. Pagadas quedan fuera del universo.
-  const EMIT = ['Pendiente','Vencido','Propuesta']
-  const delMes = billing.filter(b=> b.due && b.due.startsWith(key) && (b.status==='Programada'||EMIT.includes(b.status)))
-  if(delMes.length===0) return null
-  const esEmitida = b => b.status!=='Programada'
-  const emitidas = delMes.filter(esEmitida)
-  const porFacturar = delMes.filter(b=>!esEmitida(b))
-  const emitidasCLP = emitidas.reduce((a,b)=>a+(b.amount||0),0)
-  const porFacturarCLP = porFacturar.reduce((a,b)=>a+(b.amount||0),0)
-  const totalUF = ufState.uf ? (emitidasCLP+porFacturarCLP)/ufState.uf : null
-  const totalCLP = emitidasCLP+porFacturarCLP
-  const sm = clp => moneda==='UF' ? (ufState.uf?fmtUFk(clp/ufState.uf):'—') : fmtShort(clp)
-  const lbl = {fontSize:11,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}
-  const big = {fontSize:22,fontWeight:600,lineHeight:1,whiteSpace:'nowrap'}
-  const unidad = {fontSize:11,color:'#99ABB4'}
-  const sub = {fontSize:12,color:C.muted,marginTop:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
-  const kpi = {minWidth:0,borderRadius:10,padding:'13px 12px'}
-  return (
-    <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:8}}>{mesLabel}</div>
-      <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8}}>
-          <div style={{...kpi,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}>
-            <div style={lbl}>Emitidas</div>
-            <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:C.text}}>{emitidas.length}</span><span style={unidad}>factura{emitidas.length!==1?'s':''}</span></div>
-            <div style={sub}>{sm(emitidasCLP)}</div>
-          </div>
-          <div style={{...kpi,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #C77F18'}}>
-            <div style={lbl}>Por facturar</div>
-            <div style={{display:'flex',alignItems:'baseline',gap:5}}><span style={{...big,color:'#C77F18'}}>{porFacturar.length}</span><span style={unidad}>factura{porFacturar.length!==1?'s':''}</span></div>
-            <div style={sub}>{sm(porFacturarCLP)}</div>
-          </div>
-          <div style={{...kpi,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}>
-            <div style={lbl}>Total mes</div>
-            <div style={{...big,fontSize:17,color:'#003C50',overflow:'hidden',textOverflow:'ellipsis'}}>{sm(totalCLP)}</div>
-            <div style={sub}>{delMes.length} factura{delMes.length!==1?'s':''}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function VentasPorMes({sales,ufHoy,moneda='CLP'}) {
   const yr = currentYear
@@ -2099,8 +2051,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           </div>
         </div>
       )}
-
-      <PorFacturarMes billing={billing} moneda={dashMoneda}/>
 
       {tasks?.filter(t=>t.status==='Activo'||t.status==='Terminado').length>0&&(
         <div style={{padding:'16px 20px 0'}}>
