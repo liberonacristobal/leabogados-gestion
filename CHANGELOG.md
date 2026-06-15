@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Pills del hero de Tareas navegan
+- Cada pill del hero ahora es tappable y lleva a su sección (abre y hace scroll): titular y "Activas" → Activas; "Que asigné" y las personas de "Asigné a" → Tareas que asigné; "Terminadas" → Terminadas.
+
 ## 2026-06-15 — Hero de Tareas sin redundancia
 - Quité el tablero de 4 tiles del hero de Tareas porque repetía el titular y los chips (Vencidas/Esta semana/Activas/Terminadas ya estaban arriba). Queda solo el hero narrativo (titular + chips + "Asigné a" + panel Gmail).
 
