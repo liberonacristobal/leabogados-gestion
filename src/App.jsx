@@ -10535,37 +10535,43 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
       {/* Hero: foco del día (titular) + tablero de 4 KPIs (tocables → abren la sección) */}
       <div style={{padding:'14px 20px 0'}}>
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:8}}>
-          {kpiVencidas.length>0 ? (<>
-            <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.overdue,lineHeight:1}}>{kpiVencidas.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>tarea{kpiVencidas.length!==1?'s':''} vencida{kpiVencidas.length!==1?'s':''}</span></div>
-            {kpiSemana.length>0&&<div style={{fontSize:13,color:C.soon,marginTop:5,fontWeight:500}}>{kpiSemana.length} vence{kpiSemana.length!==1?'n':''} esta semana</div>}
-          </>) : kpiSemana.length>0 ? (
-            <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.soon,lineHeight:1}}>{kpiSemana.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>vence{kpiSemana.length!==1?'n':''} esta semana</span></div>
-          ) : (
-            <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.greenText,lineHeight:1}}>{mias.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>{mias.length===0?'tareas — ¡al día!':'tareas activas, bajo control'}</span></div>
-          )}
-          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
-            {heroChip('Activas',mias.length,'#E6EEF1',C.accent)}
-            {asignadas.length>0&&heroChip('Que asigné',asignadas.length,'#F1EFE8','#5F5E5A')}
-            {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText)}
-          </div>
-          {asignadasPorPersona.length>0&&(
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.border}`}}>
-              <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.3,alignSelf:'center'}}>Asigné a</span>
-              {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 8px',fontWeight:600}}>{p} · {n}</span> })}
+          <div style={{display:'flex',gap:12,alignItems:'stretch'}}>
+            <div style={{flex:1,minWidth:0}}>
+              {kpiVencidas.length>0 ? (<>
+                <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.overdue,lineHeight:1}}>{kpiVencidas.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>tarea{kpiVencidas.length!==1?'s':''} vencida{kpiVencidas.length!==1?'s':''}</span></div>
+                {kpiSemana.length>0&&<div style={{fontSize:13,color:C.soon,marginTop:5,fontWeight:500}}>{kpiSemana.length} vence{kpiSemana.length!==1?'n':''} esta semana</div>}
+              </>) : kpiSemana.length>0 ? (
+                <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.soon,lineHeight:1}}>{kpiSemana.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>vence{kpiSemana.length!==1?'n':''} esta semana</span></div>
+              ) : (
+                <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.greenText,lineHeight:1}}>{mias.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>{mias.length===0?'tareas — ¡al día!':'tareas activas, bajo control'}</span></div>
+              )}
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
+                {heroChip('Activas',mias.length,'#E6EEF1',C.accent)}
+                {asignadas.length>0&&heroChip('Que asigné',asignadas.length,'#F1EFE8','#5F5E5A')}
+                {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText)}
+              </div>
+              {asignadasPorPersona.length>0&&(
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.border}`}}>
+                  <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.3,alignSelf:'center'}}>Asigné a</span>
+                  {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 8px',fontWeight:600}}>{p} · {n}</span> })}
+                </div>
+              )}
             </div>
-          )}
-          {/* Tareas sugeridas desde Gmail (mismo formato grande); al tocar se despliegan y cada una abre el borrador */}
-          {isAdmin&&(sugBusy||sugVisibles.length>0)&&(
-            <div style={{marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.border}`}}>
-              <div onClick={()=>{ if(!sugBusy) setSugOpen(o=>!o) }} style={{display:'flex',alignItems:'baseline',gap:9,cursor:sugBusy?'default':'pointer'}}>
-                {sugBusy ? <span style={{fontSize:13,color:C.muted}}>Revisando tus correos…</span> : (<>
-                  <span style={{fontSize:34,fontWeight:600,color:C.accent,lineHeight:1}}>{sugVisibles.length}</span>
-                  <span style={{fontSize:15,fontWeight:500,color:C.text,flex:1}}>tarea{sugVisibles.length!==1?'s':''} sugerida{sugVisibles.length!==1?'s':''} <span style={{fontSize:11,color:C.muted,fontWeight:400}}>desde Gmail</span></span>
-                  <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:sugOpen?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:sugOpen?-2:2}}/>
+            {/* Tareas sugeridas desde Gmail: panel verde a la derecha; al tocar se despliega la lista abajo */}
+            {isAdmin&&(sugBusy||sugVisibles.length>0)&&(
+              <div onClick={()=>{ if(!sugBusy) setSugOpen(o=>!o) }} style={{width:124,flexShrink:0,background:'#E1F5EE',borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:sugBusy?'default':'pointer'}}>
+                {sugBusy ? <span style={{fontSize:11,color:C.greenText,fontWeight:500}}>Revisando tus correos…</span> : (<>
+                  <div style={{fontSize:30,fontWeight:600,color:C.greenText,lineHeight:1}}>{sugVisibles.length}</div>
+                  <div style={{fontSize:10,color:C.greenText,marginTop:3,lineHeight:1.3,fontWeight:500}}>sugeridas desde Gmail</div>
+                  <div style={{fontSize:11,color:C.greenText,fontWeight:700,marginTop:6}}>{sugOpen?'Ocultar ▴':'Revisar ›'}</div>
                 </>)}
               </div>
-              {sugOpen&&sugVisibles.map(a=>(
-                <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,marginTop:8,padding:'8px 10px',background:'#F5F7F9',borderRadius:8}}>
+            )}
+          </div>
+          {isAdmin&&sugOpen&&sugVisibles.length>0&&(
+            <div style={{marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.border}`}}>
+              {sugVisibles.map(a=>(
+                <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,marginTop:6,padding:'8px 10px',background:'#F5F7F9',borderRadius:8}}>
                   <div onClick={()=>onEdit&&onEdit({title:a.title,client_id:a.client_id,due:a.due,note:a.note})} style={{flex:1,minWidth:0,cursor:'pointer'}}>
                     <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.title}</div>
                     <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.fromName}{a.client_id?` · ${clients.find(c=>c.id===a.client_id)?.name||''}`:''}{a.due?` · vence ${fmtVenceShort(a.due)}`:''}</div>
