@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Gmail → contactos: corrección de matching
+- **Bug grave corregido:** el escáner asociaba todos los correos `@gmail.com` (y otros proveedores) a un mismo cliente. Ahora los dominios genéricos (gmail/hotmail/outlook/yahoo/icloud/live…) **nunca** asocian por dominio, ni en el mapa de contactos existentes, ni en lo aprendido, ni en la IA (más estricta: ante duda, sin asignar). Se borran las reglas de dominio genérico mal aprendidas al abrir el modal.
+- Nuevo botón **"Cambiar"** en los contactos ya asociados a un cliente: permite reasignar a otro cliente o moverlo a "Por asignar" (antes solo Agregar/Descartar).
+
 ## 2026-06-15 — Correo de nueva tarea: nuevo diseño
 - Rediseño del email de `notify-task`: **logo de la firma** en el header (URL pública `/le-logo-blanco.png`), saludo "Hola {nombre}," + subtítulo "{asignador} te acaba de asignar una tarea", **bloque de tarea** (título, nota citada si existe, Cliente, Proyecto, Vence con **pill roja si vence en ≤2 días**), botones **"Ver en la app"** y **"Agregar recordatorio"** (Google Calendar pre-armado). Asunto dinámico "Nueva tarea | {cliente} | {título}". CSS inline, ancho 560px, Arial. (Íconos de fila omitidos: Gmail elimina SVG inline y no se usan emojis; se pueden añadir como PNG hosteados si se requieren.)
 
