@@ -420,7 +420,10 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
           <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{cl.name}</div>
           <div style={{fontSize:11,fontWeight:600,color:saldo<0?'#E24B4A':C.greenText}}>{saldo!==0?(saldo<0?'-':'+')+'$'+Math.abs(saldo).toLocaleString('es-CL'):''}</div>
         </div>
-        {cl.type&&<div style={{fontSize:11,color:'#537281',marginTop:2}}>{cl.type}</div>}
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2,flexWrap:'wrap'}}>
+          {cl.type&&<span style={{fontSize:11,color:'#537281'}}>{cl.type}</span>}
+          {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{marginLeft:'auto',fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600}}>{cl.abogado_responsable}</span> })()}
+        </div>
       </div>
     )
   }
@@ -441,7 +444,10 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
             <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',color:'#537281',cursor:'pointer',fontSize:20,padding:'0 4px 0 0'}}>←</button>
             <div style={{flex:1}}>
               <div style={{fontSize:18,fontWeight:700,color:'#3D3D3D'}}>{cl.name}</div>
-              {cl.type&&<div style={{fontSize:11,color:'#537281'}}>{cl.type}</div>}
+              <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                {cl.type&&<span style={{fontSize:11,color:'#537281'}}>{cl.type}</span>}
+                {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{cl.abogado_responsable}</span> })()}
+              </div>
             </div>
             <button onClick={()=>onEdit(cl)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:'#fff',color:'#3D3D3D',fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
           </div>
@@ -6771,7 +6777,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   <div style={{marginTop:7}}>
                     {bucket==='auto'&&!r.isInternal&&(
                       <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',flexWrap:'wrap'}}>
-                        <span style={{fontSize:12,color:C.normal,fontWeight:600,marginRight:'auto'}}>{r.clientName}</span>
+                        <span style={{fontSize:12,color:C.normal,fontWeight:600,marginRight:'auto',display:'inline-flex',alignItems:'center',gap:6}}>{r.clientName}{(()=>{ const resp=clients.find(c=>c.id===r.client_id)?.abogado_responsable; if(!resp) return null; const pc=personChip(resp); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px',fontWeight:600}}>{resp}</span> })()}</span>
                         {ents.length>1&&(
                           <select value={r.entity_id||''} onChange={e=>editarCampo(r.id,'entity_id',e.target.value||null)} style={{padding:'5px 7px',borderRadius:6,border:`1px solid ${r.entity_id?C.border:C.soon}`,fontSize:11,background:'#fff',color:C.text,outline:'none',maxWidth:170}}>
                             <option value=''>Elegir razón social…</option>
@@ -8400,6 +8406,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
   const clientTasks = tasks.filter(t=>t.client_id===client.id&&t.status!=='Terminado')
+  // Abogado responsable: el campo del cliente, o el de su venta más reciente (mismo criterio que la lista).
+  const responsable = client.abogado_responsable || [...(sales||[])].filter(s=>s.client_id===client.id&&s.responsible).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))[0]?.responsible || null
 
   // Vendido UF: misma fuente que Dashboard/Ventas (recurrentes x12, CLP convertido a UF)
   const vendidoUF = clientSales.reduce((a,s)=>a+ventaUF(s,ufRef),0)
@@ -8430,6 +8438,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               {client.type}
               {client.status==='Terminado'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#F5F7F9',color:C.muted,fontWeight:600}}>Terminado</span>}
               {client.status==='Prospecto'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#FFF8E1',color:'#C77F18',fontWeight:600}}>Prospecto</span>}
+              {responsable&&(()=>{ const pc=personChip(responsable); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{responsable}</span> })()}
             </div>
           </div>
           <button onClick={()=>onEdit(client)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
@@ -8810,10 +8819,11 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                 </div>
                 <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`1px solid ${ended?C.border:C.normal}`,background:ended?'#F5F7F9':'transparent',color:ended?C.muted:C.normal,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminar'}</button>
               </div>
-              <div style={{display:'flex',gap:12,fontSize:11,flexWrap:'wrap'}}>
+              <div style={{display:'flex',gap:12,fontSize:11,flexWrap:'wrap',alignItems:'center'}}>
                 {!ended&&<span style={{color:C.accent}}>{activeSales} ventas activas</span>}
                 {cp>0&&<span style={{color:hasOverdue?C.overdue:C.soon,fontWeight:600}}>{fmt(cp)} por cobrar</span>}
                 {balance!==0&&<span style={{color:balance<0?C.overdue:C.normal,fontWeight:600}}>Fondos: {fmt(balance)}</span>}
+                {responsableDe[c.id]&&(()=>{ const pc=personChip(responsableDe[c.id]); return <span style={{marginLeft:'auto',fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{responsableDe[c.id]}</span> })()}
               </div>
             </div>
           )
