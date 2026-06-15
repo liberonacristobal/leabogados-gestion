@@ -10511,12 +10511,6 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())
 
   const heroChip = (label,val,bg,col)=>(<span style={{fontSize:11,background:bg,color:col,borderRadius:20,padding:'4px 11px',fontWeight:600}}>{label} {val}</span>)
-  const kpiTile = (val,label,col,onClick)=>(
-    <div onClick={onClick} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0}}>
-      <div style={{fontSize:26,fontWeight:600,color:col,lineHeight:1}}>{val}</div>
-      <div style={{fontSize:11,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
-    </div>
-  )
   return (
     <div>
       {/* Recordatorio caja chica (solo quien tiene caja activa): sin cargar gastos hace ≥10 días y/o fondo bajo */}
@@ -10581,12 +10575,6 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
               ))}
             </div>
           )}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          {kpiTile(kpiVencidas.length,'Vencidas',C.overdue,()=>setOpenActivas(true))}
-          {kpiTile(kpiSemana.length,'Esta semana',C.soon,()=>setOpenActivas(true))}
-          {kpiTile(mias.length,'Activas',C.accent,()=>setOpenActivas(true))}
-          {kpiTile(kpiTermMes.length,'Terminadas (mes)',C.greenText,()=>setOpenTerm(true))}
         </div>
       </div>
       <div style={{padding:'14px 20px 0'}}>
