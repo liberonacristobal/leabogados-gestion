@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Rendicion: correlativo al enviar + correo redactado con IA
+- El **correlativo se graba al CONFIRMAR el envio** (no al generar). Al generar se muestra el N° tentativo ("Sera la N° X, se confirma al enviar"); las rendiciones no enviadas no consumen numero. El contexto del modal cuenta solo las ENVIADAS.
+- **Correo con IA**: nuevo boton "Redactar con IA" en el modal de envio. La IA redacta el correo (saludo por genero, tono, segun saldo) pero las CIFRAS y los DATOS DE CUENTA van fijos (se le pasan y se le prohibe cambiarlos). El mensaje es editable; fallback a la version determinista. Resumen del PDF en un desplegable.
+
 ## 2026-06-15 — Rendiciones: correlativo por cliente + continuidad (transparencia)
 - Cada rendicion al cliente lleva ahora un **correlativo por cliente** (N°1, N°2... guardado, sobrevive a anulaciones). Aparece en el asunto del correo, el encabezado del PDF y el historial.
 - **Continuidad**: el modal de rendicion muestra antes de generar el N° que tendra, cuantas rendiciones anteriores hay y el saldo actual del fondo. El correo menciona el N°. El recuadro "Resumen del fondo" del PDF sigue mostrando las rendiciones previas del mismo fondo.
