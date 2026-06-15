@@ -8483,7 +8483,9 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
     Object.values({...by,...folioBy}).forEach(g=>{ if(g.length<2) return; const ids=g.map(x=>x.id).sort().join(','); if(seen.has(ids)) return; seen.add(ids)
       // SIEMPRE conservar la que tiene número (Factura N° XX = la factura real), nunca al azar; luego Pagada, folio limpio, n° más bajo.
       const keep=[...g].sort((a,b)=>((a.invoice_no?0:1)-(b.invoice_no?0:1))||((b.status==='Pagado')-(a.status==='Pagado'))||((a.invoice_no===folioN(a.invoice_no)?0:1)-(b.invoice_no===folioN(b.invoice_no)?0:1))||(parseInt(folioN(a.invoice_no))||9e9)-(parseInt(folioN(b.invoice_no))||9e9))[0]
-      groups.push({rows:g, keepId:keep.id}) })
+      const folios=[...new Set(g.map(x=>folioN(x.invoice_no)).filter(Boolean))]
+      const motivo = (folios.length===1) ? `mismo folio N° ${folios[0]} cargado ${g.length} veces (con y sin "Factura")` : 'mismo monto y mismo vencimiento'
+      groups.push({rows:g, keepId:keep.id, motivo}) })
     return groups
   },[scope,periodo])
 
@@ -8525,8 +8527,17 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
     const out=[]
     progs.forEach(p=>{
       const pm=mes(p.due||p.issued_at); const a=p.amount||0; if(!a) return
-      const r = reals.find(x=>String(x.client_id)===String(p.client_id) && Math.abs((x.amount||0)-a)/a<=0.15 && (()=>{ const rm=mes(x.due||x.issued_at); if(!pm||!rm) return false; const d=(parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7))); return Math.abs(d)<=1 })())
-      if(r) out.push({prog:p, real:r})
+      for(const x of reals){
+        if(String(x.client_id)!==String(p.client_id)) continue
+        const dMonto=Math.abs((x.amount||0)-a)/a; if(dMonto>0.15) continue
+        const rm=mes(x.due||x.issued_at); if(!pm||!rm) continue
+        const dMes=Math.abs((parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7)))); if(dMes>1) continue
+        const raz=[]
+        if(p.sale_id&&x.sale_id&&String(p.sale_id)===String(x.sale_id)) raz.push('misma venta')
+        raz.push(dMes===0?`mismo mes (${pm.slice(5,7)}/${pm.slice(0,4)})`:'mes adyacente')
+        raz.push(dMonto<0.01?'mismo monto':`monto a ${(dMonto*100).toFixed(1).replace(/\.0$/,'')}%`)
+        out.push({prog:p, real:x, razones:raz}); break
+      }
     })
     return out
   },[scope,periodo])
@@ -8541,7 +8552,9 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
       const reales = act.filter(r=>r.invoice_no && String(r.client_id)===String(g.client_id) && ['Pagado','Pendiente','Vencido'].includes(r.status))
       let best=null,score=0
       reales.forEach(r=>{ const a=g.amount||0; const mEq=a&&Math.abs((r.amount||0)-a)/a<=0.02?0.5:0; const gl=simTexto(r.concept,g.concept)*0.5; const sc=mEq+gl; if(sc>score){score=sc;best=r} })
-      return {g, real:best, score}
+      const raz=[]
+      if(best){ const a=g.amount||0; if(a&&Math.abs((best.amount||0)-a)/a<=0.02) raz.push('mismo monto'); if(simTexto(best.concept,g.concept)>=0.3) raz.push('glosa parecida'); raz.push('y esta no tiene número') }
+      return {g, real:best, score, razones:raz}
     }).filter(x=>x.real && x.score>=0.5).sort((a,b)=>b.score-a.score)
   },[scope,okIds,periodo])
   const marcarLegit = id => { learnPut('conciliacion_ok', String(id), '1', {}); setOkIds(p=>new Set([...(p||[]),String(id)])) }
@@ -8593,7 +8606,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
           {ghosts.map((x,i)=>(
             <div key={i} style={{background:'#fff',border:`1px solid #F09595`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
               <div style={{fontSize:12.5,fontWeight:600}}>{x.g.concept||'—'} · {fmt(x.g.amount)}</div>
-              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(x.g.client_id)} · sin folio. Parece copia de la real F° {folioN(x.real.invoice_no)} ({fmt(x.real.amount)}).</div>
+              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(x.g.client_id)} · pagada SIN número. Parece copia de Factura N° {folioN(x.real.invoice_no)} ({fmt(x.real.amount)}){x.razones&&x.razones.length?` — porque: ${x.razones.join(' · ')}`:''}.</div>
               <div style={{display:'flex',gap:6}}>
                 <button onClick={()=>onReplaceProgramada&&onReplaceProgramada(x.g.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Dar de baja la copia</button>
                 <button onClick={()=>marcarLegit(x.g.id)} style={{fontSize:10,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>No es duplicado</button>
@@ -8607,7 +8620,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
           {dupGroups.map((g,i)=>{ const drop=g.rows.filter(r=>r.id!==g.keepId); const keep=g.rows.find(r=>r.id===g.keepId); const lbl=b=>b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'copia sin número'; const keepLbl=lbl(keep); return (
             <div key={i} style={{background:'#fff',border:`1px solid #F09595`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
               <div style={{fontSize:12.5,fontWeight:600}}>{keep.concept||'—'} · {fmt(keep.amount)}</div>
-              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(keep.client_id)} · {g.rows.length} copias. Conservo <b style={{color:C.greenText}}>{keepLbl}</b>{keep.status==='Pagado'?' (pagada)':''}; elimino: {drop.map(lbl).join(', ')}.</div>
+              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(keep.client_id)} · {g.rows.length} copias — {g.motivo}. Conservo <b style={{color:C.greenText}}>{keepLbl}</b>{keep.status==='Pagado'?' (pagada)':''}; elimino: {drop.map(lbl).join(', ')}.</div>
               <button onClick={()=>onResolveDup&&onResolveDup(g.keepId, drop.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Conservar {keepLbl} · eliminar {drop.length}</button>
             </div>
           )})}
@@ -8637,7 +8650,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
           {progMatches.map((m,i)=>(
             <div key={i} style={{background:'#fff',border:`1px solid #B5D4F4`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
               <div style={{fontSize:12.5,fontWeight:600}}>{m.prog.concept||'—'}</div>
-              <div style={{fontSize:10,color:C.accent,margin:'3px 0 7px'}}>Programada {fmt(m.prog.amount)} ≈ {m.real.invoice_no?`Factura N° ${folioN(m.real.invoice_no)}`:'real'} {fmt(m.real.amount)} ({m.real.status}) — mismo proyecto/cliente, mes y monto. Reemplazar borra la programada.</div>
+              <div style={{fontSize:10,color:C.accent,margin:'3px 0 7px'}}>Programada {fmt(m.prog.amount)} ≈ {m.real.invoice_no?`Factura N° ${folioN(m.real.invoice_no)}`:'real'} {fmt(m.real.amount)} ({m.real.status}) — porque: {m.razones?m.razones.join(' · '):'mismo cliente, mes y monto'}. Reemplazar borra la programada.</div>
               <button onClick={()=>onReplaceProgramada&&onReplaceProgramada(m.prog.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Reemplazar (borra programada)</button>
             </div>
           ))}
