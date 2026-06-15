@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-15 — Contactos: principal/secundario + Red profesional
+- Ficha de cliente: **estrella** por contacto para marcar **principal** (toggle, principales arriba; badge "Principal").
+- Nuevo en el menú (admin): **Red profesional** — base de contactos de red (no clientes) con nombre, email, país, **categoría libre** (las armas tú; los chips de filtro se generan solos por uso), web, LinkedIn, descripción y "conocido en" (origen). Buscador + filtro por país + chips por categoría, agrupada por país. Paleta corporativa.
+- Escáner Gmail: 3ª acción **"→ Red"** por contacto (lo guarda en Red profesional con la web inferida del dominio; país/categoría se completan en la vista).
+
+# Changelog
+
 ## 2026-06-15 — Dashboard: panel "Qué atender hoy" (IA)
 - Nuevo bloque bajo "Cómo va el año": junta lo urgente de todas las áreas y lo prioriza por severidad — facturas vencidas, tareas vencidas, por cobrar de la semana, caja chica sin liquidar, clientes sin fondos, rendiciones por hacer, propuestas tardías. Cada fila es tappable y navega a su sección. Incluye **headline determinista** + botón **"Resumen IA"** (Opus redacta el foco del día sobre cifras ya calculadas). Estado "Todo al día" cuando no hay pendientes.
 
