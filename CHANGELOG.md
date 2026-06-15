@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Conciliación: toggle Histórico/Mes + pago parcial
+- Conciliación: toggle Histórico / Mes corriente (mes filtra emitidas por emisión y programadas por vencimiento del mes en curso).
+- Pago parcial: el botón Pagar pregunta el monto recibido; si es menor al saldo queda como abono (paid_amount) y la factura sigue pendiente, mostrando abonado  en la fila. Requiere la columna billing.paid_amount.
+
+
 ## 2026-06-15 — Cockpit Parte 2b: Recordar cobro + barra de progreso
 - Botón Recordar en facturas pendientes/vencidas: envía un correo de recordatorio al cliente (desde la cuenta de oficina) con el detalle de la Factura N°, monto y vencimiento (con confirmación). Si el cliente no tiene correo, avisa.
 - Barra de progreso en el encabezado de cada proyecto (cobrado/facturado).
