@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Ingresos del año por año de venta
+- Nueva tarjeta en el **Dashboard** (tras Cash flow): **"Cobrado [año] · por año de venta"** — separa lo cobrado este año según el año de la venta de origen (2026 / 2025 / 2024 y anteriores), con barra y desglose. Lo que no tiene año cae en **"Sin año asignado"** (ámbar, tappable → Facturación).
+- Nueva cola **"Sin año"** en Facturación: facturas pagadas sin año de venta resuelto; **Asociar venta** (enlaza `sale_id`, el año deriva de `sales.year`) o **elegir el año** directo. **Aprende cliente→año** (sugerencia ✦) y no vuelve a preguntar. Requiere columna `billing.sale_year`.
+
 ## 2026-06-15 — Caja chica: asistente IA de liquidación
 - Botón **"Asistente IA"** en PENDIENTES. Revisa tus gastos sin liquidar y los separa en **Listos** (sin problemas) y **A revisar**. Detección **determinista** (sin cliente, sin categoría, posible duplicado por mismo monto+fecha+glosa parecida). La **IA solo sugiere** cliente/categoría faltantes; cada sugerencia que aceptas se guarda (glosa→cliente, glosa→categoría) y no vuelve a preguntar (✦ = aprendido). "Seleccionar listos" deja la selección hecha para liquidar. Nada se liquida solo.
 
