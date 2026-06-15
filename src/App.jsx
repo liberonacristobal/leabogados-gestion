@@ -10913,7 +10913,7 @@ function ClientePicker({clients=[], onPick}){
   const matches = q.trim()? clients.filter(c=>String(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,8):[]
   return (
     <div style={{position:'relative',marginTop:4}}>
-      <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder='Buscar cliente…' style={{width:'100%',maxWidth:240,height:32,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12,color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}}/>
+      <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder='Buscar cliente…' style={{width:'100%',maxWidth:240,height:32,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12,color:C.text,background:'#F5F7F9',colorScheme:'light',WebkitTextFillColor:C.text,outline:'none',boxSizing:'border-box'}}/>
       {open&&matches.length>0&&(
         <div style={{position:'absolute',top:'100%',left:0,width:240,maxWidth:'100%',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:60,marginTop:3,maxHeight:200,overflowY:'auto'}}>
           {matches.map(c=>(<div key={c.id} onMouseDown={()=>{onPick(c.id);setQ('');setOpen(false)}} style={{padding:'8px 11px',fontSize:12,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>))}
@@ -11126,7 +11126,10 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
                   <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}><button onClick={()=>agregarSeguros(conCliente.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'9px 14px',cursor:'pointer'}}>Agregar todos ({conCliente.filter(a=>a.count>=2).length})</button></div>
                   {Object.keys(grupos).map(cid=>(
                     <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                      <div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'8px 14px',background:'#F5F7F9'}}>{clientName(cid)} · {grupos[cid].length}</div>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'8px 14px',background:'#F5F7F9'}}>
+                        <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{clientName(cid)} · {grupos[cid].length}</span>
+                        {grupos[cid].length>1&&<button onClick={()=>agregarSeguros(grupos[cid])} style={{fontSize:11,fontWeight:700,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Agregar todos</button>}
+                      </div>
                       {grupos[cid].map(a=>fila(a,false))}
                     </div>
                   ))}
