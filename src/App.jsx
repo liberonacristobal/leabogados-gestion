@@ -101,6 +101,8 @@ const rsLabel = (clientId, clients, clientEntities, entityId) => {
   const c = (clients||[]).find(x=>String(x.id)===String(clientId))
   return {name:c?.name||'Cliente', rut:c?.rut||'', multi:ents.length>1?ents.length:0}
 }
+// Folio limpio: invoice_no a veces trae la palabra "Factura" como texto; folioN devuelve solo el número/código (para contextos con prefijo "F°").
+const folioN = no => String(no||'').replace(/^factura\s*/i,'').trim()
 // Trato al cliente: a personas se les dice "Estimado [nombre de pila]" (sin señor/señora ni apellido); a empresas "Estimados".
 const _ES_EMPRESA = /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a\.?|eirl|e\.?i\.?r\.?l|inversiones|comercial|constructora|sociedad|holding|inmobiliaria|servicios|grupo|asociados|abogados|consultores|ingenier|transportes|agricola|agrícola|clinica|clínica|tech|spa\.|cia)\b/i
 const esPersona = name => { const n=(name||'').trim(); if(!n) return false; if(_ES_EMPRESA.test(n)) return false; const w=n.split(/\s+/); return w.length>=2 && w.length<=4 && !/\d/.test(n) }
@@ -2374,8 +2376,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       const metaFac = fac ? (pp? `F° ${fac.invoice_no||'—'} · cobrada ${fmtDMY(fac.paid_at)}` : `F° ${fac.invoice_no||'—'}${fac.due?` · vence ${fmtDMY(fac.due)}`:''}`) : '—'
                       const on = cpExp===t.id
                       const explica = pp
-                        ? `La factura al cliente ${fac?.invoice_no?`F° ${fac.invoice_no}`:'asociada'} ya fue cobrada${fac?.paid_at?` el ${fmtDMY(fac.paid_at)}`:''}, así que ya puedes pagarle al proveedor.`
-                        : `Aún no se cobra la factura al cliente${fac?.invoice_no?` (F° ${fac.invoice_no})`:''}${fac?.due?`, que vence el ${fmtDMY(fac.due)}`:''}. Esta cuenta se paga recién cuando ese cobro entre.`
+                        ? `La factura al cliente ${fac?.invoice_no?`F° ${folioN(fac.invoice_no)}`:'asociada'} ya fue cobrada${fac?.paid_at?` el ${fmtDMY(fac.paid_at)}`:''}, así que ya puedes pagarle al proveedor.`
+                        : `Aún no se cobra la factura al cliente${fac?.invoice_no?` (F° ${folioN(fac.invoice_no)})`:''}${fac?.due?`, que vence el ${fmtDMY(fac.due)}`:''}. Esta cuenta se paga recién cuando ese cobro entre.`
                       return (
                         <div key={t.id} style={{borderTop:`1px solid ${C.border}`}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px'}}>
@@ -2421,7 +2423,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const fac=(billing||[]).find(b=>String(b.id)===String(payTercero.billing_id))
         const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
         const venta=(sales||[]).find(s=>String(s.id)===String(payTercero.sale_id))
-        const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}${fac?.invoice_no?` · F° ${fac.invoice_no}`:''}`
+        const ori=`${cli?.name||'—'}${venta?.title?` · ${venta.title}`:''}${fac?.invoice_no?` · F° ${folioN(fac.invoice_no)}`:''}`
         const subtit = [prov?.razon_social?.trim(), prov?.rut].filter(Boolean).join(' · ')
         const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
         const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercero(payTercero.id,{pagado_at:payFecha,referencia:payRef,factura_numero:payDoc,factura_fecha:payDocF}); setPayingNow(false); if(r) setPayTercero(null) }
@@ -2458,7 +2460,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 </div>
                 <div style={{marginBottom:13}}>
                   <span style={fl}>Factura del proveedor</span>
-                  {user&&<Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={payTercero.id} folderKind='facturas' namePrefix={`${tituloProv(prov)} · ${fac?.invoice_no?`F° ${fac.invoice_no}`:'pago'}`} user={user}/>}
+                  {user&&<Attachments table='terceros_attachments' idField='terceros_pago_id' entityId={payTercero.id} folderKind='facturas' namePrefix={`${tituloProv(prov)} · ${fac?.invoice_no?`F° ${folioN(fac.invoice_no)}`:'pago'}`} user={user}/>}
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
                   <div><span style={fl}>Fecha de pago</span><input type='date' value={payFecha} onChange={e=>setPayFecha(e.target.value)} style={inp}/></div>
@@ -2510,10 +2512,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   {payGroup.cuentas.map((t,i)=>{
                     const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
                     const venta=(sales||[]).find(s=>String(s.id)===String(t.sale_id))
-                    const ori=`${venta?.title||fac?.invoice_no?`F° ${fac.invoice_no}`:'—'}`
+                    const ori=`${venta?.title||fac?.invoice_no?`F° ${folioN(fac.invoice_no)}`:'—'}`
                     return (
                       <div key={t.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',fontSize:12,color:C.text}}>
-                        <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{venta?.title?venta.title:''}{fac?.invoice_no?`${venta?.title?' · ':''}F° ${fac.invoice_no}`:''}{fac?.paid_at?` · cobrada ${fmtDMY(fac.paid_at)}`:''}</span>
+                        <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{venta?.title?venta.title:''}{fac?.invoice_no?`${venta?.title?' · ':''}F° ${folioN(fac.invoice_no)}`:''}{fac?.paid_at?` · cobrada ${fmtDMY(fac.paid_at)}`:''}</span>
                         <span style={{fontWeight:600,flexShrink:0}}>{fmt(t.monto)}</span>
                       </div>
                     )
@@ -5576,7 +5578,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
               <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderTop:`1px solid ${C.border}`}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||b.receptor_name||'Sin cliente'}</div>
-                  <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`F° ${b.invoice_no} · `:''}{b.concept||'—'} · {fmt0(b.amount)}</div>
+                  <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`F° ${folioN(b.invoice_no)} · `:''}{b.concept||'—'} · {fmt0(b.amount)}</div>
                 </div>
                 <input type='number' value={montos[b.id]||''} onChange={e=>setMontos(p=>({...p,[b.id]:e.target.value}))} placeholder='Su parte $' style={{width:96,height:30,border:`0.5px solid ${C.border}`,borderRadius:7,fontSize:12,padding:'0 8px',background:'#fff',color:C.text,outline:'none',boxSizing:'border-box',flexShrink:0}}/>
                 <button onClick={()=>asignarFac(b.id)} disabled={asgBusy===b.id||!(parseInt(montos[b.id])||0)} style={{...chipBtn('primary'),height:30,opacity:(asgBusy===b.id||!(parseInt(montos[b.id])||0))?.5:1}}>{asgBusy===b.id?'…':'Asignar'}</button>
@@ -5596,7 +5598,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
                 <div key={t.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`}}>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:500,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}</div>
-                    <div style={{fontSize:11,color:'#99ABB4'}}>{fac?.invoice_no?`F° ${fac.invoice_no} · `:''}{t.estado==='pagado'&&t.pagado_at?`Pagado ${fmtD(String(t.pagado_at).slice(0,10))}`:(t.created_at?fmtD(String(t.created_at).slice(0,10)):'')}</div>
+                    <div style={{fontSize:11,color:'#99ABB4'}}>{fac?.invoice_no?`F° ${folioN(fac.invoice_no)} · `:''}{t.estado==='pagado'&&t.pagado_at?`Pagado ${fmtD(String(t.pagado_at).slice(0,10))}`:(t.created_at?fmtD(String(t.created_at).slice(0,10)):'')}</div>
                     {t.estado==='pagado'&&t.factura_numero&&<div style={{fontSize:11,color:'#99ABB4'}}>Doc {t.factura_numero}{t.factura_fecha?` · ${fmtD(String(t.factura_fecha).slice(0,10))}`:''}</div>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
@@ -5821,7 +5823,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
           {gastosPend.length===0 && <div style={{fontSize:10,color:'#C77F18',marginTop:3}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
           <div style={{marginTop:8}}>
             <div style={{...lblS,marginBottom:4}}>Subproyecto <span style={{textTransform:'none',fontWeight:400,color:'#99ABB4'}}>(opcional)</span></div>
-            <input value={subproyecto} onChange={e=>setSubproyecto(e.target.value)} placeholder='—' style={{...inpS,borderColor:C.border}}/>
+            <input value={subproyecto} onChange={e=>setSubproyecto(e.target.value)} placeholder='—' list='rend-subproy' style={{...inpS,borderColor:C.border}}/>
+            <datalist id='rend-subproy'>{[...new Set((rendiciones||[]).filter(r=>String(r.client_id)===String(client.id)&&r.subproject).map(r=>r.subproject))].map(s=><option key={s} value={s}/>)}</datalist>
           </div>
         </div>
         )
@@ -10580,6 +10583,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const [resueltas,setResueltas] = useState([])     // log de la sesión: {b, tipo:'baja'|'legit'} para plegar + deshacer
   const [showResueltas,setShowResueltas] = useState(false)
   const [showConc,setShowConc] = useState(false)    // sección plegable de cuotas YA conciliadas (con folio)
+  const [concQ,setConcQ] = useState('')             // búsqueda dentro de Conciliadas (por cliente/glosa/folio)
   const [cardFilter,setCardFilter] = useState(null) // null='todas' · 'match' · 'revisar' · 'conc' (filtro por tarjeta de resumen)
   const [pickRS,setPickRS] = useState({})           // {cid: entityId} razón social elegida cuando el cliente tiene varias
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>{ setIgnorados(new Set((data||[]).map(r=>String(r.key)))) },()=>setIgnorados(new Set())) },[])
@@ -10782,14 +10786,18 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
         const conc=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&b.status==='Pagado').sort((a,b)=>String(b.paid_at||'').localeCompare(String(a.paid_at||'')))
         if(conc.length===0) return null
         const totC=conc.reduce((a,b)=>a+(b.amount||0),0)
-        const gC={}; conc.forEach(b=>{ const k=String(b.client_id||'__'); (gC[k]=gC[k]||[]).push(b) })
+        const cq=concQ.trim().toLowerCase()
+        const concF = cq ? conc.filter(b=>{ const cn=(clientById(b.client_id)?.name||'').toLowerCase(); return cn.includes(cq)||String(b.concept||'').toLowerCase().includes(cq)||String(b.invoice_no||'').toLowerCase().includes(cq) }) : conc
+        const gC={}; concF.forEach(b=>{ const k=String(b.client_id||'__'); (gC[k]=gC[k]||[]).push(b) })
         return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:4,marginBottom:8}}>
             <div onClick={()=>setShowConc(s=>!s)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',cursor:'pointer',background:'#EDF7F2'}}>
               <span style={{fontSize:12,color:C.muted}}><b style={{color:C.greenText}}>●</b> Conciliadas · con folio · <b style={{color:C.text}}>{conc.length}</b> · {fmt(totC)}</span>
               <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{showConc?'Ocultar ▴':'Ver ▾'}</span>
             </div>
-            {showConc&&<div style={{maxHeight:'40vh',overflowY:'auto'}}>
+            {showConc&&<div style={{maxHeight:'44vh',overflowY:'auto'}}>
+              <div style={{padding:'8px 12px',borderTop:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:1}}><input value={concQ} onChange={e=>setConcQ(e.target.value)} placeholder='Buscar por cliente, glosa o folio…' style={{width:'100%',height:34,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12,color:C.text,background:'#F5F7F9',colorScheme:'light',outline:'none',boxSizing:'border-box'}}/></div>
+              {Object.keys(gC).length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>Sin coincidencias.</div>}
               {Object.keys(gC).map(cid=>{ const list=gC[cid]; const c=clientById(cid); return (
                 <div key={cid}>
                   <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,padding:'7px 14px 3px',borderTop:`0.5px solid ${C.border}`,background:'#FAFBFC'}}>{c?.name||'Cliente'} · {list.length}</div>
