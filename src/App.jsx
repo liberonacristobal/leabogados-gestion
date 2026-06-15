@@ -5520,10 +5520,10 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
   const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
   const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
   const saldoActual = fondosDisp - gastosYaRend
-  // Correlativo por cliente (guardado, sobrevive a anulaciones): máximo existente + 1.
-  const rendsCli = (rendiciones||[]).filter(r=>String(r.client_id)===String(client.id))
-  const nextCorr = Math.max(0, ...rendsCli.map(r=>r.correlativo||0)) + 1
-  const previasN = rendsCli.length
+  // Correlativo por cliente: se cuenta solo sobre las rendiciones ENVIADAS (correlativo grabado). Tentativo = max + 1.
+  const rendsCliEnv = (rendiciones||[]).filter(r=>String(r.client_id)===String(client.id) && r.correlativo)
+  const nextCorr = Math.max(0, ...rendsCliEnv.map(r=>r.correlativo||0)) + 1
+  const previasN = rendsCliEnv.length
 
   // Gastos disponibles para rendir (no rendidos aun)
   const disponibles = allMovs.filter(e=>{
@@ -5596,7 +5596,6 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
         n_gastos: gastosSel.length,
         n_clientes: 1,
         tipo: 'cliente',
-        correlativo: nextCorr,
         dirigido_a: (atencion||'').trim()||null
       })
       if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
@@ -5628,8 +5627,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
     <div>
       {/* Contexto de continuidad: correlativo que tendrá + rendiciones anteriores + saldo actual */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:12,paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
-        <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Rendición N° {nextCorr}</span>
-        <span style={{fontSize:11,color:C.muted,textAlign:'right'}}>{previasN>0?`${previasN} anterior${previasN!==1?'es':''} · saldo actual ${fmtN(saldoActual)}`:'Primera rendición de este cliente'}</span>
+        <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Será la N° {nextCorr}<span style={{fontSize:10,fontWeight:500,color:'#99ABB4'}}> · se confirma al enviar</span></span>
+        <span style={{fontSize:11,color:C.muted,textAlign:'right'}}>{previasN>0?`${previasN} enviada${previasN!==1?'s':''} · saldo actual ${fmtN(saldoActual)}`:'Primera rendición de este cliente'}</span>
       </div>
       {/* Razón social seleccionada */}
       {headEnt&&(
@@ -6763,7 +6762,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
       {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
-      {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))} onClose={()=>setEmailRend(null)}/>}
+      {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
@@ -7707,6 +7706,25 @@ Saludos cordiales,
 ${user?.name||''}
 Liberona Escala Abogados`
   }
+  const [body,setBody] = useState(()=>cuerpoCorreo())
+  const [aiBusy,setAiBusy] = useState(false)
+  // La IA redacta el correo, pero las CIFRAS y los DATOS DE CUENTA van fijos (se le pasan y se le prohíbe cambiarlos).
+  const redactarIA = async()=>{
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+    if(!apiKey){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
+    setAiBusy(true)
+    const terminado = client?.status==='Terminado'
+    const cierreTipo = saldoCliente<0?'falta_fondos':(saldoCliente>0?(terminado?'a_favor_devolver':'a_favor_proximos'):'cubierto')
+    const facts = { saludo: saludoCli(client?.name), cliente: client?.name, correlativo: r.correlativo||null, periodo: r.periodo, total_rendido: r.total, saldo: saldoCliente, tipo_cierre: cierreTipo, remitente: user?.name||'', cuenta_LEA: cierreTipo==='falta_fondos'?{titular:'Liberona Escala Abogados Limitada',rut:'77.700.387-9',banco:'Banco BICE',cuenta_corriente:'138392-2',correo:'administracion@leabogados.cl'}:null }
+    const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un CORREO BREVE (máx 6 líneas) para enviar a un cliente junto al PDF adjunto de su rendición de gastos. Español de Chile, cordial y profesional. REGLAS DURAS: usa el saludo EXACTO "${saludoCli(client?.name)}:"; NO inventes ni cambies cifras ni datos de cuenta, usa SOLO los que te paso (textualmente); menciona que el detalle está en el documento adjunto; NO listes los gastos uno a uno. Según "tipo_cierre": falta_fondos → pide transferir el saldo a su cargo a la cuenta indicada (incluye los datos de cuenta tal cual); a_favor_devolver → hay saldo a favor y se concluyó la gestión, pide sus datos de cuenta corriente a administracion@leabogados.cl para reintegrarlo; a_favor_proximos → el saldo a favor queda disponible para los próximos trabajos; cubierto → no menciones saldo. Cierra con "Saludos cordiales," y el remitente. Devuelve SOLO el texto del correo, sin asunto ni markdown. Datos:\n${JSON.stringify(facts,null,2)}`
+    try{
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})})
+      const data = await resp.json(); const txt = (data.content?.[0]?.text||'').trim()
+      if(!txt) throw new Error('respuesta vacía')
+      setBody(txt); logEvent('rendicion','correo_ia',{client_id:r.client_id},user?.name)
+    }catch(e){ alert('Error al redactar con IA: '+(e?.message||e)) }
+    setAiBusy(false)
+  }
   const verPDF = () => {
     const w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para ver el PDF.'); return }
     w.document.write(rendicionPdfHtml(r, client, expenses, clientEntities))   // diseño rico A (mismo que "Ver PDF" del historial)
@@ -7714,7 +7732,7 @@ Liberona Escala Abogados`
   }
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
-    const texto = cuerpoCorreo()
+    const texto = body
     setSending(true)
     try{
       // Envío directo con PDF adjunto vía Gmail API (si el token tiene el scope gmail.send)
@@ -7734,9 +7752,15 @@ Liberona Escala Abogados`
         if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
       }
       const now = new Date().toISOString()
-      const {error:seErr}=await supabase.from('rendiciones').update({sent_at:now}).eq('id',r.id)
+      // El correlativo se GRABA recién al confirmar el envío (no al generar): max de las ya enviadas del cliente + 1.
+      let corr = r.correlativo
+      if(!corr){
+        const {data:mx}=await supabase.from('rendiciones').select('correlativo').eq('client_id',r.client_id).not('correlativo','is',null).order('correlativo',{ascending:false}).limit(1).maybeSingle()
+        corr = ((mx&&mx.correlativo)||0)+1
+      }
+      const {error:seErr}=await supabase.from('rendiciones').update({sent_at:now, correlativo:corr}).eq('id',r.id)
       if(seErr) console.error('No se pudo marcar la rendición como enviada:',seErr.message)
-      else onSent && onSent(r.id, now)
+      else onSent && onSent(r.id, now, corr)
       alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se abrió tu correo y el PDF en otra pestaña. Adjunta ese PDF antes de enviar.')
       onClose()
     }catch(e){ alert('Error: '+e.message) }
@@ -7748,8 +7772,13 @@ Liberona Escala Abogados`
       <Fld label='De'><Inp value={user?.email||''} disabled style={{opacity:.7}}/></Fld>
       <Fld label='Para'><Inp type='email' value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl'/></Fld>
       <Fld label='Asunto'><Inp value={asunto} onChange={e=>setAsunto(e.target.value)}/></Fld>
-      <Lbl>Resumen</Lbl>
-      <div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:10,maxHeight:240,overflowY:'auto',marginBottom:14}} dangerouslySetInnerHTML={{__html:buildHTML()}}/>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+        <Lbl>Mensaje</Lbl>
+        <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:26,opacity:aiBusy?.6:1}}>{aiBusy?'Redactando…':'Redactar con IA'}</button>
+      </div>
+      <textarea value={body} onChange={e=>setBody(e.target.value)} rows={8} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:6}}/>
+      <div style={{fontSize:10,color:'#99ABB4',marginBottom:12}}>Las cifras y los datos de cuenta van fijos; la IA solo redacta. Revisa antes de enviar.</div>
+      <details style={{marginBottom:14}}><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Ver resumen del PDF adjunto</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:10,maxHeight:220,overflowY:'auto',marginTop:8}} dangerouslySetInnerHTML={{__html:buildHTML()}}/></details>
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button onClick={verPDF} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
@@ -8119,7 +8148,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         rendiciones={rendiciones}
         onAnularRendicion={handleAnularRendicion}
         user={user}
-        onRendicionSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))}
+        onRendicionSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))}
       />
       {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} rendiciones={rendiciones} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setEmailRend(r)}}/></Modal>}
     </>
