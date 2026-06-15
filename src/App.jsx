@@ -7946,6 +7946,14 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
         <Fld label='Fecha'><Inp type='date' value={f.date||''} onChange={e=>up('date',e.target.value)}/></Fld>
       </div>
       <Fld label='Descripción'><Inp value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Descripción...'/></Fld>
+      <Fld label='Cliente'>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span style={{fontSize:13,fontWeight:600,color:client?C.text:C.overdue}}>{client?.name||'Sin cliente'}</span>
+          {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
+          <ClientePicker clients={clients} onPick={cid=>setF(p=>({...p,client_id:cid,entity_id:null}))}/>
+        </div>
+        {(f.client_render_id||f.render_id||f.notaria_render_id)&&<div style={{fontSize:10,color:C.overdue,marginTop:5}}>Este gasto está en una rendición/liquidación: reábrela antes de moverlo a otro cliente.</div>}
+      </Fld>
       {rsList.length>=1&&(
         <Fld label='Razón social'>
           <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
