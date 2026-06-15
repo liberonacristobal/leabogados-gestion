@@ -4640,7 +4640,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
-  const [filter,setFilter] = useState('emitidas')
+  const [filter,setFilter] = useState('resumen')
   const [impOpen,setImpOpen] = useState(false)
   const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
@@ -4964,7 +4964,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:9}}>
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:9}}>
           {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Programado',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=filter===fl; return (
             <button key={l} onClick={()=>{setFilter(fl);clearSel()}} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 8px',border:`1.5px solid ${on?col:C.border}`,cursor:'pointer',minWidth:0}}>
               <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
@@ -4972,8 +4972,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             </button>
           )})}
         </div>}
-        <div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
-          {[['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=>(
+        {filter!=='resumen'&&<div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
+          {[['resumen','Resumen'],['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'0 0 auto',padding:'6px 12px',borderRadius:20,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
           {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&<button onClick={()=>setShowBuscar(s=>!s)} style={{flex:'0 0 auto',marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:20,border:`1px solid ${C.accent}`,background:(q||showBuscar)?C.accent:'#E6EEF1',color:(q||showBuscar)?'#fff':C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',maxWidth:160,overflow:'hidden'}}>
@@ -4981,11 +4981,11 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q||'Buscar'}</span>
             {q&&<span onClick={e=>{e.stopPropagation();setQ('')}} style={{flexShrink:0,fontSize:13,lineHeight:1}}>×</span>}
           </button>}
-        </div>
+        </div>}
         {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
-        {filter!=='checklist'&&filter!=='anticipos'&&filter!=='sinanio'&&<>
+        {filter!=='checklist'&&filter!=='anticipos'&&filter!=='sinanio'&&filter!=='resumen'&&<>
         {showBuscar&&(
           <div style={{display:'flex',gap:6,marginBottom:6}}>
             <Inp autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura...' style={{flex:1,marginBottom:0,padding:'7px 11px',fontSize:13}}/>
@@ -5067,7 +5067,47 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
       )})()}
 
       <div style={{padding:'10px 20px 100px'}}>
-        {filter==='anticipos' ? null
+        {filter==='resumen' ? (()=>{
+          const hoy=new Date().toISOString().slice(0,10)
+          const pend=bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
+          const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
+          const porCobrar=pend.reduce((a,b)=>a+(b.amount||0),0)
+          const venAll=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+          const cobAll=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+          const progAll=bb.filter(b=>b.status==='Programada').reduce((a,b)=>a+(b.amount||0),0)
+          const buckets=[['Por vencer',b=>dias(b)<=0,C.muted],['1–30 días',b=>dias(b)>=1&&dias(b)<=30,C.soon],['31–60 días',b=>dias(b)>=31&&dias(b)<=60,'#BA7517'],['61–90 días',b=>dias(b)>=61&&dias(b)<=90,C.overdue],['90+ días',b=>dias(b)>90,'#A32D2D']]
+          const go=f=>{setFilter(f);clearSel&&clearSel()}
+          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>go(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:col}}>{fmt(v)}</div></button>)
+          return (<div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}><div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Por cobrar</div><div style={{fontSize:22,fontWeight:700,color:C.accent}}>{fmt(porCobrar)}</div></div>
+              <div style={{background:venAll>0?'#FCEBEB':'#fff',border:`1px solid ${venAll>0?'#F7C1C1':C.border}`,borderRadius:12,padding:'13px 15px'}}><div style={{fontSize:10,color:venAll>0?'#A32D2D':C.muted,textTransform:'uppercase',letterSpacing:.3}}>Vencido</div><div style={{fontSize:22,fontWeight:700,color:venAll>0?C.overdue:C.text}}>{fmt(venAll)}</div></div>
+            </div>
+            <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600,marginBottom:7}}>Vencimientos</div>
+            <div onClick={()=>go('vencido')} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 13px',marginBottom:16,cursor:'pointer'}}>
+              {buckets.map(([l,fn,col],i)=>{ const arr=pend.filter(fn); const s=arr.reduce((a,b)=>a+(b.amount||0),0); return (
+                <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<buckets.length-1?`0.5px solid ${C.border}`:'none'}}>
+                  <span style={{fontSize:12,color:col,fontWeight:600}}>{l}</span>
+                  <span style={{fontSize:12,color:C.muted}}>{arr.length} · <b style={{color:C.text}}>{fmt(s)}</b></span>
+                </div>
+              )})}
+            </div>
+            <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600,marginBottom:7}}>Estados</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+              {tab('emitidas','Por cobrar',porCobrar,C.accent)}
+              {tab('vencido','Vencidas',venAll,C.overdue)}
+              {tab('pagado','Cobradas',cobAll,C.normal)}
+              {tab('programadas','Programadas',progAll,C.muted)}
+            </div>
+            <div style={{display:'flex',gap:16,flexWrap:'wrap',fontSize:11}}>
+              <span onClick={()=>go('anticipos')} style={{cursor:'pointer',fontWeight:600,color:C.accent}}>Anticipos</span>
+              <span onClick={()=>go('terceros')} style={{cursor:'pointer',fontWeight:600,color:C.accent}}>Proveedores</span>
+              <span onClick={()=>go('checklist')} style={{cursor:'pointer',fontWeight:600,color:C.accent}}>Checklist</span>
+              {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{cursor:'pointer',fontWeight:600,color:C.soon}}>Sin año · {sinAnio.length}</span>}
+            </div>
+          </div>)
+        })()
+        : filter==='anticipos' ? null
         : filter==='checklist' ? (
           <ChecklistFacturacion billing={billing} clients={clients} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
         ) : filter==='sinanio' ? (() => {
@@ -5191,6 +5231,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           </>
         )}
       </div>
+      {onAdd&&<button onClick={()=>onAdd()} title='Nueva factura' aria-label='Nueva factura' style={{position:'fixed',right:18,bottom:82,width:52,height:52,borderRadius:'50%',background:C.accent,color:'#fff',border:'none',fontSize:30,fontWeight:300,lineHeight:1,boxShadow:'0 3px 12px rgba(0,0,0,.22)',cursor:'pointer',zIndex:50,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>}
     </div>
   )
 }
