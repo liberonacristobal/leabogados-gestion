@@ -684,6 +684,15 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const [fHasta,setFHasta] = useState('')
   const [fCliente,setFCliente] = useState('')
   const [fCat,setFCat] = useState('')
+  // Asistente IA de liquidación: revisa pendientes (determinista) + sugiere cliente/categoría (IA), aprende.
+  const [asistOpen,setAsistOpen] = useState(false)
+  const [asistBusy,setAsistBusy] = useState(false)
+  const [asistRan,setAsistRan] = useState(false)
+  const [iaSug,setIaSug] = useState({})        // {expenseId:{client_id?,category?,cliLearned?,catLearned?}}
+  const [asistAttach,setAsistAttach] = useState(new Set())  // ids con comprobante de respaldo (informativo)
+  const [dupOk,setDupOk] = useState(new Set())  // ids que el usuario marcó "son distintos"
+  const [pickCliFor,setPickCliFor] = useState(null)  // id del gasto con picker de cliente abierto
+  const [pickCatFor,setPickCatFor] = useState(null)  // id del gasto con selector de categoría abierto
 
   // Gastos pendientes de liquidar DEL USUARIO (tipo gasto, no rendidos, created_by = me)
   const misPendientes = expenses.filter(e=>e.type==='gasto'&&!e.rendered_at&&!e.paid_by_client&&e.created_by===me)
@@ -707,6 +716,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
   // Pills de categoría en PENDIENTES: [valor en DB, etiqueta mostrada]
   const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
+  const CAT_LIST = ['Notaria','CBR','Diario Oficial','Registro Civil','Fondo','Otro']
   const catLabel = c => c==='Diario Oficial'?'DO':c==='Registro Civil'?'R. Civil':(c||'Otro')
   const catBadge = c => c==='CBR'?{bg:'#E4E8EB',color:'#003C50'}:(c==='Notaria'||c==='Diario Oficial')?{bg:'#FFF8E1',color:'#C77F18'}:{bg:'#F5F7F9',color:'#537281'}
   // KPI cards (compartidas PENDIENTES/CAJA): mismo formato que Facturación — fondo con tinte de
@@ -728,6 +738,86 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
     const dia = d => new Date(d+'T12:00').toLocaleDateString('es-CL')
     const ini=fechas[0], fin=fechas[fechas.length-1]
     return mesAno(ini)===mesAno(fin) ? mesAno(ini) : `${dia(ini)} – ${dia(fin)}`
+  }
+
+  // ── Asistente IA: clasificación determinista (listos / a revisar) ─────────────
+  // Las cifras y la detección de problemas son deterministas; la IA solo sugiere cliente/categoría.
+  const asistFindings = useMemo(()=>{
+    if(!asistRan) return null
+    // Posibles duplicados: mismo monto y misma fecha con glosa parecida → se marca todo menos el primero del grupo.
+    const grupos = {}
+    misPendientes.forEach(e=>{ const k=`${e.amount||0}|${e.date||''}`; (grupos[k]||(grupos[k]=[])).push(e) })
+    const dupFlag = new Set()
+    Object.values(grupos).forEach(g=>{ if(g.length<2) return; const ord=[...g].sort((a,b)=>(String(a.id)>String(b.id)?1:-1)); for(let i=1;i<ord.length;i++){ const a=ord[0],b=ord[i]; const sim=simTexto(a.concept||'',b.concept||''); if((a.concept||'')&&(b.concept||'')&&(sim>=0.55||_normTxt(a.concept)===_normTxt(b.concept))) dupFlag.add(b.id) } })
+    const revisar=[], listos=[]
+    misPendientes.forEach(e=>{
+      const sug=iaSug[e.id]||{}
+      if(!e.client_id){ revisar.push({e,tipo:'cliente',sug}); return }
+      if(!e.category){ revisar.push({e,tipo:'categoria',sug}); return }
+      if(dupFlag.has(e.id)&&!dupOk.has(e.id)){ revisar.push({e,tipo:'dup',ref:(grupos[`${e.amount||0}|${e.date||''}`]||[]).find(x=>String(x.id)!==String(e.id))}); return }
+      listos.push(e)
+    })
+    const totListos = listos.reduce((a,e)=>a+(e.amount||0),0)
+    const conResp = misPendientes.filter(e=>asistAttach.has(String(e.id))).length
+    return {revisar,listos,totListos,conResp}
+  },[asistRan,misPendientes,iaSug,dupOk,asistAttach])
+
+  const runAsistente = async() => {
+    setAsistOpen(true); setAsistBusy(true); setAsistRan(false); setDupOk(new Set()); setIaSug({})
+    try{
+      const ids = misPendientes.map(e=>e.id)
+      let attach=new Set()
+      if(ids.length){ const {data}=await supabase.from('expense_attachments').select('expense_id').in('expense_id',ids); attach=new Set((data||[]).map(x=>String(x.expense_id))) }
+      setAsistAttach(attach)
+      const learnedCli={}, learnedCat={}
+      const [{data:lc},{data:lk}] = await Promise.all([
+        supabase.from('learnings').select('key,value').eq('kind','gasto_cliente'),
+        supabase.from('learnings').select('key,value').eq('kind','gasto_categoria'),
+      ])
+      ;(lc||[]).forEach(r=>{ if(r.key&&r.value) learnedCli[r.key]=r.value })
+      ;(lk||[]).forEach(r=>{ if(r.key&&r.value) learnedCat[r.key]=r.value })
+      const sug={}, needIA=[]
+      misPendientes.forEach(e=>{
+        const gk=glosaKey(e.concept||''); const s={}
+        if(!e.client_id && gk && learnedCli[gk] && clients.some(c=>String(c.id)===String(learnedCli[gk]))){ s.client_id=learnedCli[gk]; s.cliLearned=true }
+        if(!e.category && gk && learnedCat[gk] && CAT_LIST.includes(learnedCat[gk])){ s.category=learnedCat[gk]; s.catLearned=true }
+        if((!e.client_id&&!s.client_id)||(!e.category&&!s.category)) needIA.push(e)
+        if(s.client_id||s.category) sug[e.id]=s
+      })
+      const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
+      if(apiKey && needIA.length){
+        const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
+        const prompt=`Eres asistente contable del estudio Liberona Escala Abogados. Te paso GASTOS de caja chica a los que les falta cliente o categoría, la lista de CLIENTES y las CATEGORÍAS válidas. Para cada gasto sugiere el cliente (id de la lista) y/o la categoría más probable según la glosa. Si no es claro, usa null. Devuelve SOLO un JSON array: [{"id":"<id del gasto>","client_id":"<id o null>","category":"<una de las categorías o null>"}]. NUNCA inventes un client_id fuera de la lista ni una categoría fuera de las dadas.\nCATEGORIAS: ${JSON.stringify(CAT_LIST)}\nCLIENTES: ${JSON.stringify(clientList)}\nGASTOS: ${JSON.stringify(needIA.map(e=>({id:e.id,glosa:e.concept||'',monto:e.amount||0,falta_cliente:!e.client_id,falta_categoria:!e.category})))}`
+        try{
+          const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})})
+          const j=await resp.json(); const txt=j?.content?.[0]?.text||''
+          const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
+          arr.forEach(o=>{ const e=needIA.find(x=>String(x.id)===String(o.id)); if(!e) return; const s=sug[e.id]||{}; if(!e.client_id && o.client_id && clients.some(c=>String(c.id)===String(o.client_id))){ s.client_id=o.client_id; s.cliIA=true } if(!e.category && o.category && CAT_LIST.includes(o.category)){ s.category=o.category; s.catIA=true } if(s.client_id||s.category) sug[e.id]=s })
+        }catch(err){}
+      }
+      setIaSug(sug)
+    }catch(e){}
+    setAsistBusy(false); setAsistRan(true)
+  }
+
+  const aplicarCliente = async(e,client_id) => {
+    if(!client_id) return
+    try{ await supabase.from('expenses').update({client_id}).eq('id',e.id) }catch(_){}
+    if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,client_id}:x))
+    const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_cliente',gk,client_id)
+    setPickCliFor(null)
+  }
+  const aplicarCategoria = async(e,category) => {
+    if(!category) return
+    try{ await supabase.from('expenses').update({category}).eq('id',e.id) }catch(_){}
+    if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,category}:x))
+    const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_categoria',gk,category)
+    setPickCatFor(null)
+  }
+  const seleccionarListos = (cerrar) => {
+    if(!asistFindings) return
+    setSelected(prev=>{ const n=new Set(prev); asistFindings.listos.forEach(e=>n.add(e.id)); return n })
+    if(cerrar) setAsistOpen(false)
   }
 
   const handleLiquidar = async(abrirCorreo=false) => {
@@ -877,6 +967,80 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           </div>
         </div>
       )}
+      {/* ── Asistente IA de liquidación (bottom-sheet; no cierra al tocar fuera) ── */}
+      {asistOpen&&(
+        <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,.4)',display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+          <div style={{background:'#fff',borderTopLeftRadius:16,borderTopRightRadius:16,maxHeight:'88vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            <div style={{background:C.accent,color:'#fff',padding:'13px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6z'/><path d='M19 14l.7 2 2 .7-2 .7L19 19.4 18.3 17.4l-2-.7 2-.7z'/></svg>
+                <span style={{fontSize:14,fontWeight:500}}>Asistente de liquidación</span>
+              </div>
+              <button onClick={()=>setAsistOpen(false)} style={{background:'none',border:'none',color:'#fff',fontSize:20,lineHeight:1,cursor:'pointer',opacity:.8,padding:0}}>×</button>
+            </div>
+            <div style={{overflowY:'auto',flex:1}}>
+              {asistBusy&&(
+                <div style={{padding:'40px 20px',textAlign:'center',color:C.muted,fontSize:13}}>Revisando tus gastos pendientes…</div>
+              )}
+              {!asistBusy&&asistRan&&asistFindings&&(()=>{
+                const {revisar,listos,totListos,conResp}=asistFindings
+                if(!misPendientes.length) return <div style={{padding:'40px 20px',textAlign:'center',color:'#99ABB4',fontSize:13}}>No tienes gastos pendientes de liquidar.</div>
+                const cliName = id => clients.find(c=>String(c.id)===String(id))?.name||'cliente'
+                const chip = (label,onClick,primary)=>(<button onClick={onClick} style={{height:24,display:'inline-flex',alignItems:'center',gap:4,padding:'0 10px',borderRadius:20,fontSize:11,cursor:'pointer',border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted}}>{label}</button>)
+                const check = <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
+                return (<>
+                  <div style={{padding:'13px 16px',fontSize:12.5,lineHeight:1.55,color:C.muted,background:'#E6EEF1',borderBottom:`1px solid ${C.border}`}}>
+                    Tienes <b style={{color:C.accent}}>{misPendientes.length} gasto{misPendientes.length!==1?'s':''}</b> sin liquidar por <b style={{color:C.accent}}>{fmtCLP(sinLiquidar)}</b>. {listos.length} list{listos.length!==1?'os':'o'}{revisar.length?`; ${revisar.length} para revisar`:''}.{conResp?` · ${conResp} con comprobante`:''}
+                  </div>
+                  {listos.length>0&&(
+                    <div style={{padding:'13px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,background:'#E1F5EE',borderBottom:`1px solid ${C.border}`}}>
+                      <div>
+                        <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:.4,color:C.greenText,fontWeight:600}}>Listos para liquidar</div>
+                        <div style={{fontSize:16,fontWeight:500,color:C.greenText,marginTop:2}}>{listos.length} gasto{listos.length!==1?'s':''} · {fmtCLP(totListos)}</div>
+                      </div>
+                      <button onClick={()=>seleccionarListos(false)} style={{height:32,padding:'0 14px',background:C.normal,color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Seleccionar</button>
+                    </div>
+                  )}
+                  {revisar.length>0&&<div style={{padding:'11px 16px 4px',fontSize:10,textTransform:'uppercase',letterSpacing:.4,color:'#99ABB4',fontWeight:600}}>Revisar antes · {revisar.length}</div>}
+                  {revisar.map(({e,tipo,sug,ref})=>{
+                    const dot = tipo==='dup'?C.overdue:C.soon
+                    return (
+                      <div key={e.id} style={{padding:'9px 16px',borderBottom:`0.5px solid ${C.border}`,display:'flex',gap:10,alignItems:'flex-start'}}>
+                        <span style={{width:8,height:8,borderRadius:'50%',background:dot,flexShrink:0,marginTop:5}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'} · <span style={{color:C.muted}}>{fmtCLP(e.amount)}</span></div>
+                          <div style={{fontSize:11,color:'#99ABB4',marginTop:1}}>
+                            {tipo==='cliente'?'Sin cliente asignado':tipo==='categoria'?'Sin categoría':`Posible duplicado${ref?` (mismo monto y fecha que «${(ref.concept||'—').slice(0,28)}»)`:''}`}
+                          </div>
+                          <div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                            {tipo==='cliente'&&<>
+                              {sug&&sug.client_id&&chip(<>{cliName(sug.client_id)} {check}{(sug.cliLearned||sug.cliIA)&&<span style={{color:sug.cliLearned?C.greenText:C.muted,marginLeft:2}}>{sug.cliLearned?'✦':'IA'}</span>}</>,()=>aplicarCliente(e,sug.client_id),true)}
+                              {chip('Elegir otro',()=>setPickCliFor(pickCliFor===e.id?null:e.id))}
+                              {pickCliFor===e.id&&<div style={{flexBasis:'100%'}}><ClientePicker clients={clients} onPick={cid=>aplicarCliente(e,cid)}/></div>}
+                            </>}
+                            {tipo==='categoria'&&<>
+                              {sug&&sug.category&&chip(<>{catLabel(sug.category)} {check}{(sug.catLearned||sug.catIA)&&<span style={{color:sug.catLearned?C.greenText:C.muted,marginLeft:2}}>{sug.catLearned?'✦':'IA'}</span>}</>,()=>aplicarCategoria(e,sug.category),true)}
+                              {chip('Otra',()=>setPickCatFor(pickCatFor===e.id?null:e.id))}
+                              {pickCatFor===e.id&&<div style={{flexBasis:'100%',display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>{CAT_LIST.map(c=>chip(catLabel(c),()=>aplicarCategoria(e,c)))}</div>}
+                            </>}
+                            {tipo==='dup'&&<>
+                              {chip('Son distintos',()=>setDupOk(p=>{const n=new Set(p);n.add(e.id);return n}),true)}
+                            </>}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {!revisar.length&&listos.length>0&&<div style={{padding:'14px 16px',fontSize:12,color:C.greenText,textAlign:'center'}}>Todo en orden — no hay nada que revisar.</div>}
+                </>)
+              })()}
+            </div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+              <button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:40,background:(!asistFindings||!asistFindings.listos.length)?'#99ABB4':C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Aplicar y seleccionar listos</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F5F7F9',zIndex:10}}>
         <div style={{fontSize:20,fontWeight:600,color:'#3D3D3D',fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja Chica</div>
         <div style={{display:'flex',background:'#F5F7F9',borderRadius:10,padding:3}}>
@@ -902,10 +1066,16 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               <div style={{...kpiVal,color:C.accent}}>{fmtCLP(sinLiquidar)}</div>
             </div>
           </div>
-          {/* MIS GASTOS + conteo */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'2px 14px 8px'}}>
+          {/* MIS GASTOS + asistente IA + conteo */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'2px 14px 8px'}}>
             <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase'}}>Mis gastos</span>
-            <span style={{fontSize:11,color:'#537281'}}>{pendientes.length} gasto{pendientes.length!==1?'s':''}</span>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              {misPendientes.length>0&&<button onClick={runAsistente} style={{height:26,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.6 4.6L18 9.2l-4.4 1.6L12 15l-1.6-4.2L6 9.2l4.4-1.6z'/><path d='M19 14l.7 2 2 .7-2 .7L19 19.4 18.3 17.4l-2-.7 2-.7z'/></svg>
+                Asistente IA
+              </button>}
+              <span style={{fontSize:11,color:'#537281'}}>{pendientes.length} gasto{pendientes.length!==1?'s':''}</span>
+            </div>
           </div>
           {/* Pills de categoría */}
           <div style={{display:'flex',gap:6,overflowX:'auto',padding:'0 14px 10px'}}>
