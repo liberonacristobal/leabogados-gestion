@@ -95,7 +95,11 @@ const logEvent = (area,action,detail,user) => { try{ supabase.from('usage_events
 // Trato al cliente: a personas se les dice "Estimado [nombre de pila]" (sin señor/señora ni apellido); a empresas "Estimados".
 const _ES_EMPRESA = /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a\.?|eirl|e\.?i\.?r\.?l|inversiones|comercial|constructora|sociedad|holding|inmobiliaria|servicios|grupo|asociados|abogados|consultores|ingenier|transportes|agricola|agrícola|clinica|clínica|tech|spa\.|cia)\b/i
 const esPersona = name => { const n=(name||'').trim(); if(!n) return false; if(_ES_EMPRESA.test(n)) return false; const w=n.split(/\s+/); return w.length>=2 && w.length<=4 && !/\d/.test(n) }
-const saludoCli = name => esPersona(name) ? `Estimado/a ${(name||'').trim().split(/\s+/)[0]}` : 'Estimados'
+// Género por el nombre de pila para "Estimado"/"Estimada" (heurística: termina en 'a' = mujer, salvo excepciones).
+const _NOMBRES_F = new Set(['carmen','isabel','beatriz','raquel','mercedes','soledad','pilar','ines','belen','estrella','flor','luz','paz','rocio','dolores','consuelo','montserrat','maribel','noelia','ester','esther','ruth','judith','sol','nieves'])
+const _NOMBRES_M = new Set(['elias','tobias','jeremias','nicolas','tomas','matias','lucas','jonas','bautista','cosme','josemaria','agustin'])
+const generoF = name => { const n=_normTxt((name||'').trim().split(/\s+/)[0]); if(!n) return false; if(_NOMBRES_F.has(n)) return true; if(_NOMBRES_M.has(n)) return false; return n.endsWith('a') }
+const saludoCli = name => esPersona(name) ? `${generoF(name)?'Estimada':'Estimado'} ${(name||'').trim().split(/\s+/)[0]}` : 'Estimados'
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
 const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:12,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
   ...({
