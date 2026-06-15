@@ -9390,12 +9390,12 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
                   {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.name!==c.name||rs.multi)?<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rs.name}${rs.rut?` | ${rs.rut}`:''}`}</div>:null })()}
                 </div>
+                {responsableDe[c.id]&&(()=>{ const pc=personChip(responsableDe[c.id]); return <span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{responsableDe[c.id]}</span> })()}
               </div>
               <div style={{display:'flex',gap:12,fontSize:11,flexWrap:'wrap',alignItems:'center'}}>
                 {!ended&&<span style={{color:C.accent}}>{activeSales} ventas activas</span>}
                 {cp>0&&<span style={{color:hasOverdue?C.overdue:C.soon,fontWeight:600}}>{fmt(cp)} por cobrar</span>}
                 {balance!==0&&<span style={{color:balance<0?C.overdue:C.normal,fontWeight:600}}>Fondos: {fmt(balance)}</span>}
-                {responsableDe[c.id]&&(()=>{ const pc=personChip(responsableDe[c.id]); return <span style={{marginLeft:'auto',fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{responsableDe[c.id]}</span> })()}
               </div>
             </div>
           )

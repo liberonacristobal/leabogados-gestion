@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Abogado en lista Clientes (admin) + fusión Freddy Bravo
+- Lista de Clientes (admin): el abogado responsable ahora va como pill en la LÍNEA DEL NOMBRE, justificado a la derecha (antes estaba en la línea financiera).
+- Cliente duplicado Freddy Bravo (creado por error, sin registros) archivado; Bravo Silva conserva toda la información.
+
+
 ## 2026-06-15 — Conciliación unificada (global + por cliente) con IA
 - Una sola interfaz Conciliar: desde el menú admin (todos los clientes) y desde el cockpit de cada cliente. Absorbe la conciliación vieja (Pagadas sin folio que son copia de una real → dar de baja / no es duplicado, respeta lo aprendido) y suma: duplicados exactos, sin proyecto por serie y programada↔real. En sin-proyecto, si no hay match claro, botón Sugerir con IA (Opus) propone la venta. Todo con compuerta humana y deshacer.
 
