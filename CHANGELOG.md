@@ -3,9 +3,9 @@
 ## 2026-06-15 — Rendición: el proyecto viene de la venta/propuesta
 - El selector de Proyecto de la rendición ahora ofrece los **proyectos de las ventas/propuestas del cliente** (venta = proyecto), no solo los escritos en gastos. Se combinan con los de gastos (con su conteo) y se sugiere el correcto. Un gasto pertenece al proyecto si tiene esa glosa **o** está vinculado a la venta (sale_id).
 
-## 2026-06-15 — Razón social en los encabezados de las vistas
-- Helper único `rsLabel` (cliente + entity_id → razón social a mostrar). Ahora se lee la **razón social** en los encabezados de: Conciliar facturas (grupo + conciliadas), Facturación (grupo de cliente), ficha de cliente, lista de clientes y Ventas (según el entity_id de la venta). Las vistas centradas en persona (Tareas, Caja chica) mantienen el nombre.
-- Conciliación: folio limpio (evita "Factura Factura 261" / "F° Factura 212").
+## 2026-06-15 — Encabezados: nombre cliente + razón social | rut (dropdown si varias)
+- Formato en los encabezados: **nombre del cliente** arriba y **razón social | rut** debajo. Si el cliente tiene **más de una razón social**, en Conciliar facturas se despliega un **selector** para escoger. Aplicado en Conciliación, Facturación, ficha de cliente, lista de clientes y Ventas (RS según el entity_id de la venta). Tareas/Caja chica mantienen el nombre.
+- Conciliación: el **RUT y la razón social también pesan en el match** (misma RS / mismo RUT / mismo receptor suma certeza; nueva fila comparable "razón social"). Folio limpio (evita "Factura Factura 261").
 
 ## 2026-06-15 — Conciliar facturas: tarjetas filtran + no cierra al tocar fuera
 - Las tarjetas del resumen (Analizadas / Con match / A revisar / Conciliadas) ahora son **tappeables**: filtran la lista a esa categoría (resaltadas al activar). Encabezado más compacto (texto en 1 línea, tarjetas más densas).
