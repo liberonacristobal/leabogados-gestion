@@ -875,23 +875,27 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         const texto = 'Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+me+'\nPeríodo: '+periodo+'\nN° de gastos: '+marcados.length+'\n\nDetalle:\n'+lineas+'\n\nTOTAL: $'+totalReal.toLocaleString('es-CL')+'\n\nQuedo a disposición para cualquier consulta.'
         // Mismo flujo que la rendición al cliente: Gmail API con PDF adjunto + cuerpo HTML; si no hay token, fallback a mailto + PDF imprimible.
         let sent=false
+        // HTML + PDF se arman una sola vez (no dependen del token), para servir tanto al envío
+        // desde el correo del usuario como al fallback desde el servidor (oficina).
+        const porCli={}; marcados.forEach(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; (porCli[cn]=porCli[cn]||[]).push(e) })
+        const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        const filasHtml = Object.entries(porCli).map(([cn,gs])=>{
+          const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
+          const rows=gs.map(e=>`<tr><td style="padding:4px 0;font-size:12px;color:#3D3D3D">${fmtFechaDMY(e.date)} · ${esc((e.concept||'—'))}</td><td style="padding:4px 0;font-size:12px;color:#E24B4A;text-align:right;font-weight:bold;white-space:nowrap">-$${(e.amount||0).toLocaleString('es-CL')}</td></tr>`).join('')
+          return `<div style="margin-top:14px"><div style="font-size:13px;font-weight:bold;color:#003C50;border-bottom:1px solid #003C50;padding-bottom:3px">${esc(cn)} — $${tot.toLocaleString('es-CL')}</div><table style="width:100%;border-collapse:collapse">${rows}</table></div>`
+        }).join('')
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjunto la liquidación de caja chica de <b>${esc(me)}</b> — ${esc(periodo)}.</div><div style="background:#f5f5f5;border-radius:8px;padding:16px"><div style="font-size:13px;color:#666666">N° de gastos: <b style="color:#1a1a1a">${marcados.length}</b></div>${filasHtml}<table style="width:100%;border-collapse:collapse;border-top:1.5px solid #537281;margin-top:14px"><tr><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#1a1a1a">TOTAL</td><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#E24B4A;text-align:right">-$${totalReal.toLocaleString('es-CL')}</td></tr></table></div><div style="font-size:12px;color:#999999;margin-top:16px">Se adjunta el PDF con el detalle por cliente.</div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee"><div style="font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></div></body></html>`
+        const toAll = (cc||'').trim() ? dest+','+cc.trim() : dest
+        const pdfName = `Liquidacion ${me} ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'
+        let pdf=null; try{ pdf = await liquidacionPdfBase64({me, periodo, gastos:marcados, clients}) }catch(_){}
+        // 1) desde el correo del propio usuario (Gmail API)
         try{
           const token = await driveToken()
-          if(token){
-            const porCli={}; marcados.forEach(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; (porCli[cn]=porCli[cn]||[]).push(e) })
-            const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-            const filasHtml = Object.entries(porCli).map(([cn,gs])=>{
-              const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
-              const rows=gs.map(e=>`<tr><td style="padding:4px 0;font-size:12px;color:#3D3D3D">${fmtFechaDMY(e.date)} · ${esc((e.concept||'—'))}</td><td style="padding:4px 0;font-size:12px;color:#E24B4A;text-align:right;font-weight:bold;white-space:nowrap">-$${(e.amount||0).toLocaleString('es-CL')}</td></tr>`).join('')
-              return `<div style="margin-top:14px"><div style="font-size:13px;font-weight:bold;color:#003C50;border-bottom:1px solid #003C50;padding-bottom:3px">${esc(cn)} — $${tot.toLocaleString('es-CL')}</div><table style="width:100%;border-collapse:collapse">${rows}</table></div>`
-            }).join('')
-            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjunto la liquidación de caja chica de <b>${esc(me)}</b> — ${esc(periodo)}.</div><div style="background:#f5f5f5;border-radius:8px;padding:16px"><div style="font-size:13px;color:#666666">N° de gastos: <b style="color:#1a1a1a">${marcados.length}</b></div>${filasHtml}<table style="width:100%;border-collapse:collapse;border-top:1.5px solid #537281;margin-top:14px"><tr><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#1a1a1a">TOTAL</td><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#E24B4A;text-align:right">-$${totalReal.toLocaleString('es-CL')}</td></tr></table></div><div style="font-size:12px;color:#999999;margin-top:16px">Se adjunta el PDF con el detalle por cliente.</div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee"><div style="font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></div></body></html>`
-            const toAll = (cc||'').trim() ? dest+','+cc.trim() : dest
-            const pdf = await liquidacionPdfBase64({me, periodo, gastos:marcados, clients})
-            await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:html, pdfBase64:pdf, pdfName:`Liquidacion ${me} ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'})
-            sent=true
-          }
+          if(token && pdf){ await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:html, pdfBase64:pdf, pdfName}); sent=true }
         }catch(_){ sent=false }
+        // 2) fallback: desde la cuenta de oficina (servidor SMTP) con el PDF adjunto — siempre funciona
+        if(!sent && pdf){ try{ await sendMailServer({to:toAll, subject:asunto, html, text:texto, pdfBase64:pdf, pdfName}); sent=true }catch(_){ sent=false } }
+        // 3) último recurso: mailto + PDF imprimible para adjuntar a mano
         if(!sent){
           const ccStr = (cc||'').trim() ? '&cc=' + encodeURIComponent(cc.trim()) : ''
           const mailLink = document.createElement('a')
@@ -7047,18 +7051,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       if(dest){
         try{ localStorage.setItem('notaria_email',dest) }catch(_){}
         let sent=false
-        try{
-          const token=await driveToken()
-          if(token){
-            const filas=notaSel.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
-            const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjuntamos la liquidación de las siguientes órdenes de trabajo (OT) que estamos pagando — ${periodo}.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">TOTAL</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${notaTotal.toLocaleString('es-CL')}</td></tr></table></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
-            const texto='Estimados,\n\nAdjuntamos la liquidación de las OT que estamos pagando — '+periodo+'.\n\n'+notaSel.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTOTAL: $'+notaTotal.toLocaleString('es-CL')
-            const pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:notaSel,clients,titulo:'Liquidación de gastos — Notaría'})
-            await sendGmailWithPdf(token,{to:dest,subject:`Liquidación de gastos — Liberona Escala Abogados — ${periodo}`,bodyText:texto,bodyHtml:html,pdfBase64:pdf,pdfName:`Liquidacion notaria ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'})
-            sent=true
-          }
-        }catch(_){ sent=false }
-        if(!sent){ const a=document.createElement('a'); a.href='mailto:'+dest+'?subject='+encodeURIComponent(`Liquidación de gastos — Liberona Escala Abogados — ${periodo}`); a.click() }
+        // HTML + texto + PDF se arman una sola vez (no dependen del token): sirven al envío del usuario y al fallback del servidor.
+        const filas=notaSel.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
+        const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjuntamos la liquidación de las siguientes órdenes de trabajo (OT) que estamos pagando — ${periodo}.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">TOTAL</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${notaTotal.toLocaleString('es-CL')}</td></tr></table></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
+        const texto='Estimados,\n\nAdjuntamos la liquidación de las OT que estamos pagando — '+periodo+'.\n\n'+notaSel.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTOTAL: $'+notaTotal.toLocaleString('es-CL')
+        const subjectNota=`Liquidación de gastos — Liberona Escala Abogados — ${periodo}`
+        const pdfNameNota=`Liquidacion notaria ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'
+        let pdf=null; try{ pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:notaSel,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){}
+        // 1) desde el correo del usuario
+        try{ const token=await driveToken(); if(token && pdf){ await sendGmailWithPdf(token,{to:dest,subject:subjectNota,bodyText:texto,bodyHtml:html,pdfBase64:pdf,pdfName:pdfNameNota}); sent=true } }catch(_){ sent=false }
+        // 2) fallback: desde la cuenta de oficina (servidor) con el PDF adjunto
+        if(!sent && pdf){ try{ await sendMailServer({to:dest,subject:subjectNota,html,text:texto,pdfBase64:pdf,pdfName:pdfNameNota}); sent=true }catch(_){ sent=false } }
+        // 3) último recurso: abrir el correo a mano
+        if(!sent){ const a=document.createElement('a'); a.href='mailto:'+dest+'?subject='+encodeURIComponent(subjectNota); a.click() }
       }
       setSelNota(new Set()); setNotaConfirm(false)
     }catch(e){alert('Error al liquidar: '+e.message)}
@@ -8658,22 +8663,29 @@ Liberona Escala Abogados`
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
       if(!conAdjunto){
-        // Token presente pero el envío falló = tu sesión no tiene el permiso de enviar correo. Avisar para que reentre.
-        if(token && sendErr) alert('Tu sesión de Google no tiene permiso para enviar correos con el PDF adjunto. Cierra sesión y vuelve a entrar (Google te pedirá autorizar "enviar correo") y quedará automático. Por ahora descargamos el PDF y abrimos Gmail para que lo adjuntes.')
-        // Sin scope gmail.send: Gmail/mailto NO permiten pre-adjuntar. Descargamos el PDF REAL
-        // (jsPDF, no la vista HTML) para que el usuario lo arrastre al correo que abrimos.
+        // Fallback robusto: el usuario no tiene permiso gmail.send → enviar IGUAL desde la cuenta de oficina
+        // (servidor SMTP) con el PDF adjunto. Solo si el servidor también falla, se descarga y se abre Gmail a mano.
         try{
-          const b64 = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
-          const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
-          const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}))
-          const a = document.createElement('a'); a.href=url
-          a.download = `Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'
-          document.body.appendChild(a); a.click(); a.remove()
-          setTimeout(()=>URL.revokeObjectURL(url), 5000)
-        }catch(_){ verPDF() }
-        const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
-        const win=window.open(gmailUrl,'_blank')
-        if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
+          await sendMailServer({to:para.trim(), subject:asunto, html:buildEmailHtml(texto), text:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
+          conAdjunto = true
+          alert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
+        }catch(srvErr){
+          // Último recurso: descargar el PDF REAL (jsPDF) y abrir Gmail para adjuntarlo a mano.
+          alert('No se pudo enviar automáticamente. Descargamos el PDF y abrimos Gmail para que lo adjuntes.')
+          try{
+            const b64 = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
+            const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
+            const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}))
+            const a = document.createElement('a'); a.href=url
+            a.download = `Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'
+            document.body.appendChild(a); a.click(); a.remove()
+            setTimeout(()=>URL.revokeObjectURL(url), 5000)
+          }catch(_){ verPDF() }
+          const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+          const win=window.open(gmailUrl,'_blank')
+          if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+        }
       }
       const now = new Date().toISOString()
       // El correlativo se GRABA recién al confirmar el envío (no al generar): max de las ya enviadas del cliente + 1.
@@ -9583,6 +9595,17 @@ async function liquidacionPdfBase64({me, periodo, gastos, clients, titulo}){
   doc.setFont('helvetica','bold'); doc.text(me||'', 40, y); y+=14
   doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
   return doc.output('datauristring').split(',')[1]
+}
+// Envío desde la CUENTA DE OFICINA vía edge function (SMTP). Fallback cuando el usuario no tiene
+// el permiso gmail.send: la rendición/liquidación se envía igual, con el PDF adjunto.
+async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName}){
+  const res = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
+    body:JSON.stringify({mail:{to, cc:cc||null, subject, html:html||null, text:text||null, pdfBase64:pdfBase64||null, pdfName:pdfName||null}})
+  })
+  if(!res.ok){ let m=''; try{ m=(await res.json()).error||'' }catch(_){} throw new Error('Servidor '+res.status+(m?': '+m:'')) }
+  return true
 }
 // Construye el MIME multipart y lo envía con la API de Gmail
 async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase64, pdfName}){

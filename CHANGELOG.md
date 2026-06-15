@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Correo: auto-envío desde el servidor si falta permiso
+- Rendiciones, liquidaciones de caja chica y de notaría: ahora intentan enviarse desde el **correo del propio usuario** y, si no tiene el permiso de Gmail, se **envían igual automáticamente desde la cuenta de oficina** (servidor SMTP) con el PDF adjunto. Nunca quedan sin enviarse. Solo si el servidor también falla se descarga el PDF para adjuntar a mano. La edge function  ahora acepta envío genérico con adjunto.
+
+
 ## 2026-06-15 — Agendar tarea: siempre funciona (fallback a link)
 - El botón **Agregar a Google Calendar** ahora cae a un **link pre-armado de Calendar** (sin permisos) cuando la Calendar API no está autorizada → funciona para todos al instante. Si el permiso está activo, sigue agregando en 1 clic silencioso.
 
