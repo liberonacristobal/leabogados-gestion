@@ -5509,6 +5509,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
   const [contacts, setContacts] = useState([])
   const [atencion, setAtencion] = useState('')
   const [prefilled, setPrefilled] = useState(false)   // "Dirigido a" precargado de rendición anterior
+  const [limpiandoIA, setLimpiandoIA] = useState(false)
 
   // Movimientos del cliente, acotados a la(s) razón(es) social(es) seleccionada(s).
   // Con 1 RS todo pertenece a esa RS (incl. sin entity_id); sin selección/sin RS, todos.
@@ -5563,6 +5564,30 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
 
+  // IA: profesionaliza las descripciones de los gastos seleccionados (expande abreviaciones legales, corrige tildes). Guarda el resultado.
+  const mejorarDescripcionesIA = async()=>{
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+    if(!apiKey){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
+    const sel = disponibles.filter(e=>selected.has(e.id))
+    if(!sel.length) return
+    setLimpiandoIA(true)
+    const lista = sel.map((e,i)=>`${i+1}. "${e.concept||''}"`).join('\n')
+    const prompt = `Eres asistente de una firma de abogados chilena. Profesionaliza estas descripciones de GASTOS para una rendición al cliente: corrige ortografía y tildes ("notaria"→"Notaría", "inscripcion"→"Inscripción"), capitaliza bien y EXPANDE abreviaciones legales chilenas ("EP"→"Escritura Pública", "CV"→"Compraventa", "CCV"→"Copia con Vigencia", "GP"→"Gravámenes y Prohibiciones", "D.O."→"Diario Oficial", "+K"→"Empresa en un Día", "CBR"→"Conservador de Bienes Raíces", "CBRS"→"Conservador de Bienes Raíces de Santiago"). Mantén el significado; si ya está correcta, devuélvela igual. NO inventes datos. Responde SOLO un array JSON sin markdown: [{"i":1,"concepto":"..."}]\n\nDESCRIPCIONES:\n${lista}`
+    try{
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})})
+      const data = await resp.json()
+      const raw = (data.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
+      const arr = JSON.parse(raw)
+      const updates = []
+      ;(Array.isArray(arr)?arr:[]).forEach(o=>{ const e=sel[(o.i||0)-1]; if(e && o.concepto && o.concepto.trim() && o.concepto!==e.concept){ updates.push({id:e.id, concepto:o.concepto.trim()}) } })
+      if(!updates.length){ alert('Las descripciones ya estaban claras.'); setLimpiandoIA(false); return }
+      for(const u of updates){ await supabase.from('expenses').update({concept:u.concepto}).eq('id',u.id) }
+      if(setExpenses) setExpenses(p=>p.map(e=>{ const u=updates.find(x=>x.id===e.id); return u?{...e,concept:u.concepto}:e }))
+      logEvent('rendicion','limpiar_descripciones',{n:updates.length},currentUserName)
+      alert(`${updates.length} descripción(es) mejorada(s).`)
+    }catch(e){ alert('Error al mejorar con IA: '+(e?.message||e)) }
+    setLimpiandoIA(false)
+  }
   const generatePDFContent = (atencionVal) => {
     const ent = headEnt
     const razon = ent?.name || client.name || '\u2014'
@@ -5721,6 +5746,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
         </div>
       )}
 
+      {/* Mejora de descripciones con IA (solo si hay selección) */}
+      {selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>}
       {/* Botones */}
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
