@@ -2003,13 +2003,12 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             </div>
           </div>
           {/* Trigger detalle de ventas del año (componen el Vendido) */}
-          <div style={{borderTop:`1px solid ${C.border}`}}>
-            <button onClick={()=>setRevOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',gap:8}}>
-              <span style={{display:'flex',alignItems:'center',gap:6,color:'#99ABB4',fontSize:10,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ventas {selYear} · {ventasDelAnio.length}</span>
-              <Chev open={revOpen}/>
-            </button>
-            {revOpen&&(
-              <div style={{padding:'0 16px 12px'}}>
+          {revOpen&&(
+              <div style={{borderTop:`1px solid ${C.border}`,padding:'10px 16px 12px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <span style={{color:'#99ABB4',fontSize:10,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ventas {selYear} · {ventasDelAnio.length}</span>
+                  <button onClick={()=>setRevOpen(false)} style={{background:'none',border:'none',color:'#99ABB4',fontSize:10,cursor:'pointer',textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ocultar</button>
+                </div>
                 {ventasDelAnio.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0 8px'}}>Sin ventas registradas este año.</div>}
                 {ventasDelAnio.map(({s,bruto})=>{
                   const cn=clients.find(c=>String(c.id)===String(s.client_id))?.name||'—'
@@ -2031,7 +2030,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 )}
               </div>
             )}
-          </div>
           {/* Trigger años anteriores */}
           <div style={{borderTop:`1px solid ${C.border}`}}>
             <button onClick={()=>setHistOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',gap:8}}>
