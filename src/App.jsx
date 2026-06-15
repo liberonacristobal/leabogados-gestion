@@ -8483,16 +8483,34 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
     return groups
   },[scope])
 
-  // (2) Sin proyecto, agrupadas por serie; sugiere venta por coincidencia de glosa base con el título.
+  // (2) Sin proyecto, agrupadas por serie. CRUCE POR PRIORIDAD (no solo glosa): modalidad/cuotas de la venta › monto › fecha › glosa, con RAZONES explícitas.
   const serieGroups = useMemo(()=>{
     const sin = act.filter(b=>!b.sale_id && b.billing_type!=='reembolso')
     const by={}; sin.forEach(b=>{ const k=serieKey(b.concept); if(!k||k.length<4) return; (by[`${b.client_id}|${k}`]=by[`${b.client_id}|${k}`]||[]).push(b) })
+    const NMatch = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
+    const MES = /(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|mensual)/i
+    const ventaTotal = s => (s.amount_clp || (s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0) || 0)
+    const cruzar = (rows, s) => {
+      const razones=[]; let score=0; const cfg=s.cobro_config||{}
+      const sRows = act.filter(b=>String(b.sale_id)===String(s.id))   // facturas ya ligadas a la venta (su calendario real)
+      const nm = NMatch(rows[0].concept)
+      if(nm && s.cobro_type==='cuotas' && Number(cfg.nCuotas)===nm.tot){ score+=4; razones.push(`modalidad cuotas (${nm.tot}), esta es ${nm.n}/${nm.tot}`) }
+      else if(s.cobro_type==='mensual' && MES.test(rows[0].concept||'')){ score+=4; razones.push('modalidad mensual') }
+      const amt=rows[0].amount||0
+      let expected = sRows.map(b=>b.amount||0).filter(Boolean)
+      if(!expected.length && s.cobro_type==='cuotas' && Number(cfg.nCuotas)) expected=[Math.round(ventaTotal(s)/Number(cfg.nCuotas))]
+      if(amt && expected.some(e=>Math.abs(e-amt)/amt<=0.15)){ score+=2; razones.push('monto coincide con la cuota esperada') }
+      const w=new Set(serieKey(rows[0].concept).split(' ').filter(x=>x.length>3))
+      const gl=serieKey(s.title).split(' ').filter(x=>x.length>3).filter(x=>w.has(x)).length
+      if(gl){ score+=Math.min(2,gl); razones.push('glosa coincide') }
+      return {score, razones}
+    }
     return Object.entries(by).map(([k,rows])=>{
       const cid=rows[0].client_id
       const cs=(sales||[]).filter(s=>String(s.client_id)===String(cid))
-      const words=new Set(rows.flatMap(r=>norm(r.concept).split(/[^a-z0-9]+/)).filter(w=>w.length>3))
-      let best=null,score=0; cs.forEach(s=>{ const n=norm(s.title).split(/[^a-z0-9]+/).filter(w=>w.length>3).filter(w=>words.has(w)).length; if(n>score){score=n;best=s} })
-      return {cid, rows:rows.sort((a,b)=>(a.due||'').localeCompare(b.due||'')), sug:score>0?best:null, sales:cs}
+      let best=null,bestSc=0,bestRaz=[]
+      cs.forEach(s=>{ const {score,razones}=cruzar(rows,s); if(score>bestSc){bestSc=score;best=s;bestRaz=razones} })
+      return {cid, rows:rows.sort((a,b)=>(a.due||'').localeCompare(b.due||'')), sug:bestSc>0?best:null, razones:bestRaz, sales:cs}
     }).filter(g=>g.sales.length>0).sort((a,b)=>b.rows.length-a.rows.length)
   },[scope,sales])
 
@@ -8531,9 +8549,9 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
     const key=import.meta.env.VITE_ANTHROPIC_API_KEY; if(!key){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
     setAiBusy(idx)
     try{
-      const ventas=g.sales.map(s=>`${s.id} :: ${s.title}${s.year?` (${s.year})`:''}`).join('\n')
-      const concs=g.rows.slice(0,8).map(r=>`- ${r.concept} · $${(r.amount||0).toLocaleString('es-CL')}`).join('\n')
-      const prompt=`Asistente contable de un estudio de abogados. Estas facturas no están asignadas a un proyecto (venta). ¿A cuál de las ventas del cliente pertenecen? Responde SOLO con el id exacto de la venta, o la palabra ninguna.\n\nVentas del cliente:\n${ventas}\n\nFacturas:\n${concs}`
+      const ventas=g.sales.map(s=>`${s.id} :: ${s.title}${s.year?` (${s.year})`:''} · modalidad ${s.cobro_type||'?'}${s.cobro_config?.nCuotas?` ${s.cobro_config.nCuotas} cuotas`:''} · total $${(s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0)||0).toLocaleString('es-CL')}`).join('\n')
+      const concs=g.rows.slice(0,8).map(r=>`- ${r.concept} · $${(r.amount||0).toLocaleString('es-CL')}${r.issued_at?` · emitida ${r.issued_at}`:''}`).join('\n')
+      const prompt=`Asistente contable de un estudio de abogados. Estas facturas no están asignadas a un proyecto (venta). ¿A cuál venta pertenecen? Cruza por PRIORIDAD: modalidad de pago y número de cuotas de la venta › monto por cuota › fecha › glosa. Si las facturas dicen "cuota X/N", deben calzar con una venta de modalidad cuotas con N cuotas. Responde SOLO con el id exacto de la venta, o la palabra ninguna.\n\nVentas del cliente:\n${ventas}\n\nFacturas:\n${concs}`
       const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:60,messages:[{role:'user',content:prompt}]})})
       const j=await resp.json(); const txt=(j?.content?.[0]?.text||'').trim()
       const m=g.sales.find(s=>txt.includes(String(s.id)))
@@ -8592,6 +8610,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
             <div key={i} style={{background:'#fff',border:`1px solid #FAC775`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:12.5,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.rows[0].concept||'—'}</span><span style={{fontSize:10,background:'#FAEEDA',color:'#854F0B',borderRadius:10,padding:'1px 8px',fontWeight:600,flexShrink:0,marginLeft:6}}>{g.rows.length} fact.</span></div>
               <div style={{fontSize:10,color:C.muted,marginBottom:7}}>{cName(g.cid)}{eff?<> · ✦ Sugerida{ia?' (IA)':''}: <b style={{color:C.accent}}>{eff.title}</b></>:' · elige la venta'}</div>
+              {g.sug&&g.razones&&g.razones.length>0&&<div style={{fontSize:10,color:C.greenText,background:'#E1F5EE',borderRadius:8,padding:'5px 9px',marginBottom:7,lineHeight:1.45}}>Porque: {g.razones.join(' · ')}.</div>}
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                 {eff&&<button onClick={()=>onAssignSeries&&onAssignSeries(eff.id, g.rows.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Asignar las {g.rows.length} a {eff.title}</button>}
                 {!eff&&<button onClick={()=>sugerirIA(g,i)} disabled={aiBusy===i} style={{fontSize:10,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer',opacity:aiBusy===i?.6:1}}>{aiBusy===i?'Consultando…':'✦ Sugerir con IA'}</button>}
@@ -8609,7 +8628,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
           {progMatches.map((m,i)=>(
             <div key={i} style={{background:'#fff',border:`1px solid #B5D4F4`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
               <div style={{fontSize:12.5,fontWeight:600}}>{m.prog.concept||'—'}</div>
-              <div style={{fontSize:10,color:C.accent,margin:'3px 0 7px'}}>Programada {fmt(m.prog.amount)} ≈ real {m.real.invoice_no?`F° ${folioN(m.real.invoice_no)}`:''} {fmt(m.real.amount)} ({m.real.status}). Reemplazar borra la programada.</div>
+              <div style={{fontSize:10,color:C.accent,margin:'3px 0 7px'}}>Programada {fmt(m.prog.amount)} ≈ {m.real.invoice_no?`Factura N° ${folioN(m.real.invoice_no)}`:'real'} {fmt(m.real.amount)} ({m.real.status}) — mismo proyecto/cliente, mes y monto. Reemplazar borra la programada.</div>
               <button onClick={()=>onReplaceProgramada&&onReplaceProgramada(m.prog.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Reemplazar (borra programada)</button>
             </div>
           ))}

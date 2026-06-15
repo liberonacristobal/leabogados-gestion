@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Conciliación v2: cruce por prioridad + razonamiento
+- En Sin proyecto, la IA ya no cruza solo por glosa: prioriza modalidad y N° de cuotas de la venta › monto vs cuota esperada › glosa, y muestra el RAZONAMIENTO explícito (Porque: …). El sugerir con Opus también recibe modalidad/cuotas/total de cada venta. Descuadre programada↔real muestra Factura N° de la real.
+
+
 ## 2026-06-15 — Cockpit: Facturación histórica solo ≤2025 + Pagar rápido
 - El contenedor Facturación AAAA (emitidas sin proyecto) ahora SOLO existe para 2025 hacia atrás. En 2026+ toda factura debe tener venta/propuesta: si no la tiene, cae en Facturas sin proyecto asignado para forzar la asignación.
 - Botón Pagar en la fila de facturas pendientes/vencidas (marca pagada con fecha de hoy, con confirmación), sin entrar a editar.
