@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Agendar tarea: siempre funciona (fallback a link)
+- El botón **Agregar a Google Calendar** ahora cae a un **link pre-armado de Calendar** (sin permisos) cuando la Calendar API no está autorizada → funciona para todos al instante. Si el permiso está activo, sigue agregando en 1 clic silencioso.
+
+
 ## 2026-06-15 — Editar gasto: reasignar a otro cliente
 - Al **tocar un gasto** se abre el editor (ya existía). Ahora incluye campo **Cliente** por búsqueda: cambiarlo **mueve el gasto a otro cliente** y reajusta la razón social. La RS ya era editable. Avisa si el gasto está en una rendición/liquidación (reabrir primero).
 

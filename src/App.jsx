@@ -10781,19 +10781,24 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const sugVisibles = (sugTareas||[]).filter(a=>!sugDismiss.has(a.id))
   const descartarSug = a=>{ learnPut('tarea_gmail_descartada',a.id,'descartada',{}); setSugDismiss(p=>new Set([...p,a.id])) }
 
-  // Agregar el vencimiento de una tarea al Google Calendar corporativo (Calendar API, evento de día completo).
+  // Agregar el vencimiento de una tarea al Google Calendar (evento de día completo).
+  // Intenta la Calendar API (silencioso, 1 clic) y si no hay permiso cae al link pre-armado de Calendar,
+  // que NO requiere ningún scope: así siempre funciona, esté o no autorizada la API.
   const agendarTarea = async(t)=>{
     if(!t.due){ alert('Esta tarea no tiene fecha de vencimiento.'); return }
+    const cl=clients.find(c=>c.id===t.client_id)
+    const desc=[cl?('Cliente: '+cl.name):'',t.project?('Proyecto: '+t.project):'',t.assigned_by?('Asignada por '+t.assigned_by):''].filter(Boolean).join('\n')
+    const end=new Date(t.due+'T00:00:00'); end.setDate(end.getDate()+1); const endISO=end.toISOString().slice(0,10)
+    const dd=t.due.replace(/-/g,''), ddEnd=endISO.replace(/-/g,'')
+    const abrirLink=()=>{ const url=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Tarea: '+(t.title||''))}&dates=${dd}/${ddEnd}&details=${encodeURIComponent(desc)}&ctz=America/Santiago`; window.open(url,'_blank','noopener') }
     const token = await driveToken()
-    if(!token){ alert('Vuelve a entrar con Google para conectar tu calendario.'); return }
+    if(!token){ abrirLink(); return }
     try{
-      const cl=clients.find(c=>c.id===t.client_id)
-      const end=new Date(t.due+'T00:00:00'); end.setDate(end.getDate()+1); const endISO=end.toISOString().slice(0,10)
-      const body={ summary:'Tarea: '+(t.title||''), description:[cl?('Cliente: '+cl.name):'',t.project?('Proyecto: '+t.project):'',t.assigned_by?('Asignada por '+t.assigned_by):''].filter(Boolean).join('\n'), start:{date:t.due}, end:{date:endISO}, reminders:{useDefault:true} }
+      const body={ summary:'Tarea: '+(t.title||''), description:desc, start:{date:t.due}, end:{date:endISO}, reminders:{useDefault:true} }
       const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)})
-      if(!r.ok){ if(r.status===401||r.status===403){ alert('Falta el permiso de calendario. Cierra sesión y vuelve a entrar para concederlo.'); return } throw new Error('Calendar '+r.status) }
+      if(!r.ok){ if(r.status===401||r.status===403){ abrirLink(); return } throw new Error('Calendar '+r.status) }
       alert('Agregado a tu Google Calendar para el '+fmtFechaDMY(t.due)+'.')
-    }catch(e){ alert('No se pudo agregar al calendario: '+e.message) }
+    }catch(e){ abrirLink() }
   }
 
   // Orden por urgencia: vencimiento más cercano primero, sin fecha al final
