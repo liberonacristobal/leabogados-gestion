@@ -11365,11 +11365,13 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const [err,setErr] = useState('')
   const [revTab,setRevTab] = useState('con')       // pestaña del panel: 'con' (con cliente) | 'sin' (por asignar)
   const [sinShow,setSinShow] = useState(50)        // cuántos "por asignar" mostrar (paginado incremental)
+  const [cambiarFor,setCambiarFor] = useState(null) // email del contacto "con cliente" al que se le está cambiando el cliente
   const lastScan = (typeof localStorage!=='undefined' && localStorage.getItem('gmail_contactos_last'))||''
   const clientName = id => clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
   const domLearnedRef = useRef({})   // dominio → client_id aprendido (de asignaciones manuales previas)
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','contacto_descartado').then(({data})=>setDismissed(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
-  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','dominio_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[String(r.key)]=String(r.value) }); domLearnedRef.current=m },()=>{}) },[])
+  // Carga dominios aprendidos, EXCLUYE proveedores genéricos y BORRA los que se hubieran aprendido mal (gmail.com→cliente).
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','dominio_cliente').then(({data})=>{ const m={}; const bad=[]; (data||[]).forEach(r=>{ if(!r.key||!r.value) return; if(PROV.test(String(r.key))) bad.push(String(r.key)); else m[String(r.key)]=String(r.value) }); domLearnedRef.current=m; if(bad.length) supabase.from('learnings').delete().eq('kind','dominio_cliente').in('key',bad).then(()=>{},()=>{}) },()=>{}) },[])
 
   const parseAddrs = h => (h||'').split(',').map(s=>s.trim()).map(s=>{ const m=s.match(/^(.*?)<(.+?)>$/); if(m) return {name:m[1].replace(/["']/g,'').trim(), email:m[2].trim().toLowerCase()}; return {name:'', email:s.toLowerCase()} }).filter(x=>x.email.includes('@'))
   // Match por EXTENSIÓN/dominio: la palabra clave del dominio (ej. "tarragona" de @tarragona.cl) contra
@@ -11377,9 +11379,9 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const PROV = /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|gmx|aol)\b/
   const clientByDomain = domain => {
     const dom=String(domain||'')
-    if(domLearnedRef.current[dom] && clients.some(c=>String(c.id)===String(domLearnedRef.current[dom]))) return domLearnedRef.current[dom]   // aprendido
     const core = dom.split('.')[0].replace(/[^a-z0-9]/g,'')
-    if(core.length<4 || PROV.test(dom)) return null
+    if(!dom || PROV.test(dom) || core.length<4) return null   // proveedores genéricos (gmail/hotmail…) o dominios muy cortos: NUNCA asociar por dominio (ni aunque esté "aprendido")
+    if(domLearnedRef.current[dom] && clients.some(c=>String(c.id)===String(domLearnedRef.current[dom]))) return domLearnedRef.current[dom]   // aprendido (solo dominios propios)
     const hit = arr => { for(const o of arr){ const n=_normTxt(o.name||'').replace(/ /g,''); if(n.length>=4 && (n.includes(core)||core.includes(n))) return o } return null }
     const c=hit(clients); if(c) return c.id
     const e=hit(clientEntities); if(e&&e.client_id) return e.client_id
@@ -11391,7 +11393,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
     const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>{ const ents=(clientEntities||[]).filter(e=>e.client_id===c.id); return {id:c.id,nombre:c.name,rs:ents.map(e=>e.name).filter(Boolean),rut:c.rut||ents.map(e=>e.rut).filter(Boolean)[0]||''} })
     for(let i=0;i<ambig.length;i+=25){
       const batch=ambig.slice(i,i+25); setProg({done:i,total:ambig.length,label:'Asociando con IA…'})
-      const prompt=`Eres asistente del estudio de abogados Liberona Escala Abogados (@leabogados.cl). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. También usa el nombre/empresa que aparece en los asuntos. Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
+      const prompt=`Eres asistente del estudio de abogados Liberona Escala Abogados (@leabogados.cl). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. IMPORTANTE: si el dominio es genérico de proveedor (gmail.com, hotmail, outlook, yahoo, icloud, live, etc.) NO lo uses para asociar — en ese caso asígnalo SOLO si el NOMBRE del contacto o de la empresa que aparece en los asuntos coincide CLARAMENTE con un cliente de la lista; ante cualquier duda devuelve null (es mucho mejor dejarlo sin asignar que asignarlo al cliente equivocado). Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
       try{
         const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
         const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
@@ -11439,7 +11441,9 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
       for(let i=0;i<ids.length;i+=CONC){ await Promise.all(ids.slice(i,i+CONC).map(fetchMeta)) }
       const ce=await supabase.from('contacts').select('client_id,email')
       const existEmails=new Set((ce.data||[]).filter(c=>c.email).map(c=>String(c.email).toLowerCase()))
-      const domClient={}; (ce.data||[]).forEach(c=>{ if(c.email){ const dm=String(c.email).split('@')[1]; if(dm&&dm!==ME_DOMAIN&&!domClient[dm]) domClient[dm]=c.client_id } })
+      // Mapa dominio→cliente desde contactos existentes, EXCLUYENDO proveedores genéricos (gmail/hotmail…):
+      // si no se excluyen, un solo contacto @gmail de un cliente arrastraba TODOS los gmail a ese cliente.
+      const domClient={}; (ce.data||[]).forEach(c=>{ if(c.email){ const dm=String(c.email).split('@')[1]; if(dm&&dm!==ME_DOMAIN&&!PROV.test(dm)&&!domClient[dm]) domClient[dm]=c.client_id } })
       let cands=Object.values(agg).filter(a=>a.count>=1 && !existEmails.has(a.email) && !dismissed.has(a.email))
       cands.forEach(a=>{ a.client_id = domClient[a.domain] || clientByDomain(a.domain) || null; a.cargo='' })
       await asociarIA(cands.filter(a=>!a.client_id))
@@ -11493,9 +11497,14 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
         <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.email}{a.cargo?<span style={{color:'#99ABB4'}}> · {a.cargo}{a.byIA?' (IA)':''}</span>:''}</div>
         <div style={{fontSize:10,color:'#99ABB4'}}>{a.count} correo{a.count!==1?'s':''}{a.last?` · último ${fmtFechaDMY(a.last)}`:''}</div>
         {asignable&&<ClientePicker clients={clientesOrden} onPick={cid=>agregar(a,cid)}/>}
+        {!asignable&&cambiarFor===a.email&&<div style={{marginTop:4}}>
+          <ClientePicker clients={clientesOrden} onPick={cid=>{reasignar(a.email,cid);setCambiarFor(null)}}/>
+          <button onClick={()=>{reasignar(a.email,null);setCambiarFor(null)}} style={{marginTop:4,fontSize:10,color:'#854F0B',background:'none',border:'none',cursor:'pointer',padding:0}}>Sin cliente (mover a "Por asignar")</button>
+        </div>}
       </div>
       <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>
         {a.client_id&&<button disabled={busyE===a.email} onClick={()=>agregar(a)} style={{...chipBtn('primary'),opacity:busyE===a.email?.6:1}}>Agregar</button>}
+        {!asignable&&<button onClick={()=>setCambiarFor(cambiarFor===a.email?null:a.email)} style={chipBtn('soft')}>Cambiar</button>}
         {asignable&&<button disabled={busyE===a.email} onClick={()=>aRed(a)} style={chipBtn('green')}>→ Red</button>}
         <button onClick={()=>descartar(a)} style={chipBtn('soft')}>Descartar</button>
       </div>
