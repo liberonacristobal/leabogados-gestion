@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Rendicion al cliente: correo breve + logica de saldo (el PDF es el detalle)
+- El correo de rendicion ahora es BREVE: apunta al PDF adjunto (donde esta el detalle) en vez de listar todo. Cierre segun saldo del fondo: si falta fondos, pide transferir a la cuenta de Liberona Escala (BICE 138392-2); si hay saldo a favor y el trabajo termino, pide los datos de cuenta del cliente para devolverlo; si hay saldo a favor y siguen proyectos, indica que queda disponible para los proximos trabajos. Trato: "Estimado [nombre]" a personas.
+- Se quito el informe verboso con IA (estado de cuenta): el diferenciador es la rendicion con su diseno en PDF + el correo breve.
+
 ## 2026-06-15 — Estado de cuenta del cliente con IA (transparencia)
 - En la ficha del cliente, nuevo boton "Estado": muestra fondos, gastos por concepto, saldo y facturas por pagar (cifras deterministas, auditables) y un boton "Generar con IA" que redacta un estado de cuenta claro y transparente (Opus) para compartir con el cliente. Distinto del reporte interno: este es por cliente, en lenguaje simple. Cada generacion se registra (usage_events).
 
