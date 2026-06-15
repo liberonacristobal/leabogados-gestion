@@ -2775,7 +2775,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
           return (
             <div key={s.id}
               onClick={()=>onEdit(s)}
-              style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?'#C77F18':C.border}`,borderLeft:tardio?`4px solid #C77F18`:undefined,cursor:'pointer'}}
+              style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?'#C77F18':C.border}`,borderLeft:tardio?`4px solid #C77F18`:undefined,cursor:'pointer'}}
               onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?'#C77F18':C.accent}
               onMouseLeave={e=>e.currentTarget.style.borderColor=tardio?'#C77F18':C.border}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:5}}>
@@ -4634,7 +4634,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               const semCol=(pagado||anticipada)?C.muted:(dl==null?C.muted:dl<0?C.overdue:dl<=7?'#C77F18':C.normal)
               const semTxt=anticipada?'':prog?(dl!=null?(dl<0?`${Math.abs(dl)} días vencida`:`vence en ${dl} días`):''):((dl!=null&&dl<0)?`${Math.abs(dl)} días vencida`:(dEmis!=null?`${dEmis} días`:''))
               return (
-              <div key={b.id} onClick={()=>onEdit(b)} style={{position:'relative',background:C.card,borderRadius:10,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`,cursor:'pointer'}}>
+              <div key={b.id} onClick={()=>onEdit(b)} style={{position:'relative',background:C.card,borderRadius:12,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`,cursor:'pointer'}}>
                 {/* línea 1: concepto + monto */}
                 <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
                   {prog&&<input type='checkbox' checked={selected.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
@@ -4642,7 +4642,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado)?C.overdue:C.text,whiteSpace:'nowrap',flexShrink:0}}>{fmt(b.amount)}</div>
                 </div>
                 {/* línea 2: factura n° + fecha */}
-                <div style={{fontSize:11,color:'#99ABB4',marginTop:4}}>{prog?`Vence ${fmtDMY(b.due)}`:`N° ${b.invoice_no||'—'} · ${fmtDMY(b.issued_at)}`}</div>
+                <div style={{fontSize:11,color:'#99ABB4',marginTop:4}}>{prog?`Vence ${fmtDMY(b.due)}`:`N° ${folioN(b.invoice_no)||'—'} · ${fmtDMY(b.issued_at)}`}</div>
                 {/* línea 3: semáforo + tags | acciones */}
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:7}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
