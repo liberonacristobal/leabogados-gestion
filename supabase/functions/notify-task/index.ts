@@ -47,22 +47,40 @@ serve(async (req) => {
   }
 
   try {
-    const { task, assignedBy } = await req.json();
-
-    if (!task || !task.who) {
-      return new Response(JSON.stringify({ error: "Falta task.who" }), { status: 400 });
+    const { task, assignedBy, kind, notifyName } = await req.json();
+    if (!task) {
+      return new Response(JSON.stringify({ error: "Falta task" }), { status: 400 });
     }
 
-    const toEmail = EMAILS[task.who];
+    const tipo = kind || "nueva";
+    const by = assignedBy || "el estudio";
+    // Destinatario y mensaje según el tipo de aviso:
+    //  nueva     → al asignado (task.who): "{asignador} te asignó una tarea".
+    //  delegada  → al que asignó (assigned_by): "{responsable} delegó a {X} una tarea que asignaste".
+    //  terminada → al que asignó (assigned_by): "{responsable} marcó como terminada una tarea que asignaste".
+    let recipientName = task.who, subjectPrefix = "Nueva tarea", subtitle = `${by} te acaba de asignar una tarea.`;
+    if (tipo === "delegada") {
+      recipientName = notifyName || task.assigned_by;
+      const delTo = Array.isArray(task.delegated_to) ? task.delegated_to.join(", ") : (task.delegated_to || "");
+      subjectPrefix = "Tarea delegada";
+      subtitle = `${task.delegated_by || task.who || by} delegó a ${delTo || "otra persona"} una tarea que asignaste.`;
+    } else if (tipo === "terminada") {
+      recipientName = notifyName || task.assigned_by;
+      subjectPrefix = "Tarea terminada";
+      subtitle = `${task.who || "El responsable"} marcó como terminada una tarea que asignaste.`;
+    }
+    if (!recipientName) {
+      return new Response(JSON.stringify({ skipped: true, reason: "Sin destinatario" }), { status: 200 });
+    }
+    const toEmail = EMAILS[recipientName];
     if (!toEmail) {
-      return new Response(JSON.stringify({ skipped: true, reason: `No hay email para ${task.who}` }), { status: 200 });
+      return new Response(JSON.stringify({ skipped: true, reason: `No hay email para ${recipientName}` }), { status: 200 });
     }
 
     const clienteName = task.client_name || "";
     const project = task.project || "";
     const titulo = task.title || "";
     const nota = task.note || task.descripcion || task.comentario || "";
-    const by = assignedBy || "el estudio";
     const due = task.due ? new Date(task.due + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
     // Urgencia del vencimiento: ≤ 2 días desde hoy → pill roja; si no, pill neutra.
     let dueUrgent = false;
@@ -82,7 +100,7 @@ serve(async (req) => {
     // HTML escaping para datos dinámicos (evita romper el markup con < > & en glosas/títulos).
     const esc = (s: string) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const tituloTrunc = titulo.length > 50 ? titulo.slice(0, 50) + "..." : titulo;
-    const subject = clienteName ? `Nueva tarea | ${clienteName} | ${tituloTrunc}` : `Nueva tarea | ${tituloTrunc}`;
+    const subject = clienteName ? `${subjectPrefix} | ${clienteName} | ${tituloTrunc}` : `${subjectPrefix} | ${tituloTrunc}`;
     const rowLabel = "color:#888888; font-size:12px; padding:6px 0; width:80px; vertical-align:top;";
     const rowVal = "font-size:13px; color:#1a1a1a; font-weight:500; padding:6px 0; vertical-align:top;";
 
@@ -96,8 +114,8 @@ serve(async (req) => {
       <img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px; width:184px; display:inline-block; border:0;" />
     </div>
     <div style="padding:28px;">
-      <div style="font-size:16px; color:#1a1a1a; margin:0 0 6px;">Hola ${esc(task.who)},</div>
-      <div style="font-size:14px; color:#666666; margin:0 0 20px;">${esc(by)} te acaba de asignar una tarea.</div>
+      <div style="font-size:16px; color:#1a1a1a; margin:0 0 6px;">Hola ${esc(recipientName)},</div>
+      <div style="font-size:14px; color:#666666; margin:0 0 20px;">${esc(subtitle)}</div>
 
       <div style="background:#f5f5f5; border-radius:8px; padding:16px;">
         <div style="font-size:15px; font-weight:bold; color:#1a1a1a; margin-bottom:${nota ? "12px" : "10px"};">${esc(titulo)}</div>
@@ -109,9 +127,9 @@ serve(async (req) => {
         </table>
       </div>
 
-      <div style="margin-top:24px;">
-        <a href="https://gestion.leabogados.cl" style="display:inline-block; background:#003C50; color:#ffffff; text-decoration:none; padding:11px 22px; border-radius:6px; font-size:13px; font-weight:bold;">Ver en la app &rarr;</a>
-        <a href="${calUrl}" style="display:inline-block; background:#ffffff; color:#333333; text-decoration:none; padding:11px 22px; border-radius:6px; font-size:13px; font-weight:bold; border:1px solid #cccccc; margin-left:8px;">Agregar recordatorio</a>
+      <div style="margin-top:22px;">
+        <a href="https://gestion.leabogados.cl" style="display:inline-block; background:#003C50; color:#ffffff; text-decoration:none; padding:8px 16px; border-radius:18px; font-size:12px; font-weight:bold;">Ver en la app &rarr;</a>
+        <a href="${calUrl}" style="display:inline-block; background:#ffffff; color:#555555; text-decoration:none; padding:7px 14px; border-radius:18px; font-size:11px; font-weight:bold; border:1px solid #cccccc; margin-left:8px;">Agregar recordatorio</a>
       </div>
     </div>
     <div style="padding:16px 28px; border-top:1px solid #eeeeee;">

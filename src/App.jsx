@@ -12092,6 +12092,7 @@ export default function App() {
       // _isNew: marca "tarea nueva" aunque traiga id (caso borrador finalizado al adjuntar archivos)
       const {_isNew, ...rest} = f
       const esNueva = _isNew || !rest.id
+      const prevTask = rest.id ? (tasks||[]).find(t=>t.id===rest.id) : null   // estado anterior: detectar transición a Terminado
       const taskPayload={...rest,sale_id:rest.sale_id||null,client_id:rest.client_id||null}
       // Sella la fecha de termino al completar; la limpia al reabrir. No sobreescribe si ya estaba.
       taskPayload.completed_at = taskPayload.status==='Terminado' ? (taskPayload.completed_at || new Date().toISOString()) : null
@@ -12108,10 +12109,19 @@ export default function App() {
           body:JSON.stringify({task:{...data,client_name:client?.name||''},assignedBy:user?.name||'el estudio'})
         }).catch(()=>{})
       }
+      // Aviso al ASIGNADOR cuando la tarea se marca Terminada (solo en la transición) y la asignó otra persona.
+      if(!esNueva && data.status==='Terminado' && prevTask && prevTask.status!=='Terminado' && data.assigned_by && data.assigned_by!==user?.name){
+        const client=clients.find(c=>c.id===data.client_id)
+        fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
+          body:JSON.stringify({kind:'terminada', notifyName:data.assigned_by, task:{...data,client_name:client?.name||''}, assignedBy:user?.name||''})
+        }).catch(()=>{})
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[user])
+  },[user,tasks,clients])
 
   // Delegar: el responsable traspasa la tarea a otra(s) persona(s) con un nuevo plazo.
   // NO cambia who/assignees (sigue siendo responsable ante quien la asignó); solo registra
@@ -12129,6 +12139,14 @@ export default function App() {
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
         body:JSON.stringify({task:{...data,client_name:client?.name||'',who:(to||[]).join(', ')},assignedBy:user?.name||'el estudio'})
       }).catch(()=>{})
+      // Además, avisar a quien ASIGNÓ la tarea que fue delegada (si la asignó otra persona).
+      if(data.assigned_by && data.assigned_by!==user?.name){
+        fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
+          body:JSON.stringify({kind:'delegada', notifyName:data.assigned_by, task:{...data,client_name:client?.name||''}, assignedBy:user?.name||''})
+        }).catch(()=>{})
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
