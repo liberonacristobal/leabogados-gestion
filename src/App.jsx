@@ -836,8 +836,9 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       const periodo = periodoDeGastos(gastosSel)   // #2: período = mes(es) de los gastos, no el de hoy
       const totalLiq = gastosSel.reduce((a,e)=>a+(e.amount||0),0)
       const clientesIds = [...new Set(gastosSel.map(e=>e.client_id).filter(Boolean))]
+      const otNumsLiq = [...new Set(gastosSel.map(e=>e.ot_number).filter(Boolean))].join(', ')   // OT de notaría incluidas
       // Registrar la liquidación PRIMERO — si falla, ningún gasto queda marcado
-      const {error:rErr} = await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length })
+      const {error:rErr} = await supabase.from('rendiciones').insert({ id: renderId, user_name: me, periodo, total: totalLiq, n_gastos: gastosSel.length, n_clientes: clientesIds.length, ot_numbers: otNumsLiq||null })
       if(rErr) throw rErr
       // Marcar gastos — registrar cuáles SÍ se marcaron (marcados) para no inflar la rendición ante fallas parciales
       const erroresMarcado = [], marcados = []
@@ -855,7 +856,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       }
       // Estado local: usar SOLO los marcados (los que fallaron siguen en pendientes sin recargar)
       const marcadosIds = new Set(marcados.map(e=>e.id))
-      setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalReal,n_gastos:marcados.length,n_clientes:[...new Set(marcados.map(e=>e.client_id).filter(Boolean))].length,created_at:now},...p])
+      setRendiciones(p=>[{id:renderId,user_name:me,periodo,total:totalReal,n_gastos:marcados.length,n_clientes:[...new Set(marcados.map(e=>e.client_id).filter(Boolean))].length,created_at:now,ot_numbers:otNumsLiq||null},...p])
       if(setExpenses) setExpenses(p=>p.map(e=>marcadosIds.has(e.id)?{...e,rendered_at:now,render_id:renderId,rendered_by:me}:e))
       setSelected(new Set())
       setConfirmLiq(false)
@@ -6032,6 +6033,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const nowLabel = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
       // Registrar la rendición PRIMERO: si falla, no marcamos gastos (evita gastos huérfanos)
       const rendUser = currentUserName || 'admin'
+      const otNums = [...new Set(gastosSel.map(e=>e.ot_number).filter(Boolean))].join(', ')   // OT de notaría incluidas (para cruzar con la notaría)
       const {error:rendErr} = await supabase.from('rendiciones').insert({
         id: renderId,
         user_name: rendUser,
@@ -6044,7 +6046,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         entity_id: selEnt||null,
         project: proyecto||null,
         subproject: (subproyecto||'').trim()||null,
-        dirigido_a: (atencion||'').trim()||null
+        dirigido_a: (atencion||'').trim()||null,
+        ot_numbers: otNums||null
       })
       if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
       // Marcar gastos como rendidos, avisando si alguno falla
@@ -6056,7 +6059,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
-      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null}
+      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,ot_numbers:otNums||null}
       if(onRendicionComplete) onRendicionComplete(rendObj)
       await guardarDirigido()
       // modo 'pdf': abre el documento imprimible. modo 'enviar': encadena al modal de correo.
@@ -6350,6 +6353,50 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
       const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
       const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Plantilla_carga_masiva.xlsx'; a.click(); URL.revokeObjectURL(a.href)
     }catch(e){ alert('Error al generar la plantilla: '+e.message) }
+    setGenPlantilla(false)
+  }
+
+  // Modelo Excel ESPECÍFICO de notaría: hoja "Gastos" (la lee el parser con tipo gasto), Categoría=Notaria precargada,
+  // y las columnas Subconcepto + OT destacadas (distinguen gastos con igual concepto y el OT va a la rendición).
+  const descargarPlantillaNotaria = async() => {
+    setGenPlantilla(true)
+    try{
+      const ExcelJS = await loadExcelJS()
+      const wb = new ExcelJS.Workbook()
+      const headFont={bold:true}, headFill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE4E8EB'}}
+      const g = wb.addWorksheet('Gastos')
+      g.columns=[
+        {header:'RUT',key:'rut',width:16},
+        {header:'Nombre',key:'nombre',width:28},
+        {header:'Fecha',key:'fecha',width:13},
+        {header:'Monto',key:'monto',width:13},
+        {header:'Concepto',key:'concepto',width:24},
+        {header:'Subconcepto',key:'subconcepto',width:34},
+        {header:'OT',key:'ot',width:12},
+        {header:'Categoría',key:'categoria',width:14},
+      ]
+      g.addRow({rut:'77.245.923-8',nombre:'Inmobiliaria Vista SpA',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Compraventa lote 4, Chicureo',ot:'OT-1284',categoria:'Notaria'})
+      g.addRow({rut:'77.245.923-8',nombre:'Inmobiliaria Vista SpA',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Constitución de sociedad por acciones',ot:'OT-1290',categoria:'Notaria'})
+      g.addRow({rut:'77.981.467-K',nombre:'Trans Alerce SpA',fecha:new Date(2026,2,14),monto:14000,concepto:'Copia con vigencia',subconcepto:'Poder especial',ot:'OT-1305',categoria:'Notaria'})
+      g.getColumn('fecha').numFmt='dd-mm-yyyy'; g.getColumn('monto').numFmt='#,##0'
+      g.getRow(1).eachCell(c=>{ c.font=headFont; c.fill=headFill })
+      // Validación: Categoría sugerida Notaria (lista de categorías válidas)
+      const cats='"'+CAT_OPCIONES.join(',')+'"'
+      for(let i=2;i<=200;i++){ g.getCell(`H${i}`).dataValidation={type:'list',allowBlank:true,formulae:[cats]} }
+      const ins = wb.addWorksheet('Instrucciones')
+      ins.columns=[{header:'Cómo usar este modelo (Notaría)',key:'t',width:100}]
+      ;[
+        'Una fila por gasto notarial. RUT o Nombre del cliente, Fecha, Monto y Concepto son lo mínimo.',
+        'Subconcepto: el detalle que distingue gastos con el MISMO concepto (ej. "Compraventa lote 4" vs "Constitución de sociedad"). Evita que se marquen como duplicados.',
+        'OT: el número de orden de la notaría (ej. OT-1284). Se guarda y aparece en la rendición al cliente y queda asociado a la rendición para cruzarlo con la notaría.',
+        'Categoría: dejar "Notaria". La IA corrige la redacción y compone la glosa (Concepto + Subconcepto) al cargar.',
+        'Dos filas con igual RUT, fecha, monto y concepto pero distinto Subconcepto u OT NO son duplicados.',
+      ].forEach(t=>ins.addRow({t}))
+      ins.getRow(1).eachCell(c=>{ c.font=headFont; c.fill=headFill })
+      const buf=await wb.xlsx.writeBuffer()
+      const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Modelo_notaria.xlsx'; a.click(); URL.revokeObjectURL(a.href)
+    }catch(e){ alert('Error al generar el modelo: '+e.message) }
     setGenPlantilla(false)
   }
 
@@ -6704,6 +6751,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {genPlantilla?'Generando plantilla...':'Descargar plantilla modelo (.xlsx)'}
             </button>
             <div style={{fontSize:10,color:C.muted,marginTop:3}}>Incluye hojas Gastos, Fondos e Instrucciones con ejemplos</div>
+            <button type='button' onClick={descargarPlantillaNotaria} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline',marginTop:8}}>
+              {genPlantilla?'Generando…':'Descargar modelo de notaría (.xlsx)'}
+            </button>
+            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Enfocado en notaría: Concepto · Subconcepto · OT, categoría Notaria precargada</div>
           </div>
           {bulkImports.length>0&&(
             <div style={{marginTop:18,paddingTop:14,borderTop:`0.5px solid ${C.border}`}}>
@@ -7082,10 +7133,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {expandRend===r.id&&(()=>{
           const gastos=expenses.filter(e=>e.client_render_id===r.id)
           return <div style={{marginTop:8,padding:'8px 11px',background:'#F5F7F9',borderRadius:8}}>
+            {r.ot_numbers&&<div style={{fontSize:10,color:'#185FA5',fontWeight:600,marginBottom:6,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>OT incluidas: {r.ot_numbers}</div>}
             {gastos.length===0?<div style={{fontSize:11,color:C.muted}}>Sin detalle de gastos.</div>:gastos.map((e,i)=>(
               <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 0',borderBottom:i<gastos.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>
                 <div style={{minWidth:0}}>
-                  <div style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                  <div style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:'#185FA5',fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div>
                   <div style={{fontSize:10,color:C.muted,marginTop:1}}>{RENDCAT(e.category)}{e.subcategory?': '+e.subcategory:''} · {fmtFechaDMY(e.date)}</div>
                 </div>
                 <div style={{color:C.overdue,fontWeight:600,whiteSpace:'nowrap'}}>-{fmt(e.amount)}</div>
