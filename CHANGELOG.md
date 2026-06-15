@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Conciliación de facturas (v1): motor + barrido de auditoría + aprendizaje
+- Nuevo "Conciliar facturas" (menú admin): detecta cuotas marcadas Pagado SIN N° de factura (suelen duplicar una factura real, tipo BM Soluciones). Agrupa por cliente, sugiere la factura real que calza (cruce por venta/glosa), y deja darlas de baja (a Papelera, reversible) o marcarlas legitimas.
+- Capa de conocimiento: cada decision se guarda (learnings) y cada accion se registra (usage_events). "No es duplicado" enseña a la app a no re-mostrarla.
+- Helpers del motor: normalizacion + similitud de texto (glosa-proyecto), base para el cruce con tolerancia y el juez IA que vienen en los siguientes incrementos.
+
 ## 2026-06-14 — Datos: BM Soluciones, quitar doble conteo (6 cuotas fantasma)
 - Se eliminaron (a Papelera) las 6 cuotas mensuales Ene-Jun 2026 marcadas pagadas SIN factura: duplicaban con la factura real 239 (Asesoria Legal Permanente Enero-Junio, 8.343.676) que cubre ese periodo. Se dejaron la 239 y las cuotas Programadas Jul-Dic.
 

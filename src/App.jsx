@@ -83,6 +83,15 @@ async function reconcileProgramada(clientId, amount, issuedAt){
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
+
+// ─── Conciliación de facturas: motor de cruce + auto-generación de conocimiento ───
+// Normaliza texto (sin tildes/símbolos) y mide similitud por tokens (Jaccard) 0..1, para cruzar glosa↔proyecto.
+const _normTxt = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
+const simTexto = (a,b) => { const A=new Set(_normTxt(a).split(' ').filter(w=>w.length>2)), B=new Set(_normTxt(b).split(' ').filter(w=>w.length>2)); if(!A.size||!B.size) return 0; let i=0; A.forEach(w=>{ if(B.has(w)) i++ }); return i/(A.size+B.size-i) }
+// La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
+// En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
+const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
+const logEvent = (area,action,detail,user) => { try{ supabase.from('usage_events').insert({area,action,detail:detail||{},user_name:user||null}).then(()=>{},()=>{}) }catch(e){} }
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
 const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:12,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
   ...({
@@ -10250,6 +10259,88 @@ ${muestra}`
   )
 }
 
+// ─── CONCILIACIÓN DE FACTURAS (v1: barrido de auditoría de dobles conteos) ──
+// Detecta cuotas marcadas Pagado SIN N° de factura (una factura pagada real lleva folio): suelen ser
+// "fantasma" que duplican una factura real (caso BM Soluciones). Agrupa por cliente, muestra la evidencia
+// y deja darlas de baja (soft-delete, reversible) o marcarlas legítimas (la app aprende y no las re-muestra).
+function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[], sales=[], currentUserName, onClose}){
+  const [ignorados,setIgnorados] = useState(null)   // ids marcados "no es duplicado" (learnings)
+  const [busy,setBusy] = useState(false)
+  const [toast,setToast] = useState(null)
+  useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>{ setIgnorados(new Set((data||[]).map(r=>String(r.key)))) },()=>setIgnorados(new Set())) },[])
+  useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),5000); return ()=>clearTimeout(t) } },[toast])
+  const ig = ignorados||new Set()
+  const clientById = id => clients.find(c=>String(c.id)===String(id))
+  const rutDe = id => { const c=clientById(id); if(c?.rut) return c.rut; const e=(clientEntities||[]).find(x=>x.client_id===id&&x.rut); return e?.rut||'' }
+  const saleTitle = sid => sales.find(s=>String(s.id)===String(sid))?.title||''
+  // Sospechosas: Pagado sin folio, vivas, no reembolso, no ya marcadas legítimas.
+  const sospechosas = (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && b.status==='Pagado' && !b.invoice_no && !ig.has(String(b.id)))
+  const grupos = {}
+  sospechosas.forEach(b=>{ const k=String(b.client_id||'__'); (grupos[k]=grupos[k]||[]).push(b) })
+  const realesDe = cid => (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && String(b.client_id)===String(cid) && b.invoice_no && ['Pagado','Pendiente'].includes(b.status))
+  const sugerencia = (b, reales) => { let best=null,bs=0; reales.forEach(r=>{ let s=0; if(r.sale_id&&b.sale_id&&String(r.sale_id)===String(b.sale_id)) s+=2; s+=Math.max(simTexto(r.concept,b.concept),simTexto(r.concept,saleTitle(b.sale_id))); if(s>bs){bs=s;best=r} }); return bs>=0.3?best:null }
+  const darDeBaja = async(ids)=>{
+    if(busy||!ids.length) return; setBusy(true)
+    try{
+      const now=new Date().toISOString()
+      const {error}=await supabase.from('billing').update({deleted_at:now}).in('id',ids)
+      if(error) throw error
+      if(setBilling) setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,deleted_at:now}:b))
+      logEvent('conciliacion','dar_de_baja',{ids,n:ids.length},currentUserName)
+      setToast(`${ids.length} cuota(s) dada(s) de baja — están en Papelera si te equivocaste`)
+    }catch(e){ alert('Error: '+e.message) }
+    setBusy(false)
+  }
+  const noEsDuplicado = (b)=>{
+    learnPut('conciliacion_ok', b.id, 'legit', {concept:b.concept,client_id:b.client_id})
+    logEvent('conciliacion','marcar_legitima',{id:b.id},currentUserName)
+    setIgnorados(p=>new Set([...(p||[]),String(b.id)]))
+  }
+  const C2 = {muted:C.muted,text:C.text,border:C.border,accent:C.accent,over:C.overdue,green:C.greenText}
+  const lbl = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}
+  if(ignorados===null) return <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
+  const claves = Object.keys(grupos)
+  return (
+    <div style={{maxWidth:560}}>
+      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>
+        Cuotas marcadas <b style={{color:C.text}}>Pagado pero sin N° de factura</b>. Una factura pagada real lleva folio, así que estas suelen ser cuotas "fantasma" que <b style={{color:C.text}}>duplican</b> una factura real (como pasó con BM Soluciones). Revisa y da de baja las que sobran — todo va a Papelera, es reversible.
+      </div>
+      {claves.length===0 && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'28px 0'}}>Sin duplicados sospechosos. Todo en orden.</div>}
+      {claves.map(cid=>{
+        const grupo=grupos[cid]; const c=clientById(cid); const reales=realesDe(cid)
+        const sumF=grupo.reduce((a,b)=>a+(b.amount||0),0); const sumR=reales.filter(r=>r.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+        return (
+          <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'10px 14px',background:'#F5F7F9'}}>
+              <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{c?.name||'Cliente'}</div>{rutDe(cid)&&<div style={{fontSize:10,color:'#99ABB4'}}>{rutDe(cid)}</div>}</div>
+              <div style={{textAlign:'right',flexShrink:0}}><div style={lbl}>Sin folio</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(sumF)}</div></div>
+            </div>
+            {reales.length>0&&<div style={{fontSize:10,color:C.muted,padding:'6px 14px',borderBottom:`1px solid ${C.border}`}}>Facturas reales pagadas del cliente (con folio): <b style={{color:C.greenText}}>{fmt(sumR)}</b> en {reales.filter(r=>r.status==='Pagado').length}</div>}
+            {grupo.map(b=>{
+              const sug=sugerencia(b,reales)
+              return (
+                <div key={b.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                    <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div><div style={{fontSize:10,color:'#99ABB4'}}>Pagada {b.paid_at?fmtFechaDMY(b.paid_at):'—'} · sin N° de factura</div></div>
+                    <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(b.amount)}</span>
+                  </div>
+                  {sug&&<div style={{fontSize:10,color:'#854F0B',background:'#FFF8E1',borderRadius:6,padding:'4px 8px',marginTop:6}}>Parece la misma que <b>{sug.invoice_no}</b> · {sug.concept||'—'} ({fmt(sug.amount)})</div>}
+                  <div style={{display:'flex',gap:6,marginTop:8}}>
+                    <button disabled={busy} onClick={()=>darDeBaja([b.id])} style={{...chipBtn('primary'),opacity:busy?.6:1}}>Dar de baja</button>
+                    <button onClick={()=>noEsDuplicado(b)} style={chipBtn('soft')}>No es duplicado</button>
+                  </div>
+                </div>
+              )
+            })}
+            {grupo.length>1&&<div style={{padding:'10px 14px'}}><button disabled={busy} onClick={()=>darDeBaja(grupo.map(b=>b.id))} style={{...chipBtn('primary'),opacity:busy?.6:1}}>Dar de baja las {grupo.length}</button></div>}
+          </div>
+        )
+      })}
+      {toast&&<div style={{position:'sticky',bottom:0,background:C.greenText,color:'#fff',fontSize:12,fontWeight:600,padding:'9px 12px',borderRadius:8,marginTop:8}}>{toast}</div>}
+    </div>
+  )
+}
+
 // ─── PAPELERA (soft-delete): ventas, cobros y gastos eliminados; restaurar o borrar definitivo ──
 function PapeleraModal({clients=[],onClose,onChanged}){
   const [data,setData] = useState(null)   // {ventas, cobros, gastos}
@@ -11299,6 +11390,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>
                   Papelera
                 </div>}
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'conciliacion'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M7 8l-4 4 4 4'/><path d='M17 8l4 4-4 4'/><path d='M14 4l-4 16'/></svg>
+                  Conciliar facturas
+                </div>}
                 {actualRole==='admin'&&(userRole==='admin'
                   ? <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('limited');setTab('tasks')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
@@ -11363,6 +11458,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='conciliacion'&&<Modal title='Conciliar facturas' onClose={()=>setModal(null)}><ConciliacionModal billing={billing} setBilling={setBilling} clients={clients} clientEntities={clientEntities} sales={sales} currentUserName={user?.name} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
           const [s,b,e]=await Promise.all([
             supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
