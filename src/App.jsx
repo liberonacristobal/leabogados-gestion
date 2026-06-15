@@ -10532,39 +10532,43 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
       <div style={{padding:'14px 20px 0'}}>
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:8}}>
           <div style={{display:'flex',gap:12,alignItems:'stretch'}}>
+            {/* Col 1: subtarjeta de foco (vencidas/esta semana/al día) + a quiénes asigné, debajo */}
             <div style={{flex:1,minWidth:0}}>
-              <div onClick={()=>goSec(setOpenActivas,'sec-activas')} style={{cursor:'pointer'}}>
-                {kpiVencidas.length>0 ? (<>
-                  <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.overdue,lineHeight:1}}>{kpiVencidas.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>tarea{kpiVencidas.length!==1?'s':''} vencida{kpiVencidas.length!==1?'s':''}</span></div>
-                  {kpiSemana.length>0&&<div style={{fontSize:13,color:C.soon,marginTop:5,fontWeight:500}}>{kpiSemana.length} vence{kpiSemana.length!==1?'n':''} esta semana</div>}
-                </>) : kpiSemana.length>0 ? (
-                  <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.soon,lineHeight:1}}>{kpiSemana.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>vence{kpiSemana.length!==1?'n':''} esta semana</span></div>
-                ) : (
-                  <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.greenText,lineHeight:1}}>{mias.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>{mias.length===0?'tareas — ¡al día!':'tareas activas, bajo control'}</span></div>
-                )}
-              </div>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
-                {heroChip('Activas',mias.length,'#E6EEF1',C.accent,()=>goSec(setOpenActivas,'sec-activas'))}
-                {asignadas.length>0&&heroChip('Que asigné',asignadas.length,'#F1EFE8','#5F5E5A',()=>goSec(setOpenAsignadas,'sec-asignadas'))}
-                {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText,()=>goSec(setOpenTerm,'sec-term'))}
-              </div>
+              {(()=>{ const foco = kpiVencidas.length>0 ? {n:kpiVencidas.length,lbl:`vencida${kpiVencidas.length!==1?'s':''}`,bg:'#FCEBEB',col:C.overdue}
+                  : kpiSemana.length>0 ? {n:kpiSemana.length,lbl:'vencen esta semana',bg:'#FAEEDA',col:'#B5710F'}
+                  : {n:mias.length,lbl:'activas · al día',bg:'#E1F5EE',col:C.greenText}
+                return (
+                  <div onClick={()=>goSec(setOpenActivas,'sec-activas')} style={{background:foco.bg,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
+                    <div style={{fontSize:30,fontWeight:600,color:foco.col,lineHeight:1}}>{foco.n}</div>
+                    <div style={{fontSize:10,color:foco.col,marginTop:3,fontWeight:500,lineHeight:1.3}}>{foco.lbl}</div>
+                    {kpiVencidas.length>0&&kpiSemana.length>0&&<div style={{fontSize:9,color:foco.col,marginTop:2,opacity:.85}}>+{kpiSemana.length} esta semana</div>}
+                  </div>
+                )
+              })()}
               {asignadasPorPersona.length>0&&(
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.border}`}}>
-                  <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.3,alignSelf:'center'}}>Asigné a</span>
-                  {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} onClick={()=>goSec(setOpenAsignadas,'sec-asignadas')} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 8px',fontWeight:600,cursor:'pointer'}}>{p} · {n}</span> })}
+                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:7}}>
+                  {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} onClick={()=>goSec(setOpenAsignadas,'sec-asignadas')} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 7px',fontWeight:600,cursor:'pointer'}}>{p} · {n}</span> })}
                 </div>
               )}
             </div>
-            {/* Tareas sugeridas desde Gmail: panel verde a la derecha; al tocar se despliega la lista abajo */}
-            {isAdmin&&(sugBusy||sugVisibles.length>0)&&(
-              <div onClick={()=>{ if(!sugBusy) setSugOpen(o=>!o) }} style={{width:124,flexShrink:0,background:'#E1F5EE',borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:sugBusy?'default':'pointer'}}>
-                {sugBusy ? <span style={{fontSize:11,color:C.greenText,fontWeight:500}}>Revisando tus correos…</span> : (<>
+            <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
+            {/* Col 2: pills entre las dos subtarjetas */}
+            <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:7,justifyContent:'center',alignItems:'flex-start'}}>
+              {heroChip('Activas',mias.length,'#E6EEF1',C.accent,()=>goSec(setOpenActivas,'sec-activas'))}
+              {asignadas.length>0&&heroChip('Que asigné',asignadas.length,'#F1EFE8','#5F5E5A',()=>goSec(setOpenAsignadas,'sec-asignadas'))}
+              {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText,()=>goSec(setOpenTerm,'sec-term'))}
+            </div>
+            {/* Col 3: subtarjeta sugeridas desde Gmail (admin); al tocar se despliega la lista abajo */}
+            {isAdmin&&(sugBusy||sugVisibles.length>0)&&(<>
+              <div style={{width:1,background:C.border,alignSelf:'stretch'}}/>
+              <div onClick={()=>{ if(!sugBusy) setSugOpen(o=>!o) }} style={{flex:1,minWidth:0,background:'#E1F5EE',borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',justifyContent:'center',cursor:sugBusy?'default':'pointer'}}>
+                {sugBusy ? <span style={{fontSize:11,color:C.greenText,fontWeight:500}}>Revisando…</span> : (<>
                   <div style={{fontSize:30,fontWeight:600,color:C.greenText,lineHeight:1}}>{sugVisibles.length}</div>
                   <div style={{fontSize:10,color:C.greenText,marginTop:3,lineHeight:1.3,fontWeight:500}}>sugeridas desde Gmail</div>
                   <div style={{fontSize:11,color:C.greenText,fontWeight:700,marginTop:6}}>{sugOpen?'Ocultar ▴':'Revisar ›'}</div>
                 </>)}
               </div>
-            )}
+            </>)}
           </div>
           {isAdmin&&sugOpen&&sugVisibles.length>0&&(
             <div style={{marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.border}`}}>
