@@ -7759,12 +7759,12 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   }
   const cuerpoCorreo = () => {
     const abs = fmtN(Math.abs(saldoCliente))
-    const cuentaLEA = `\n  Titular: Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Correo: administracion@leabogados.cl`
+    const cuentaLEA = `\n  Titular: Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Comprobante a: administracion@leabogados.cl`
     const terminado = client?.status==='Terminado'
     // Cierre según el saldo del fondo (fuente única rendicionSaldo): falta fondos / a favor + terminado / a favor + más proyectos.
     let cierre = ''
     if(saldoCliente < 0){
-      cierre = `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}. Le agradeceremos transferir ese monto, indicando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:${cuentaLEA}`
+      cierre = `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}, que le agradeceremos transferir a la cuenta del estudio:${cuentaLEA}`
     } else if(saldoCliente > 0 && terminado){
       cierre = `\n\nQueda un saldo a su favor de ${abs}. Habiendo concluido la gestión encomendada, le agradeceremos indicarnos sus datos de cuenta corriente a administracion@leabogados.cl para reintegrárselo.`
     } else if(saldoCliente > 0){
@@ -7820,7 +7820,17 @@ Liberona Escala Abogados`
         }catch(_){ /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
       if(!conAdjunto){
-        verPDF()   // abre el PDF para que el usuario lo guarde y lo adjunte manualmente
+        // Sin scope gmail.send: Gmail/mailto NO permiten pre-adjuntar. Descargamos el PDF REAL
+        // (jsPDF, no la vista HTML) para que el usuario lo arrastre al correo que abrimos.
+        try{
+          const b64 = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
+          const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
+          const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}))
+          const a = document.createElement('a'); a.href=url
+          a.download = `Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'
+          document.body.appendChild(a); a.click(); a.remove()
+          setTimeout(()=>URL.revokeObjectURL(url), 5000)
+        }catch(_){ verPDF() }
         const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
         const win=window.open(gmailUrl,'_blank')
         if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
@@ -7835,7 +7845,7 @@ Liberona Escala Abogados`
       const {error:seErr}=await supabase.from('rendiciones').update({sent_at:now, correlativo:corr}).eq('id',r.id)
       if(seErr) console.error('No se pudo marcar la rendición como enviada:',seErr.message)
       else onSent && onSent(r.id, now, corr)
-      alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se abrió tu correo y el PDF en otra pestaña. Adjunta ese PDF antes de enviar.')
+      alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
     }catch(e){ alert('Error: '+e.message) }
     setSending(false)
