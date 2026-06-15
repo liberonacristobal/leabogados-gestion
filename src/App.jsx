@@ -10592,7 +10592,9 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const [concQ,setConcQ] = useState('')             // búsqueda dentro de Conciliadas (por cliente/glosa/folio)
   const [cardFilter,setCardFilter] = useState(null) // null='todas' · 'match' · 'revisar' · 'conc' (filtro por tarjeta de resumen)
   const [pickRS,setPickRS] = useState({})           // {cid: entityId} razón social elegida cuando el cliente tiene varias
+  const [dupSigs,setDupSigs] = useState(new Set())  // firmas (cliente::glosa) de duplicados confirmados antes → suben la certeza de futuras parecidas
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>{ setIgnorados(new Set((data||[]).map(r=>String(r.key)))) },()=>setIgnorados(new Set())) },[])
+  useEffect(()=>{ supabase.from('learnings').select('meta').eq('kind','conciliacion_dup').then(({data})=>{ const s=new Set(); (data||[]).forEach(r=>{ const mm=r.meta||{}; if(mm.client_id&&mm.concept) s.add(`${mm.client_id}::${glosaKey(mm.concept)}`) }); setDupSigs(s) },()=>{}) },[])
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),5000); return ()=>clearTimeout(t) } },[toast])
   const ig = ignorados||new Set()
   const clientById = id => clients.find(c=>String(c.id)===String(id))
@@ -10625,8 +10627,11 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
     }).sort((a,b)=>b.score-a.score)
     return cands
   }
-  const scoreOf = b => { const cs=analizar(b,realesDe(b.client_id)); return cs[0]?cs[0].score:0 }
+  const dupBoost = b => (b.client_id&&b.concept&&dupSigs.has(`${b.client_id}::${glosaKey(b.concept)}`)) ? 0.15 : 0   // aprendió que esta glosa ya fue duplicado
+  const scoreOf = b => { const cs=analizar(b,realesDe(b.client_id)); return Math.min(1,(cs[0]?cs[0].score:0)+dupBoost(b)) }
   const pasaFiltro = b => cardFilter==='match' ? scoreOf(b)>=0.6 : cardFilter==='revisar' ? scoreOf(b)<0.6 : true
+  // Suspechosas de ALTA certeza (para acción masiva): score boosteado ≥ 0.85.
+  const altaCerteza = () => sospechosas.filter(b=>!ig.has(String(b.id))&&scoreOf(b)>=0.85)
   const veredicto = sc => sc>=0.85?['Muy probable duplicado','#A32D2D','#FCEBEB']:sc>=0.6?['Probable duplicado','#854F0B','#FFF8E1']:sc>=0.4?['Posible duplicado','#854F0B','#FFF8E1']:['Poco probable','#537281','#F5F7F9']
   const fmtDelta = d => (d>0?'+':'−')+fmt(Math.abs(d))
   const STOP = new Set(['de','la','el','los','las','y','del','en','por','para','con','cuota','mensual','factura','cobro','servicio','servicios','asesoria','asesoría','permanente'])
@@ -10700,12 +10705,16 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
           </div>
         )
       })()}
+      {(()=>{ const alta=altaCerteza(); if(alta.length<2) return null; const tot=alta.reduce((a,b)=>a+(b.amount||0),0); return (
+        <button disabled={busy} onClick={()=>{ if(confirm(`Dar de baja ${alta.length} cuotas de alta certeza (≥85%) por ${fmt(tot)}? Van a Papelera (reversible).`)) darDeBaja(alta) }} style={{width:'100%',marginBottom:12,padding:'9px',borderRadius:9,border:`1px solid ${C.overdue}`,background:'#FCEBEB',color:'#A32D2D',fontSize:12,fontWeight:700,cursor:'pointer',opacity:busy?.6:1}}>Dar de baja las {alta.length} de alta certeza · {fmt(tot)}</button>
+      )})()}
       {claves.length===0 && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'28px 0'}}>Sin duplicados sospechosos. Todo en orden.</div>}
       {cardFilter!=='conc' && claves.length>0 && !claves.some(cid=>(grupos[cid]||[]).filter(pasaFiltro).length>0) && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'22px 0'}}>Nada en esta categoría.</div>}
       {cardFilter!=='conc' && claves.map(cid=>{
         const grupoAll=(grupos[cid]||[]).filter(pasaFiltro); if(!grupoAll.length) return null
         const rsSel = pickRS[cid]||''   // '' = todas las RS; si se elige una, se filtran las cuotas a esa RS
-        const grupo = rsSel ? grupoAll.filter(b=>String(b.entity_id)===String(rsSel)) : grupoAll
+        let grupo = rsSel ? grupoAll.filter(b=>String(b.entity_id)===String(rsSel)) : grupoAll
+        if(cardFilter==='revisar') grupo = [...grupo].sort((a,b)=>scoreOf(a)-scoreOf(b))   // menor certeza primero
         const c=clientById(cid); const reales=realesDe(cid)
         const sumF=grupo.reduce((a,b)=>a+(b.amount||0),0); const sumR=reales.filter(r=>r.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
         return (
@@ -10728,13 +10737,16 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
             {grupo.map(b=>{
               const cands=analizar(b,reales)
               const m = chosenCand[b.id] ? (cands.find(x=>String(x.r.id)===String(chosenCand[b.id]))||cands[0]) : cands[0]
-              const [vl,vfg,vbg] = m ? veredicto(m.score) : ['Sin candidata clara','#537281','#F5F7F9']
+              const apr = dupBoost(b)>0   // la app aprendió que esta glosa ya fue duplicado
+              const sc = m ? Math.min(1, m.score + dupBoost(b)) : 0
+              const [vl,vfg,vbg] = m ? veredicto(sc) : ['Sin candidata clara','#537281','#F5F7F9']
               const otras = (billing||[]).filter(x=>!x.deleted_at&&x.billing_type!=='reembolso'&&String(x.client_id)===String(b.client_id)&&String(x.id)!==String(b.id)).sort((a,c)=>String(c.due||c.paid_at||'').localeCompare(String(a.due||a.paid_at||'')))
               const proyB = saleTitle(b.sale_id)
               return (
                 <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,padding:'10px 12px'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                    <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,background:vbg,color:vfg}}>{m?`${vl} · ${Math.round(m.score*100)}%`:vl}</span>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6,marginBottom:8}}>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,background:vbg,color:vfg}}>{m?`${vl} · ${Math.round(sc*100)}%`:vl}</span>
+                    {apr&&<span style={{fontSize:9,fontWeight:700,color:C.accent,background:'#E6EEF1',padding:'2px 8px',borderRadius:20}}>aprendido ✦</span>}
                   </div>
                   {m ? (
                     <div style={{border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden'}}>
