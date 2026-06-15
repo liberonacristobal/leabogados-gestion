@@ -6252,6 +6252,8 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
   const fmtFDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
   const [genPlantilla,setGenPlantilla] = useState(false)
   const [matching,setMatching] = useState(false)        // análisis de matching/IA en curso
+  const [respFilter,setRespFilter] = useState(null)      // filtro del preview por abogado responsable ('__sin__' = sin responsable)
+  const respDeRow = r => (r.client_id ? (clients.find(c=>String(c.id)===String(r.client_id))?.abogado_responsable||null) : null)
   const [matchProg,setMatchProg] = useState(null)       // {done,total} de lotes IA
 
   const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
@@ -6744,8 +6746,18 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <button disabled={guardando||rows.length===0} onClick={()=>{ if(confirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
           </div>
           {dups.length>0&&<div style={{fontSize:11,color:'#C77F18',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto) dentro del archivo.</div>}
+          {/* Resumen de abogados involucrados: tocar un nombre filtra las filas de ese responsable */}
+          {(()=>{ const m={}; rows.forEach(r=>{ const k=respDeRow(r)||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!ents.length) return null; return (
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
+              <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Abogados</span>
+              {ents.map(([k,n])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; return (
+                <button key={k} onClick={()=>setRespFilter(on?null:k)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',border:`1px solid ${on?pc.color:'transparent'}`,background:pc.bg,color:pc.color}}>{sin?'Sin responsable':k} · {n}</button>
+              )})}
+              {respFilter&&<button onClick={()=>setRespFilter(null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
+            </div>
+          )})()}
           <div style={{maxHeight:360,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12}}>
-            {rows.map(r=>{
+            {rows.filter(r=>!respFilter||(respDeRow(r)||'__sin__')===respFilter).map(r=>{
               const bucket = bucketOf(r)
               const bad = montoBad(r)
               const ents = r.client_id ? entsOf(r.client_id) : []
