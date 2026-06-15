@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -13,61 +14,26 @@ const EMAILS: Record<string, string> = {
   "Cristobal": "cl@leabogados.cl",
 };
 
+// Envío por SMTP robusto (denomailer) — reemplaza la implementación a mano que fallaba con "Bad resource ID".
 async function sendViaSMTP(to: string, subject: string, html: string) {
-  const encoder = new TextEncoder();
-
-  const conn = await Deno.connectTls({
-    hostname: "smtp.gmail.com",
-    port: 465,
+  const client = new SMTPClient({
+    connection: {
+      hostname: "smtp.gmail.com",
+      port: 465,
+      tls: true,
+      auth: { username: GMAIL_USER, password: GMAIL_PASS },
+    },
   });
-
-  const reader = conn.readable.getReader();
-  const writer = conn.writable.getWriter();
-
-  const readLine = async (): Promise<string> => {
-    let result = "";
-    while (true) {
-      const { value } = await reader.read();
-      if (!value) break;
-      result += new TextDecoder().decode(value);
-      if (result.endsWith("\r\n")) break;
-    }
-    return result.trim();
-  };
-
-  const writeLine = async (line: string) => {
-    await writer.write(encoder.encode(line + "\r\n"));
-  };
-
-  await readLine();
-  await writeLine(`EHLO leabogados.cl`);
-  let resp = "";
-  while (!resp.includes("250 ")) { resp = await readLine(); }
-  await writeLine(`AUTH PLAIN ${btoa(`\0${GMAIL_USER}\0${GMAIL_PASS}`)}`);
-  await readLine();
-  await writeLine(`MAIL FROM:<${GMAIL_USER}>`);
-  await readLine();
-  await writeLine(`RCPT TO:<${to}>`);
-  await readLine();
-  await writeLine(`DATA`);
-  await readLine();
-
-  const emailContent = [
-    `From: Gestión LE <${GMAIL_USER}>`,
-    `To: ${to}`,
-    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=UTF-8`,
-    ``,
-    html,
-  ].join("\r\n");
-
-  await writeLine(emailContent + "\r\n.");
-  await readLine();
-  await writeLine(`QUIT`);
-  reader.cancel();
-  writer.close();
-  conn.close();
+  try {
+    await client.send({
+      from: `Gestión LE <${GMAIL_USER}>`,
+      to,
+      subject,
+      html,
+    });
+  } finally {
+    await client.close();
+  }
 }
 
 serve(async (req) => {
@@ -126,8 +92,8 @@ serve(async (req) => {
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: Arial, Helvetica, sans-serif; background:#f0f2f4; margin:0; padding:20px;">
   <div style="max-width:560px; margin:0 auto; background:#ffffff; border-radius:12px; overflow:hidden; border:1px solid #e4e8eb;">
-    <div style="background:#003C50; padding:20px 28px;">
-      <img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="32" width="210" style="height:32px; width:210px; display:block; border:0;" />
+    <div style="background:#003C50; padding:20px 28px; text-align:center;">
+      <img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px; width:184px; display:inline-block; border:0;" />
     </div>
     <div style="padding:28px;">
       <div style="font-size:16px; color:#1a1a1a; margin:0 0 6px;">Hola ${esc(task.who)},</div>
