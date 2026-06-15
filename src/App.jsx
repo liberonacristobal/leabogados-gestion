@@ -6790,8 +6790,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling}) {
+function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica}) {
   const [selectedClient,setSelectedClient] = useState(null)
+  const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
+  const isAdmin = currentUser?.role==='admin'
+  // Personas con caja chica activa = quienes tienen fondos entregados en petty_cash.
+  const cajaPersons = useMemo(()=>[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))],[pettyCash])
   const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
@@ -6924,6 +6928,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const renderMov = (e) => {
     const isFondo=e.type==='fondo'
     const catBg=CATS[e.category]||CATS['Otro']
+    const isImported=!!e.bulk_import_id
+    const needsClass=isImported&&!isFondo&&e.category!=='Notaria'   // origen interno: caja chica (de quién) vs fondos del cliente
+    const stop=ev=>ev.stopPropagation()
+    const xBtn={background:'none',border:'none',cursor:'pointer',color:'inherit',fontSize:11,lineHeight:1,padding:'0 0 0 5px',fontWeight:700}
+    const chipAdd={height:24,padding:'0 11px',borderRadius:20,border:`0.5px solid ${C.muted}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}
+    const chipPerson={height:24,padding:'0 11px',borderRadius:20,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:500,cursor:'pointer'}
     return (
       <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
@@ -6933,9 +6943,33 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600}}>Fondo</span>}
               {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>Rendido <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
+              {isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A',fontWeight:600}}>Carga masiva</span>}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
+            {needsClass&&(
+              <div style={{marginTop:6}} onClick={stop}>
+                {e.created_by ? (
+                  <span style={{display:'inline-flex',alignItems:'center',fontSize:10,padding:'2px 8px',borderRadius:12,background:'#E1F5EE',color:C.greenText,fontWeight:600}}>Caja chica · {e.created_by}{isAdmin&&<button title='Quitar de caja chica' onClick={()=>onAssignCajaChica&&onAssignCajaChica(e,{clear:true})} style={xBtn}>✕</button>}</span>
+                ) : e.paid_by_client ? (
+                  <span style={{display:'inline-flex',alignItems:'center',fontSize:10,padding:'2px 8px',borderRadius:12,background:'#E6EEF1',color:C.accent,fontWeight:600}}>Fondos del cliente{isAdmin&&<button title='Deshacer' onClick={()=>onAssignCajaChica&&onAssignCajaChica(e,{clear:true})} style={xBtn}>✕</button>}</span>
+                ) : isAdmin ? (
+                  <>
+                    <button onClick={()=>setClassifyFor(classifyFor===e.id?null:e.id)} style={chipAdd}>+ Clasificar</button>
+                    {classifyFor===e.id&&(
+                      <div style={{marginTop:6,display:'flex',flexDirection:'column',gap:6,background:'#F5F7F9',borderRadius:8,padding:'8px 10px'}}>
+                        <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Caja chica de</span>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {cajaPersons.length===0&&<span style={{fontSize:11,color:C.muted}}>Nadie tiene caja chica activa.</span>}
+                          {cajaPersons.map(p=><button key={p} onClick={()=>{onAssignCajaChica&&onAssignCajaChica(e,{person:p});setClassifyFor(null)}} style={chipPerson}>{p}</button>)}
+                        </div>
+                        <button onClick={()=>{onAssignCajaChica&&onAssignCajaChica(e,{paidByClient:true});setClassifyFor(null)}} style={{...chipPerson,alignSelf:'flex-start'}}>Pagado con fondos del cliente</button>
+                      </div>
+                    )}
+                  </>
+                ) : <span style={{fontSize:10,color:'#99ABB4'}}>Sin clasificar</span>}
+              </div>
+            )}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
             {!isFondo&&<AdjuntoIcon e={e}/>}
@@ -11915,6 +11949,21 @@ export default function App() {
     setSaving(false)
   },[user,expenses,rendiciones,sales])
 
+  // Clasificación interna de un gasto importado (no toca la rendición al cliente, que es independiente):
+  // {person} → entra a la caja chica de esa persona (created_by); {paidByClient:true} → pagado con fondos
+  // del cliente (no caja chica); {clear:true} → vuelve a sin clasificar. La pertenencia a caja chica es derivada.
+  const handleAssignCajaChica=useCallback(async(expense,{person,paidByClient,clear})=>{
+    const patch = clear ? {created_by:null,paid_by_client:false}
+      : person ? {created_by:person,paid_by_client:false}
+      : paidByClient ? {created_by:null,paid_by_client:true} : null
+    if(!patch) return
+    try{
+      const {error}=await supabase.from('expenses').update(patch).eq('id',expense.id)
+      if(error)throw error
+      setExpenses(p=>p.map(x=>x.id===expense.id?{...x,...patch}:x))
+    }catch(e){alert('Error: '+e.message)}
+  },[])
+
   // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
   // Devuelve resumen. Cada gasto queda marcado con bulk_import_id para poder deshacer (commit 5).
   const handleBulkImport=useCallback(async(filas,{tipo,filename})=>{
@@ -11930,7 +11979,10 @@ export default function App() {
         category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
         date:r.fecha||null, project:r.proyecto||null, sale_id:null,
         paid_by_client: tipo!=='fondo'&&r.categoria==='Notaria',
-        created_by:user?.name||null, bulk_import_id:batchId,
+        // Carga masiva NO entra a caja chica: la pertenencia se deriva de created_by, así que se deja null
+        // (el importador queda registrado en bulk_imports.created_by). El admin la clasifica luego con la pill:
+        // caja chica de una persona, o pagada con fondos del cliente. A futuro las masivas son solo Notaría (ya excluidas).
+        created_by: null, bulk_import_id:batchId,
       }
       const k = keyOf(row)
       if(vistos.has(k)){ dupOmit++; continue }
@@ -12617,7 +12669,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
