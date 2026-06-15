@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturas: cockpit en la ficha del cliente (Fase 1)
+- La pestaña Financiero del cliente ahora es el lugar único para gestionar TODAS sus facturas: KPIs tappables (Por cobrar/Cobrado/Programado/Facturado que filtran), buscador (folio, concepto, mes, monto), y filtros combinables por proyecto (= venta), estado y año. Lista única; cada factura se toca y abre el editor (editar, marcar pagada, anular, eliminar) — los cambios se reflejan en toda la app. La Facturación global se mantiene para SII/carga masiva. (Fase 2: asistente de vinculación en lote con IA y detector de duplicados.)
+
+
 ## 2026-06-15 — Correo: auto-envío desde el servidor si falta permiso
 - Rendiciones, liquidaciones de caja chica y de notaría: ahora intentan enviarse desde el **correo del propio usuario** y, si no tiene el permiso de Gmail, se **envían igual automáticamente desde la cuenta de oficina** (servidor SMTP) con el PDF adjunto. Nunca quedan sin enviarse. Solo si el servidor también falla se descarga el PDF para adjuntar a mano. La edge function notify-task ahora acepta envío genérico con adjunto.
 
