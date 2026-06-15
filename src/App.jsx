@@ -5197,7 +5197,7 @@ function printComprobante(bill, clientName){
   const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Comprobante ${bill.invoice_no||''}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:12px;background:#fff}.page{max-width:816px;margin:0 auto}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:16px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Comprobante de cobro</div>${bill.invoice_no?`<div style='font-size:11px;opacity:.85;margin-top:2px'>N° ${bill.invoice_no}</div>`:''}</div></div><div style='padding:24px 26px'><table style='width:100%;border-collapse:collapse;font-size:12px'>${row('Cliente', clientName||'—')}${bill.receptor_name?row('Razón social', bill.receptor_name+(bill.receptor_rut?` · ${bill.receptor_rut}`:'')):''}${row('Concepto', bill.concept||'—')}${row('Monto', n(bill.amount))}${row('Estado', bill.status||'—')}${row('Emisión', dmy(bill.issued_at))}${bill.status==='Pagado'?row('Fecha de pago', dmy(bill.paid_at)):row('Vencimiento', dmy(bill.due))}${bill.notes?row('Notas', bill.notes):''}</table><div style='margin-top:26px;padding-top:12px;border-top:1px solid ${GRAY};font-size:10px;color:${MUT};display:flex;justify-content:space-between'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago</span><span>Documento interno — no es el DTE del SII</span></div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
   const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
 }
-function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,sales=[],proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
@@ -5213,6 +5213,16 @@ function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],ant
   const [obsBaja,setObsBaja] = useState('')
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
+  // Proyecto = venta. La factura se asocia a una venta del cliente (sale_id) → así se concilian programadas ↔ pagadas.
+  const clientSales = (sales||[]).filter(s=>String(s.client_id)===String(f.client_id))
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  const sugVenta = useMemo(()=>{
+    if(f.sale_id || !f.concept || !clientSales.length) return null
+    const cw = new Set(norm(f.concept).split(/[^a-z0-9]+/).filter(w=>w.length>3))
+    let best=null, score=0
+    clientSales.forEach(s=>{ const n=norm(s.title).split(/[^a-z0-9]+/).filter(w=>w.length>3).filter(w=>cw.has(w)).length; if(n>score){score=n;best=s} })
+    return score>0?best:null
+  },[f.concept,f.sale_id,f.client_id,sales])
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:3,display:'block'}
   const inp={width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none'}
@@ -5293,6 +5303,17 @@ function BillingForm({bill,clients,clientEntities,proveedores=[],terceros=[],ant
         </div>
 
         <div><label style={flabel}>Concepto</label><input value={f.concept||''} onChange={e=>up('concept',e.target.value)} placeholder='Descripción del cobro...' style={inp}/></div>
+
+        {f.client_id&&(
+          <div>
+            <label style={flabel}>Proyecto (venta)</label>
+            <select value={f.sale_id||''} onChange={e=>up('sale_id',e.target.value||null)} style={sel}>
+              <option value=''>— Sin proyecto —</option>
+              {clientSales.map(s=><option key={s.id} value={s.id}>{s.title}{s.year?` · ${s.year}`:''}</option>)}
+            </select>
+            {sugVenta&&<button type='button' onClick={()=>up('sale_id',sugVenta.id)} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>✦ Sugerido: {sugVenta.title}</button>}
+          </div>
+        )}
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
           <div><label style={flabel}>Monto total (CLP)</label><input type='number' value={f.amount||''} onChange={e=>up('amount',e.target.value)} placeholder='0' style={inp}/></div>
@@ -12984,6 +13005,8 @@ export default function App() {
         const wc={...saved,clients:clients.find(c=>c.id===saved.client_id)}
         return f.id?p.map(x=>x.id===saved.id?wc:x):[wc,...p]
       })
+      // Aprende glosa→venta: la próxima factura con glosa similar (mismo cliente) sugiere este proyecto.
+      if(saved.sale_id && saved.concept){ const gk=glosaKey(saved.concept); if(gk) learnPut('factura_proyecto', `${saved.client_id}::${gk}`, String(saved.sale_id), {}) }
       // Cuenta por pagar a proveedor anclada a este cobro (monto "de terceros").
       // No se toca si ya se pagó. Se crea/actualiza/elimina según el proveedor asignado.
       if(!_terceroPagado){
@@ -13489,7 +13512,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(

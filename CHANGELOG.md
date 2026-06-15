@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Cobro: campo Proyecto (venta) + sugerencia
+- La ventana Editar/Nuevo cobro ahora tiene campo **Proyecto (venta)**: asocia la factura a una venta del cliente (sale_id) para conciliar programadas ↔ pagadas. Sugiere la venta por coincidencia de glosa (✦) y aprende glosa→venta para autocompletar a futuro.
+
+
 ## 2026-06-15 — Facturas: cockpit en la ficha del cliente (Fase 1)
 - La pestaña Financiero del cliente ahora es el lugar único para gestionar TODAS sus facturas: KPIs tappables (Por cobrar/Cobrado/Programado/Facturado que filtran), buscador (folio, concepto, mes, monto), y filtros combinables por proyecto (= venta), estado y año. Lista única; cada factura se toca y abre el editor (editar, marcar pagada, anular, eliminar) — los cambios se reflejan en toda la app. La Facturación global se mantiene para SII/carga masiva. (Fase 2: asistente de vinculación en lote con IA y detector de duplicados.)
 
