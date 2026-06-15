@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Abogado responsable visible
+- El **abogado responsable** del cliente (`abogado_responsable`) ahora se muestra como **pill** (paleta por persona) en la **lista de clientes** (admin y limited, a la derecha de la línea), en la **ficha del cliente** y en el **preview de carga masiva** (junto al cliente asignado). Ayuda al limited a saber a quién preguntar por una carga.
+
 ## 2026-06-15 — Asignar razón social por gasto
 - La razón social ahora se asigna **dentro de cada gasto** (vista interior del cliente), no en bloque: **pills** de RS si el cliente tiene ≤3 razones sociales, **selector ▾** si tiene más. El gasto ya asignado muestra "RS · [nombre]" con opción **cambiar**. Todo con deshacer. Se quitó el botón en bloque "Asignar razón social (N)" del listado (asignaba todos a la vez).
 
