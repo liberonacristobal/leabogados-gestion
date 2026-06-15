@@ -5079,18 +5079,16 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const go=f=>{setFilter(f);clearSel&&clearSel()}
           const tab=(f,l,v,col)=>(<button key={f} onClick={()=>go(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:col}}>{fmt(v)}</div></button>)
           return (<div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}><div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Por cobrar</div><div style={{fontSize:22,fontWeight:700,color:C.accent}}>{fmt(porCobrar)}</div></div>
-              <div style={{background:venAll>0?'#FCEBEB':'#fff',border:`1px solid ${venAll>0?'#F7C1C1':C.border}`,borderRadius:12,padding:'13px 15px'}}><div style={{fontSize:10,color:venAll>0?'#A32D2D':C.muted,textTransform:'uppercase',letterSpacing:.3}}>Vencido</div><div style={{fontSize:22,fontWeight:700,color:venAll>0?C.overdue:C.text}}>{fmt(venAll)}</div></div>
-            </div>
-            <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600,marginBottom:7}}>Vencimientos</div>
-            <div onClick={()=>go('vencido')} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 13px',marginBottom:16,cursor:'pointer'}}>
-              {buckets.map(([l,fn,col],i)=>{ const arr=pend.filter(fn); const s=arr.reduce((a,b)=>a+(b.amount||0),0); return (
-                <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<buckets.length-1?`0.5px solid ${C.border}`:'none'}}>
-                  <span style={{fontSize:12,color:col,fontWeight:600}}>{l}</span>
-                  <span style={{fontSize:12,color:C.muted}}>{arr.length} · <b style={{color:C.text}}>{fmt(s)}</b></span>
-                </div>
-              )})}
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16}}>
+              <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Por cobrar · facturas emitidas sin pagar</div>
+              <div style={{fontSize:26,fontWeight:700,color:C.accent,lineHeight:1.1}}>{fmt(porCobrar)}</div>
+              <div style={{height:7,background:'#E4E8EB',borderRadius:4,margin:'10px 0 7px',overflow:'hidden',display:'flex'}}>
+                <div style={{width:`${porCobrar>0?Math.min(100,Math.round(venAll/porCobrar*100)):0}%`,background:C.overdue}}/>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:11,flexWrap:'wrap',gap:6}}>
+                <span style={{color:C.overdue,fontWeight:600}}>Vencido {fmt(venAll)} <span style={{color:C.muted,fontWeight:400}}>· ya pasó el plazo</span></span>
+                <span style={{color:C.muted,fontWeight:600}}>Al día {fmt(porCobrar-venAll)}</span>
+              </div>
             </div>
             <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600,marginBottom:7}}>Estados</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
