@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Conciliación unificada (global + por cliente) con IA
+- Una sola interfaz Conciliar: desde el menú admin (todos los clientes) y desde el cockpit de cada cliente. Absorbe la conciliación vieja (Pagadas sin folio que son copia de una real → dar de baja / no es duplicado, respeta lo aprendido) y suma: duplicados exactos, sin proyecto por serie y programada↔real. En sin-proyecto, si no hay match claro, botón Sugerir con IA (Opus) propone la venta. Todo con compuerta humana y deshacer.
+
+
 ## 2026-06-15 — Asistente de conciliación de facturas (Fase 2, por cliente)
 - Botón Conciliar en el cockpit del cliente: (1) DUPLICADOS exactos (mismo monto+vencimiento o mismo folio repetido salvo prefijo Factura) → conservar 1 y eliminar resto (con deshacer, normaliza folio); (2) SIN PROYECTO agrupadas por SERIE con venta sugerida (✦) → asignar la serie completa; (3) PROGRAMADA↔REAL por venta+mes+tolerancia → reemplazar (borra la programada). Nada se borra/asigna solo. Convive con la Conciliación global existente (fantasmas Pagado sin folio).
 
