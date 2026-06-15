@@ -8673,6 +8673,20 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     ;(list||clientSales).forEach(s=>{ const n=serieKey(s.title).split(' ').filter(x=>x.length>3).filter(x=>w.has(x)).length; if(n>sc){sc=n;best=s} })
     return sc>0?best:null
   }
+  // Recordar cobro: correo al cliente (desde la cuenta de oficina) con el detalle de una factura vencida/pendiente.
+  const recordarCobro = async(b)=>{
+    const to=(client.email||'').trim()
+    if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
+    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const folio=b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'
+    const monto='$'+(b.amount||0).toLocaleString('es-CL')
+    const venc=b.due?fmtFechaDMY(b.due):''
+    if(!confirm(`¿Enviar recordatorio de cobro a ${to} por ${folio} (${monto})?`)) return
+    const texto=`Estimados,\n\nLes recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.\n\nQuedamos atentos a su confirmación. Saludos cordiales,\nLiberona Escala Abogados`
+    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Les recordamos amablemente el pago pendiente de <b>${esc(folio)}</b>${b.concept?` (${esc(b.concept)})`:''} por <b>${monto}</b>${venc?`, con vencimiento <b>${venc}</b>`:''}.<br><br>Quedamos atentos a su confirmación. Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
+    try{ await sendMailServer({to, subject:`Recordatorio de cobro — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
+    catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
+  }
 
   const matchEstado = b => fEstado==='all' ? b.status!=='Anulada' : fEstado==='porcobrar' ? ['Pendiente','Vencido'].includes(b.status) : b.status===fEstado
   const facturas = all.filter(b=>{
@@ -8767,6 +8781,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                 </div>
                 {['Pendiente','Vencido'].includes(b.status)&&<div style={{display:'flex',gap:6,marginTop:7}}>
                   <button onClick={()=>{ if(confirm(`¿Marcar pagada ${lblFolio(b)} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',new Date().toISOString().slice(0,10)) }} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>
+                  <button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>
                 </div>}
                 {assignable&&<div style={{display:'flex',gap:6,alignItems:'center',marginTop:7,flexWrap:'wrap'}}>
                   {sug&&<button onClick={()=>onAssignSeries&&onAssignSeries(sug.id,[b.id])} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 10px',fontWeight:600,cursor:'pointer'}}>✦ {sug.title}</button>}
@@ -8801,6 +8816,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   <div onClick={()=>toggleProj(String(sid))} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s?.title||'Proyecto'} {open?'▾':'▸'}</span><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{cuotasCob}/{rows.length} cobradas</span></div>
                     <div style={{fontSize:10,color:C.muted,marginTop:3}}>Facturado {fmt(fac)} · Cobrado {fmt(cob)} · <b style={{color:pen>0?C.soon:C.muted}}>Pendiente {fmt(pen)}</b></div>
+                    <div style={{height:4,background:'#E4E8EB',borderRadius:2,marginTop:6,overflow:'hidden'}}><div style={{height:'100%',width:`${fac>0?Math.min(100,Math.round(cob/fac*100)):0}%`,background:C.normal,borderRadius:2}}/></div>
                   </div>
                   {open&&<div style={{padding:'0 11px 9px'}}>{renderGroupRows(rows)}</div>}
                 </div>
