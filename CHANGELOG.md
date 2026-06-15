@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Conciliación: al deduplicar, conserva la Factura N° real
+- Al resolver duplicados de emitidas, SIEMPRE se conserva la que tiene número (Factura N° XX = la factura real), nunca al azar; la tarjeta muestra explícitamente cuál conserva y cuáles elimina.
+
+
 ## 2026-06-15 — Abogado en lista Clientes (admin) + fusión Freddy Bravo
 - Lista de Clientes (admin): el abogado responsable ahora va como pill en la LÍNEA DEL NOMBRE, justificado a la derecha (antes estaba en la línea financiera).
 - Cliente duplicado Freddy Bravo (creado por error, sin registros) archivado; Bravo Silva conserva toda la información.

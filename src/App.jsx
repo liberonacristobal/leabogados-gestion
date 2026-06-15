@@ -8477,7 +8477,8 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
     const folioBy={}; act.forEach(b=>{ const f=folioN(b.invoice_no); if(f){ const k=`${b.client_id}|f|${f}`; (folioBy[k]=folioBy[k]||[]).push(b) } })
     const groups=[]; const seen=new Set()
     Object.values({...by,...folioBy}).forEach(g=>{ if(g.length<2) return; const ids=g.map(x=>x.id).sort().join(','); if(seen.has(ids)) return; seen.add(ids)
-      const keep=[...g].sort((a,b)=>((b.status==='Pagado')-(a.status==='Pagado'))||((a.invoice_no===folioN(a.invoice_no)?0:1)-(b.invoice_no===folioN(b.invoice_no)?0:1))||(parseInt(folioN(a.invoice_no))||9e9)-(parseInt(folioN(b.invoice_no))||9e9))[0]
+      // SIEMPRE conservar la que tiene número (Factura N° XX = la factura real), nunca al azar; luego Pagada, folio limpio, n° más bajo.
+      const keep=[...g].sort((a,b)=>((a.invoice_no?0:1)-(b.invoice_no?0:1))||((b.status==='Pagado')-(a.status==='Pagado'))||((a.invoice_no===folioN(a.invoice_no)?0:1)-(b.invoice_no===folioN(b.invoice_no)?0:1))||(parseInt(folioN(a.invoice_no))||9e9)-(parseInt(folioN(b.invoice_no))||9e9))[0]
       groups.push({rows:g, keepId:keep.id}) })
     return groups
   },[scope])
@@ -8576,11 +8577,11 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
 
         {dupGroups.length>0&&<div>
           {sect(1,C.overdue,'Duplicados','determinista',dupGroups.length+' grupos')}
-          {dupGroups.map((g,i)=>{ const drop=g.rows.filter(r=>r.id!==g.keepId); const keep=g.rows.find(r=>r.id===g.keepId); return (
+          {dupGroups.map((g,i)=>{ const drop=g.rows.filter(r=>r.id!==g.keepId); const keep=g.rows.find(r=>r.id===g.keepId); const lbl=b=>b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'copia sin número'; const keepLbl=lbl(keep); return (
             <div key={i} style={{background:'#fff',border:`1px solid #F09595`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
               <div style={{fontSize:12.5,fontWeight:600}}>{keep.concept||'—'} · {fmt(keep.amount)}</div>
-              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(keep.client_id)} · {g.rows.length} copias (folios {g.rows.map(r=>folioN(r.invoice_no)||'s/f').join(', ')}). Conservar F° {folioN(keep.invoice_no)||'s/f'}.</div>
-              <button onClick={()=>onResolveDup&&onResolveDup(g.keepId, drop.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Conservar 1 · eliminar {drop.length}</button>
+              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(keep.client_id)} · {g.rows.length} copias. Conservo <b style={{color:C.greenText}}>{keepLbl}</b>{keep.status==='Pagado'?' (pagada)':''}; elimino: {drop.map(lbl).join(', ')}.</div>
+              <button onClick={()=>onResolveDup&&onResolveDup(g.keepId, drop.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Conservar {keepLbl} · eliminar {drop.length}</button>
             </div>
           )})}
         </div>}
