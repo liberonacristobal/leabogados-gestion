@@ -10404,6 +10404,30 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const mias = base.filter(t=>enMiLista(t,me))
   const asignadas = base.filter(t=>t.assigned_by===me && !enMiLista(t,me))
 
+  // KPIs del hero (sobre mis tareas activas; respetan los filtros de cliente/proyecto)
+  const _dl = t => daysLeft(t.due)
+  const kpiVencidas = mias.filter(t=>_dl(t)!=null && _dl(t)<0)
+  const kpiSemana = mias.filter(t=>{ const d=_dl(t); return d!=null && d>=0 && d<=7 })
+  const _som = (()=>{ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),1).getTime() })()
+  const kpiTermMes = terminadasAll.filter(t=>{ const cd=t.completed_at||t.created_at; return cd && new Date(cd).getTime()>=_som })
+  // "Que asigné" por persona (a quién delegué y cuántas)
+  const asignadasPorPersona = (()=>{ const m={}; asignadas.forEach(t=>{ (taskAssignees(t).length?taskAssignees(t):['—']).forEach(p=>{ m[p]=(m[p]||0)+1 }) }); return Object.entries(m).sort((a,b)=>b[1]-a[1]) })()
+
+  // Agregar el vencimiento de una tarea al Google Calendar corporativo (Calendar API, evento de día completo).
+  const agendarTarea = async(t)=>{
+    if(!t.due){ alert('Esta tarea no tiene fecha de vencimiento.'); return }
+    const token = await driveToken()
+    if(!token){ alert('Vuelve a entrar con Google para conectar tu calendario.'); return }
+    try{
+      const cl=clients.find(c=>c.id===t.client_id)
+      const end=new Date(t.due+'T00:00:00'); end.setDate(end.getDate()+1); const endISO=end.toISOString().slice(0,10)
+      const body={ summary:'Tarea: '+(t.title||''), description:[cl?('Cliente: '+cl.name):'',t.project?('Proyecto: '+t.project):'',t.assigned_by?('Asignada por '+t.assigned_by):''].filter(Boolean).join('\n'), start:{date:t.due}, end:{date:endISO}, reminders:{useDefault:true} }
+      const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)})
+      if(!r.ok){ if(r.status===401||r.status===403){ alert('Falta el permiso de calendario. Cierra sesión y vuelve a entrar para concederlo.'); return } throw new Error('Calendar '+r.status) }
+      alert('Agregado a tu Google Calendar para el '+fmtFechaDMY(t.due)+'.')
+    }catch(e){ alert('No se pudo agregar al calendario: '+e.message) }
+  }
+
   // Orden por urgencia: vencimiento más cercano primero, sin fecha al final
   const porUrgencia = arr => [...arr].sort((a,b)=>(daysLeft(a.due)??99999)-(daysLeft(b.due)??99999))
 
@@ -10432,6 +10456,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
               <span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:8,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>{t.due?'Vence '+fmtVenceShort(t.due):'Sin fecha'}</span>
               <div style={{display:'flex',gap:4}}>
                 {onComplete&&<button onClick={(e)=>{e.stopPropagation();onComplete(t)}} title='Terminada' style={{width:26,height:26,borderRadius:5,border:'1px solid #1D9E75',background:'#E1F5EE',color:C.greenText,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,padding:0}}>&#10003;</button>}
+                <button onClick={(e)=>{e.stopPropagation();agendarTarea(t)}} disabled={!t.due} title={t.due?'Agregar a Google Calendar':'Sin fecha de vencimiento'} style={{width:26,height:26,borderRadius:5,border:`0.5px solid ${t.due?C.done:C.border}`,background:'#fff',color:t.due?C.muted:'#C7D0D5',cursor:t.due?'pointer':'default',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>
+                </button>
                 <button onClick={(e)=>{e.stopPropagation();onEdit&&onEdit(t)}} title='Editar' style={{width:26,height:26,borderRadius:5,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:13,padding:0}}>&#9998;</button>
               </div>
             </div>
@@ -10456,8 +10483,45 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const saludo = `¡Hola${primerNombre?`, ${primerNombre}`:''}!`
   const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())
 
+  const heroChip = (label,val,bg,col)=>(<span style={{fontSize:11,background:bg,color:col,borderRadius:20,padding:'4px 11px',fontWeight:600}}>{label} {val}</span>)
+  const kpiTile = (val,label,col,onClick)=>(
+    <div onClick={onClick} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'10px 12px',cursor:'pointer',minWidth:0}}>
+      <div style={{fontSize:26,fontWeight:600,color:col,lineHeight:1}}>{val}</div>
+      <div style={{fontSize:11,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
+    </div>
+  )
   return (
     <div>
+      {/* Hero: foco del día (titular) + tablero de 4 KPIs (tocables → abren la sección) */}
+      <div style={{padding:'14px 20px 0'}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:8}}>
+          {kpiVencidas.length>0 ? (<>
+            <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.overdue,lineHeight:1}}>{kpiVencidas.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>tarea{kpiVencidas.length!==1?'s':''} vencida{kpiVencidas.length!==1?'s':''}</span></div>
+            {kpiSemana.length>0&&<div style={{fontSize:13,color:C.soon,marginTop:5,fontWeight:500}}>{kpiSemana.length} vence{kpiSemana.length!==1?'n':''} esta semana</div>}
+          </>) : kpiSemana.length>0 ? (
+            <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.soon,lineHeight:1}}>{kpiSemana.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>vence{kpiSemana.length!==1?'n':''} esta semana</span></div>
+          ) : (
+            <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.greenText,lineHeight:1}}>{mias.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>{mias.length===0?'tareas — ¡al día!':'tareas activas, bajo control'}</span></div>
+          )}
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
+            {heroChip('Activas',mias.length,'#E6EEF1',C.accent)}
+            {asignadas.length>0&&heroChip('Que asigné',asignadas.length,'#F1EFE8','#5F5E5A')}
+            {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText)}
+          </div>
+          {asignadasPorPersona.length>0&&(
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.border}`}}>
+              <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.3,alignSelf:'center'}}>Asigné a</span>
+              {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 8px',fontWeight:600}}>{p} · {n}</span> })}
+            </div>
+          )}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {kpiTile(kpiVencidas.length,'Vencidas',C.overdue,()=>setOpenActivas(true))}
+          {kpiTile(kpiSemana.length,'Esta semana',C.soon,()=>setOpenActivas(true))}
+          {kpiTile(mias.length,'Activas',C.accent,()=>setOpenActivas(true))}
+          {kpiTile(kpiTermMes.length,'Terminadas (mes)',C.greenText,()=>setOpenTerm(true))}
+        </div>
+      </div>
       <div style={{padding:'14px 20px 0'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:4}}>
           <BloqueTitulo>Mis tareas</BloqueTitulo>
