@@ -11532,6 +11532,135 @@ function ClientePicker({clients=[], onPick}){
     </div>
   )
 }
+// Escáner Gmail → tareas: lee correos NO LEÍDOS (asunto + vista previa), la IA detecta acciones pendientes
+// y propone tareas (cliente/plazo sugeridos). Compuerta humana: crear / editar / descartar. Solo encabezados+snippet a la IA.
+function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
+  const [phase,setPhase] = useState('idle')
+  const [prog,setProg] = useState({done:0,total:0,label:''})
+  const [props_,setProps] = useState([])
+  const [dismissed,setDismissed] = useState(new Set())
+  const [hechas,setHechas] = useState(new Set())
+  const [busy,setBusy] = useState('')
+  const [err,setErr] = useState('')
+  useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','tarea_gmail_descartada').then(({data})=>setDismissed(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
+  const clientName = id => clients.find(c=>String(c.id)===String(id))?.name||''
+  const fmtVence = iso => { if(!iso) return ''; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:iso }
+  const dueCol = iso => { if(!iso) return {bg:'#E4E8EB',col:'#537281'}; const d=Math.round((new Date(iso+'T12:00')-new Date().setHours(0,0,0,0))/86400000); return d<=2?{bg:'#FCEBEB',col:'#A32D2D'}:{bg:'#FAEEDA',col:'#854F0B'} }
+
+  const sugerirIA = async(correos)=>{
+    const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
+    if(!apiKey || !correos.length){ setProps([]); return }
+    const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
+    const hoyISO=new Date().toISOString().slice(0,10); const out=[]
+    for(let i=0;i<correos.length;i+=20){
+      const batch=correos.slice(i,i+20); setProg({done:i,total:correos.length,label:'Detectando tareas con IA…'})
+      const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES. Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "client_id" (de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","client_id":"<id o null>","due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
+      try{
+        const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
+        const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+        arr.forEach(o=>{ if(!o||!o.task) return; const c=batch.find(x=>x.id===o.id); if(!c) return; out.push({...c, title:o.title||c.subject, client_id:(o.client_id&&clients.some(cl=>String(cl.id)===String(o.client_id)))?o.client_id:null, due:(o.due&&/^\d{4}-\d{2}-\d{2}$/.test(o.due))?o.due:null, note:o.note||''}) })
+      }catch(_){}
+    }
+    setProps(out)
+  }
+
+  const escanear = async()=>{
+    setErr(''); setPhase('scanning'); setProg({done:0,total:0,label:'Conectando…'})
+    try{
+      const token=await driveToken()
+      if(!token){ setErr('No hay token de Google con permiso de lectura. Cierra sesión y vuelve a entrar.'); setPhase('error'); return }
+      const q=encodeURIComponent('is:unread -in:spam -in:trash')
+      const CAP=120; let ids=[], pageToken=''
+      setProg({done:0,total:CAP,label:'Buscando no leídos…'})
+      while(ids.length<CAP){
+        const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100${pageToken?`&pageToken=${pageToken}`:''}`,{headers:{Authorization:'Bearer '+token}})
+        if(!r.ok){ if(r.status===401) throw new Error('Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.'); throw new Error('Gmail list '+r.status) }
+        const j=await r.json(); (j.messages||[]).forEach(m=>ids.push(m.id)); pageToken=j.nextPageToken; if(!pageToken) break
+      }
+      ids=ids.slice(0,CAP)
+      if(!ids.length){ setProps([]); setPhase('review'); return }
+      const correos=[]; let done=0
+      const fetchMeta=async(id)=>{
+        try{
+          const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,{headers:{Authorization:'Bearer '+token}})
+          if(!r.ok) return; const j=await r.json()
+          const H={}; (j.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
+          const from=H['from']||''; const subj=H['subject']||''
+          const m=from.match(/<(.+?)>/); const email=(m?m[1]:from).trim().toLowerCase()
+          if(!email.includes('@')) return
+          if(/no-?reply|noreply|notif|mailer-daemon|newsletter|bounce|postmaster|@.*(facebook|linkedin|twitter|mailchimp)/.test(email)) return
+          if(dismissed.has(id)) return
+          correos.push({id, from:email, fromName:(from.replace(/<.+?>/,'').replace(/["']/g,'').trim())||email, subject:subj, snippet:(j.snippet||'')})
+        }catch(_){}
+        done++; if(done%10===0) setProg({done,total:ids.length,label:'Leyendo asuntos…'})
+      }
+      for(let i=0;i<ids.length;i+=8){ await Promise.all(ids.slice(i,i+8).map(fetchMeta)) }
+      await sugerirIA(correos)
+      setPhase('review')
+    }catch(e){ setErr(e.message||String(e)); setPhase('error') }
+  }
+
+  const crear = async(a)=>{ setBusy(a.id); try{ await onCrear({title:a.title, client_id:a.client_id, due:a.due, note:(a.note||'')+(a.note?' · ':'')+'(correo: '+(a.subject||'').slice(0,80)+')'}); setHechas(p=>new Set([...p,a.id])) }catch(e){ alert('No se pudo crear: '+e.message) } setBusy('') }
+  const descartar = a=>{ learnPut('tarea_gmail_descartada',a.id,'descartada',{}); setDismissed(p=>new Set([...p,a.id])) }
+  const visibles = props_.filter(a=>!hechas.has(a.id)&&!dismissed.has(a.id))
+
+  return (
+    <div style={{maxWidth:600}}>
+      {phase==='idle'&&(
+        <div style={{padding:'2px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+            <div style={{width:44,height:44,borderRadius:12,background:C.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></svg>
+            </div>
+            <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:700,color:C.accent}}>Tareas desde Gmail</div><div style={{fontSize:11,color:C.muted}}>Reviso tus correos no leídos y te propongo tareas</div></div>
+          </div>
+          <div style={{fontSize:11,color:'#99ABB4',marginBottom:12,lineHeight:1.5}}>La IA lee solo el asunto y la vista previa (no el cuerpo completo). Nada se crea solo: tú apruebas, editas o descartas.</div>
+          <button onClick={escanear} style={{width:'100%',height:46,borderRadius:11,border:'none',background:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>Revisar no leídos</button>
+        </div>
+      )}
+      {phase==='scanning'&&(()=>{ const pct=prog.total?Math.round(prog.done/prog.total*100):8; return (
+        <div style={{padding:'34px 24px 38px',textAlign:'center'}}>
+          <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:4}}>Revisando tu Gmail</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:18}}>{prog.label||'Conectando…'}</div>
+          <div style={{height:8,background:'#EEF1F3',borderRadius:6,overflow:'hidden',maxWidth:340,margin:'0 auto'}}><div style={{height:'100%',width:`${pct}%`,background:C.accent,borderRadius:6,transition:'width .3s'}}/></div>
+          <div style={{fontSize:10,color:'#99ABB4',marginTop:16,lineHeight:1.5}}>Solo asunto + vista previa a la IA, nunca el cuerpo completo.</div>
+        </div>
+      )})()}
+      {phase==='error'&&(
+        <div style={{padding:'24px 10px',textAlign:'center'}}>
+          <div style={{fontSize:13,color:C.overdue,marginBottom:14,lineHeight:1.5}}>{err}</div>
+          <button onClick={()=>setPhase('idle')} style={{padding:'9px 16px',borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver</button>
+        </div>
+      )}
+      {phase==='review'&&(
+        <div>
+          {visibles.length===0
+            ? <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'26px 0'}}>No encontré tareas en tus correos no leídos.</div>
+            : <>
+              <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{visibles.length} tarea{visibles.length!==1?'s':''} sugerida{visibles.length!==1?'s':''}. Tú decides.</div>
+              {visibles.map(a=>{ const dc=dueCol(a.due); return (
+                <div key={a.id} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',marginBottom:8}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{a.title}</div>
+                  <div style={{fontSize:11,color:'#99ABB4',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>De: {a.fromName} · "{a.subject||'—'}"</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:7}}>
+                    {a.client_id&&<span style={{fontSize:10,background:'#E6EEF1',color:C.accent,borderRadius:10,padding:'2px 8px',fontWeight:600}}>{clientName(a.client_id)}</span>}
+                    <span style={{fontSize:10,background:dc.bg,color:dc.col,borderRadius:10,padding:'2px 8px',fontWeight:600}}>{a.due?'Vence '+fmtVence(a.due):'Sin fecha'}</span>
+                    <span style={{fontSize:10,color:'#99ABB4'}}>IA ✦</span>
+                  </div>
+                  <div style={{display:'flex',gap:6,marginTop:9}}>
+                    <button disabled={busy===a.id} onClick={()=>crear(a)} style={{height:28,padding:'0 12px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:busy===a.id?.6:1}}>Crear tarea</button>
+                    <button onClick={()=>{onEditar&&onEditar({title:a.title,client_id:a.client_id,due:a.due,note:a.note});onClose&&onClose()}} style={{height:28,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.muted}`,background:'#fff',color:C.accent,fontSize:12,cursor:'pointer'}}>Editar</button>
+                    <button onClick={()=>descartar(a)} style={{height:28,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,cursor:'pointer'}}>Descartar</button>
+                  </div>
+                </div>
+              )})}
+            </>}
+          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',marginTop:4}}>Volver</button>
+        </div>
+      )}
+    </div>
+  )
+}
 function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const [phase,setPhase] = useState('idle')        // idle|scanning|review|error
   const [prog,setProg] = useState({done:0,total:0,label:''})
@@ -12329,6 +12458,14 @@ export default function App() {
     setSaving(false)
   },[user,clients])
 
+  // Crear tarea a partir de una sugerencia del escáner de Gmail (asignada a mí mismo).
+  const handleCrearTareaGmail=useCallback(async(t)=>{
+    const payload={ title:t.title||'(sin título)', who:user?.name||null, assignees:[user?.name].filter(Boolean), client_id:t.client_id||null, due:t.due||null, status:'Activo', note:t.note||null, assigned_by:user?.name||null }
+    const {data,error}=await supabase.from('tasks').upsert(payload).select().single()
+    if(error) throw error
+    setTasks(p=>[data,...p])
+  },[user])
+
   const handleSaveClient=useCallback(async(f)=>{
     setSaving(true)
     try{
@@ -12838,6 +12975,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
                   Contactos +Gmail
                 </div>}
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'gmailTareas'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></svg>
+                  Tareas +Gmail
+                </div>}
                 {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redProfesional'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='3.2'/><path d='M5.5 20a6.5 6.5 0 0 1 13 0'/><circle cx='19' cy='6' r='2'/><circle cx='5' cy='6' r='2'/></svg>
                   Red profesional
@@ -12908,6 +13049,7 @@ export default function App() {
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='conciliacion'&&<Modal title='Conciliar facturas' onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliacionModal billing={billing} setBilling={setBilling} clients={clients} clientEntities={clientEntities} sales={sales} currentUserName={user?.name} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
           const [s,b,e]=await Promise.all([
