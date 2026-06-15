@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Liquidación de caja chica = rendición
+- Al liquidar y enviar, la liquidación ahora sale por **correo con el PDF adjunto** (vía Gmail API, cuerpo HTML branded con logo + detalle por cliente), igual que la rendición al cliente; destinatario por defecto los admin (editable). Si no hay permiso de Gmail, cae al `mailto` + PDF imprimible.
+- **Pill "Liquidado"** en cada gasto del cliente que ya fue a una liquidación de caja chica; al tocarla se abre el detalle de esa liquidación (gastos, cliente, total).
+
 ## 2026-06-15 — Tareas: aviso al asignador + correo robusto
 - Cuando alguien **delega** o **marca como terminada** una tarea que le asignaste, ahora **te llega un correo** (mismo diseño que el de nueva tarea, con asunto "Tarea delegada" / "Tarea terminada"). Solo se avisa a quien la asignó y si fue otra persona quien actuó.
 - Envío de `notify-task` migrado a **denomailer** (SMTP robusto) — antes fallaba en silencio. Botones del correo ahora son **pills más pequeños** y el **logo va centrado**.
