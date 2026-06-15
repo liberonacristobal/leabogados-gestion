@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Editar gasto: reasignar a otro cliente
+- Al **tocar un gasto** se abre el editor (ya existía). Ahora incluye campo **Cliente** por búsqueda: cambiarlo **mueve el gasto a otro cliente** y reajusta la razón social. La RS ya era editable. Avisa si el gasto está en una rendición/liquidación (reabrir primero).
+
+
 ## 2026-06-15 — Rendición Notaría, correo Martina, Reabrir, vista clientes limited
 - **Rendición al cliente** ahora incluye gastos **sin razón social** (ej. notaría sin RS) aunque elijas una RS específica: ya no quedan fuera. La limitación de Notaría es solo de caja chica.
 - **Correo de rendición**: si tu sesión de Google no tiene el permiso de enviar (scope `gmail.send`), ahora **avisa claramente** que cierres sesión y vuelvas a entrar para activarlo (caso Martina). El flujo de envío es idéntico para limited y admin.
