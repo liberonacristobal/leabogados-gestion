@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Notaría: marcar pagado, anulados, acción sobre el cliente
+- La acción de notaría ya no usa barra inferior: al seleccionar, se despliega un bloque **sobre el primer cliente** con **Liquidar a notaría** (paga+correo) y **Marcar pagado** (históricos ya pagados, sin correo). Historial distingue "Enviada a notaría" vs "Pagado histórico".
+- Gastos de **$1** (anulados, solo orden) salen de pendientes y van a un grupo **"Anulados"** con **Eliminar** (a papelera).
+- El botón **archivar** de la lista de Gastos ahora va junto al nombre del cliente, separado por "|".
+
 ## 2026-06-15 — Entrada notaría + archivar en Gastos
 - En la barra de buscar clientes de Gastos hay una pill **"Gastos notariales"** (ámbar) que **despliega dos pills**: Carga masiva y Liquidar notaría (con el conteo de pendientes). Reemplaza los botones sueltos del header.
 - **Botón archivar** en cada cliente de la lista de Gastos (mismo ícono que Clientes): lo marca **Terminado** y sale de la lista; un toggle **"Archivados (N)"** los vuelve a mostrar. Acorta el scroll de clientes antiguos.
