@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Tarjeta de Tareas en 3 columnas
+- Rediseño de la tarjeta de foco: **subtarjeta "vencen esta semana/vencidas"** (con tinte por urgencia) y debajo las personas a quienes asigné; **pills Activas/Que asigné/Terminadas al medio**; **subtarjeta "sugeridas desde Gmail"** a la derecha; divisorias verticales. Todo sigue siendo tappable a su sección.
+
 ## 2026-06-15 — Pills del hero de Tareas navegan
 - Cada pill del hero ahora es tappable y lleva a su sección (abre y hace scroll): titular y "Activas" → Activas; "Que asigné" y las personas de "Asigné a" → Tareas que asigné; "Terminadas" → Terminadas.
 
