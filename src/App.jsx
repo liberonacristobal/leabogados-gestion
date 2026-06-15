@@ -2899,7 +2899,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onUpdateCuotas,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
   const [cubrirAnt,setCubrirAnt] = useState(null)
   const [facturarAntS,setFacturarAntS] = useState(null)
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -2923,6 +2923,13 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   const [tramos,setTramos] = useState(sale?.cobro_config?.tramos||[{id:1,pct:50,fecha:''},{id:2,pct:50,fecha:''}])
   const [cuotasCustom,setCuotasCustom] = useState(sale?.cobro_config?.cuotasCustom||[{id:1,monto:'',fecha:''}])
   const [mensualInicio,setMensualInicio] = useState(sale?.cobro_config?.mensualInicio||'')
+  // Cuotas mensuales con UNA cuota distinta (modelo: monto recurrente + cuota distinta inicial/final; el N° se deriva para cuadrar el total)
+  const [cuotaDist,setCuotaDist] = useState(sale?.cobro_config?.cuotaDist||false)
+  const [cuotaDistPos,setCuotaDistPos] = useState(sale?.cobro_config?.cuotaDistPos||'primera')
+  const [cuotaDistMonto,setCuotaDistMonto] = useState(sale?.cobro_config?.cuotaDistMonto||'')
+  const [cuotaRec,setCuotaRec] = useState(sale?.cobro_config?.cuotaRec||'')
+  const [cuotaEdits,setCuotaEdits] = useState({})   // ediciones inline de cuotas programadas guardadas {id:{due,amount}}
+  const [savingCuotas,setSavingCuotas] = useState(false)
   const [costMode,setCostMode] = useState('fijo')
   const [costPct,setCostPct] = useState('')
   // Reparto del costo de terceros entre proveedores. Para venta existente se ancla por billing_id;
@@ -3172,12 +3179,34 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   const panelHon = parseFloat(newHon)||0
   const panelCosto = newCostMode==='pct' ? panelHon*(parseFloat(newCostPct)||0)/100 : parseFloat(newCosto)||0
 
+  // Modelo "cuota distinta": el usuario fija el monto RECURRENTE y el de UNA cuota distinta (inicial/final).
+  // El N° de cuotas se deriva para cuadrar el total; el último recurrente absorbe el residuo. Devuelve montos en la MONEDA.
+  const calcCuotasDist = () => {
+    const total = moneda==='CLP'?montoCLP:amountUF
+    const R = parseFloat(cuotaRec)||0, D = parseFloat(cuotaDistMonto)||0
+    if(!total||R<=0) return []
+    const restante = +(total - D).toFixed(2)
+    if(restante<=0) return [{m:total,d:true}]
+    const nRec = Math.max(1, Math.round(restante/R))
+    const recs = Array.from({length:nRec},()=>R)
+    recs[nRec-1] = +(restante - R*(nRec-1)).toFixed(2)
+    const rl = recs.map(m=>({m,d:false}))
+    return cuotaDistPos==='primera' ? [{m:D,d:true},...rl] : [...rl,{m:D,d:true}]
+  }
   const generarCobros = () => {
     if(!f.client_id||!totalCLP) return []
     const cobros = []
     if(cobroType==='mensual' && mensualInicio) {
       const [y,m] = mensualInicio.split('-').map(Number); let cy=y, cm=m
       for(let i=0;i<12;i++){ cobros.push({monto:Math.round(totalCLP), fecha:`${cy}-${String(cm).padStart(2,'0')}-01`, label:`Mensual ${MONTHS[cm-1]} ${cy}`}); cm++; if(cm>12){cm=1;cy++} }
+    } else if(cobroType==='cuotas' && cobroInicio && cuotaDist) {
+      const arr = calcCuotasDist()
+      if(arr.length){
+        const totR = Math.round(totalCLP); let acc=0
+        arr.forEach((c,i)=>{ const mm = moneda==='CLP'?Math.round(c.m):Math.round(c.m*ufVal); acc+=mm; const d=new Date(cobroInicio+'T12:00'); d.setMonth(d.getMonth()+i); cobros.push({monto:mm, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${arr.length}`}) }
+        )
+        cobros[cobros.length-1].monto += (totR-acc)   // cuadra el total exacto (residuo de redondeo)
+      }
     } else if(cobroType==='cuotas' && cobroInicio && nCuotas>0) {
       const mc = Math.round(totalCLP/nCuotas)
       const totR = Math.round(totalCLP)
@@ -3191,6 +3220,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     return cobros
   }
   const cobros = generarCobros()
+  const cobroConfig = {nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,cuotaDist,cuotaDistPos,cuotaDistMonto,cuotaRec}
 
   const handleSave = () => {
     // Reparto: solo filas con proveedor elegido y monto. Si hay filas con monto pero SIN proveedor y ninguna completa, avisar.
@@ -3210,7 +3240,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       saveF.status = 'Activo'
     }
     clearDraft()
-    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false, repartoTerceros:repartoLimpio})
+    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, repartoTerceros:repartoLimpio})
   }
 
   const handleSaveDraft = () => {
@@ -3221,7 +3251,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       else saveF.cost_clp = (montoCLP*(parseFloat(costPct)||0)/100)||null
     }
     clearDraft()
-    onSave({...saveF, cobros:[], cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
+    onSave({...saveF, cobros:[], cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false})
   }
 
   const confirmAndSave = async() => {
@@ -3234,7 +3264,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         const updF = {...f}
         if(moneda==='UF'){updF.amount_uf=newHon;updF.cost_uf=panelCosto||null;updF.cost_clp=null}
         else{updF.amount_clp=newHon;updF.cost_clp=panelCosto||null;updF.cost_uf=null}
-        onSave({...updF, cobros, cobro_type:cobroType, cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio}, _actualizarPago:false})
+        onSave({...updF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false})
       }
     } else {
       if(!newFmt||!newVig){ alert('Elige el nuevo formato y la fecha de vigencia.'); return }
@@ -3256,7 +3286,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       }
       setSavingTariff(true)
       const rec=await onCambiarFormato(sale,{newFmt,newHon:baseHon||null,newCosto:panelCosto||null,vigDate,motivo:null,nuevasCuotas})
-      if(rec){ setTariffs(p=>[...p,rec]); onSave({...f,cobros,cobro_type:cobroType,cobro_config:{nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio},_actualizarPago:false}) }
+      if(rec){ setTariffs(p=>[...p,rec]); onSave({...f,cobros,cobro_type:cobroType,cobro_config:cobroConfig,_actualizarPago:false}) }
     }
     setSavingTariff(false)
   }
@@ -3599,10 +3629,29 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {cobroType==='cuotas'&&(
             <div style={{background:'#F5F7F9',borderRadius:8,padding:'12px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:8}}>
-                <Fld label='N° cuotas'><Inp type='number' min='1' max='36' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>
+                {cuotaDist
+                  ? <Fld label={`Monto por cuota (${moneda})`}><Inp type='number' step={moneda==='UF'?'0.01':'1'} value={cuotaRec} onChange={e=>setCuotaRec(e.target.value)} placeholder={moneda==='UF'?'0.00':'0'}/></Fld>
+                  : <Fld label='N° cuotas'><Inp type='number' min='1' max='36' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>}
                 <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(e.target.value)}/></Fld>
               </div>
-              {cobroInicio&&<div style={{fontSize:11,color:C.muted}}>Cuota mensual: <strong style={{color:C.text}}>{fmt(Math.round(totalCLP/nCuotas))}</strong> · Total: {fmt(totalCLP)}</div>}
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderTop:`1px solid ${C.border}`}}>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>Una cuota distinta</span>
+                <Switch on={cuotaDist} onToggle={()=>setCuotaDist(v=>!v)}/>
+              </div>
+              {cuotaDist&&(
+                <div style={{background:'#fff',borderRadius:8,padding:'10px 12px',border:`1px solid ${C.border}`,marginBottom:8}}>
+                  <div style={{display:'flex',gap:6,marginBottom:8}}>
+                    {[['primera','Primera'],['ultima','Última']].map(([v,l])=>(
+                      <button key={v} type='button' onClick={()=>setCuotaDistPos(v)} style={{flex:1,padding:6,borderRadius:7,border:`1.5px solid ${cuotaDistPos===v?C.accent:C.border}`,background:cuotaDistPos===v?'#E6EEF1':'transparent',color:cuotaDistPos===v?C.accent:C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{l}</button>
+                    ))}
+                  </div>
+                  <Fld label={`Monto de la ${cuotaDistPos==='primera'?'primera':'última'} (${moneda})`}><Inp type='number' step={moneda==='UF'?'0.01':'1'} value={cuotaDistMonto} onChange={e=>setCuotaDistMonto(e.target.value)} placeholder={moneda==='UF'?'0.00':'0'}/></Fld>
+                </div>
+              )}
+              {cobroInicio&&!cuotaDist&&<div style={{fontSize:11,color:C.muted}}>Cuota mensual: <strong style={{color:C.text}}>{fmt(Math.round(totalCLP/nCuotas))}</strong> · Total: {fmt(totalCLP)}</div>}
+              {cobroInicio&&cuotaDist&&(()=>{ const arr=calcCuotasDist(); if(!arr.length) return null; const recs=arr.filter(c=>!c.d); const D=arr.find(c=>c.d); const u=v=>moneda==='UF'?`UF ${(+v.toFixed(2))}`:fmt(Math.round(v)); const recGroups={}; recs.forEach(c=>{const k=(+c.m.toFixed(2));recGroups[k]=(recGroups[k]||0)+1}); const recTxt=Object.entries(recGroups).map(([m,n])=>`${n} de ${u(parseFloat(m))}`).join(' + '); return (
+                <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}><strong style={{color:C.text}}>{arr.length} cuotas</strong> · {cuotaDistPos==='primera'?`1 de ${u(D.m)} + ${recTxt}`:`${recTxt} + 1 de ${u(D.m)}`} · Total {fmt(totalCLP)}</div>
+              )})()}
             </div>
           )}
           {cobroType==='porcentaje'&&(
@@ -3715,6 +3764,31 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   <button type='button' onClick={()=>{ setModCobro(true); setModMode('cambiar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Cambiar forma de cobro</button>
                 </div>
                 )
+              })()}
+              {(()=>{
+                const prog=(billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
+                if(prog.length===0) return null
+                const cambios=Object.keys(cuotaEdits).some(id=>{ const b=prog.find(x=>String(x.id)===String(id)); if(!b) return false; const e=cuotaEdits[id]; return (e.due!==undefined&&e.due!==(b.due||''))||(e.amount!==undefined&&Math.round(parseFloat(e.amount)||0)!==Math.round(b.amount||0)) })
+                const guardar=async()=>{
+                  const ups=Object.entries(cuotaEdits).map(([id,e])=>{ const b=prog.find(x=>String(x.id)===String(id)); if(!b) return null; const due=e.due!==undefined?e.due:b.due; const amount=e.amount!==undefined?Math.round(parseFloat(e.amount)||0):b.amount; if(due===b.due&&amount===Math.round(b.amount||0)) return null; return {id:b.id,due,amount} }).filter(Boolean)
+                  if(!ups.length) return
+                  setSavingCuotas(true); await onUpdateCuotas?.(ups); setCuotaEdits({}); setSavingCuotas(false)
+                }
+                return (<>
+                  {row('Cuotas programadas',`${prog.length} pendiente${prog.length!==1?'s':''}`,'cuotasprog',false)}
+                  {openCondicion==='cuotasprog'&&(
+                    <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:'#F5F7F9'}}>
+                      <div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.4}}>Ajusta fecha o monto de una cuota sin rehacer todo. Las emitidas/pagadas no aparecen aquí.</div>
+                      {prog.map(b=>{ const e=cuotaEdits[b.id]||{}; const due=e.due!==undefined?e.due:(b.due||''); const amount=e.amount!==undefined?e.amount:(b.amount||0); return (
+                        <div key={b.id} style={{display:'grid',gridTemplateColumns:'1.1fr 1fr',gap:8,marginBottom:8,alignItems:'flex-end'}}>
+                          <Fld label={b.concept&&b.concept.includes('Cuota')?(b.concept.split('—').pop()||'').trim():'Vence'}><Inp type='date' value={due} onChange={ev=>setCuotaEdits(p=>({...p,[b.id]:{...p[b.id],due:ev.target.value}}))}/></Fld>
+                          <Fld label='Monto (CLP)'><Inp type='number' value={amount} onChange={ev=>setCuotaEdits(p=>({...p,[b.id]:{...p[b.id],amount:ev.target.value}}))}/></Fld>
+                        </div>
+                      )})}
+                      {cambios&&<button type='button' onClick={guardar} disabled={savingCuotas} style={{...chipBtn('soft'),marginTop:2,opacity:savingCuotas?.6:1}}>{savingCuotas?'Guardando…':'Guardar cambios'}</button>}
+                    </div>
+                  )}
+                </>)
               })()}
               {row('Notas',notasPrev,'notas',true)}
               {openCondicion==='notas'&&(
@@ -11444,6 +11518,18 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  // Editar cuotas PROGRAMADAS (fecha/monto) sin rehacer la forma de cobro. Solo programadas; no toca emitidas/pagadas.
+  const handleUpdateCuotas=useCallback(async(updates)=>{
+    try{
+      for(const u of updates){
+        const patch={due:u.due,amount:u.amount,updated_at:new Date().toISOString()}
+        const {error}=await supabase.from('billing').update(patch).eq('id',u.id)
+        if(error) throw error
+        setBilling(p=>p.map(x=>x.id===u.id?{...x,...patch}:x))
+      }
+    }catch(e){alert('No se pudo actualizar la cuota: '+e.message)}
+  },[])
+
   // Dar de baja (anular) una factura: registra motivo, quién y cuándo.
   const handleAnularFactura=useCallback(async(bill,motivo,obs)=>{
     try{
@@ -11606,7 +11692,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Cobro: cuota distinta (switch) + editar cuotas guardadas + correo HTML
+- **Cuota distinta**: en "Cuotas mensuales" un switch "Una cuota distinta" permite fijar el monto recurrente (ej. 55 UF) y una cuota distinta inicial o final (ej. 60 UF); la app deriva el N° de cuotas para cuadrar el total exacto y muestra el desglose ("9 cuotas · 1 de UF 60 + 8 de UF 55"). Antes había que cargarlas una a una en Personalizada.
+- **Editar cuotas guardadas**: en una venta guardada, "Condiciones registradas → Cuotas programadas" lista las cuotas pendientes con fecha y monto editables; se ajusta una sola fecha/monto sin rehacer la forma de cobro. No toca las emitidas/pagadas.
+- **Correo de rendición con diseño HTML** (barra de marca, datos de cuenta en caja) en lugar de texto plano; envío automático con PDF adjunto vía Gmail API (scope gmail.send activado).
+
 ## 2026-06-15 — Rendicion: se asocia a razon social y proyecto/subproyecto
 - La rendicion ahora se asocia a una **razon social** (si el cliente tiene 1, queda fija; si tiene varias, el emisor la elige y los gastos se acotan a esa RS) y a un **proyecto** (filtra los gastos de la RS) + **subproyecto** opcional. Se guardan en la rendicion (entity_id/project/subproject).
 - **Proyecto sugerido por IA-lite**: el modal sugiere el proyecto con mas gastos pendientes (boton "Sugerido: X"); el selector muestra el conteo de gastos por proyecto.
