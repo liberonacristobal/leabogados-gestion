@@ -10510,7 +10510,9 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const saludo = `¡Hola${primerNombre?`, ${primerNombre}`:''}!`
   const fechaHoy = new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())
 
-  const heroChip = (label,val,bg,col)=>(<span style={{fontSize:11,background:bg,color:col,borderRadius:20,padding:'4px 11px',fontWeight:600}}>{label} {val}</span>)
+  const heroChip = (label,val,bg,col,onClick)=>(<span onClick={onClick} style={{fontSize:11,background:bg,color:col,borderRadius:20,padding:'4px 11px',fontWeight:600,cursor:onClick?'pointer':'default'}}>{label} {val}</span>)
+  // Abre la sección y hace scroll hasta ella (las pills del hero llevan a su tema).
+  const goSec = (setter,id)=>{ setter&&setter(true); setVerArchivadas(false); setTimeout(()=>{ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}) },70) }
   return (
     <div>
       {/* Recordatorio caja chica (solo quien tiene caja activa): sin cargar gastos hace ≥10 días y/o fondo bajo */}
@@ -10531,23 +10533,25 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:8}}>
           <div style={{display:'flex',gap:12,alignItems:'stretch'}}>
             <div style={{flex:1,minWidth:0}}>
-              {kpiVencidas.length>0 ? (<>
-                <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.overdue,lineHeight:1}}>{kpiVencidas.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>tarea{kpiVencidas.length!==1?'s':''} vencida{kpiVencidas.length!==1?'s':''}</span></div>
-                {kpiSemana.length>0&&<div style={{fontSize:13,color:C.soon,marginTop:5,fontWeight:500}}>{kpiSemana.length} vence{kpiSemana.length!==1?'n':''} esta semana</div>}
-              </>) : kpiSemana.length>0 ? (
-                <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.soon,lineHeight:1}}>{kpiSemana.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>vence{kpiSemana.length!==1?'n':''} esta semana</span></div>
-              ) : (
-                <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.greenText,lineHeight:1}}>{mias.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>{mias.length===0?'tareas — ¡al día!':'tareas activas, bajo control'}</span></div>
-              )}
+              <div onClick={()=>goSec(setOpenActivas,'sec-activas')} style={{cursor:'pointer'}}>
+                {kpiVencidas.length>0 ? (<>
+                  <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.overdue,lineHeight:1}}>{kpiVencidas.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>tarea{kpiVencidas.length!==1?'s':''} vencida{kpiVencidas.length!==1?'s':''}</span></div>
+                  {kpiSemana.length>0&&<div style={{fontSize:13,color:C.soon,marginTop:5,fontWeight:500}}>{kpiSemana.length} vence{kpiSemana.length!==1?'n':''} esta semana</div>}
+                </>) : kpiSemana.length>0 ? (
+                  <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.soon,lineHeight:1}}>{kpiSemana.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>vence{kpiSemana.length!==1?'n':''} esta semana</span></div>
+                ) : (
+                  <div style={{display:'flex',alignItems:'baseline',gap:9}}><span style={{fontSize:34,fontWeight:600,color:C.greenText,lineHeight:1}}>{mias.length}</span><span style={{fontSize:15,fontWeight:500,color:C.text}}>{mias.length===0?'tareas — ¡al día!':'tareas activas, bajo control'}</span></div>
+                )}
+              </div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
-                {heroChip('Activas',mias.length,'#E6EEF1',C.accent)}
-                {asignadas.length>0&&heroChip('Que asigné',asignadas.length,'#F1EFE8','#5F5E5A')}
-                {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText)}
+                {heroChip('Activas',mias.length,'#E6EEF1',C.accent,()=>goSec(setOpenActivas,'sec-activas'))}
+                {asignadas.length>0&&heroChip('Que asigné',asignadas.length,'#F1EFE8','#5F5E5A',()=>goSec(setOpenAsignadas,'sec-asignadas'))}
+                {heroChip('Terminadas',kpiTermMes.length,'#E1F5EE',C.greenText,()=>goSec(setOpenTerm,'sec-term'))}
               </div>
               {asignadasPorPersona.length>0&&(
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.border}`}}>
                   <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.3,alignSelf:'center'}}>Asigné a</span>
-                  {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 8px',fontWeight:600}}>{p} · {n}</span> })}
+                  {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} onClick={()=>goSec(setOpenAsignadas,'sec-asignadas')} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 8px',fontWeight:600,cursor:'pointer'}}>{p} · {n}</span> })}
                 </div>
               )}
             </div>
@@ -10600,18 +10604,21 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           </>
         ) : (
           <>
+        <div id='sec-activas'/>
         <SubHeader label='Activas' count={mias.length} open={openActivas} onToggle={()=>setOpenActivas(o=>!o)}/>
         {openActivas&&(mias.length>0
           ? porUrgencia(mias).map(t=><Card key={t.id} t={t} showWho={false}/>)
           : <div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>{filterProject||filterClient?'Sin tareas activas con estos filtros':'No tienes tareas activas'}</div>)}
         {asignadas.length>0&&(
           <>
+            <div id='sec-asignadas'/>
             <SubHeader label='Tareas que asigné' count={asignadas.length} open={openAsignadas} onToggle={()=>setOpenAsignadas(o=>!o)}/>
             {openAsignadas&&porUrgencia(asignadas).map(t=><Card key={t.id} t={t} showWho={true}/>)}
           </>
         )}
         {terminadas.length>0&&(
           <>
+            <div id='sec-term'/>
             <SubHeader label='Terminadas' count={terminadas.length} open={openTerm} onToggle={()=>setOpenTerm(o=>!o)}/>
             {openTerm&&terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
           </>
