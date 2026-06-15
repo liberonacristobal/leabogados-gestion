@@ -12072,7 +12072,7 @@ export default function App() {
                 </div>}
                 {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'gmailContactos'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
-                  Revisar Gmail (contactos)
+                  Contactos + Gmail
                 </div>}
                 {actualRole==='admin'&&(userRole==='admin'
                   ? <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('limited');setTab('tasks')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
