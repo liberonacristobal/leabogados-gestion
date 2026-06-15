@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-15 — Proyecto = venta en todos lados, buscador en Ventas, propuesta editable
+- **Buscador en Ventas**: pill de búsqueda al lado de "Nueva venta / Nueva propuesta" que filtra por título de venta o nombre de cliente (ignora el filtro de estado mientras buscas).
+- **Propuestas/Borradores editables**: una venta en estado Propuesta o Borrador ahora se edita con el formulario completo (honorarios, costos, forma de cobro incl. cuotas mensuales/cuota distinta, notas), no solo "condiciones registradas". Al guardar se regeneran sus cuotas programadas (todas sin emitir → reemplazo seguro).
+- **Gasto: razón social + proyecto editables**: al editar un gasto se puede asignar/cambiar la razón social y el **proyecto** (sugiere las ventas del cliente). Con una sola RS, se asigna sola por defecto.
+- **Venta = proyecto (aprende)**: al guardar un gasto cuyo proyecto coincide con el título de una venta del cliente, se vincula automáticamente a esa venta (sale_id). La app aprende la estructura proyecto↔venta para reportes y rendiciones.
+
 ## 2026-06-15 — Cobro: cuota distinta (switch) + editar cuotas guardadas + correo HTML
 - **Cuota distinta**: en "Cuotas mensuales" un switch "Una cuota distinta" permite fijar el monto recurrente (ej. 55 UF) y una cuota distinta inicial o final (ej. 60 UF); la app deriva el N° de cuotas para cuadrar el total exacto y muestra el desglose ("9 cuotas · 1 de UF 60 + 8 de UF 55"). Antes había que cargarlas una a una en Personalizada.
 - **Editar cuotas guardadas**: en una venta guardada, "Condiciones registradas → Cuotas programadas" lista las cuotas pendientes con fecha y monto editables; se ajusta una sola fecha/monto sin rehacer la forma de cobro. No toca las emitidas/pagadas.

@@ -2629,16 +2629,19 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
   const [fStatus,setFStatus] = useState('Activo')
+  const [q,setQ] = useState('')
   const ufState = useUF()
   const ufHoy = ufState.uf
   const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
   const filtered = useMemo(()=>{
     let r = sales
+    // Búsqueda libre: si hay texto, busca por título de venta o nombre de cliente e ignora el filtro de estado.
+    if(q.trim()){ const ql=q.toLowerCase(); r=r.filter(s=>{ const cn=(clients.find(c=>String(c.id)===String(s.client_id))?.name||'').toLowerCase(); return (s.title||'').toLowerCase().includes(ql)||cn.includes(ql) }) }
     if(fYear) r = r.filter(s=>String(s.year)===fYear)
     if(fArea) r = r.filter(s=>s.area===fArea)
-    if(fStatus) r = r.filter(s=>s.status===fStatus)
+    if(fStatus&&!q.trim()) r = r.filter(s=>s.status===fStatus)
     return r.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0))
-  },[sales,fYear,fArea,fStatus])
+  },[sales,clients,q,fYear,fArea,fStatus])
   const totalUF = filtered.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const totalCLP = Math.round(filtered.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
   const years = [...new Set(sales.map(s=>s.year).filter(Boolean))].sort((a,b)=>b-a)
@@ -2678,7 +2681,12 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
-          <div style={{display:'flex',gap:6}}>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <div style={{position:'relative',display:'flex',alignItems:'center'}}>
+              <span style={{position:'absolute',left:9,color:C.muted,fontSize:12,pointerEvents:'none'}}>⌕</span>
+              <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{width:q?140:96,padding:'6px 22px 6px 22px',borderRadius:20,border:`1px solid ${q?C.accent:C.border}`,background:'#F5F7F9',color:C.text,fontSize:12,outline:'none',transition:'width .15s',boxSizing:'border-box'}}/>
+              {q&&<button onClick={()=>setQ('')} aria-label='Limpiar' style={{position:'absolute',right:6,background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer',lineHeight:1}}>×</button>}
+            </div>
             <button onClick={onAdd} style={chipBtn('soft')}>Nueva venta</button>
             <button onClick={onAddPropuesta} style={chipBtn('primary')}>Nueva propuesta</button>
           </div>
@@ -3221,6 +3229,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   }
   const cobros = generarCobros()
   const cobroConfig = {nCuotas,cobroInicio,tramos,cuotasCustom,mensualInicio,cuotaDist,cuotaDistPos,cuotaDistMonto,cuotaRec}
+  // Propuesta/Borrador: aún no es venta activa → se edita con el MISMO formulario completo que una venta nueva
+  // (honorarios, costos, forma de cobro, notas). Sus cuotas son todas Programadas sin emitir, así que al guardar se regeneran.
+  const propBorr = !!(sale?.id && (sale?.status==='Propuesta'||sale?.status==='Borrador'))
+  const formNuevo = !sale?.id || propBorr
 
   const handleSave = () => {
     // Reparto: solo filas con proveedor elegido y monto. Si hay filas con monto pero SIN proveedor y ninguna completa, avisar.
@@ -3240,7 +3252,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       saveF.status = 'Activo'
     }
     clearDraft()
-    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, repartoTerceros:repartoLimpio})
+    // En propuesta/borrador editada se regeneran las cuotas programadas (todas sin emitir) según la forma de cobro actual.
+    onSave({...saveF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false, _regenProg:propBorr, repartoTerceros:repartoLimpio})
   }
 
   const handleSaveDraft = () => {
@@ -3562,8 +3575,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </Fld>
       </div>
 
-      {/* 5–8. Honorarios + costos en una línea (toggle UF/CLP compartido), cobro, notas — editable solo en NUEVA VENTA */}
-      {!sale?.id&&(<>
+      {/* 5–8. Honorarios + costos en una línea (toggle UF/CLP compartido), cobro, notas — editable en venta nueva y en propuesta/borrador */}
+      {formNuevo&&(<>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
           <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6}}>Honorarios y costos<AiBadge field='amount_uf'/><AiBadge field='amount_clp'/></div>
           <div style={{display:'flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:6,overflow:'hidden'}}>
@@ -3600,8 +3613,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
       </>)}
 
-      {/* 7. Forma de cobro — solo nueva venta */}
-      {!sale?.id&&totalCLP>0&&(
+      {/* 7. Forma de cobro — venta nueva y propuesta/borrador */}
+      {formNuevo&&totalCLP>0&&(
         <div style={{marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.6,marginBottom:6}}>Forma de cobro</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:12}}>
@@ -3703,10 +3716,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       )}
 
       {/* 8. Notas — solo nueva venta */}
-      {!sale?.id&&<Fld label={<>Notas<AiBadge field='notes'/></>}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>}
+      {formNuevo&&<Fld label={<>Notas<AiBadge field='notes'/></>}><Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/></Fld>}
 
-      {/* 9. CONDICIONES REGISTRADAS — solo venta guardada */}
-      {sale?.id&&(()=>{
+      {/* 9. CONDICIONES REGISTRADAS — solo venta activa guardada (en propuesta/borrador se edita con el form completo) */}
+      {sale?.id&&!propBorr&&(()=>{
         const COBRO_LBL = {cuotas:'Cuotas mensuales',mensual:'Mensual recurrente',porcentaje:'Por porcentaje',personalizada:'Personalizada'}
         const curHon = moneda==='UF' ? (amountUF>0?fmtUF(amountUF):'—') : (montoCLP>0?fmt(montoCLP):'—')
         const curCost = moneda==='UF' ? (parseFloat(f.cost_uf)>0?fmtUF(parseFloat(f.cost_uf)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—')) : (parseFloat(f.cost_clp)>0?fmt(parseFloat(f.cost_clp)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—'))
@@ -3832,8 +3845,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={[sale].filter(Boolean)} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
       {facturarAntS&&<FacturarBloqueModal anticipo={facturarAntS} billing={billing} sales={[sale].filter(Boolean)} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAntS,d)} onClose={()=>setFacturarAntS(null)}/>}
 
-      {/* 10. Actualizar honorarios (solo ventas guardadas) */}
-      {sale?.id&&(
+      {/* 10. Actualizar honorarios (solo ventas activas guardadas) */}
+      {sale?.id&&!propBorr&&(
         <div style={{marginTop:6,marginBottom:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:modCobro?10:0}}>
             <span style={{fontSize:13,fontWeight:600,color:C.text}}>Actualizar honorarios</span>
@@ -7187,12 +7200,21 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 }
 
 // ── EXPENSE EDIT FORM (editar/eliminar registro individual) ───────────────────
-function ExpenseEditForm({expense,clients,clientEntities,expenses,onSave,onClose,onDelete,saving,user,onAttachChange}) {
+function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSave,onClose,onDelete,saving,user,onAttachChange}) {
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro'})
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const client=clients.find(c=>c.id===f.client_id)
   const isFondo=f.type==='fondo'
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
+  // Asociar siempre a una RS por defecto: con una sola, se asigna sola si venía sin asignar.
+  useEffect(()=>{ if(rsList.length===1 && !f.entity_id) setF(p=>({...p,entity_id:rsList[0].id})) },[f.client_id])
+  // Proyecto = venta: sugerencias de los títulos de ventas del cliente + proyectos ya usados en otros gastos.
+  const projectOpts = useMemo(()=>{
+    const set=new Set()
+    ;(sales||[]).filter(s=>s.client_id===f.client_id&&s.title).forEach(s=>set.add(s.title))
+    ;(expenses||[]).filter(e=>e.client_id===f.client_id&&e.project).forEach(e=>set.add(e.project))
+    return [...set].sort()
+  },[sales,expenses,f.client_id])
   return (
     <>
       {!isFondo&&(
@@ -7215,9 +7237,15 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,onSave,onClose
         <Fld label='Fecha'><Inp type='date' value={f.date||''} onChange={e=>up('date',e.target.value)}/></Fld>
       </div>
       <Fld label='Descripción'><Inp value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Descripción...'/></Fld>
-      {rsList.length>1&&(
+      {rsList.length>=1&&(
         <Fld label='Razón social'>
           <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
+        </Fld>
+      )}
+      {!isFondo&&(
+        <Fld label='Proyecto'>
+          <input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
+          <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
         </Fld>
       )}
       {!isFondo&&expense?.id&&(
@@ -10772,7 +10800,7 @@ export default function App() {
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
-      const {cobros, cobroType, _actualizarPago, _activandoPropuesta, _propAmountUF, _propAmountCLP, repartoTerceros, ...saleData} = f
+      const {cobros, cobroType, _actualizarPago, _regenProg, _activandoPropuesta, _propAmountUF, _propAmountCLP, repartoTerceros, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
       const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
@@ -10797,6 +10825,13 @@ export default function App() {
       // A) Venta NUEVA: crear las cuotas directamente
       if(cobros&&cobros.length>0&&!f.id){
         await insertarCuotas()
+      }
+      // A2) Propuesta/Borrador editada o activada: regenerar las cuotas (todas son Programadas sin emitir → reemplazo seguro, sin confirmación)
+      if(f.id&&_regenProg){
+        const {data:actuales}=await supabase.from('billing').select('id,invoice_no,status,billing_type').eq('sale_id',data.id)
+        const aBorrar=(actuales||[]).filter(b=>b.status==='Programada'&&!b.invoice_no&&b.billing_type!=='reembolso')
+        if(aBorrar.length) await supabase.from('billing').delete().in('id',aBorrar.map(b=>b.id))
+        if(cobros&&cobros.length>0) await insertarCuotas()
       }
       // B) Venta EDITADA con "Actualizar forma de pago": regeneración segura
       if(f.id&&_actualizarPago&&cobros&&cobros.length>0){
@@ -10981,6 +11016,12 @@ export default function App() {
     setSaving(true)
     try{
       const p={...f,amount:parseInt(f.amount)||0,sale_id:f.sale_id||null}
+      // Venta = proyecto: si el gasto tiene proyecto y no sale_id, lo vincula a la venta del cliente cuyo título coincide.
+      // La app APRENDE la estructura: el gasto queda atado a su venta/proyecto para reportes y rendiciones.
+      if(p.project && !p.sale_id){
+        const sa=(sales||[]).find(s=>String(s.client_id)===String(p.client_id) && (s.title||'').trim().toLowerCase()===String(p.project).trim().toLowerCase())
+        if(sa) p.sale_id=sa.id
+      }
       // Atribución automática: registra quién ingresó el gasto (solo al crear, nunca al editar)
       if(f.type==='gasto' && !f.id && !p.created_by) p.created_by = user?.name || null
       const prev = f.id ? (expenses||[]).find(x=>x.id===f.id) : null   // estado anterior: para reajustar la rendición si cambió el monto
@@ -10998,7 +11039,7 @@ export default function App() {
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
     setSaving(false)
-  },[user,expenses,rendiciones])
+  },[user,expenses,rendiciones,sales])
 
   // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
   // Devuelve resumen. Cada gasto queda marcado con bulk_import_id para poder deshacer (commit 5).
@@ -11706,7 +11747,7 @@ export default function App() {
         {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
