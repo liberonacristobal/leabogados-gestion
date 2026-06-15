@@ -2936,8 +2936,9 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
   const [cuotaDistPos,setCuotaDistPos] = useState(sale?.cobro_config?.cuotaDistPos||'primera')
   const [cuotaDistMonto,setCuotaDistMonto] = useState(sale?.cobro_config?.cuotaDistMonto||'')
   const [cuotaRec,setCuotaRec] = useState(sale?.cobro_config?.cuotaRec||'')
-  const [cuotaEdits,setCuotaEdits] = useState({})   // ediciones inline de cuotas programadas guardadas {id:{due,amount}}
+  const [cuotaEdits,setCuotaEdits] = useState({})   // ediciones inline de cuotas programadas guardadas {id:{due,amount}} (amount en la unidad cuotaUnit)
   const [savingCuotas,setSavingCuotas] = useState(false)
+  const [cuotaUnit,setCuotaUnit] = useState(sale?.moneda||'UF')   // unidad para editar las cuotas (parte por la de la venta)
   const [costMode,setCostMode] = useState('fijo')
   const [costPct,setCostPct] = useState('')
   // Reparto del costo de terceros entre proveedores. Para venta existente se ancla por billing_id;
@@ -3781,9 +3782,15 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               {(()=>{
                 const prog=(billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
                 if(prog.length===0) return null
-                const cambios=Object.keys(cuotaEdits).some(id=>{ const b=prog.find(x=>String(x.id)===String(id)); if(!b) return false; const e=cuotaEdits[id]; return (e.due!==undefined&&e.due!==(b.due||''))||(e.amount!==undefined&&Math.round(parseFloat(e.amount)||0)!==Math.round(b.amount||0)) })
+                const uf = parseFloat(f.uf_value)||ufVal||0
+                const esUF = cuotaUnit==='UF' && uf>0
+                // amount de edición se guarda en la unidad cuotaUnit; a CLP para comparar/persistir.
+                const toCLP = v => esUF ? Math.round((parseFloat(v)||0)*uf) : Math.round(parseFloat(v)||0)
+                const fromCLP = clp => esUF ? +((clp||0)/uf).toFixed(2) : Math.round(clp||0)
+                const cambios=Object.keys(cuotaEdits).some(id=>{ const b=prog.find(x=>String(x.id)===String(id)); if(!b) return false; const e=cuotaEdits[id]; return (e.due!==undefined&&e.due!==(b.due||''))||(e.amount!==undefined&&toCLP(e.amount)!==Math.round(b.amount||0)) })
+                const toggleUnit=()=>{ const nu=cuotaUnit==='UF'?'CLP':'UF'; const ok=nu!=='UF'||uf>0; if(!ok) return; setCuotaEdits(p=>{ const n={}; for(const id in p){ const e=p[id]; n[id]={...e}; if(e.amount!==undefined){ const clp = esUF?Math.round((parseFloat(e.amount)||0)*uf):Math.round(parseFloat(e.amount)||0); n[id].amount = nu==='UF'&&uf>0 ? +(clp/uf).toFixed(2) : clp } } return n }); setCuotaUnit(nu) }
                 const guardar=async()=>{
-                  const ups=Object.entries(cuotaEdits).map(([id,e])=>{ const b=prog.find(x=>String(x.id)===String(id)); if(!b) return null; const due=e.due!==undefined?e.due:b.due; const amount=e.amount!==undefined?Math.round(parseFloat(e.amount)||0):b.amount; if(due===b.due&&amount===Math.round(b.amount||0)) return null; return {id:b.id,due,amount} }).filter(Boolean)
+                  const ups=Object.entries(cuotaEdits).map(([id,e])=>{ const b=prog.find(x=>String(x.id)===String(id)); if(!b) return null; const due=e.due!==undefined?e.due:b.due; const amount=e.amount!==undefined?toCLP(e.amount):b.amount; if(due===b.due&&amount===Math.round(b.amount||0)) return null; return {id:b.id,due,amount} }).filter(Boolean)
                   if(!ups.length) return
                   setSavingCuotas(true); await onUpdateCuotas?.(ups); setCuotaEdits({}); setSavingCuotas(false)
                 }
@@ -3791,11 +3798,17 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   {row('Cuotas programadas',`${prog.length} pendiente${prog.length!==1?'s':''}`,'cuotasprog',false)}
                   {openCondicion==='cuotasprog'&&(
                     <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:'#F5F7F9'}}>
-                      <div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.4}}>Ajusta fecha o monto de una cuota sin rehacer todo. Las emitidas/pagadas no aparecen aquí.</div>
-                      {prog.map(b=>{ const e=cuotaEdits[b.id]||{}; const due=e.due!==undefined?e.due:(b.due||''); const amount=e.amount!==undefined?e.amount:(b.amount||0); return (
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
+                        <span style={{fontSize:11,color:C.muted,lineHeight:1.4,flex:1}}>Ajusta fecha o monto sin rehacer todo. Las emitidas/pagadas no aparecen.</span>
+                        {uf>0&&<div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:7,overflow:'hidden',flexShrink:0}}>{['UF','CLP'].map(u=>(<button key={u} type='button' onClick={()=>{ if(u!==cuotaUnit) toggleUnit() }} style={{padding:'4px 10px',border:'none',background:cuotaUnit===u?C.accent:'#fff',color:cuotaUnit===u?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer'}}>{u}</button>))}</div>}
+                      </div>
+                      {prog.map(b=>{ const e=cuotaEdits[b.id]||{}; const due=e.due!==undefined?e.due:(b.due||''); const amount=e.amount!==undefined?e.amount:fromCLP(b.amount||0); return (
                         <div key={b.id} style={{display:'grid',gridTemplateColumns:'1.1fr 1fr',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                           <Fld label={b.concept&&b.concept.includes('Cuota')?(b.concept.split('—').pop()||'').trim():'Vence'}><Inp type='date' value={due} onChange={ev=>setCuotaEdits(p=>({...p,[b.id]:{...p[b.id],due:ev.target.value}}))}/></Fld>
-                          <Fld label='Monto (CLP)'><Inp type='number' value={amount} onChange={ev=>setCuotaEdits(p=>({...p,[b.id]:{...p[b.id],amount:ev.target.value}}))}/></Fld>
+                          <Fld label={`Monto (${cuotaUnit})`}>
+                            <Inp type='number' step={esUF?'0.01':'1'} value={amount} onChange={ev=>setCuotaEdits(p=>({...p,[b.id]:{...p[b.id],amount:ev.target.value}}))}/>
+                            {esUF&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{fmt(toCLP(amount))}</div>}
+                          </Fld>
                         </div>
                       )})}
                       {cambios&&<button type='button' onClick={guardar} disabled={savingCuotas} style={{...chipBtn('soft'),marginTop:2,opacity:savingCuotas?.6:1}}>{savingCuotas?'Guardando…':'Guardar cambios'}</button>}
