@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Color único por persona
+- Cada integrante tiene un **color fijo** usado igual en toda la app (pills y avatares): Cristóbal azul profundo, Erasmo azul, Martín verde, Martina rosa, Rodrigo ámbar. Fuente única (`PERSON_CHIP`); se unificaron los dos mapas que antes no coincidían.
+
 ## 2026-06-15 — Abogado responsable visible
 - El **abogado responsable** del cliente (`abogado_responsable`) ahora se muestra como **pill** (paleta por persona) en la **lista de clientes** (admin y limited, a la derecha de la línea), en la **ficha del cliente** y en el **preview de carga masiva** (junto al cliente asignado). Ayuda al limited a saber a quién preguntar por una carga.
 - Carga masiva: **resumen de abogados** arriba del preview (con conteo por abogado); **tocar un nombre filtra** las filas de ese responsable. El botón de terminar cliente pasó a **ícono de archivar** (restaurar si terminado).
