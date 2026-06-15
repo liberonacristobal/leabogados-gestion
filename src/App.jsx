@@ -6980,6 +6980,66 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
   const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
 
+  // ── Liquidación de NOTARÍA (sección dentro de Gastos): gastos categoría Notaria que la oficina paga a la notaría ──
+  // Marca propia notaria_render_id (independiente de caja chica y de la rendición al cliente). La preparan los limited; visible para admin.
+  const [showNotaria,setShowNotaria] = useState(false)
+  const [selNota,setSelNota] = useState(()=>new Set())
+  const [notaSending,setNotaSending] = useState(false)
+  const [notaConfirm,setNotaConfirm] = useState(false)
+  const [notaEmail,setNotaEmail] = useState(()=>{ try{return localStorage.getItem('notaria_email')||''}catch(_){return ''} })
+  const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
+  const notaSel = notariaPend.filter(e=>selNota.has(e.id))
+  const notaTotal = notaSel.reduce((a,e)=>a+(e.amount||0),0)
+  const notaPendTotal = notariaPend.reduce((a,e)=>a+(e.amount||0),0)
+  const notaLiquidaciones = useMemo(()=>(rendiciones||[]).filter(r=>r.tipo==='notaria').sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1),[rendiciones])
+  const toggleNota = id => setSelNota(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n})
+  const periodoNota = gs => { const fs=gs.map(e=>e.date).filter(Boolean).sort(); if(!fs.length) return new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const mY=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); return mY(fs[0])===mY(fs[fs.length-1])?mY(fs[0]):`${fmtFechaDMY(fs[0])} – ${fmtFechaDMY(fs[fs.length-1])}` }
+
+  const liquidarNotaria = async() => {
+    if(!notaSel.length) return
+    setNotaSending(true)
+    try{
+      const renderId=crypto.randomUUID(), now=new Date().toISOString()
+      const periodo=periodoNota(notaSel)
+      const ot=[...new Set(notaSel.map(e=>e.ot_number).filter(Boolean))].join(', ')
+      const {error:rErr}=await supabase.from('rendiciones').insert({id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null})
+      if(rErr) throw rErr
+      const ids=notaSel.map(e=>e.id)
+      const {error:uErr}=await supabase.from('expenses').update({notaria_render_id:renderId,notaria_liquidado_at:now}).in('id',ids)
+      if(uErr) throw uErr
+      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
+      if(setRendiciones) setRendiciones(p=>[{id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null,created_at:now},...p])
+      const dest=(notaEmail||'').trim()
+      if(dest){
+        try{ localStorage.setItem('notaria_email',dest) }catch(_){}
+        let sent=false
+        try{
+          const token=await driveToken()
+          if(token){
+            const filas=notaSel.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
+            const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjuntamos la liquidación de las siguientes órdenes de trabajo (OT) que estamos pagando — ${periodo}.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">TOTAL</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${notaTotal.toLocaleString('es-CL')}</td></tr></table></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
+            const texto='Estimados,\n\nAdjuntamos la liquidación de las OT que estamos pagando — '+periodo+'.\n\n'+notaSel.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTOTAL: $'+notaTotal.toLocaleString('es-CL')
+            const pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:notaSel,clients,titulo:'Liquidación de gastos — Notaría'})
+            await sendGmailWithPdf(token,{to:dest,subject:`Liquidación de gastos — Liberona Escala Abogados — ${periodo}`,bodyText:texto,bodyHtml:html,pdfBase64:pdf,pdfName:`Liquidacion notaria ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'})
+            sent=true
+          }
+        }catch(_){ sent=false }
+        if(!sent){ const a=document.createElement('a'); a.href='mailto:'+dest+'?subject='+encodeURIComponent(`Liquidación de gastos — Liberona Escala Abogados — ${periodo}`); a.click() }
+      }
+      setSelNota(new Set()); setNotaConfirm(false)
+    }catch(e){alert('Error al liquidar: '+e.message)}
+    setNotaSending(false)
+  }
+  const deshacerNotaria = async(r) => {
+    if(!confirm('¿Deshacer esta liquidación de notaría? Los gastos vuelven a pendientes.')) return
+    try{
+      await supabase.from('expenses').update({notaria_render_id:null,notaria_liquidado_at:null}).eq('notaria_render_id',r.id)
+      await supabase.from('rendiciones').delete().eq('id',r.id)
+      setExpenses(p=>p.map(e=>e.notaria_render_id===r.id?{...e,notaria_render_id:null,notaria_liquidado_at:null}:e))
+      if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
+    }catch(e){alert('Error: '+e.message)}
+  }
+
   const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
@@ -7185,20 +7245,23 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {(selectedClient||showOrphans)&&(
-              <button onClick={()=>{setSelectedClient(null);setShowOrphans(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+            {(selectedClient||showOrphans||showNotaria)&&(
+              <button onClick={()=>{setSelectedClient(null);setShowOrphans(false);setShowNotaria(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
             )}
             <div>
               <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                {showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
+                {showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
               </div>
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selEnts[0].name}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
             </div>
           </div>
           <div style={{display:'flex',gap:6}}>
-            {!selectedClient&&!showOrphans&&<button onClick={onBulk} style={chipBtn('soft')}>+ Carga masiva</button>}
-            <button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>
-            <button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>
+            {!selectedClient&&!showOrphans&&!showNotaria&&<>
+              <button onClick={()=>setShowNotaria(true)} style={chipBtn('soft')}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
+              <button onClick={onBulk} style={chipBtn('soft')}>+ Carga masiva</button>
+            </>}
+            {!showNotaria&&<button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>}
+            {!showNotaria&&<button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>}
             {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
           </div>
         </div>
@@ -7207,10 +7270,68 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
 
         {/* Vista general: búsqueda */}
-        {!selectedClient&&!showOrphans&&(
+        {!selectedClient&&!showOrphans&&!showNotaria&&(
           <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:4}}/>
         )}
       </div>
+
+      {/* Vista Notaría: pendientes de liquidar a la notaría + liquidaciones (historial) */}
+      {showNotaria&&(
+        <div style={{padding:'4px 20px 130px'}}>
+          <div style={{display:'flex',gap:8,marginBottom:10}}>
+            <div style={{flex:1,background:'#FCEBEB',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:'#A32D2D',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Pendiente a notaría</div><div style={{fontSize:16,fontWeight:700,color:'#A32D2D'}}>{fmt(notaPendTotal)}</div><div style={{fontSize:9,color:'#A32D2D',fontWeight:600}}>{notariaPend.length} gasto{notariaPend.length!==1?'s':''}</div></div>
+            <div style={{flex:1,background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Notaría</div><div style={{fontSize:13,fontWeight:600,color:C.accent,marginTop:2}}>Notaría Lascar</div></div>
+          </div>
+          {notariaPend.length>0&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}><button onClick={()=>setSelNota(selNota.size===notariaPend.length?new Set():new Set(notariaPend.map(e=>e.id)))} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>{selNota.size===notariaPend.length?'Quitar todos':'Seleccionar todos'}</button></div>}
+          {notariaPend.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>No hay gastos de notaría pendientes de liquidar.</div>}
+          {notariaPend.map(e=>{ const on=selNota.has(e.id); const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return (
+            <div key={e.id} onClick={()=>toggleNota(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',marginBottom:6,borderRadius:10,border:`1px solid ${on?C.accent:C.border}`,background:on?'#F5F7F9':C.card,cursor:'pointer'}}>
+              <span style={{width:18,height:18,borderRadius:5,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:'#185FA5',fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div>
+                <div style={{fontSize:10,color:'#99ABB4',marginTop:1}}>{cn} · {e.date?fmtFechaDMY(e.date):'sin fecha'}</div>
+              </div>
+              <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
+            </div>
+          )})}
+
+          {notaLiquidaciones.length>0&&<div style={{marginTop:18}}>
+            <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Liquidaciones a notaría</div>
+            {notaLiquidaciones.map(r=>(
+              <div key={r.id} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:6}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                  <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:'#99ABB4'}}>{r.created_at?new Date(r.created_at).toLocaleDateString('es-CL'):''}{r.user_name?` · ${r.user_name}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div>
+                  <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(r.total)}</span>
+                </div>
+                {r.ot_numbers&&<div style={{fontSize:10,color:'#185FA5',fontWeight:600,marginTop:4}}>OT: {r.ot_numbers}</div>}
+                <div style={{marginTop:6}}><button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Deshacer</button></div>
+              </div>
+            ))}
+          </div>}
+
+          {/* Barra inferior: liquidar */}
+          {selNota.size>0&&!notaConfirm&&(
+            <div style={{position:'fixed',left:0,right:0,bottom:'calc(56px + env(safe-area-inset-bottom,0px))',background:C.accent,padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',zIndex:49}}>
+              <div><div style={{fontSize:10,color:'rgba(255,255,255,.6)'}}>{selNota.size} GASTO{selNota.size!==1?'S':''}</div><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>{fmt(notaTotal)}</div></div>
+              <button onClick={()=>setNotaConfirm(true)} style={{height:34,padding:'0 16px',background:'#fff',color:C.accent,border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Liquidar a notaría →</button>
+            </div>
+          )}
+          {notaConfirm&&(
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:18}}>
+              <div style={{background:'#fff',borderRadius:16,width:'min(92vw,420px)',padding:20}}>
+                <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Liquidar a notaría</div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:12}}>{selNota.size} gasto{selNota.size!==1?'s':''} · {fmt(notaTotal)}. Se enviará el detalle (OT + montos) a la notaría con PDF adjunto.</div>
+                <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Correo de la notaría</label>
+                <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginTop:4,marginBottom:14,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:13,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}}/>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>setNotaConfirm(false)} style={{flex:1,height:40,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button disabled={notaSending} onClick={liquidarNotaria} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:notaSending?'default':'pointer',opacity:notaSending?.6:1}}>{notaSending?'Enviando…':'Liquidar y enviar'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Vista "Sin cliente · por asignar": gastos huérfanos de la carga masiva */}
       {showOrphans&&(
@@ -7234,7 +7355,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       )}
 
       {/* Vista general: lista de clientes con saldo */}
-      {!selectedClient&&!showOrphans&&(
+      {!selectedClient&&!showOrphans&&!showNotaria&&(
         <div style={{padding:'4px 20px 100px'}}>
           {orphans.length>0&&(
             <div onClick={()=>setShowOrphans(true)} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
@@ -9289,16 +9410,17 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
   return doc.output('datauristring').split(',')[1]
 }
 // PDF de la liquidación de caja chica (jsPDF) → base64. Agrupado por cliente, mismo estilo que la rendición.
-async function liquidacionPdfBase64({me, periodo, gastos, clients}){
+async function liquidacionPdfBase64({me, periodo, gastos, clients, titulo}){
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const doc = new jsPDF({unit:'pt', format:'letter'})
   const W = doc.internal.pageSize.getWidth()
+  const _tit = titulo || 'Liquidación de caja chica'
   const total = (gastos||[]).reduce((a,e)=>a+(e.amount||0),0)
   const porCliente = {}
   ;(gastos||[]).forEach(e=>{ const cn=(clients||[]).find(c=>c.id===e.client_id)?.name||'Sin cliente'; (porCliente[cn]=porCliente[cn]||[]).push(e) })
   doc.setFillColor(0,60,80); doc.rect(0,0,W,74,'F')
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16)
-  doc.text('Liquidación de caja chica', 40, 34)
+  doc.text(_tit, 40, 34)
   doc.setFont('helvetica','normal'); doc.setFontSize(10)
   doc.text(`${me||''} · ${periodo||''}`, 40, 54)
   doc.setFont('helvetica','bold'); doc.setFontSize(12)
@@ -9319,7 +9441,7 @@ async function liquidacionPdfBase64({me, periodo, gastos, clients}){
       if(y>700){ doc.addPage(); y=60 }
       doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(61,61,61)
       doc.text(fmtFechaDMY(e.date), 40, y)
-      doc.text(String(e.concept||'—').slice(0,42), 130, y)
+      doc.text((String(e.concept||'—')+(e.ot_number?` · ${e.ot_number}`:'')).slice(0,52), 130, y)
       doc.setFontSize(8.5); doc.setTextColor(83,114,129)
       doc.text(String(e.category||'Otro').slice(0,20), 130, y+11)
       doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(226,75,74)
