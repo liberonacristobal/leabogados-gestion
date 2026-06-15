@@ -7664,24 +7664,23 @@ function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
     return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:700">Rendición de gastos</div><div style="font-size:11px;opacity:.85;margin-top:2px">${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#E24B4A">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
   }
   const cuerpoCorreo = () => {
-    const lineas = det.map(e=>`${fmtFechaDMY(e.date)} · ${RENDCAT(e.category)}${e.subcategory?': '+e.subcategory:''} · ${e.concept||'—'} · -${fmtN(e.amount)}`).join('; ')
-    const banco = debeCliente ? `
-
-Producto de esta rendición resulta un saldo a su cargo de ${fmtN(Math.abs(saldoCliente))}. Le agradeceremos efectuar la transferencia a la cuenta que indicamos a continuación, señalando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:
-
-  Titular: Liberona Escala Abogados Ltda.
-  RUT: 77.700.387-9
-  Banco: Banco BICE
-  Cuenta Corriente: 138392-2` : ''
+    const abs = fmtN(Math.abs(saldoCliente))
+    const cuentaLEA = `\n  Titular: Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Correo: administracion@leabogados.cl`
+    const terminado = client?.status==='Terminado'
+    // Cierre según el saldo del fondo (fuente única rendicionSaldo): falta fondos / a favor + terminado / a favor + más proyectos.
+    let cierre = ''
+    if(saldoCliente < 0){
+      cierre = `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}. Le agradeceremos transferir ese monto, indicando su nombre en el comentario y enviando el comprobante a administracion@leabogados.cl:${cuentaLEA}`
+    } else if(saldoCliente > 0 && terminado){
+      cierre = `\n\nQueda un saldo a su favor de ${abs}. Habiendo concluido la gestión encomendada, le agradeceremos indicarnos sus datos de cuenta corriente a administracion@leabogados.cl para reintegrárselo.`
+    } else if(saldoCliente > 0){
+      cierre = `\n\nQueda un saldo a su favor de ${abs}, que dejamos disponible para los próximos trabajos en curso.`
+    }
     return `${saludoCli(client?.name)}:
 
-Esperando que se encuentre muy bien, le hacemos llegar la rendición de los gastos incurridos durante el período ${r.periodo||''}, en el marco de la gestión encomendada. En el documento adjunto encontrará el respaldo de cada desembolso.
+Adjuntamos la rendición de los gastos del período ${r.periodo||''}. En el documento adjunto encontrará el detalle de cada desembolso.${cierre}
 
-${lineas}
-
-Total rendido: -${fmtN(r.total)}${banco}
-
-Cualquier consulta, quedamos a su entera disposición.
+Quedamos atentos a cualquier consulta.
 
 Saludos cordiales,
 ${user?.name||''}
@@ -7741,7 +7740,6 @@ Liberona Escala Abogados`
 
 function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields}) {
   const [emailRend,setEmailRend] = useState(null)
-  const [estadoCuenta,setEstadoCuenta] = useState(false)
   const [ftab,setFtab] = useState('resumen')
   const ufState = useUF()
   const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || 40000
@@ -7780,7 +7778,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               {client.status==='Prospecto'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#FFF8E1',color:'#C77F18',fontWeight:600}}>Prospecto</span>}
             </div>
           </div>
-          <button onClick={()=>setEstadoCuenta(true)} title='Estado de cuenta (IA) para el cliente' style={{padding:'6px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><line x1='8' y1='13' x2='16' y2='13'/><line x1='8' y1='17' x2='13' y2='17'/></svg>Estado</button>
           <button onClick={()=>onEdit(client)} style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
         </div>
         <FichaTabs tab={ftab} setTab={setFtab} role="admin"/>
@@ -8023,7 +8020,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields}/>}
       {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
-      {estadoCuenta&&<Modal title={`Estado de cuenta · ${client.name}`} onClose={()=>setEstadoCuenta(false)}><EstadoCuentaModal client={client} expenses={expenses} billing={billing} user={user} onClose={()=>setEstadoCuenta(false)}/></Modal>}
     </div>
   )
 }
@@ -10262,65 +10258,6 @@ ${muestra}`
         <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={importando||validas.length===0} onClick={importar} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(importando||validas.length===0)?'default':'pointer',opacity:(importando||validas.length===0)?.6:1}}>{importando?'Importando…':`Importar ${validas.length}`}</button>
       </div>
-    </div>
-  )
-}
-
-// ─── ESTADO DE CUENTA DEL CLIENTE (transparencia): cifras determinísticas + narrativa IA (Opus) ──
-// Documento para COMPARTIR con el cliente. Distinto del reporte interno (ReportBuilder): este es por cliente,
-// en lenguaje claro. Los números salen de los helpers (rigor matemático); la IA solo redacta la prosa.
-function EstadoCuentaModal({client, expenses=[], billing=[], user, onClose}){
-  const [narr,setNarr] = useState(null)
-  const [gen,setGen] = useState(false)
-  const [copied,setCopied] = useState(false)
-  const evs = (expenses||[]).filter(e=>e.client_id===client.id)
-  const totFondos = evs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-  const gastos = evs.filter(e=>e.type!=='fondo')
-  const totGastos = gastos.reduce((a,e)=>a+(e.amount||0),0)
-  const saldo = totFondos-totGastos
-  const rendidos = gastos.filter(e=>e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
-  const pendRendir = totGastos-rendidos
-  const porCat = {}; gastos.forEach(e=>{ const k=RENDCAT?RENDCAT(e.category):(e.category||'Otro'); porCat[k]=(porCat[k]||0)+(e.amount||0) })
-  const catList = Object.entries(porCat).sort((a,b)=>b[1]-a[1])
-  const facts = (billing||[]).filter(b=>String(b.client_id)===String(client.id)&&b.billing_type!=='reembolso'&&!b.deleted_at)
-  const pend = facts.filter(b=>['Pendiente','Vencido'].includes(b.status))
-  const totPend = pend.reduce((a,b)=>a+(b.amount||0),0)
-  const vencido = facts.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
-  const generar = async()=>{
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-    if(!apiKey){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
-    setGen(true)
-    const datos = { cliente:client.name, fondos_recibidos:totFondos, gastos_totales:totGastos, gastos_por_concepto:porCat, saldo, pendiente_de_rendir:pendRendir, facturas_por_pagar:totPend, de_eso_vencido:vencido }
-    const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un ESTADO DE CUENTA claro, transparente y cordial para enviar al CLIENTE "${client.name}", en español de Chile (formal pero cercano). SALUDO: si "${client.name}" es una PERSONA, salúdala como "Estimado/a [su primer nombre]" usando SOLO el nombre de pila — nunca "señor/señora" ni el apellido; si es una empresa, usa "Estimados". SOLO prosa (sin markdown, sin tablas, sin viñetas). Lenguaje simple, nada de jerga contable. Explica: cuánto fondo nos entregó, en qué se gastó (agrupado por concepto), cuánto queda de saldo y qué significa (si es a favor del cliente o si el cliente nos debe), y si hay facturas pendientes o vencidas por pagar. Breve (2-3 párrafos). Honesto y fácil de entender. Montos en pesos chilenos. Datos:\n${JSON.stringify(datos,null,2)}`
-    try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{ method:'POST', headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}, body:JSON.stringify({model:'claude-opus-4-8',max_tokens:1200,messages:[{role:'user',content:prompt}]}) })
-      const data = await resp.json()
-      const txt = data.content?.[0]?.text || ''
-      if(!txt) throw new Error('Respuesta vacía')
-      setNarr(txt); logEvent('estado_cuenta','generar',{client_id:client.id},user?.name)
-    }catch(e){ alert('Error al generar con IA: '+(e?.message||e)) }
-    setGen(false)
-  }
-  const copiar = ()=>{ const t=narr||''; if(!t) return; try{ navigator.clipboard.writeText(t); setCopied(true); setTimeout(()=>setCopied(false),2000) }catch(e){} }
-  const row = (l,v,col)=>(<div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'6px 0',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:12,color:C.muted}}>{l}</span><b style={{fontSize:13,fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</b></div>)
-  return (
-    <div style={{maxWidth:540}}>
-      <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:12}}>
-        {row('Fondos recibidos',totFondos,C.greenText)}
-        {row('Gastos realizados',totGastos,C.text)}
-        {catList.length>0&&<div style={{padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>{catList.map(([k,v])=>(<div key={k} style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#99ABB4',padding:'2px 0 2px 10px'}}><span>{k}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</span></div>))}</div>}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'9px 0 2px'}}><span style={{fontSize:12,fontWeight:700,color:C.text}}>Saldo {saldo<0?'(el cliente debe)':'(a favor del cliente)'}</span><b style={{fontSize:16,fontWeight:700,color:saldo<0?C.overdue:C.greenText}}>{saldo<0?'−':''}{fmt(Math.abs(saldo))}</b></div>
-        {pendRendir>0&&<div style={{fontSize:10,color:C.soon,marginTop:2}}>Hay {fmt(pendRendir)} en gastos aún sin rendir al cliente.</div>}
-        {totPend>0&&<div style={{fontSize:10,color:vencido>0?C.overdue:C.muted,marginTop:4}}>Facturas por pagar: {fmt(totPend)}{vencido>0?` (de eso, ${fmt(vencido)} vencido)`:''}.</div>}
-      </div>
-      <button onClick={generar} disabled={gen} style={{...chipBtn('primary'),height:34,padding:'0 16px',opacity:gen?.6:1}}>{gen?'Generando…':narr?'Regenerar con IA':'Generar estado de cuenta (IA)'}</button>
-      {narr&&(
-        <div style={{marginTop:12}}>
-          <div style={{whiteSpace:'pre-wrap',fontSize:13,lineHeight:1.55,color:C.text,background:'#F5F7F9',borderRadius:10,padding:'12px 14px'}}>{narr}</div>
-          <button onClick={copiar} style={{...chipBtn('soft'),marginTop:8}}>{copied?'Copiado ✓':'Copiar texto'}</button>
-        </div>
-      )}
-      <div style={{fontSize:10,color:'#99ABB4',marginTop:12,lineHeight:1.4}}>Las cifras salen de los movimientos registrados (auditable). La IA solo redacta el texto; revísalo antes de enviarlo.</div>
     </div>
   )
 }
