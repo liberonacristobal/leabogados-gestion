@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Notaría: Subconcepto y OT en carga masiva
+- La carga masiva acepta **Subconcepto** (detalle que distingue gastos con igual concepto) y **OT** (N° de orden notarial, OT-XXXX). Ambos entran al **dedup** → ya no se marcan como duplicados gastos con el mismo concepto pero distinto subconcepto/OT. La **IA** usa subconcepto/OT/notas para **asignar el cliente** y **compone la glosa** (Concepto + Subconcepto). El **OT se guarda** y aparece en el **detalle de la rendición** al cliente. Plantilla actualizada. (Requiere columnas `expenses.subconcept` y `expenses.ot_number`.)
+
 ## 2026-06-15 — Color único por persona
 - Cada integrante tiene un **color fijo** usado igual en toda la app (pills y avatares): Cristóbal azul profundo, Erasmo azul, Martín verde, Martina rosa, Rodrigo ámbar. Fuente única (`PERSON_CHIP`); se unificaron los dos mapas que antes no coincidían.
 
