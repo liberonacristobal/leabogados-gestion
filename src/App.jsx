@@ -10907,6 +10907,21 @@ function PapeleraModal({clients=[],onClose,onChanged}){
 // (dominio conocido → directo; ambiguos → IA Opus) y propone agregarlos a la ficha. Compuerta humana.
 // Privacidad: a la IA solo van encabezados (De/Para/CC/Asunto) y dominio, nunca el cuerpo.
 const ME_DOMAIN = 'leabogados.cl'
+// Buscador de cliente (escribe para filtrar) — para asignar contactos sin cliente claro.
+function ClientePicker({clients=[], onPick}){
+  const [q,setQ]=useState(''); const [open,setOpen]=useState(false)
+  const matches = q.trim()? clients.filter(c=>String(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,8):[]
+  return (
+    <div style={{position:'relative',marginTop:4}}>
+      <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder='Buscar cliente…' style={{width:'100%',maxWidth:240,height:32,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:12,color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}}/>
+      {open&&matches.length>0&&(
+        <div style={{position:'absolute',top:'100%',left:0,width:240,maxWidth:'100%',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:60,marginTop:3,maxHeight:200,overflowY:'auto'}}>
+          {matches.map(c=>(<div key={c.id} onMouseDown={()=>{onPick(c.id);setQ('');setOpen(false)}} style={{padding:'8px 11px',fontSize:12,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{c.name}</div>))}
+        </div>
+      )}
+    </div>
+  )
+}
 function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const [phase,setPhase] = useState('idle')        // idle|scanning|review|error
   const [prog,setProg] = useState({done:0,total:0,label:''})
@@ -11012,7 +11027,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
         <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||a.email.split('@')[0]}</div>
         <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.email}{a.cargo?<span style={{color:'#99ABB4'}}> · {a.cargo}{a.byIA?' (IA)':''}</span>:''}</div>
         <div style={{fontSize:10,color:'#99ABB4'}}>{a.count} correo{a.count!==1?'s':''}{a.last?` · último ${fmtFechaDMY(a.last)}`:''}</div>
-        {asignable&&<select value={a.client_id||''} onChange={e=>reasignar(a.email,e.target.value||null)} style={selCli}><option value=''>Asignar a cliente…</option>{clientesOrden.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+        {asignable&&<ClientePicker clients={clientesOrden} onPick={cid=>agregar(a,cid)}/>}
       </div>
       <div style={{display:'flex',gap:6,flexShrink:0}}>
         {a.client_id&&<button disabled={busyE===a.email} onClick={()=>agregar(a)} style={{...chipBtn('primary'),opacity:busyE===a.email?.6:1}}>Agregar</button>}
@@ -11024,10 +11039,31 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   return (
     <div style={{maxWidth:600}}>
       {phase==='idle'&&(
-        <div style={{padding:'4px 2px'}}>
-          <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Reviso tu Gmail corporativo y propongo <b style={{color:C.text}}>contactos de clientes</b> (nombre + correo + cargo tentativo). Tú apruebas cuáles se agregan a la ficha. A la IA solo le envío <b style={{color:C.text}}>encabezados</b> (De/Para/CC/Asunto), nunca el cuerpo.</div>
-          <button onClick={()=>escanear('global')} style={{width:'100%',height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:8}}>Revisión global (últimos 12 meses)</button>
-          {lastScan&&<button onClick={()=>escanear('nuevos')} style={{width:'100%',height:40,borderRadius:10,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Revisar solo nuevos (desde {lastScan})</button>}
+        <div style={{padding:'2px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+            <div style={{width:44,height:44,borderRadius:12,background:C.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
+            </div>
+            <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:700,color:C.accent}}>Contactos desde Gmail</div><div style={{fontSize:11,color:C.muted}}>Encuentra con quién te relacionas en cada cliente</div></div>
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            {[['12','meses','#F5F7F9',C.accent],['~600','correos','#F5F7F9',C.accent],['IA','asocia','#E1F5EE',C.greenText]].map(([v,l,bg,col],i)=>(
+              <div key={i} style={{flex:1,background:bg,borderRadius:10,padding:'9px 8px',textAlign:'center'}}><div style={{fontSize:18,fontWeight:700,color:col,lineHeight:1.1}}>{v}</div><div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:2}}>{l}</div></div>
+            ))}
+          </div>
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+            <div style={{fontSize:9,fontWeight:700,color:'#99ABB4',letterSpacing:.3,padding:'6px 12px',background:'#FAFBFC'}}>ASÍ SE VERÁ CADA CONTACTO</div>
+            <div style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:`1px solid #F1F3F5`}}>
+              <div style={{width:30,height:30,borderRadius:'50%',background:'#E6EEF1',color:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>AF</div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Agustín Ferrada</div><div style={{fontSize:10,color:C.muted}}>agustin@cavor.cl · Gerente (IA)</div></div>
+              <span style={{fontSize:10,fontWeight:700,color:C.accent,background:'#E6EEF1',padding:'3px 9px',borderRadius:20}}>Agregar</span>
+            </div>
+          </div>
+          <button onClick={()=>escanear('global')} style={{width:'100%',height:46,borderRadius:11,border:'none',background:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:9}}>Revisión global · últimos 12 meses</button>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+            <span style={{fontSize:10,color:'#99ABB4',display:'flex',alignItems:'center',gap:5}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.normal} strokeWidth='2.4'><path d='M20 6L9 17l-5-5'/></svg>Solo encabezados a la IA · nunca el cuerpo</span>
+            {lastScan&&<button onClick={()=>escanear('nuevos')} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Solo nuevos · desde {lastScan}</button>}
+          </div>
         </div>
       )}
       {phase==='scanning'&&(
@@ -11046,9 +11082,9 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
       )}
       {phase==='review'&&(
         <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-            <div style={{fontSize:12,color:C.muted}}><b style={{color:C.text}}>{visibles.length}</b> contacto{visibles.length!==1?'s':''} nuevo{visibles.length!==1?'s':''}{conCliente.length>0&&` · ${conCliente.length} con cliente`}</div>
-            {conCliente.length>0&&<button onClick={()=>agregarSeguros(conCliente.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer'}}>Agregar todos los seguros</button>}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:12,background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
+            <div style={{fontSize:12,color:C.muted}}><b style={{color:C.text,fontSize:15}}>{visibles.length}</b> nuevo{visibles.length!==1?'s':''}{conCliente.length>0&&<span> · <b style={{color:C.accent}}>{conCliente.length}</b> con cliente</span>}{sinCliente.length>0&&<span> · <b style={{color:'#854F0B'}}>{sinCliente.length}</b> por asignar</span>}</div>
+            {conCliente.length>0&&<button onClick={()=>agregarSeguros(conCliente.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 12px',cursor:'pointer',whiteSpace:'nowrap'}}>Agregar seguros</button>}
           </div>
           {visibles.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'26px 0'}}>Sin contactos nuevos por revisar.</div>}
           {Object.keys(grupos).map(cid=>(
