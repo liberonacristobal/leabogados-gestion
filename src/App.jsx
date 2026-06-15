@@ -231,7 +231,7 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
   // Saldo disponible = fondos recibidos − rendido en tandas anteriores − esta rendición.
   const saldo = totFondos - rendidoAntes - totGastos
   const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg=MUTED; if(c.includes('notar')){bg='#E6F1FB';fg=A} else if(c.includes('transp')){bg='#E1F5EE';fg=C.greenText} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${RENDCAT(cat)}</span>` }
-  const filasGastos = gastos.map(e=>`<tr><td style='white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'—'}${e.respaldo?` <span style='font-size:8px;font-weight:700;color:#0F6E56;background:#E1F5EE;padding:1px 5px;border-radius:4px;white-space:nowrap'>✓ respaldo</span>`:''}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600;white-space:nowrap'>${fmtN(e.amount)}</td></tr>`).join('')
+  const filasGastos = gastos.map(e=>`<tr><td style='white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'—'}${e.ot_number?` <span style='font-size:8px;font-weight:700;color:#185FA5;white-space:nowrap'>${String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>`:''}${e.respaldo?` <span style='font-size:8px;font-weight:700;color:#0F6E56;background:#E1F5EE;padding:1px 5px;border-radius:4px;white-space:nowrap'>✓ respaldo</span>`:''}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600;white-space:nowrap'>${fmtN(e.amount)}</td></tr>`).join('')
   const conRespaldoN = gastos.filter(e=>e.respaldo).length
   const filasFondos = fondos.length ? fondos.map(e=>`<tr><td style='width:90px;white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'Fondo recibido'}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>Sin fondos registrados</td></tr>`
   let saldoBox=''
@@ -6285,12 +6285,15 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
         {header:'Nombre',key:'nombre',width:28},
         {header:'Fecha',key:'fecha',width:13},
         {header:'Monto',key:'monto',width:13},
-        {header:'Concepto',key:'concepto',width:32},
+        {header:'Concepto',key:'concepto',width:28},
+        {header:'Subconcepto',key:'subconcepto',width:32},
+        {header:'OT',key:'ot',width:12},
         {header:'Categoría',key:'categoria',width:16},
       ]
       g.addRow({rut:'76.123.456-7',nombre:'Inmobiliaria Andes SpA',fecha:new Date(2026,5,3),monto:45000,concepto:'Inscripción en Conservador de Bienes Raíces',categoria:'CBR'})
       g.addRow({rut:'12.345.678-9',nombre:'Juan Pérez Soto',fecha:new Date(2026,5,5),monto:18000,concepto:'Transporte a notaría',categoria:'Otro'})
-      g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura notarial',categoria:'Notaria'})
+      g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura pública',subconcepto:'Compraventa lote 4, Chicureo',ot:'OT-1284',categoria:'Notaria'})
+      g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura pública',subconcepto:'Constitución de sociedad',ot:'OT-1290',categoria:'Notaria'})
       g.getColumn('fecha').numFmt='dd-mm-yyyy'
       g.getColumn('monto').numFmt='#,##0'
       estilarHeader(g)
@@ -6322,7 +6325,7 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
         ['INSTRUCCIONES — CARGA MASIVA DE GASTOS Y FONDOS',true],
         ['',false],
         ['Columnas obligatorias: RUT (o Nombre) y Monto. Recomendado incluir Fecha.',false],
-        ['Columnas opcionales: Concepto y, solo en Gastos, Categoría (si no se indica, se usa "Otro").',false],
+        ['Columnas opcionales: Concepto, Subconcepto (detalle que distingue gastos con igual concepto, ej. notaría), OT (N° de orden de la notaría, ej. OT-1284) y, solo en Gastos, Categoría (si no se indica, se usa "Otro").',false],
         ['',false],
         ['Formato de RUT: con o sin puntos y guión. Ejemplos válidos: 76.123.456-7, 761234567, 76123456-7.',false],
         ['Formato de fecha: dd-mm-yyyy, dd/mm/yyyy o yyyy-mm-dd. Ejemplos: 03-06-2026, 03/06/2026, 2026-06-03. Si se omite, se usa la fecha de carga.',false],
@@ -6335,9 +6338,9 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
         ['',false],
         ['Monto: número mayor a 0, sin decimales. Las filas con monto menor o igual a 0 (incluidos negativos) se marcan como ERROR (rojo) y NO se cargan.',false],
         ['',false],
-        ['Duplicados: el sistema NO deduplica. Si subes el mismo archivo dos veces, los movimientos se cargan dos veces. La vista previa avisa si detecta filas duplicadas (mismo RUT, fecha, monto y concepto), pero igual puedes cargarlas.',false],
+        ['Duplicados: la vista previa avisa si detecta filas duplicadas (mismo RUT, fecha, monto, concepto, subconcepto y OT). Si dos gastos tienen el mismo concepto pero distinto subconcepto u OT, NO se marcan como duplicados.',false],
         ['',false],
-        ['Hoja "Gastos": RUT | Nombre | Fecha | Monto | Concepto | Categoría.',false],
+        ['Hoja "Gastos": RUT | Nombre | Fecha | Monto | Concepto | Subconcepto | OT | Categoría. Subconcepto y OT distinguen gastos de notaría con el mismo concepto (evitan falsos duplicados) y el OT aparece en la rendición al cliente.',false],
         ['Hoja "Fondos": RUT | Nombre | Fecha | Monto | Concepto.',false],
         ['Al cargar en la app eliges si subes Gastos o Fondos; se lee la hoja correspondiente.',false],
       ]
@@ -6405,7 +6408,7 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
     if(!apiKey) return []
     const clientesDB = clients.map(c=>`- ID: ${c.id} | Nombre: "${c.name}" | RUT: ${c.rut||'-'} | RS: "${c.razon_social||''}"`).join('\n')
-    const lista = batch.map((r,i)=>`${i+1}. "${r.nombre||r.rut||''}" | concepto: "${r.concepto||''}"`).join('\n')
+    const lista = batch.map((r,i)=>`${i+1}. "${r.nombre||r.rut||''}" | concepto: "${r.concepto||''}"${r.subconcepto?` | subconcepto: "${r.subconcepto}"`:''}${r.ot?` | OT: "${r.ot}"`:''}${r.notas?` | notas: "${r.notas}"`:''}`).join('\n')
     const prompt = `Eres un asistente experto para una firma de abogados chilena. Debes hacer match entre nombres de una planilla histórica y clientes del sistema. Los nombres pueden estar abreviados, sin sufijos legales, con errores de tipeo o con distintas capitalizaciones.
 
 CLIENTES REGISTRADOS EN EL SISTEMA:
@@ -6414,9 +6417,9 @@ ${clientesDB}
 NOMBRES A RESOLVER (con su concepto):
 ${lista}
 
-El campo cliente de la planilla puede contener indistintamente: el nombre del cliente, la razón social, una mezcla o abreviación, solo apellido o nombre parcial, o el nombre de fantasía/proyecto. Compara contra AMBOS campos (nombre Y razón social) de cada cliente. "Oficina", "Liberona Escala", "interno" → gasto interno de la firma (sin cliente externo, is_internal=true).
+El campo cliente de la planilla puede contener indistintamente: el nombre del cliente, la razón social, una mezcla o abreviación, solo apellido o nombre parcial, o el nombre de fantasía/proyecto. Compara contra AMBOS campos (nombre Y razón social) de cada cliente. La notaría envía datos desordenados: USA TAMBIÉN el subconcepto, el OT y las notas como pistas para identificar al cliente (suelen mencionar el proyecto, la operación o el nombre del cliente). "Oficina", "Liberona Escala", "interno" → gasto interno de la firma (sin cliente externo, is_internal=true).
 
-TAREA 2 — corrige el concepto de cada fila: ortografía y tildes ("inscripcion"→"Inscripción", "notaria"→"Notaría"), capitalización, y expande abreviaciones legales chilenas ("EP"→"Escritura Pública", "CV"→"Compraventa", "CCV"→"Copia con Vigencia", "GP"→"Gravámenes y Prohibiciones", "D.O."→"Diario Oficial", "+K"→"Empresa en un Día", "CBRS"→"CBR Santiago"). Mantén el significado; si ya está correcto, devuelve el mismo texto.
+TAREA 2 — compón la GLOSA del gasto en "concepto_corregido": combina el concepto con el subconcepto en una sola frase clara y legible para el cliente (ej. concepto "Escritura pública" + subconcepto "compraventa lote 4 chicureo" → "Escritura pública — Compraventa lote 4, Chicureo"). Corrige ortografía/tildes/capitalización y expande abreviaciones legales chilenas ("EP"→"Escritura Pública", "CV"→"Compraventa", "CCV"→"Copia con Vigencia", "GP"→"Gravámenes y Prohibiciones", "D.O."→"Diario Oficial", "+K"→"Empresa en un Día", "CBRS"→"CBR Santiago"). NO incluyas el OT en la glosa (va aparte). Si no hay subconcepto, solo corrige el concepto.
 
 Responde SOLO con un array JSON sin markdown ni texto adicional:
 [{"index":1,"raw_nombre":"...","client_id":"uuid o null","client_nombre":"... o null","confidence":0-100,"reason":"breve","is_internal":true/false,"concepto_corregido":"..."}]`
@@ -6513,6 +6516,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     fecha:     ['fecha','fecha gasto','date'],
     concepto:  ['concepto','actividad','descripción','descripcion','detalle','glosa','detail'],
     detalle:   ['detalle proveedor','detalle prov','proveedor detalle'],
+    subconcepto:['subconcepto','sub concepto','sub-concepto','subconc','detalle adicional','sub detalle','subglosa','sub glosa'],
+    ot:        ['ot','o.t.','orden','orden de trabajo','n° ot','nro ot','ot n°','numero ot','número ot','n ot'],
     categoria: ['categoría','categoria','tipo','proveedor','category'],
     monto:     ['monto','importe','valor','amount','total'],
     notas:     ['notas','nota','observaciones','observación','observacion','comments'],
@@ -6551,6 +6556,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const cBase = String(getField('concepto')||'').trim()
         const cDet  = String(getField('detalle')||'').trim()
         const concepto = cBase&&cDet ? `${cBase} — ${cDet}` : (cBase||cDet)
+        const subconcepto = String(getField('subconcepto')||'').trim()   // detalle que distingue gastos con igual concepto (notaría)
+        const ot = String(getField('ot')||'').trim()                     // N° de orden de la notaría (OT-XXXX)
         const notas = String(getField('notas')||'').trim()
         const proyecto = String(getField('proyecto')||'').trim()
         const fecha = parseFecha(getField('fecha'))
@@ -6565,7 +6572,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        return {id:idx, rut, nombre, fecha, monto, concepto, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: cli?method:undefined, confidence: cli?(method==='name_exact'?95:100):undefined, error, dup:false}
+        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: cli?method:undefined, confidence: cli?(method==='name_exact'?95:100):undefined, error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
       let parsed = []
@@ -6592,7 +6599,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       }
       if(parsed.length===0){ alert('No se encontraron filas. Revisa que el Excel tenga una columna de Cliente (o RUT) y otra de Monto. Puedes descargar la plantilla modelo como referencia.'); setRows(null); setCargando(false); return }
       // Detección de duplicados dentro del archivo (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
-      const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}`
+      const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}|${(r.subconcepto||'').trim().toLowerCase()}|${(r.ot||'').trim().toLowerCase()}`
       const counts={}
       parsed.forEach(r=>{ const k=keyOf(r); counts[k]=(counts[k]||0)+1 })
       parsed.forEach(r=>{ if(counts[keyOf(r)]>1) r.dup=true })
@@ -6761,6 +6768,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                     <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:badge[2],background:badge[1],borderRadius:4,padding:'2px 7px',flexShrink:0,whiteSpace:'nowrap'}}>{badge[0]}</span>
                     <span style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.fecha||'sin fecha'} · {r.rut||r.nombre||'sin RUT'}</span>
+                    {r.ot&&<span style={{fontSize:9,fontWeight:600,color:'#185FA5',background:'#E6F1FB',borderRadius:4,padding:'1px 6px',flexShrink:0}}>{String(r.ot).toUpperCase().startsWith('OT')?r.ot:'OT-'+r.ot}</span>}
                     {r.dup&&<span style={{fontSize:9,fontWeight:600,color:'#C77F18',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:4,padding:'1px 6px',flexShrink:0}}>Duplicada</span>}
                     <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:bad?C.overdue:C.text,flexShrink:0}}>{bad?'$0':fmt(r.monto)}</span>
                   </div>
@@ -6777,6 +6785,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                       </select>
                     )}
                   </div>
+                  {r.subconcepto&&<input value={r.subconcepto} onChange={e=>editarCampo(r.id,'subconcepto',e.target.value)} placeholder='Subconcepto' style={{width:'100%',marginTop:6,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.muted,outline:'none',boxSizing:'border-box'}}/>}
                   {/* resolución de cliente según estado */}
                   <div style={{marginTop:7}}>
                     {bucket==='auto'&&!r.isInternal&&(
@@ -12362,15 +12371,19 @@ export default function App() {
   // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
   // Devuelve resumen. Cada gasto queda marcado con bulk_import_id para poder deshacer (commit 5).
   const handleBulkImport=useCallback(async(filas,{tipo,filename})=>{
-    const keyOf = e => `${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}`
+    const keyOf = e => `${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}|${(e.subconcept||'').trim().toLowerCase()}|${(e.ot_number||'').trim().toLowerCase()}`
     const vistos = new Set((expenses||[]).map(keyOf))
     const batchId = crypto.randomUUID()
     let dupOmit=0, sinCliente=0, sinFecha=0
     const payloads=[]
     for(const r of filas){
+      // Glosa final = concepto compuesto con subconcepto (si la IA no lo compuso ya); subconcepto y OT se guardan aparte.
+      const _sub=(r.subconcepto||'').trim(), _base=(r.concepto||'').trim()
+      // Si la IA ya compuso la glosa (conceptoFix), se usa tal cual; si no, se concatena el subconcepto.
+      const _concept=(!r.conceptoFix && _sub && !_base.toLowerCase().includes(_sub.toLowerCase()))?`${_base} — ${_sub}`:_base
       const row = {
         type:tipo, client_id:r.client_id||null, entity_id:r.entity_id||null,
-        amount:r.monto||0, concept:r.concepto||'', notas:r.notas||null,
+        amount:r.monto||0, concept:_concept, subconcept:_sub||null, ot_number:(r.ot||'').trim()||null, notas:r.notas||null,
         category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
         date:r.fecha||null, project:r.proyecto||null, sale_id:null,
         paid_by_client: tipo!=='fondo'&&r.categoria==='Notaria',
