@@ -5701,7 +5701,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
           </div>
           {proyectosDisp.length>0
             ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={inpS}><option value=''>Todos los proyectos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p} ({proyConteo[p]})</option>)}</select>
-            : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Sin gastos por rendir en esta RS' style={inpS} disabled/>}
+            : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Escribe el proyecto (opcional)' style={inpS}/>}
+          {proyectosDisp.length===0 && <div style={{fontSize:10,color:'#C77F18',marginTop:3}}>Esta razón social no tiene gastos por rendir. Cambia de razón social o ingresa gastos primero.</div>}
           <div style={{marginTop:8}}>
             <div style={{...lblS,marginBottom:4}}>Subproyecto <span style={{textTransform:'none',fontWeight:400,color:'#99ABB4'}}>(opcional)</span></div>
             <input value={subproyecto} onChange={e=>setSubproyecto(e.target.value)} placeholder='—' style={{...inpS,borderColor:C.border}}/>
@@ -7757,6 +7758,18 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     const rows = det.map(e=>`<tr><td style="padding:5px 8px;border-bottom:1px solid ${A4};white-space:nowrap">${fmtFechaDMY(e.date)}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${RENDCAT(e.category)}${e.subcategory?': '+e.subcategory:''}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4}">${e.concept||'—'}</td><td style="padding:5px 8px;border-bottom:1px solid ${A4};text-align:right;color:#E24B4A;white-space:nowrap">-${fmtN(e.amount)}</td></tr>`).join('')
     return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:13px"><div style="background:${A};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:700">Rendición de gastos</div><div style="font-size:11px;opacity:.85;margin-top:2px">${client?.name||''} · ${r.periodo}</div></div><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:28px;display:block"/></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><thead><tr style="background:${A4}"><th style="text-align:left;padding:6px 8px">Fecha</th><th style="text-align:left;padding:6px 8px">Categoría</th><th style="text-align:left;padding:6px 8px">Descripción</th><th style="text-align:right;padding:6px 8px">Monto</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700"><td colspan="3" style="padding:8px;border-top:2px solid ${A2}">TOTAL RENDIDO</td><td style="padding:8px;border-top:2px solid ${A2};text-align:right;color:#E24B4A">-${fmtN(r.total)}</td></tr></tfoot></table><div style="margin-top:14px;font-size:12px">Atentamente,<br/><strong>${user?.name||''}</strong><br/>Liberona Escala Abogados</div></div>`
   }
+  // Envuelve el texto del correo (lo que el usuario ve/edita) en HTML con la marca del estudio,
+  // para que no llegue plano. Las líneas indentadas (datos de cuenta) se muestran en una caja.
+  const buildEmailHtml = (text) => {
+    const A='#003C50', A4='#E4E8EB', MUTED='#537281', BG='#F7F9FA'
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const lines = String(text).split('\n')
+    let out='', box=[]
+    const flush=()=>{ if(box.length){ out+=`<div style="background:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.indexOf(':'); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+1).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
+    lines.forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()? `<p style="margin:0 0 10px">${esc(l)}</p>` : '' } })
+    flush()
+    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><div style="background:${A};padding:18px 24px;border-radius:8px 8px 0 0"><table width="100%"><tr><td style="vertical-align:middle"><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''}</td></tr></table></div><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}</div><div style="padding:12px 24px;border:1px solid ${A4};border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:${MUTED};text-align:center">Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</div></div>`
+  }
   const cuerpoCorreo = () => {
     const abs = fmtN(Math.abs(saldoCliente))
     const cuentaLEA = `\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Comprobante a: administracion@leabogados.cl`
@@ -7815,7 +7828,7 @@ Liberona Escala Abogados`
       if(token){
         try{
           const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
-          await sendGmailWithPdf(token, {to:para.trim(), subject:asunto, bodyText:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
+          await sendGmailWithPdf(token, {to:para.trim(), subject:asunto, bodyText:texto, bodyHtml:buildEmailHtml(texto), pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(_){ /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
@@ -7862,7 +7875,7 @@ Liberona Escala Abogados`
       </div>
       <textarea value={body} onChange={e=>setBody(e.target.value)} rows={8} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:6}}/>
       <div style={{fontSize:10,color:'#99ABB4',marginBottom:12}}>Las cifras y los datos de cuenta van fijos; la IA solo redacta. Revisa antes de enviar.</div>
-      <details style={{marginBottom:14}}><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Ver resumen del PDF adjunto</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:10,maxHeight:220,overflowY:'auto',marginTop:8}} dangerouslySetInnerHTML={{__html:buildHTML()}}/></details>
+      <details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body)}}/></details>
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button onClick={verPDF} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
@@ -8687,13 +8700,23 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
   return doc.output('datauristring').split(',')[1]
 }
 // Construye el MIME multipart y lo envía con la API de Gmail
-async function sendGmailWithPdf(token, {to, subject, bodyText, pdfBase64, pdfName}){
+async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase64, pdfName}){
   const b64 = s => btoa(unescape(encodeURIComponent(s)))
   const boundary = 'lea_'+Date.now()
+  const alt = 'alt_'+Date.now()
+  // multipart/mixed → [ multipart/alternative → (text/plain, text/html) , application/pdf ]
+  const cuerpo = bodyHtml ? [
+    `--${boundary}`, `Content-Type: multipart/alternative; boundary="${alt}"`, '',
+    `--${alt}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), '',
+    `--${alt}`, 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyHtml), '',
+    `--${alt}--`, ''
+  ] : [
+    `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), ''
+  ]
   const mime = [
     `To: ${to}`, `Subject: =?UTF-8?B?${b64(subject)}?=`, 'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
-    `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), '',
+    ...cuerpo,
     `--${boundary}`, `Content-Type: application/pdf; name="${pdfName}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${pdfName}"`, '', pdfBase64, '',
     `--${boundary}--`
   ].join('\r\n')
