@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Caja chica: asistente IA de liquidación
+- Botón **"Asistente IA"** en PENDIENTES. Revisa tus gastos sin liquidar y los separa en **Listos** (sin problemas) y **A revisar**. Detección **determinista** (sin cliente, sin categoría, posible duplicado por mismo monto+fecha+glosa parecida). La **IA solo sugiere** cliente/categoría faltantes; cada sugerencia que aceptas se guarda (glosa→cliente, glosa→categoría) y no vuelve a preguntar (✦ = aprendido). "Seleccionar listos" deja la selección hecha para liquidar. Nada se liquida solo.
+
 ## 2026-06-15 — Rendición: comprobantes de respaldo en el PDF
 - El PDF de rendición ahora marca cada gasto que tiene **comprobante de respaldo** (chip "✓ respaldo") y al pie indica "N de M con comprobante de respaldo (disponibles a solicitud)". Se lee de `expense_attachments`. Aplica en el modal de rendición, en "Ver PDF" del correo y en el historial.
 
