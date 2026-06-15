@@ -10353,7 +10353,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
   )
 }
 
-function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName,setTab}) {
+function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName,setTab,isAdmin}) {
   const [vistaCalendario,setVistaCalendario] = useState(false)
   const [semanaOffset,setSemanaOffset] = useState(0)
   const hoy = new Date()
@@ -10429,6 +10429,16 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const diasSinGasto = _ultGasto ? Math.floor((Date.now()-new Date(_ultGasto+'T12:00').getTime())/86400000) : null
   const nudgeCargar = tieneCaja && diasSinGasto!=null && diasSinGasto>=10
   const nudgeLiquidar = tieneCaja && miSaldo < 50000
+
+  // Sugerencias de tareas desde Gmail (no leídos) para el hero. Escaneo 1 vez por sesión (cacheado), solo admin.
+  const [sugTareas,setSugTareas] = useState(()=>{ try{ const c=sessionStorage.getItem('gmail_tareas_sug'); return c?JSON.parse(c):null }catch(_){ return null } })
+  const [sugBusy,setSugBusy] = useState(false)
+  const [sugOpen,setSugOpen] = useState(false)
+  const [sugDismiss,setSugDismiss] = useState(new Set())
+  useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','tarea_gmail_descartada').then(({data})=>setSugDismiss(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
+  useEffect(()=>{ if(!isAdmin||sugTareas!=null) return; let alive=true; setSugBusy(true); escanearTareasGmail(clients).then(items=>{ if(!alive)return; setSugTareas(items); try{sessionStorage.setItem('gmail_tareas_sug',JSON.stringify(items))}catch(_){}; setSugBusy(false) }).catch(()=>{ if(alive){ setSugTareas([]); setSugBusy(false) } }); return ()=>{alive=false} },[isAdmin])
+  const sugVisibles = (sugTareas||[]).filter(a=>!sugDismiss.has(a.id))
+  const descartarSug = a=>{ learnPut('tarea_gmail_descartada',a.id,'descartada',{}); setSugDismiss(p=>new Set([...p,a.id])) }
 
   // Agregar el vencimiento de una tarea al Google Calendar corporativo (Calendar API, evento de día completo).
   const agendarTarea = async(t)=>{
@@ -10542,6 +10552,27 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
             <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.border}`}}>
               <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.3,alignSelf:'center'}}>Asigné a</span>
               {asignadasPorPersona.map(([p,n])=>{ const pc=personChip(p); return <span key={p} style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 8px',fontWeight:600}}>{p} · {n}</span> })}
+            </div>
+          )}
+          {/* Tareas sugeridas desde Gmail (mismo formato grande); al tocar se despliegan y cada una abre el borrador */}
+          {isAdmin&&(sugBusy||sugVisibles.length>0)&&(
+            <div style={{marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.border}`}}>
+              <div onClick={()=>{ if(!sugBusy) setSugOpen(o=>!o) }} style={{display:'flex',alignItems:'baseline',gap:9,cursor:sugBusy?'default':'pointer'}}>
+                {sugBusy ? <span style={{fontSize:13,color:C.muted}}>Revisando tus correos…</span> : (<>
+                  <span style={{fontSize:34,fontWeight:600,color:C.accent,lineHeight:1}}>{sugVisibles.length}</span>
+                  <span style={{fontSize:15,fontWeight:500,color:C.text,flex:1}}>tarea{sugVisibles.length!==1?'s':''} sugerida{sugVisibles.length!==1?'s':''} <span style={{fontSize:11,color:C.muted,fontWeight:400}}>desde Gmail</span></span>
+                  <span style={{width:7,height:7,border:`solid ${C.muted}`,borderWidth:'0 1.5px 1.5px 0',display:'inline-block',transform:sugOpen?'rotate(-135deg)':'rotate(45deg)',transition:'transform .2s',marginBottom:sugOpen?-2:2}}/>
+                </>)}
+              </div>
+              {sugOpen&&sugVisibles.map(a=>(
+                <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,marginTop:8,padding:'8px 10px',background:'#F5F7F9',borderRadius:8}}>
+                  <div onClick={()=>onEdit&&onEdit({title:a.title,client_id:a.client_id,due:a.due,note:a.note})} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.title}</div>
+                    <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.fromName}{a.client_id?` · ${clients.find(c=>c.id===a.client_id)?.name||''}`:''}{a.due?` · vence ${fmtVenceShort(a.due)}`:''}</div>
+                  </div>
+                  <button onClick={()=>descartarSug(a)} title='Descartar' style={{background:'none',border:'none',color:'#99ABB4',cursor:'pointer',fontSize:16,lineHeight:1,padding:'0 2px',flexShrink:0}}>×</button>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -11532,8 +11563,51 @@ function ClientePicker({clients=[], onPick}){
     </div>
   )
 }
-// Escáner Gmail → tareas: lee correos NO LEÍDOS (asunto + vista previa), la IA detecta acciones pendientes
-// y propone tareas (cliente/plazo sugeridos). Compuerta humana: crear / editar / descartar. Solo encabezados+snippet a la IA.
+// Helper reutilizable (lo usan el modal "Tareas +Gmail" y el hero de Tareas): lee correos NO LEÍDOS
+// (asunto + snippet), la IA detecta acciones pendientes y devuelve sugerencias de tarea. Solo encabezados+snippet a la IA.
+async function escanearTareasGmail(clients=[], onProgress){
+  const token=await driveToken()
+  if(!token){ const e=new Error('Sin token de Google'); e.code=401; throw e }
+  const q=encodeURIComponent('is:unread -in:spam -in:trash')
+  const CAP=120; let ids=[], pageToken=''
+  while(ids.length<CAP){
+    const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100${pageToken?`&pageToken=${pageToken}`:''}`,{headers:{Authorization:'Bearer '+token}})
+    if(!r.ok){ const e=new Error('Gmail '+r.status); e.code=r.status; throw e }
+    const j=await r.json(); (j.messages||[]).forEach(m=>ids.push(m.id)); pageToken=j.nextPageToken; if(!pageToken) break
+  }
+  ids=ids.slice(0,CAP)
+  if(!ids.length) return []
+  const correos=[]; let done=0
+  const fetchMeta=async(id)=>{
+    try{
+      const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,{headers:{Authorization:'Bearer '+token}})
+      if(!r.ok) return; const j=await r.json()
+      const H={}; (j.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
+      const from=H['from']||''; const subj=H['subject']||''
+      const m=from.match(/<(.+?)>/); const email=(m?m[1]:from).trim().toLowerCase()
+      if(!email.includes('@')) return
+      if(/no-?reply|noreply|notif|mailer-daemon|newsletter|bounce|postmaster|@.*(facebook|linkedin|twitter|mailchimp)/.test(email)) return
+      correos.push({id, from:email, fromName:(from.replace(/<.+?>/,'').replace(/["']/g,'').trim())||email, subject:subj, snippet:(j.snippet||'')})
+    }catch(_){}
+    done++; if(onProgress&&done%10===0) onProgress(done,ids.length)
+  }
+  for(let i=0;i<ids.length;i+=8){ await Promise.all(ids.slice(i,i+8).map(fetchMeta)) }
+  const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
+  if(!apiKey || !correos.length) return []
+  const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
+  const hoyISO=new Date().toISOString().slice(0,10); const out=[]
+  for(let i=0;i<correos.length;i+=20){
+    const batch=correos.slice(i,i+20); if(onProgress) onProgress(correos.length===0?0:Math.min(correos.length,i),correos.length)
+    const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES. Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "client_id" (de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","client_id":"<id o null>","due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
+    try{
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
+      const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+      arr.forEach(o=>{ if(!o||!o.task) return; const c=batch.find(x=>x.id===o.id); if(!c) return; out.push({...c, title:o.title||c.subject, client_id:(o.client_id&&clients.some(cl=>String(cl.id)===String(o.client_id)))?o.client_id:null, due:(o.due&&/^\d{4}-\d{2}-\d{2}$/.test(o.due))?o.due:null, note:o.note||''}) })
+    }catch(_){}
+  }
+  return out
+}
+// Escáner Gmail → tareas (modal): usa el helper de arriba. Compuerta humana: crear / editar / descartar.
 function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
   const [phase,setPhase] = useState('idle')
   const [prog,setProg] = useState({done:0,total:0,label:''})
@@ -11547,57 +11621,13 @@ function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
   const fmtVence = iso => { if(!iso) return ''; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:iso }
   const dueCol = iso => { if(!iso) return {bg:'#E4E8EB',col:'#537281'}; const d=Math.round((new Date(iso+'T12:00')-new Date().setHours(0,0,0,0))/86400000); return d<=2?{bg:'#FCEBEB',col:'#A32D2D'}:{bg:'#FAEEDA',col:'#854F0B'} }
 
-  const sugerirIA = async(correos)=>{
-    const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
-    if(!apiKey || !correos.length){ setProps([]); return }
-    const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
-    const hoyISO=new Date().toISOString().slice(0,10); const out=[]
-    for(let i=0;i<correos.length;i+=20){
-      const batch=correos.slice(i,i+20); setProg({done:i,total:correos.length,label:'Detectando tareas con IA…'})
-      const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES. Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "client_id" (de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","client_id":"<id o null>","due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
-      try{
-        const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
-        const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
-        arr.forEach(o=>{ if(!o||!o.task) return; const c=batch.find(x=>x.id===o.id); if(!c) return; out.push({...c, title:o.title||c.subject, client_id:(o.client_id&&clients.some(cl=>String(cl.id)===String(o.client_id)))?o.client_id:null, due:(o.due&&/^\d{4}-\d{2}-\d{2}$/.test(o.due))?o.due:null, note:o.note||''}) })
-      }catch(_){}
-    }
-    setProps(out)
-  }
-
   const escanear = async()=>{
-    setErr(''); setPhase('scanning'); setProg({done:0,total:0,label:'Conectando…'})
+    setErr(''); setPhase('scanning'); setProg({done:0,total:0,label:'Buscando no leídos…'})
     try{
-      const token=await driveToken()
-      if(!token){ setErr('No hay token de Google con permiso de lectura. Cierra sesión y vuelve a entrar.'); setPhase('error'); return }
-      const q=encodeURIComponent('is:unread -in:spam -in:trash')
-      const CAP=120; let ids=[], pageToken=''
-      setProg({done:0,total:CAP,label:'Buscando no leídos…'})
-      while(ids.length<CAP){
-        const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100${pageToken?`&pageToken=${pageToken}`:''}`,{headers:{Authorization:'Bearer '+token}})
-        if(!r.ok){ if(r.status===401) throw new Error('Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.'); throw new Error('Gmail list '+r.status) }
-        const j=await r.json(); (j.messages||[]).forEach(m=>ids.push(m.id)); pageToken=j.nextPageToken; if(!pageToken) break
-      }
-      ids=ids.slice(0,CAP)
-      if(!ids.length){ setProps([]); setPhase('review'); return }
-      const correos=[]; let done=0
-      const fetchMeta=async(id)=>{
-        try{
-          const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,{headers:{Authorization:'Bearer '+token}})
-          if(!r.ok) return; const j=await r.json()
-          const H={}; (j.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
-          const from=H['from']||''; const subj=H['subject']||''
-          const m=from.match(/<(.+?)>/); const email=(m?m[1]:from).trim().toLowerCase()
-          if(!email.includes('@')) return
-          if(/no-?reply|noreply|notif|mailer-daemon|newsletter|bounce|postmaster|@.*(facebook|linkedin|twitter|mailchimp)/.test(email)) return
-          if(dismissed.has(id)) return
-          correos.push({id, from:email, fromName:(from.replace(/<.+?>/,'').replace(/["']/g,'').trim())||email, subject:subj, snippet:(j.snippet||'')})
-        }catch(_){}
-        done++; if(done%10===0) setProg({done,total:ids.length,label:'Leyendo asuntos…'})
-      }
-      for(let i=0;i<ids.length;i+=8){ await Promise.all(ids.slice(i,i+8).map(fetchMeta)) }
-      await sugerirIA(correos)
+      const items = await escanearTareasGmail(clients, (d,t)=>setProg({done:d,total:t,label:'Leyendo asuntos…'}))
+      setProps(items.filter(a=>!dismissed.has(a.id)))
       setPhase('review')
-    }catch(e){ setErr(e.message||String(e)); setPhase('error') }
+    }catch(e){ setErr(e.code===401?'Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.':(e.message||String(e))); setPhase('error') }
   }
 
   const crear = async(a)=>{ setBusy(a.id); try{ await onCrear({title:a.title, client_id:a.client_id, due:a.due, note:(a.note||'')+(a.note?' · ':'')+'(correo: '+(a.subject||'').slice(0,80)+')'}); setHechas(p=>new Set([...p,a.id])) }catch(e){ alert('No se pudo crear: '+e.message) } setBusy('') }
@@ -13013,7 +13043,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
-            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab}/>}
+            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
