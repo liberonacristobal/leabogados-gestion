@@ -8817,7 +8817,11 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
                   {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.name!==c.name||rs.multi)?<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rs.name}${rs.rut?` | ${rs.rut}`:''}`}</div>:null })()}
                 </div>
-                <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'2px 9px',borderRadius:20,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.normal:C.muted,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminado'}</button>
+                <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} title={ended?'Reactivar cliente':'Archivar (terminar) cliente'} style={{flexShrink:0,width:28,height:28,borderRadius:7,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>
+                  {ended
+                    ? <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>
+                    : <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}
+                </button>
               </div>
               <div style={{display:'flex',gap:12,fontSize:11,flexWrap:'wrap',alignItems:'center'}}>
                 {!ended&&<span style={{color:C.accent}}>{activeSales} ventas activas</span>}
