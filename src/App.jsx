@@ -10931,7 +10931,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const [busyE,setBusyE] = useState('')            // email en proceso
   const [err,setErr] = useState('')
   const [revTab,setRevTab] = useState('con')       // pestaña del panel: 'con' (con cliente) | 'sin' (por asignar)
-  const [revQ,setRevQ] = useState('')              // búsqueda dentro del panel
+  const [sinShow,setSinShow] = useState(50)        // cuántos "por asignar" mostrar (paginado incremental)
   const lastScan = (typeof localStorage!=='undefined' && localStorage.getItem('gmail_contactos_last'))||''
   const clientName = id => clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','contacto_descartado').then(({data})=>setDismissed(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
@@ -11079,14 +11079,18 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
           </div>
         </div>
       )}
-      {phase==='scanning'&&(
-        <div style={{padding:'30px 10px',textAlign:'center'}}>
-          <Spin/>
-          <div style={{fontSize:13,color:C.text,fontWeight:600,marginTop:12}}>{prog.label}</div>
-          {prog.total>0&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{prog.done} / {prog.total}</div>}
-          <div style={{height:6,background:'#F1F3F5',borderRadius:4,overflow:'hidden',marginTop:12,maxWidth:320,marginLeft:'auto',marginRight:'auto'}}><div style={{height:'100%',width:`${prog.total?Math.round(prog.done/prog.total*100):10}%`,background:C.accent,transition:'width .2s'}}/></div>
+      {phase==='scanning'&&(()=>{ const pct=prog.total?Math.round(prog.done/prog.total*100):8; return (
+        <div style={{padding:'34px 24px 38px',textAlign:'center'}}>
+          <div style={{width:56,height:56,borderRadius:16,background:'#E6EEF1',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}>
+            <svg width='28' height='28' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
+          </div>
+          <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:4}}>Revisando tu Gmail</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:18}}>{prog.label||'Conectando…'}</div>
+          <div style={{height:8,background:'#EEF1F3',borderRadius:6,overflow:'hidden',maxWidth:340,margin:'0 auto'}}><div style={{height:'100%',width:`${pct}%`,background:C.accent,borderRadius:6,transition:'width .3s'}}/></div>
+          <div style={{display:'flex',justifyContent:'space-between',maxWidth:340,margin:'8px auto 0',fontSize:11,color:'#99ABB4'}}><span>{prog.total>0?`${prog.done} / ${prog.total}`:''}</span><span style={{fontWeight:700,color:C.accent}}>{pct}%</span></div>
+          <div style={{fontSize:10,color:'#99ABB4',marginTop:18,lineHeight:1.5,maxWidth:300,marginLeft:'auto',marginRight:'auto'}}>Leo solo los encabezados (De/Para/Asunto) para encontrar tus contactos. Puede tardar un poco.</div>
         </div>
-      )}
+      )})()}
       {phase==='error'&&(
         <div style={{padding:'24px 10px',textAlign:'center'}}>
           <div style={{fontSize:13,color:C.overdue,marginBottom:14,lineHeight:1.5}}>{err}</div>
@@ -11094,42 +11098,38 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
         </div>
       )}
       {phase==='review'&&(()=>{
-        const q=revQ.trim().toLowerCase()
-        const fil = a => !q || (a.name||'').toLowerCase().includes(q) || a.email.includes(q)
-        const conF = conCliente.filter(fil)
-        const sinF = sinCliente.filter(fil)
-        const gF={}; conF.forEach(a=>{ (gF[a.client_id]=gF[a.client_id]||[]).push(a) })
         const tab=(k,l,n,col)=>{ const on=revTab===k; return (
-          <button onClick={()=>setRevTab(k)} style={{flex:1,padding:'8px 6px',border:'none',borderBottom:`2px solid ${on?col:'transparent'}`,background:'none',color:on?col:C.muted,fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{l} <span style={{fontSize:11,opacity:.85}}>{n}</span></button>
+          <button onClick={()=>setRevTab(k)} style={{flex:1,padding:'9px 6px',border:'none',borderBottom:`2px solid ${on?col:'transparent'}`,background:'none',color:on?col:C.muted,fontSize:12.5,fontWeight:on?700:500,cursor:'pointer'}}>{l} <span style={{fontSize:11,fontWeight:700,color:on?'#fff':C.muted,background:on?col:'#EEF1F3',borderRadius:20,padding:'1px 7px',marginLeft:2}}>{n}</span></button>
         )}
         return (
         <div>
           {visibles.length===0
             ? <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'26px 0'}}>Sin contactos nuevos por revisar.</div>
             : <>
-              <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:10}}>
+              <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:12}}>
                 {tab('con','Con cliente',conCliente.length,C.accent)}
                 {tab('sin','Por asignar',sinCliente.length,'#854F0B')}
               </div>
-              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:10}}>
-                <input value={revQ} onChange={e=>setRevQ(e.target.value)} placeholder='Buscar nombre o correo…' style={{flex:1,height:36,border:`1px solid ${C.border}`,borderRadius:9,padding:'0 11px',fontSize:13,color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}}/>
-                {revTab==='con'&&conF.length>0&&<button onClick={()=>agregarSeguros(conF.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'9px 12px',cursor:'pointer',whiteSpace:'nowrap'}}>Agregar seguros</button>}
-              </div>
-              {revTab==='con'&&(Object.keys(gF).length===0
-                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>Nada por aquí.</div>
-                : Object.keys(gF).map(cid=>(
+              {revTab==='con'&&(conCliente.length===0
+                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>No hay contactos asociados a un cliente.</div>
+                : <>
+                  <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}><button onClick={()=>agregarSeguros(conCliente.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'9px 14px',cursor:'pointer'}}>Agregar todos ({conCliente.filter(a=>a.count>=2).length})</button></div>
+                  {Object.keys(grupos).map(cid=>(
                     <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                      <div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'8px 14px',background:'#F5F7F9'}}>{clientName(cid)} · {gF[cid].length}</div>
-                      {gF[cid].map(a=>fila(a,false))}
+                      <div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'8px 14px',background:'#F5F7F9'}}>{clientName(cid)} · {grupos[cid].length}</div>
+                      {grupos[cid].map(a=>fila(a,false))}
                     </div>
-                  )))}
-              {revTab==='sin'&&(sinF.length===0
-                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>Nada por aquí.</div>
-                : <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                    <div style={{fontSize:11,fontWeight:700,color:'#854F0B',padding:'8px 14px',background:'#FFF8E1'}}>Por asignar · {sinF.length}{q?` de ${sinCliente.length}`:''}</div>
-                    {sinF.slice(0,40).map(a=>fila(a,true))}
-                    {sinF.length>40&&<div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'10px'}}>Mostrando 40 de {sinF.length}. Usa el buscador para acotar.</div>}
-                  </div>)}
+                  ))}
+                </>)}
+              {revTab==='sin'&&(sinCliente.length===0
+                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>Todos quedaron asociados.</div>
+                : <>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.4}}>Busca el cliente de cada contacto (escribe su nombre) y se agrega; o descártalo.</div>
+                  <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+                    {sinCliente.slice(0,sinShow).map(a=>fila(a,true))}
+                  </div>
+                  {sinCliente.length>sinShow&&<button onClick={()=>setSinShow(n=>n+50)} style={{width:'100%',height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:10}}>Ver más ({sinCliente.length-sinShow} restantes)</button>}
+                </>)}
             </>}
           <button onClick={()=>setPhase('idle')} style={{width:'100%',height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver al inicio</button>
         </div>
