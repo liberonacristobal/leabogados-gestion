@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación global: landing Resumen + aging + FAB (Etapa A)
+- La pestaña Facturación abre por defecto en un Resumen: 2 KPIs (Por cobrar / Vencido), tabla de aging (Por vencer / 1–30 / 31–60 / 61–90 / 90+), accesos por estado (Por cobrar, Vencidas, Cobradas, Programadas) y enlaces a Anticipos/Proveedores/Checklist/Sin año. Chip Resumen para volver. Botón flotante (FAB) para nueva factura. Toda la lógica existente (anticipos, terceros, SII, export, pago) intacta.
+
+
 ## 2026-06-15 — Conciliación: toggle Histórico/Mes + pago parcial
 - Conciliación: toggle Histórico / Mes corriente (mes filtra emitidas por emisión y programadas por vencimiento del mes en curso).
 - Pago parcial: el botón Pagar pregunta el monto recibido; si es menor al saldo queda como abono (paid_amount) y la factura sigue pendiente, mostrando abonado  en la fila. Requiere la columna billing.paid_amount.
