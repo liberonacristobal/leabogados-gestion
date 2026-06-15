@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Conciliar facturas: resumen de totales + contexto por cliente
+- **Resumen arriba** con totales: Analizadas · Con match · A revisar · Conciliadas · Aprendidas (legítimas marcadas).
+- **Aprende del proceso**: cada baja confirmada deja un registro auditable (`learnings` kind `conciliacion_dup`); las marcadas legítimas siguen sin re-mostrarse.
+- **"Otras cuotas del cliente"**: el contexto ahora muestra todas las cuotas del mismo cliente (no solo de la venta), marcando las de igual monto — para detectar duplicados en otras ventas o futuras.
+
 ## 2026-06-15 — Conciliar facturas: rediseño comparable
 - Cada cuota sospechosa (Pagado sin folio) se muestra como **comparación lado a lado** Fantasma ↔ Factura real, con tabla campo-a-campo (glosa, monto, fecha pago, proyecto), **punto de coincidencia** por fila (verde/ámbar) y **veredicto de certeza** (% + "Muy probable / Probable / Posible / Poco probable").
 - **Glosas con diff**: se resaltan en negrita azul las palabras en común entre ambas; **delta de monto** cuando son casi iguales (ej. +$15).

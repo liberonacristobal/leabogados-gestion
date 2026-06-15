@@ -10595,6 +10595,8 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
       if(error) throw error
       if(setBilling) setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,deleted_at:now}:b))
       logEvent('conciliacion','dar_de_baja',{ids,n:ids.length},currentUserName)
+      // Aprende del proceso: deja registro auditable de cada duplicado confirmado (concepto/cliente/monto).
+      items.forEach(b=>learnPut('conciliacion_dup', b.id, 'dup', {concept:b.concept,client_id:b.client_id,amount:b.amount}))
       setResueltas(p=>[...items.map(b=>({b,tipo:'baja'})),...p])
       setToast(`${ids.length} cuota(s) dada(s) de baja — puedes deshacer en "Ya resueltas"`)
     }catch(e){ alert('Error: '+e.message) }
@@ -10631,9 +10633,24 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const stPillCuota = st => st==='Pagado'?['Pagada',C.greenText,'#E1F5EE']:st==='Programada'?['Programada',C.muted,'#F5F7F9']:st==='Pendiente'?['Pendiente',C.accent,'#E6EEF1']:[st,C.muted,'#F5F7F9']
   return (
     <div style={{maxWidth:600}}>
-      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>
+      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:10}}>
         Cuotas marcadas <b style={{color:C.text}}>Pagado sin N° de factura</b>: una factura pagada real lleva folio, así que suelen <b style={{color:C.text}}>duplicar</b> una factura real. Compara cada una con su candidata y da de baja la que sobra — todo es reversible.
       </div>
+      {(()=>{
+        let conMatch=0; sospechosas.forEach(b=>{ const cs=analizar(b,realesDe(b.client_id)); if(cs[0]&&cs[0].score>=0.6) conMatch++ })
+        const aRev=sospechosas.length-conMatch
+        const concCount=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&b.status==='Pagado').length
+        const stat=(v,l,col,bg)=>(<div style={{flex:1,minWidth:74,background:bg,borderRadius:9,padding:'7px 9px',textAlign:'center'}}><div style={{fontSize:17,fontWeight:700,color:col,lineHeight:1.1}}>{v}</div><div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:2}}>{l}</div></div>)
+        return (
+          <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+            {stat(sospechosas.length,'Analizadas',C.text,'#F5F7F9')}
+            {stat(conMatch,'Con match',C.accent,'#E6EEF1')}
+            {stat(aRev,'A revisar',aRev>0?'#A32D2D':C.muted,aRev>0?'#FCEBEB':'#F5F7F9')}
+            {stat(concCount,'Conciliadas',C.greenText,'#E1F5EE')}
+            {ig.size>0&&stat(ig.size,'Aprendidas',C.muted,'#F5F7F9')}
+          </div>
+        )
+      })()}
       {claves.length===0 && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'28px 0'}}>Sin duplicados sospechosos. Todo en orden.</div>}
       {claves.map(cid=>{
         const grupo=grupos[cid]; const c=clientById(cid); const reales=realesDe(cid)
@@ -10649,7 +10666,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
               const cands=analizar(b,reales)
               const m = chosenCand[b.id] ? (cands.find(x=>String(x.r.id)===String(chosenCand[b.id]))||cands[0]) : cands[0]
               const [vl,vfg,vbg] = m ? veredicto(m.score) : ['Sin candidata clara','#537281','#F5F7F9']
-              const otras = b.sale_id ? (billing||[]).filter(x=>!x.deleted_at&&x.billing_type!=='reembolso'&&String(x.sale_id)===String(b.sale_id)&&String(x.id)!==String(b.id)) : []
+              const otras = (billing||[]).filter(x=>!x.deleted_at&&x.billing_type!=='reembolso'&&String(x.client_id)===String(b.client_id)&&String(x.id)!==String(b.id)).sort((a,c)=>String(c.due||c.paid_at||'').localeCompare(String(a.due||a.paid_at||'')))
               const proyB = saleTitle(b.sale_id)
               return (
                 <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,padding:'10px 12px'}}>
@@ -10676,7 +10693,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
                   )}
                   <div style={{display:'flex',gap:10,marginTop:8,flexWrap:'wrap'}}>
                     {reales.length>0&&<button onClick={()=>setExpanded(p=>({...p,[b.id]:p[b.id]==='cand'?null:'cand'}))} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>¿Otra factura? ({reales.length}) {expanded[b.id]==='cand'?'▴':'▾'}</button>}
-                    {otras.length>0&&<button onClick={()=>setExpanded(p=>({...p,[b.id]:p[b.id]==='cuotas'?null:'cuotas'}))} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Otras cuotas de la venta ({otras.length}) {expanded[b.id]==='cuotas'?'▴':'▾'}</button>}
+                    {otras.length>0&&<button onClick={()=>setExpanded(p=>({...p,[b.id]:p[b.id]==='cuotas'?null:'cuotas'}))} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Otras cuotas del cliente ({otras.length}) {expanded[b.id]==='cuotas'?'▴':'▾'}</button>}
                   </div>
                   {expanded[b.id]==='cand'&&(
                     <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden'}}>
@@ -10689,7 +10706,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
                     </div>
                   )}
                   {expanded[b.id]==='cuotas'&&(
-                    <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden'}}>
+                    <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden',maxHeight:'34vh',overflowY:'auto'}}>
                       {otras.map(x=>{ const [sl,sc,sb]=stPillCuota(x.status); const same=Math.abs((x.amount||0)-(b.amount||0))<=Math.max(1000,(b.amount||0)*0.01); return (
                         <div key={x.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`0.5px solid ${C.border}`}}>
                           <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.concept||'—'}{same&&<span style={{color:C.soon,fontWeight:600}}> · = monto</span>}</div><div style={{fontSize:9,color:'#99ABB4'}}>{x.invoice_no?`F° ${x.invoice_no} · `:''}{x.status==='Pagado'?`pagada ${x.paid_at?fmtFechaDMY(x.paid_at):''}`:`vence ${x.due?fmtFechaDMY(x.due):'—'}`}</div></div>
