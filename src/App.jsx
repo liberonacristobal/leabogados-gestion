@@ -8817,7 +8817,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
                   {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.name!==c.name||rs.multi)?<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rs.name}${rs.rut?` | ${rs.rut}`:''}`}</div>:null })()}
                 </div>
-                <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`1px solid ${ended?C.border:C.normal}`,background:ended?'#F5F7F9':'transparent',color:ended?C.muted:C.normal,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminar'}</button>
+                <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'2px 9px',borderRadius:20,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.normal:C.muted,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminado'}</button>
               </div>
               <div style={{display:'flex',gap:12,fontSize:11,flexWrap:'wrap',alignItems:'center'}}>
                 {!ended&&<span style={{color:C.accent}}>{activeSales} ventas activas</span>}
