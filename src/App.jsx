@@ -1872,6 +1872,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [dgl,setDgl] = useState('neto')   // pill del desglose financiero: neto | fac | cob
   const [iaHoy,setIaHoy] = useState(null)       // resumen IA de "qué atender hoy"
   const [iaHoyBusy,setIaHoyBusy] = useState(false)
+  const [hoyOpen,setHoyOpen] = useState(false)  // pill "qué atender hoy" colapsada por defecto
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
   // --- META anual: metas por año (annual_targets) + selector + histórico ---
@@ -2105,17 +2106,25 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      {/* Qué atender hoy: pendientes urgentes de todas las áreas, priorizados + resumen IA */}
+      {/* Qué atender hoy: pill colapsada (poco espacio); se despliega al tocar */}
       <div style={{padding:'16px 20px 0'}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Qué atender hoy</div>
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'11px 16px',background:'#FAFBFC',borderBottom:`1px solid ${C.border}`}}>
-            <span style={{fontSize:12,color:C.text,lineHeight:1.45}}>{iaHoy||atenderHoy.head}</span>
-            {atenderHoy.items.length>0&&<button onClick={resumenHoyIA} disabled={iaHoyBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaHoyBusy?.6:1}}>{iaHoyBusy?'…':(iaHoy?'Otra vez':'Resumen IA')}</button>}
-          </div>
-          {atenderHoy.items.length===0
-            ? <div style={{fontSize:13,color:C.greenText,textAlign:'center',padding:'18px',fontWeight:600}}>Todo al día</div>
-            : atenderHoy.items.map((it,i)=>(
+          <button onClick={()=>setHoyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'11px 16px',background:'none',border:'none',cursor:'pointer',textAlign:'left'}}>
+            <span style={{width:9,height:9,borderRadius:'50%',background:atenderHoy.items[0]?.dot||C.normal,flexShrink:0}}/>
+            <span style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,flexShrink:0}}>Qué atender hoy</span>
+            {atenderHoy.items.length>0
+              ? <span style={{fontSize:11,fontWeight:700,color:'#fff',background:atenderHoy.items[0].sev===0?C.overdue:C.soon,borderRadius:20,padding:'0 7px',flexShrink:0}}>{atenderHoy.items.length}</span>
+              : <span style={{fontSize:11,color:C.greenText,fontWeight:600,flexShrink:0}}>Todo al día</span>}
+            {!hoyOpen&&atenderHoy.items.length>0&&<span style={{flex:1,minWidth:0,fontSize:11,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{iaHoy||atenderHoy.head}</span>}
+            <span style={{flex:hoyOpen||atenderHoy.items.length===0?1:'0 0 auto'}}/>
+            <Chev open={hoyOpen}/>
+          </button>
+          {hoyOpen&&atenderHoy.items.length>0&&(<>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 16px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}>
+              <span style={{fontSize:12,color:C.text,lineHeight:1.45}}>{iaHoy||atenderHoy.head}</span>
+              <button onClick={resumenHoyIA} disabled={iaHoyBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaHoyBusy?.6:1}}>{iaHoyBusy?'…':(iaHoy?'Otra vez':'Resumen IA')}</button>
+            </div>
+            {atenderHoy.items.map((it,i)=>(
               <div key={i} onClick={()=>setTab(it.go)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 16px',borderTop:i?'1px solid #F4F6F8':'none',cursor:'pointer'}}>
                 <span style={{width:9,height:9,borderRadius:'50%',background:it.dot,flexShrink:0}}/>
                 <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.lbl}</span>
@@ -2123,6 +2132,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <span style={{color:'#C9D2D7',flexShrink:0}}>›</span>
               </div>
             ))}
+          </>)}
         </div>
       </div>
 
