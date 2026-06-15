@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Correo de nueva tarea: nuevo diseño
+- Rediseño del email de `notify-task`: **logo de la firma** en el header (URL pública `/le-logo-blanco.png`), saludo "Hola {nombre}," + subtítulo "{asignador} te acaba de asignar una tarea", **bloque de tarea** (título, nota citada si existe, Cliente, Proyecto, Vence con **pill roja si vence en ≤2 días**), botones **"Ver en la app"** y **"Agregar recordatorio"** (Google Calendar pre-armado). Asunto dinámico "Nueva tarea | {cliente} | {título}". CSS inline, ancho 560px, Arial. (Íconos de fila omitidos: Gmail elimina SVG inline y no se usan emojis; se pueden añadir como PNG hosteados si se requieren.)
+
 ## 2026-06-15 — Caja chica: carga masiva no la afecta
 - **Corrección:** la carga masiva ya no asigna los gastos importados a la caja chica de quien importa (`created_by` queda en null; el importador se registra en `bulk_imports`). La pertenencia a caja chica es derivada de `created_by` (+ `!paid_by_client`); no se tocó la regla de carga manual ni la rendición al cliente.
 - **Pill de clasificación** en cada gasto importado (Gastos): el admin lo asigna a la **caja chica de una persona** o lo marca **pagado con fondos del cliente** (con deshacer). Badge sutil **"Carga masiva"** para distinguir de los manuales.
