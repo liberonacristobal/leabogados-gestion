@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Velocímetro Bruto/Neto + aviso de caja chica al limited
+- El velocímetro "Cómo va el año" ahora tiene un **toggle Bruto / Neto** que destaca claramente cuál se está mostrando (antes solo una etiqueta gris).
+- En Tareas, a quien tiene caja chica activa se le muestra un **aviso** cuando lleva **≥10 días sin cargar gastos** y/o cuando su **fondo está bajo (< $50.000)** — "conviene liquidar pronto", con acceso directo a Caja chica.
+
 ## 2026-06-15 — Tareas: panel KPI + agregar a calendario
 - **Hero de Tareas** arriba de "Mis tareas" (admin y limited): titular de foco (vencidas en rojo / vencen esta semana) + **tablero de 4 KPIs** tocables (Vencidas, Esta semana, Activas, Terminadas del mes) + chips (Activas / Que asigné / Terminadas) y mini-fila **"Asigné a"** por persona. Respeta los filtros de cliente/proyecto.
 - **Ícono de calendario** en cada tarjeta de tarea (junto al visto verde): crea el **evento de vencimiento en tu Google Calendar** vía Calendar API (evento de día completo). Requiere activar el scope `calendar.events` en Google + reentrar.
