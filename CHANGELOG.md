@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Asistente de conciliación de facturas (Fase 2, por cliente)
+- Botón Conciliar en el cockpit del cliente: (1) DUPLICADOS exactos (mismo monto+vencimiento o mismo folio repetido salvo prefijo Factura) → conservar 1 y eliminar resto (con deshacer, normaliza folio); (2) SIN PROYECTO agrupadas por SERIE con venta sugerida (✦) → asignar la serie completa; (3) PROGRAMADA↔REAL por venta+mes+tolerancia → reemplazar (borra la programada). Nada se borra/asigna solo. Convive con la Conciliación global existente (fantasmas Pagado sin folio).
+
+
 ## 2026-06-15 — Cobro: asignar serie completa (no dejar hermanas huérfanas)
 - Al asignar una factura a un proyecto (venta), si hay otras de la MISMA serie sin proyecto (ej. cuota 1/3 → 2/3 y 3/3, o las mensuales), la ventana ofrece asignarlas todas de una. Serie = mismo cliente + misma glosa base (sin el N/M, mes ni año). Con deshacer.
 
