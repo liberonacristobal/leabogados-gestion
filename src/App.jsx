@@ -8667,10 +8667,10 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const toggleProj = id => setOpenProj(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Al abrir un año, expandir solo los proyectos con algo vencido (lo accionable visible sin clics).
   useEffect(()=>{ const ov=new Set(); (clientBilling||[]).forEach(b=>{ if(!b.deleted_at && b.sale_id && b.status==='Vencido' && (kpiDate(b)||'').slice(0,4)===selYear) ov.add(String(b.sale_id)) }); setOpenProj(ov) },[selYear,client.id])
-  const sugSaleFor = b => { // ✦ venta probable por coincidencia de glosa base con el título
+  const sugSaleFor = (b,list) => { // ✦ venta probable por coincidencia de glosa base con el título (dentro de las ventas del año)
     if(!b?.concept) return null; const k=serieKey(b.concept); if(!k) return null
     const w=new Set(k.split(' ').filter(x=>x.length>3)); let best=null,sc=0
-    clientSales.forEach(s=>{ const n=serieKey(s.title).split(' ').filter(x=>x.length>3).filter(x=>w.has(x)).length; if(n>sc){sc=n;best=s} })
+    ;(list||clientSales).forEach(s=>{ const n=serieKey(s.title).split(' ').filter(x=>x.length>3).filter(x=>w.has(x)).length; if(n>sc){sc=n;best=s} })
     return sc>0?best:null
   }
 
@@ -8749,7 +8749,10 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const money = (rows,fn)=>rows.filter(fn).reduce((a,b)=>a+(b.amount||0),0)
           const lblFolio = b => b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')
           const renderFactura = (b,assignable)=>{
-            const sug = assignable?sugSaleFor(b):null
+            // Solo se puede asignar a ventas del MISMO año de emisión de la factura (no cruzar años).
+            const fy = (b.issued_at||b.due||'').slice(0,4)
+            const ventasYear = clientSales.filter(s=>String(s.year)===fy)
+            const sug = assignable?sugSaleFor(b,ventasYear):null
             return (
               <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${borde(b)}`,borderRadius:'0 8px 8px 0',padding:'8px 10px',marginBottom:5}}>
                 <div onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
@@ -8767,10 +8770,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                 </div>}
                 {assignable&&<div style={{display:'flex',gap:6,alignItems:'center',marginTop:7,flexWrap:'wrap'}}>
                   {sug&&<button onClick={()=>onAssignSeries&&onAssignSeries(sug.id,[b.id])} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 10px',fontWeight:600,cursor:'pointer'}}>✦ {sug.title}</button>}
-                  <select defaultValue='' onChange={e=>{ if(e.target.value&&onAssignSeries) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:10,padding:'3px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}>
-                    <option value=''>+ Asignar a proyecto…</option>
-                    {clientSales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
-                  </select>
+                  {ventasYear.length>0
+                    ? <select defaultValue='' onChange={e=>{ if(e.target.value&&onAssignSeries) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:10,padding:'3px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}>
+                        <option value=''>+ Asignar a proyecto…</option>
+                        {ventasYear.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+                      </select>
+                    : <span style={{fontSize:10,color:C.muted}}>No hay venta de {fy||'ese año'} para este cliente</span>}
                 </div>}
               </div>
             )
