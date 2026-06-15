@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Cobro: asignar serie completa (no dejar hermanas huérfanas)
+- Al asignar una factura a un proyecto (venta), si hay otras de la MISMA serie sin proyecto (ej. cuota 1/3 → 2/3 y 3/3, o las mensuales), la ventana ofrece asignarlas todas de una. Serie = mismo cliente + misma glosa base (sin el N/M, mes ni año). Con deshacer.
+
+
 ## 2026-06-15 — Cobro: campo Proyecto (venta) + sugerencia
 - La ventana Editar/Nuevo cobro ahora tiene campo **Proyecto (venta)**: asocia la factura a una venta del cliente (sale_id) para conciliar programadas ↔ pagadas. Sugiere la venta por coincidencia de glosa (✦) y aprende glosa→venta para autocompletar a futuro.
 

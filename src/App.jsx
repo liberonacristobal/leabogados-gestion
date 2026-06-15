@@ -105,6 +105,15 @@ const rsLabel = (clientId, clients, clientEntities, entityId) => {
 const folioN = no => String(no||'').replace(/^factura\s*/i,'').trim()
 // Clave de glosa para aprender gasto→proyecto: palabras significativas (≥4) ordenadas, así "Certificado dominio CBR" matchea independiente del orden.
 const glosaKey = s => _normTxt(s).split(' ').filter(w=>w.length>=4).slice(0,5).sort().join(' ')
+// Clave de SERIE de facturas: glosa base sin "cuota N/M", "N/M", meses, años → para agrupar hermanas (1/3, 2/3, 3/3; o las mensuales) y no dejarlas huérfanas.
+const _MESES_SERIE = /\b(ene(ro)?|feb(rero)?|mar(zo)?|abr(il)?|may(o)?|jun(io)?|jul(io)?|ago(sto)?|sept?(iembre)?|oct(ubre)?|nov(iembre)?|dic(iembre)?|january|february|march|april|may|june|july|august|september|october|november|december)\b/gi
+const serieKey = concept => String(concept||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/cuota\s*\d+\s*(?:\/|-|de)\s*\d+/g,' ')
+  .replace(/\b\d+\s*[\/-]\s*\d+\b/g,' ')
+  .replace(/[—–-]/g,' ').replace(_MESES_SERIE,' ')
+  .replace(/\b20\d{2}\b/g,' ').replace(/\b\d{2}\b/g,' ')
+  .replace(/\b(pago|mensual|cuota)\b/g,' ')
+  .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()
 // Trato al cliente: a personas se les dice "Estimado [nombre de pila]" (sin señor/señora ni apellido); a empresas "Estimados".
 const _ES_EMPRESA = /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a\.?|eirl|e\.?i\.?r\.?l|inversiones|comercial|constructora|sociedad|holding|inmobiliaria|servicios|grupo|asociados|abogados|consultores|ingenier|transportes|agricola|agrícola|clinica|clínica|tech|spa\.|cia)\b/i
 const esPersona = name => { const n=(name||'').trim(); if(!n) return false; if(_ES_EMPRESA.test(n)) return false; const w=n.split(/\s+/); return w.length>=2 && w.length<=4 && !/\d/.test(n) }
@@ -5197,7 +5206,7 @@ function printComprobante(bill, clientName){
   const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Comprobante ${bill.invoice_no||''}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:12px;background:#fff}.page{max-width:816px;margin:0 auto}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:16px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Comprobante de cobro</div>${bill.invoice_no?`<div style='font-size:11px;opacity:.85;margin-top:2px'>N° ${bill.invoice_no}</div>`:''}</div></div><div style='padding:24px 26px'><table style='width:100%;border-collapse:collapse;font-size:12px'>${row('Cliente', clientName||'—')}${bill.receptor_name?row('Razón social', bill.receptor_name+(bill.receptor_rut?` · ${bill.receptor_rut}`:'')):''}${row('Concepto', bill.concept||'—')}${row('Monto', n(bill.amount))}${row('Estado', bill.status||'—')}${row('Emisión', dmy(bill.issued_at))}${bill.status==='Pagado'?row('Fecha de pago', dmy(bill.paid_at)):row('Vencimiento', dmy(bill.due))}${bill.notes?row('Notas', bill.notes):''}</table><div style='margin-top:26px;padding-top:12px;border-top:1px solid ${GRAY};font-size:10px;color:${MUT};display:flex;justify-content:space-between'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago</span><span>Documento interno — no es el DTE del SII</span></div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
   const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
 }
-function BillingForm({bill,clients,clientEntities,sales=[],proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSeries,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
@@ -5223,6 +5232,13 @@ function BillingForm({bill,clients,clientEntities,sales=[],proveedores=[],tercer
     clientSales.forEach(s=>{ const n=norm(s.title).split(/[^a-z0-9]+/).filter(w=>w.length>3).filter(w=>cw.has(w)).length; if(n>score){score=n;best=s} })
     return score>0?best:null
   },[f.concept,f.sale_id,f.client_id,sales])
+  // Hermanas: facturas de la MISMA serie (mismo cliente, misma glosa base) que están SIN proyecto → ofrecer asignarlas junto con esta.
+  const [serieDone,setSerieDone] = useState(false)
+  const hermanas = useMemo(()=>{
+    if(!f.sale_id || !f.concept || !f.client_id) return []
+    const k = serieKey(f.concept); if(!k || k.length<4) return []
+    return (billing||[]).filter(b=>String(b.id)!==String(f.id) && !b.deleted_at && String(b.client_id)===String(f.client_id) && !b.sale_id && b.billing_type!=='reembolso' && b.status!=='Anulada' && serieKey(b.concept)===k)
+  },[f.sale_id,f.concept,f.client_id,f.id,billing])
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:3,display:'block'}
   const inp={width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none'}
@@ -5312,6 +5328,15 @@ function BillingForm({bill,clients,clientEntities,sales=[],proveedores=[],tercer
               {clientSales.map(s=><option key={s.id} value={s.id}>{s.title}{s.year?` · ${s.year}`:''}</option>)}
             </select>
             {sugVenta&&<button type='button' onClick={()=>up('sale_id',sugVenta.id)} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>✦ Sugerido: {sugVenta.title}</button>}
+            {f.sale_id&&hermanas.length>0&&!serieDone&&(
+              <div style={{marginTop:8,background:'#E1F5EE',border:'0.5px solid #9FE1CB',borderRadius:9,padding:'9px 11px'}}>
+                <div style={{fontSize:11.5,color:C.greenText,fontWeight:600,marginBottom:6}}>Hay {hermanas.length} factura{hermanas.length!==1?'s':''} más de esta serie sin proyecto. ¿Asignarla{hermanas.length!==1?'s':''} también a "{clientSales.find(s=>String(s.id)===String(f.sale_id))?.title||'esta venta'}"?</div>
+                <div style={{display:'flex',gap:6}}>
+                  <button type='button' onClick={()=>{ onAssignSeries&&onAssignSeries(f.sale_id, hermanas.map(b=>b.id)); setSerieDone(true) }} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'4px 12px',cursor:'pointer'}}>Sí, asignar {hermanas.length}</button>
+                  <button type='button' onClick={()=>setSerieDone(true)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'4px 12px',cursor:'pointer'}}>Solo esta</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -13228,6 +13253,15 @@ export default function App() {
       return data
     }catch(e){alert('Error: '+e.message); return null}
   },[])
+  // Asigna en lote varias facturas a una venta (hermanas de una serie) — para que no queden huérfanas. Con deshacer.
+  const handleAssignSeries=useCallback(async(saleId,ids)=>{
+    if(!ids?.length) return
+    try{
+      await supabase.from('billing').update({sale_id:saleId,updated_at:new Date().toISOString()}).in('id',ids)
+      setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,sale_id:saleId}:b))
+      setUndoToast({msg:`${ids.length} factura${ids.length!==1?'s':''} asociada${ids.length!==1?'s':''} al proyecto`, onUndo: async()=>{ await supabase.from('billing').update({sale_id:null}).in('id',ids); setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,sale_id:null}:b)) }})
+    }catch(e){ alert('Error: '+e.message) }
+  },[])
   const handleDeleteBilling=useCallback(async(id)=>{
     try{
       const row=billing.find(x=>x.id===id)
@@ -13512,7 +13546,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
