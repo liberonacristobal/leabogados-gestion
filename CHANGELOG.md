@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Cockpit v2: Año → Proyecto → Factura (Parte 1)
+- La pestaña Financiero del cliente se reorganizó en jerarquía: franja Por cobrar/Vencido arriba, tabs por AÑO, y dentro cada PROYECTO (=venta) como acordeón con resumen (Facturado/Cobrado/Pendiente + cuotas cobradas), auto-expandiendo los que tienen vencido. Las facturas se ordenan por estado (pendientes/vencidas, programadas, pagadas). Contenedor virtual Facturación AAAA para emitidas del año sin proyecto, y sección Facturas sin proyecto asignado con + Asignar a proyecto (sugerencia ✦). Folios siempre Factura N° XX. Tocar una factura abre el editor.
+
+
 ## 2026-06-15 — Conciliación: al deduplicar, conserva la Factura N° real
 - Al resolver duplicados de emitidas, SIEMPRE se conserva la que tiene número (Factura N° XX = la factura real), nunca al azar; la tarjeta muestra explícitamente cuál conserva y cuáles elimina.
 
