@@ -92,6 +92,10 @@ const simTexto = (a,b) => { const A=new Set(_normTxt(a).split(' ').filter(w=>w.l
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
 const logEvent = (area,action,detail,user) => { try{ supabase.from('usage_events').insert({area,action,detail:detail||{},user_name:user||null}).then(()=>{},()=>{}) }catch(e){} }
+// Trato al cliente: a personas se les dice "Estimado [nombre de pila]" (sin señor/señora ni apellido); a empresas "Estimados".
+const _ES_EMPRESA = /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a\.?|eirl|e\.?i\.?r\.?l|inversiones|comercial|constructora|sociedad|holding|inmobiliaria|servicios|grupo|asociados|abogados|consultores|ingenier|transportes|agricola|agrícola|clinica|clínica|tech|spa\.|cia)\b/i
+const esPersona = name => { const n=(name||'').trim(); if(!n) return false; if(_ES_EMPRESA.test(n)) return false; const w=n.split(/\s+/); return w.length>=2 && w.length<=4 && !/\d/.test(n) }
+const saludoCli = name => esPersona(name) ? `Estimado/a ${(name||'').trim().split(/\s+/)[0]}` : 'Estimados'
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
 const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:12,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
   ...({
@@ -7669,7 +7673,7 @@ Producto de esta rendición resulta un saldo a su cargo de ${fmtN(Math.abs(saldo
   RUT: 77.700.387-9
   Banco: Banco BICE
   Cuenta Corriente: 138392-2` : ''
-    return `Estimado/a ${client?.name||'cliente'}:
+    return `${saludoCli(client?.name)}:
 
 Esperando que se encuentre muy bien, le hacemos llegar la rendición de los gastos incurridos durante el período ${r.periodo||''}, en el marco de la gestión encomendada. En el documento adjunto encontrará el respaldo de cada desembolso.
 
@@ -10287,7 +10291,7 @@ function EstadoCuentaModal({client, expenses=[], billing=[], user, onClose}){
     if(!apiKey){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
     setGen(true)
     const datos = { cliente:client.name, fondos_recibidos:totFondos, gastos_totales:totGastos, gastos_por_concepto:porCat, saldo, pendiente_de_rendir:pendRendir, facturas_por_pagar:totPend, de_eso_vencido:vencido }
-    const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un ESTADO DE CUENTA claro, transparente y cordial para enviar al CLIENTE "${client.name}", en español de Chile (formal pero cercano). SOLO prosa (sin markdown, sin tablas, sin viñetas). Lenguaje simple, nada de jerga contable. Explica: cuánto fondo nos entregó, en qué se gastó (agrupado por concepto), cuánto queda de saldo y qué significa (si es a favor del cliente o si el cliente nos debe), y si hay facturas pendientes o vencidas por pagar. Breve (2-3 párrafos). Honesto y fácil de entender. Montos en pesos chilenos. Datos:\n${JSON.stringify(datos,null,2)}`
+    const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un ESTADO DE CUENTA claro, transparente y cordial para enviar al CLIENTE "${client.name}", en español de Chile (formal pero cercano). SALUDO: si "${client.name}" es una PERSONA, salúdala como "Estimado/a [su primer nombre]" usando SOLO el nombre de pila — nunca "señor/señora" ni el apellido; si es una empresa, usa "Estimados". SOLO prosa (sin markdown, sin tablas, sin viñetas). Lenguaje simple, nada de jerga contable. Explica: cuánto fondo nos entregó, en qué se gastó (agrupado por concepto), cuánto queda de saldo y qué significa (si es a favor del cliente o si el cliente nos debe), y si hay facturas pendientes o vencidas por pagar. Breve (2-3 párrafos). Honesto y fácil de entender. Montos en pesos chilenos. Datos:\n${JSON.stringify(datos,null,2)}`
     try{
       const resp = await fetch('https://api.anthropic.com/v1/messages',{ method:'POST', headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}, body:JSON.stringify({model:'claude-opus-4-8',max_tokens:1200,messages:[{role:'user',content:prompt}]}) })
       const data = await resp.json()
