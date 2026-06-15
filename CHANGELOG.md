@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Rendición: comprobantes de respaldo en el PDF
+- El PDF de rendición ahora marca cada gasto que tiene **comprobante de respaldo** (chip "✓ respaldo") y al pie indica "N de M con comprobante de respaldo (disponibles a solicitud)". Se lee de `expense_attachments`. Aplica en el modal de rendición, en "Ver PDF" del correo y en el historial.
+
 ## 2026-06-15 — Contactos: principal/secundario + Red profesional
 - Ficha de cliente: **estrella** por contacto para marcar **principal** (toggle, principales arriba; badge "Principal").
 - Nuevo en el menú (admin): **Red profesional** — base de contactos de red (no clientes) con nombre, email, país, **categoría libre** (las armas tú; los chips de filtro se generan solos por uso), web, LinkedIn, descripción y "conocido en" (origen). Buscador + filtro por país + chips por categoría, agrupada por país. Paleta corporativa.
