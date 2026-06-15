@@ -6817,9 +6817,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica}) {
+function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
+  const [rsPickFor,setRsPickFor] = useState(null)        // gasto con el selector de razón social abierto (>3 RS o "cambiar")
   const [liqDetail,setLiqDetail] = useState(null)        // liquidación de caja chica abierta desde la pill "Liquidado"
   const isAdmin = currentUser?.role==='admin'
   // Personas con caja chica activa = quienes tienen fondos entregados en petty_cash.
@@ -6999,6 +7000,35 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 ) : <span style={{fontSize:10,color:'#99ABB4'}}>Sin clasificar</span>}
               </div>
             )}
+            {/* Asignar razón social POR GASTO (solo si el cliente tiene 2+ RS): pills si ≤3, selector si más */}
+            {(()=>{
+              const rsOpts=(clientEntities||[]).filter(x=>String(x.client_id)===String(selectedClient?.id))
+              if(isFondo||rsOpts.length<2) return null
+              const open=rsPickFor===e.id
+              const rsNm=id=>rsOpts.find(x=>String(x.id)===String(id))?.name||'—'
+              const pickBtns=rsOpts.map(r=><button key={r.id} onClick={()=>{onAssignGastoRS&&onAssignGastoRS(e,r.id);setRsPickFor(null)}} style={chipPerson}>{(r.name||'').slice(0,24)}</button>)
+              return (
+                <div style={{marginTop:6}} onClick={stop}>
+                  {e.entity_id&&!open ? (
+                    <span style={{display:'inline-flex',alignItems:'center',fontSize:10,padding:'2px 8px',borderRadius:12,background:'#E6EEF1',color:C.accent,fontWeight:600}}>RS · {rsNm(e.entity_id)}<button onClick={()=>setRsPickFor(e.id)} style={{...xBtn,fontWeight:600,fontSize:10}}>cambiar</button></span>
+                  ) : rsOpts.length<=3 ? (
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                      <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Asignar a</span>
+                      {pickBtns}
+                      {open&&<button onClick={()=>setRsPickFor(null)} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>cancelar</button>}
+                    </div>
+                  ) : !open ? (
+                    <button onClick={()=>setRsPickFor(e.id)} style={chipAdd}>Asignar razón social ▾</button>
+                  ) : (
+                    <div style={{marginTop:2,display:'flex',flexDirection:'column',gap:5,background:'#F5F7F9',borderRadius:8,padding:'8px 10px'}}>
+                      <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Asignar razón social</span>
+                      {rsOpts.map(r=><button key={r.id} onClick={()=>{onAssignGastoRS&&onAssignGastoRS(e,r.id);setRsPickFor(null)}} style={{textAlign:'left',padding:'7px 10px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',fontSize:12,color:C.text,cursor:'pointer'}}>{r.name}{r.rut?` · ${r.rut}`:''}</button>)}
+                      <button onClick={()=>setRsPickFor(null)} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',alignSelf:'flex-start'}}>cancelar</button>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
             {!isFondo&&<AdjuntoIcon e={e}/>}
@@ -7181,22 +7211,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     {rb.sin&&linea('Sin razón social', rb.sin.saldo, true)}
                   </div>)
                 })()}
-                {(()=>{ const rs=(clientEntities||[]).filter(x=>x.client_id===c.id); if(!b.sinAsignar||rs.length===0) return null; return (
-                  <div onClick={ev=>ev.stopPropagation()} style={{marginTop:8}}>
-                    {asignandoRS===c.id?(
-                      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                        <span style={{fontSize:11,color:C.muted}}>Asignar a:</span>
-                        <select defaultValue='' onChange={ev=>{ if(ev.target.value){ onAssignRS(c.id,ev.target.value); setAsignandoRS(null) } }} style={{padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:12}}>
-                          <option value='' disabled>— Elegir razón social —</option>
-                          {rs.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}
-                        </select>
-                        <button onClick={()=>setAsignandoRS(null)} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer'}}>Cancelar</button>
-                      </div>
-                    ):(
-                      <button onClick={()=>setAsignandoRS(c.id)} style={{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Asignar razón social ({b.sinAsignar})</button>
-                    )}
-                  </div>
-                ) })()}
+                {/* Asignación de RS movida a cada gasto en la vista interior (por gasto, no en bloque) */}
               </div>
             )
           })}
@@ -12269,6 +12284,17 @@ export default function App() {
     }catch(e){alert('Error al asignar razón social: '+e.message)}
   },[])
 
+  // Asignar razón social a UN gasto (por id), con deshacer. Reemplaza la asignación en bloque.
+  const handleAssignGastoRS=useCallback(async(expense,entityId)=>{
+    const prevEnt = expense.entity_id||null
+    try{
+      const {error}=await supabase.from('expenses').update({entity_id:entityId}).eq('id',expense.id)
+      if(error)throw error
+      setExpenses(p=>p.map(x=>x.id===expense.id?{...x,entity_id:entityId}:x))
+      setUndoToast({msg:'Razón social asignada', onUndo:async()=>{ await supabase.from('expenses').update({entity_id:prevEnt}).eq('id',expense.id); setExpenses(p=>p.map(x=>x.id===expense.id?{...x,entity_id:prevEnt}:x)) }})
+    }catch(e){alert('Error: '+e.message)}
+  },[])
+
   const handleSaveExpense=useCallback(async(f)=>{
     setSaving(true)
     try{
@@ -13050,7 +13076,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
