@@ -10554,6 +10554,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const [expanded,setExpanded] = useState({})       // {fantasmaId: 'cuotas'|'cand'} sección abierta
   const [resueltas,setResueltas] = useState([])     // log de la sesión: {b, tipo:'baja'|'legit'} para plegar + deshacer
   const [showResueltas,setShowResueltas] = useState(false)
+  const [showConc,setShowConc] = useState(false)    // sección plegable de cuotas YA conciliadas (con folio)
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>{ setIgnorados(new Set((data||[]).map(r=>String(r.key)))) },()=>setIgnorados(new Set())) },[])
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),5000); return ()=>clearTimeout(t) } },[toast])
   const ig = ignorados||new Set()
@@ -10708,6 +10709,33 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
           </div>
         )
       })}
+      {(()=>{
+        const conc=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&b.status==='Pagado').sort((a,b)=>String(b.paid_at||'').localeCompare(String(a.paid_at||'')))
+        if(conc.length===0) return null
+        const totC=conc.reduce((a,b)=>a+(b.amount||0),0)
+        const gC={}; conc.forEach(b=>{ const k=String(b.client_id||'__'); (gC[k]=gC[k]||[]).push(b) })
+        return (
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:4,marginBottom:8}}>
+            <div onClick={()=>setShowConc(s=>!s)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',cursor:'pointer',background:'#EDF7F2'}}>
+              <span style={{fontSize:12,color:C.muted}}><b style={{color:C.greenText}}>●</b> Conciliadas · con folio · <b style={{color:C.text}}>{conc.length}</b> · {fmt(totC)}</span>
+              <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{showConc?'Ocultar ▴':'Ver ▾'}</span>
+            </div>
+            {showConc&&<div style={{maxHeight:'40vh',overflowY:'auto'}}>
+              {Object.keys(gC).map(cid=>{ const c=clientById(cid); const list=gC[cid]; return (
+                <div key={cid}>
+                  <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,padding:'7px 14px 3px',borderTop:`0.5px solid ${C.border}`,background:'#FAFBFC'}}>{c?.name||'Cliente'} · {list.length}</div>
+                  {list.map(x=>(
+                    <div key={x.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 14px',borderTop:`0.5px solid ${C.border}`}}>
+                      <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.greenText}}>F° {x.invoice_no}</b> · {x.concept||'—'}</div><div style={{fontSize:9,color:'#99ABB4'}}>Pagada {x.paid_at?fmtFechaDMY(x.paid_at):'—'}</div></div>
+                      <span style={{fontSize:11,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(x.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )})}
+            </div>}
+          </div>
+        )
+      })()}
       {resueltas.length>0&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:4}}>
           <div onClick={()=>setShowResueltas(s=>!s)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',cursor:'pointer',background:'#F5F7F9'}}>
