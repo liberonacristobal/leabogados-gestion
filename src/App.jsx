@@ -411,19 +411,26 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
   }).sort((a,b)=>a.name.localeCompare(b.name))
 
   const ClientRow = ({cl}) => {
-    const saldo = saldoCliente(expenses, cl.id)
+    const tareasC=(tasks||[]).filter(t=>t.client_id===cl.id&&t.status!=='Terminado').length
+    const ended=cl.status==='Terminado'
+    const rs=rsLabel(cl.id,clients,clientEntities)
     return (
-      <div onClick={()=>{setFtab('resumen');setSelected(cl)}} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid #E4E8EB`,cursor:'pointer',borderLeft:`3px solid ${saldo<0?'#E24B4A':'#1D9E75'}`}}
+      <div onClick={()=>{setFtab('resumen');setSelected(cl)}} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid #E4E8EB`,cursor:'pointer',borderLeft:`3px solid ${ended?'#99ABB4':tareasC>0?'#C77F18':'#003C50'}`,opacity:ended?.7:1}}
         onMouseEnter={e=>e.currentTarget.style.borderColor='#537281'}
         onMouseLeave={e=>e.currentTarget.style.borderColor='#E4E8EB'}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'#3D3D3D'}}>{cl.name}</div>
-          <div style={{fontSize:11,fontWeight:600,color:saldo<0?'#E24B4A':C.greenText}}>{saldo!==0?(saldo<0?'-':'+')+'$'+Math.abs(saldo).toLocaleString('es-CL'):''}</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+          <div style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
+            <span style={{fontSize:14,fontWeight:600,color:'#3D3D3D',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}</span>
+            <span style={{color:'#99ABB4',fontSize:13,fontWeight:300,flexShrink:0}}>|</span>
+            <button onClick={ev=>{ev.stopPropagation();onSaveFields&&onSaveFields(cl.id,{status:ended?'Activo':'Terminado'})}} title={ended?'Reactivar cliente':'Archivar (terminar) cliente'} style={{width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?'#1D9E75':'#E4E8EB'}`,background:'#fff',color:ended?C.greenText:'#537281',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,flexShrink:0}}>
+              {ended?<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}
+            </button>
+            {tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:'#C77F18',background:'#FFF8E1',borderRadius:20,padding:'1px 8px',flexShrink:0}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}
+          </div>
+          {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600}}>{cl.abogado_responsable}</span> })()}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2,flexWrap:'wrap'}}>
-          {cl.type&&<span style={{fontSize:11,color:'#537281'}}>{cl.type}</span>}
-          {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{marginLeft:'auto',fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600}}>{cl.abogado_responsable}</span> })()}
-        </div>
+        <div style={{fontSize:11,color:'#537281',marginTop:3}}>{cl.type||''}{cl.rut?` · ${cl.rut}`:''}</div>
+        {(rs.name!==cl.name||rs.multi)&&<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rs.name}${rs.rut?` | ${rs.rut}`:''}`}</div>}
       </div>
     )
   }
@@ -1230,7 +1237,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                         const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
                       }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:'#F5F7F9',color:'#537281',fontSize:11,fontWeight:500,cursor:'pointer'}}>Correo</button>
                       <button onClick={async()=>{
-                        if(!confirm('¿Anular esta liquidación? Los gastos vuelven a Pendientes.')) return
+                        if(!confirm('¿Reabrir esta liquidación? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
                         try {
                           const {error:ue}=await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
                           if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendición (quedarían huérfanos)
@@ -1239,7 +1246,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                           if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
                           setOpenRendicion(null)
                         } catch(err) { alert('Error: '+err.message) }
-                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E24B4A',background:'transparent',color:'#E24B4A',fontSize:11,fontWeight:500,cursor:'pointer'}}>Anular</button>
+                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E24B4A',background:'transparent',color:'#E24B4A',fontSize:11,fontWeight:500,cursor:'pointer'}}>Reabrir</button>
                     </div>
                   </div>
                 )}
@@ -5915,7 +5922,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const [proyecto,setProyecto] = useState('')
   const [subproyecto,setSubproyecto] = useState('')
   const headEnt = entsCli.length===1 ? entsCli[0] : (entsCli.find(e=>e.id===selEnt)||null)
-  const inScope = e => singleRS ? true : (selEnt ? e.entity_id===selEnt : false)
+  // Multi-RS: al elegir una RS se incluyen sus gastos Y los SIN razón social (ej. notaría sin RS) — no deben quedar fuera de la rendición.
+  const inScope = e => singleRS ? true : (selEnt ? (e.entity_id===selEnt || !e.entity_id) : true)
   const allMovs = expenses.filter(e=>e.client_id===client.id && inScope(e))
   // Comprobantes de respaldo: qué gastos del cliente tienen adjuntos (para referenciarlos en el PDF).
   const [conRespaldo,setConRespaldo] = useState(new Set())
@@ -6913,7 +6921,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [hFichaDesde,setHFichaDesde] = useState('')
   const [hFichaHasta,setHFichaHasta] = useState('')
   const handleAnularRendicion = async(r) => {
-    if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
+    if(!confirm('\u00bfReabrir esta rendici\u00f3n? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
     try {
       const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
       if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendición (quedarían huérfanos)
@@ -7248,7 +7256,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
         })()}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
-          <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>
+          <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Reabrir</button>
           <div style={{display:'flex',gap:6}}>
             <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
             {cl&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
@@ -8632,15 +8640,18 @@ Liberona Escala Abogados`
     try{
       // Envío directo con PDF adjunto vía Gmail API (si el token tiene el scope gmail.send)
       let conAdjunto = false
+      let sendErr = null
       const token = await driveToken()
       if(token){
         try{
           const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
           await sendGmailWithPdf(token, {to:para.trim(), subject:asunto, bodyText:texto, bodyHtml:buildEmailHtml(texto), pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
-        }catch(_){ /* sin scope gmail.send (403) u otro: caemos al fallback */ }
+        }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
       if(!conAdjunto){
+        // Token presente pero el envío falló = tu sesión no tiene el permiso de enviar correo. Avisar para que reentre.
+        if(token && sendErr) alert('Tu sesión de Google no tiene permiso para enviar correos con el PDF adjunto. Cierra sesión y vuelve a entrar (Google te pedirá autorizar "enviar correo") y quedará automático. Por ahora descargamos el PDF y abrimos Gmail para que lo adjuntes.')
         // Sin scope gmail.send: Gmail/mailto NO permiten pre-adjuntar. Descargamos el PDF REAL
         // (jsPDF, no la vista HTML) para que el usuario lo arrastre al correo que abrimos.
         try{
@@ -8904,7 +8915,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                       <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
-                      {onAnularRendicion&&<button onClick={()=>onAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button>}
+                      {onAnularRendicion&&<button onClick={()=>onAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Reabrir</button>}
                     </div>
                   </div>
                   <button onClick={()=>setEmailRend(r)} style={{marginTop:6,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>
@@ -8987,7 +8998,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   const [verProv,setVerProv] = useState(false)
 
   const handleAnularRendicion = async(r) => {
-    if(!confirm('\u00bfAnular esta rendici\u00f3n?')) return
+    if(!confirm('\u00bfReabrir esta rendici\u00f3n? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
     try {
       const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
       if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendici\u00f3n (quedar\u00edan hu\u00e9rfanos)
