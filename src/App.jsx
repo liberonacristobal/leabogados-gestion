@@ -145,7 +145,7 @@ const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina'
 const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
 // Color de pill por persona, para distinguir responsables de un vistazo (Martín/Martina reusan los tonos de Caja Chica).
 const PERSON_CHIP = {
-  'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:'#E4E8EB',color:'#537281'},
+  'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:'#FCEBEB',color:'#A32D2D'},
   'Rodrigo':{bg:'#FAEEDA',color:'#854F0B'}, 'Erasmo':{bg:'#E6F1FB',color:'#185FA5'}, 'Cristóbal':{bg:'#E6EEF1',color:'#003C50'},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:'#F1EFE8',color:'#5F5E5A'}
@@ -1816,16 +1816,8 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview,user}) {
   const miasN = (porPersona[me]||[]).length
   const fmtInicio = iso => iso?fmtFechaDMY(iso):''   // 13-06-2026
   const fmtVence = iso => iso?fmtFechaDMY(iso):''    // 13-06-2026 (formato oficial, con año)
-  const avatarColor = name => {
-    const map = {
-      'Crist\u00f3bal': ['#E6F1FB','#003C50'],
-      'Erasmo':          ['#E1F5EE',C.greenText],
-      'Mart\u00edn':    ['#EAF3DE','#3B6D11'],
-      'Martina':         ['#E4E8EB','#537281'],
-      'Rodrigo':         ['#FAEEDA','#C77F18']
-    }
-    return map[name] || ['#F1EFE8','#537281']
-  }
+  // Fuente \u00fanica de color por persona: delega en PERSON_CHIP (usado en pills y avatares en toda la app).
+  const avatarColor = name => { const c=personChip(name); return [c.bg,c.color] }
   const togglePersona = name => setOpenPersonas(prev=>({...prev,[name]:!prev[name]}))
   const badgeStyle = due => {
     const d = daysLeft(due)
