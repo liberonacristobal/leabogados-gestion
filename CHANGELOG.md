@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Estado de cuenta del cliente con IA (transparencia)
+- En la ficha del cliente, nuevo boton "Estado": muestra fondos, gastos por concepto, saldo y facturas por pagar (cifras deterministas, auditables) y un boton "Generar con IA" que redacta un estado de cuenta claro y transparente (Opus) para compartir con el cliente. Distinto del reporte interno: este es por cliente, en lenguaje simple. Cada generacion se registra (usage_events).
+
 ## 2026-06-15 — Conciliación de facturas (v1): motor + barrido de auditoría + aprendizaje
 - Nuevo "Conciliar facturas" (menú admin): detecta cuotas marcadas Pagado SIN N° de factura (suelen duplicar una factura real, tipo BM Soluciones). Agrupa por cliente, sugiere la factura real que calza (cruce por venta/glosa), y deja darlas de baja (a Papelera, reversible) o marcarlas legitimas.
 - Capa de conocimiento: cada decision se guarda (learnings) y cada accion se registra (usage_events). "No es duplicado" enseña a la app a no re-mostrarla.
