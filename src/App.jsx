@@ -213,7 +213,7 @@ function rsBalances(clientId, expenses, entities){
 // FUENTE ÚNICA del documento de rendición (HTML imprimible). La usan el historial ("Ver PDF")
 // y RendicionModal (al enviar), para que ambos PDFs sean idénticos. Recibe datos ya normalizados.
 // gastos: [{date,concept,category,amount}] · fondos: [{date,concept,amount}]
-function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[] }){
+function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4', TXT='#3D3D3D'
   // Saldo disponible = fondos recibidos − rendido en tandas anteriores − esta rendición.
   const saldo = totFondos - rendidoAntes - totGastos
@@ -233,7 +233,7 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
   const saldoPos = saldo>=0
   const kpiCard = (l,v,bg,fg)=>`<div style='background:${bg};padding:12px 16px;flex:1'><div style='font-size:8px;font-weight:600;color:${fg==='#fff'?'rgba(255,255,255,.7)':AZUL3};text-transform:uppercase;letter-spacing:.4px'>${l}</div><div style='font-size:17px;font-weight:700;color:${fg};margin-top:2px;white-space:nowrap'>${v}</div></div>`
   const kpiRow = `<div style='display:flex;gap:1px;background:${GRAY}'>${kpiCard('Fondos recibidos',fmtN(totFondos),'#fff','#0F6E56')}${kpiCard('Gastos del período',fmtN(totGastos),'#fff',TXT)}${kpiCard(saldoPos?'Saldo a favor':'Saldo pendiente',(saldo<0?'−':'')+fmtN(Math.abs(saldo)),saldoPos?'#E1F5EE':'#FCEBEB',saldoPos?'#0F6E56':'#A32D2D')}</div>`
-  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'><span>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div>${dirigidoA?`<div style='font-weight:600'>Dirigido a: ${dirigidoA}</div>`:''}</div>${kpiRow}<div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'>${correlativo?`<span style='font-weight:700'>Rendición N° ${correlativo}</span><span style='${sep}'>`:''}<span ${correlativo?'':"style='font-weight:700'"}>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div>${dirigidoA?`<div style='font-weight:600'>Dirigido a: ${dirigidoA}</div>`:''}</div>${kpiRow}<div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
 }
 
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
@@ -254,7 +254,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities){
     gastos, fondos,
     totGastos: gastos.reduce((a,e)=>a+(e.amount||0),0),
     totFondos: fondos.reduce((a,e)=>a+(e.amount||0),0),
-    rendidoAntes, rendicionesPrevias: previas,
+    rendidoAntes, rendicionesPrevias: previas, correlativo: r.correlativo,
   })
 }
 
@@ -5501,7 +5501,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, entityIds, expenses, clientEntities, onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar}) {
+function RendicionModal({client, entityIds, expenses, clientEntities, rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar}) {
   const [selected, setSelected] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
@@ -5520,6 +5520,10 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
   const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
   const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
   const saldoActual = fondosDisp - gastosYaRend
+  // Correlativo por cliente (guardado, sobrevive a anulaciones): máximo existente + 1.
+  const rendsCli = (rendiciones||[]).filter(r=>String(r.client_id)===String(client.id))
+  const nextCorr = Math.max(0, ...rendsCli.map(r=>r.correlativo||0)) + 1
+  const previasN = rendsCli.length
 
   // Gastos disponibles para rendir (no rendidos aun)
   const disponibles = allMovs.filter(e=>{
@@ -5571,7 +5575,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
     if(fechas.length){ const ini=fechas[0], fin=fechas[fechas.length-1]; periodo = mesAno(ini)===mesAno(fin) ? mesAno(ini) : `${dia(ini)} \u2013 ${dia(fin)}` }
     // Rendiciones anteriores de este fondo (la tanda actual a\u00fan no est\u00e1 rendida \u2192 queda fuera).
     const {previas, rendidoAntes} = rendicionesPreviasDe(allMovs)
-    return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel, fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp, rendidoAntes, rendicionesPrevias: previas })
+    return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel, fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp, rendidoAntes, rendicionesPrevias: previas, correlativo: nextCorr })
   }
 
   const handleGenerar = async(modo='pdf') => {
@@ -5592,6 +5596,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
         n_gastos: gastosSel.length,
         n_clientes: 1,
         tipo: 'cliente',
+        correlativo: nextCorr,
         dirigido_a: (atencion||'').trim()||null
       })
       if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
@@ -5604,7 +5609,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
       if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
-      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',dirigido_a:(atencion||'').trim()||null}
+      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,dirigido_a:(atencion||'').trim()||null}
       if(onRendicionComplete) onRendicionComplete(rendObj)
       await guardarDirigido()
       // modo 'pdf': abre el documento imprimible. modo 'enviar': encadena al modal de correo.
@@ -5621,6 +5626,11 @@ function RendicionModal({client, entityIds, expenses, clientEntities, onClose, o
 
   return (
     <div>
+      {/* Contexto de continuidad: correlativo que tendrá + rendiciones anteriores + saldo actual */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:12,paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
+        <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Rendición N° {nextCorr}</span>
+        <span style={{fontSize:11,color:C.muted,textAlign:'right'}}>{previasN>0?`${previasN} anterior${previasN!==1?'es':''} · saldo actual ${fmtN(saldoActual)}`:'Primera rendición de este cliente'}</span>
+      </div>
       {/* Razón social seleccionada */}
       {headEnt&&(
         <div style={{marginBottom:12}}>
@@ -6498,7 +6508,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
         <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?`${r.periodo} · `:''}{new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
           </div>
           <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
           <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
@@ -6752,7 +6762,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
       {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
@@ -7667,7 +7677,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const totFondosCli = _rs.totFondos
   const debeCliente = saldoCliente < 0
   const [para,setPara] = useState(client?.email||'')
-  const [asunto,setAsunto] = useState(`Rendición de gastos ${client?.name||''} — ${r.periodo}`)
+  const [asunto,setAsunto] = useState(`Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${client?.name||''}`)
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
@@ -7689,7 +7699,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     }
     return `${saludoCli(client?.name)}:
 
-Adjuntamos la rendición de los gastos del período ${r.periodo||''}. En el documento adjunto encontrará el detalle de cada desembolso.${cierre}
+Adjuntamos su rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} del período ${r.periodo||''}. En el documento adjunto encontrará el detalle de cada desembolso.${cierre}
 
 Quedamos atentos a cualquier consulta.
 
@@ -8111,7 +8121,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         user={user}
         onRendicionSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))}
       />
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} rendiciones={rendiciones} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setEmailRend(r)}}/></Modal>}
     </>
   )
 

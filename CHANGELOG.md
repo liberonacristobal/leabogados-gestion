@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Rendiciones: correlativo por cliente + continuidad (transparencia)
+- Cada rendicion al cliente lleva ahora un **correlativo por cliente** (N°1, N°2... guardado, sobrevive a anulaciones). Aparece en el asunto del correo, el encabezado del PDF y el historial.
+- **Continuidad**: el modal de rendicion muestra antes de generar el N° que tendra, cuantas rendiciones anteriores hay y el saldo actual del fondo. El correo menciona el N°. El recuadro "Resumen del fondo" del PDF sigue mostrando las rendiciones previas del mismo fondo.
+
 ## 2026-06-15 — PDF de rendicion rediseniado (Ejecutiva A)
 - El PDF de rendicion ahora lleva arriba las 3 cifras clave: Fondos recibidos, Gastos del periodo y Saldo (destacado, verde a favor / rojo pendiente), luego el detalle con badges de categoria. Aplicado al "Ver PDF" (HTML rico), al adjunto del correo (jsPDF) y al "Ver PDF" del correo. El recuadro ledger "Resumen del fondo" solo aparece si hay rendiciones previas (evita duplicar el saldo).
 
