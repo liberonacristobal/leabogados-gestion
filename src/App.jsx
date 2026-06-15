@@ -8466,10 +8466,14 @@ function ContactoTab({client, entities, onSaveFields}) {
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
 // Asistente de conciliación: 3 pasos con compuerta humana. (1) duplicados determinista, (2) sin proyecto agrupado por serie con sugerencia, (3) programada↔real por venta+mes+tolerancia. Nada se borra/asigna solo.
 function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, onResolveDup, onAssignSeries, onReplaceProgramada, onClose}) {
-  const act = (scope||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.status!=='Anulado')
+  const mes = d => (d||'').slice(0,7)
+  // Período: 'todo' (ordenar el histórico) o 'mes' (revisión del mes corriente: emitidas por issued_at, programadas por due).
+  const [periodo,setPeriodo] = useState('todo')
+  const curMes = new Date().toISOString().slice(0,7)
+  const inPeriodo = b => periodo==='todo' ? true : (b.status==='Programada' ? mes(b.due)===curMes : mes(b.issued_at||b.due)===curMes)
+  const act = (scope||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.status!=='Anulado').filter(inPeriodo)
   const cName = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
-  const mes = d => (d||'').slice(0,7)
 
   // (1) Duplicados: mismo cliente + mismo monto + mismo vencimiento, o mismo folio normalizado.
   const dupGroups = useMemo(()=>{
@@ -8481,7 +8485,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
       const keep=[...g].sort((a,b)=>((a.invoice_no?0:1)-(b.invoice_no?0:1))||((b.status==='Pagado')-(a.status==='Pagado'))||((a.invoice_no===folioN(a.invoice_no)?0:1)-(b.invoice_no===folioN(b.invoice_no)?0:1))||(parseInt(folioN(a.invoice_no))||9e9)-(parseInt(folioN(b.invoice_no))||9e9))[0]
       groups.push({rows:g, keepId:keep.id}) })
     return groups
-  },[scope])
+  },[scope,periodo])
 
   // (2) Sin proyecto, agrupadas por serie. CRUCE POR PRIORIDAD (no solo glosa): modalidad/cuotas de la venta › monto › fecha › glosa, con RAZONES explícitas.
   const serieGroups = useMemo(()=>{
@@ -8512,7 +8516,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
       cs.forEach(s=>{ const {score,razones}=cruzar(rows,s); if(score>bestSc){bestSc=score;best=s;bestRaz=razones} })
       return {cid, rows:rows.sort((a,b)=>(a.due||'').localeCompare(b.due||'')), sug:bestSc>0?best:null, razones:bestRaz, sales:cs}
     }).filter(g=>g.sales.length>0).sort((a,b)=>b.rows.length-a.rows.length)
-  },[scope,sales])
+  },[scope,sales,periodo])
 
   // (3) Programada ↔ real: programada con venta, busca real del mismo cliente, mismo mes (±1) y monto con tolerancia ±15%.
   const progMatches = useMemo(()=>{
@@ -8525,7 +8529,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
       if(r) out.push({prog:p, real:r})
     })
     return out
-  },[scope])
+  },[scope,periodo])
 
   // (0) Fantasmas: Pagado SIN folio que es copia de una real CON folio (absorbe el tool de conciliación viejo). Respeta "no es duplicado" (learnings conciliacion_ok).
   const [okIds,setOkIds] = useState(null)
@@ -8539,7 +8543,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
       reales.forEach(r=>{ const a=g.amount||0; const mEq=a&&Math.abs((r.amount||0)-a)/a<=0.02?0.5:0; const gl=simTexto(r.concept,g.concept)*0.5; const sc=mEq+gl; if(sc>score){score=sc;best=r} })
       return {g, real:best, score}
     }).filter(x=>x.real && x.score>=0.5).sort((a,b)=>b.score-a.score)
-  },[scope,okIds])
+  },[scope,okIds,periodo])
   const marcarLegit = id => { learnPut('conciliacion_ok', String(id), '1', {}); setOkIds(p=>new Set([...(p||[]),String(id)])) }
 
   // Opus para series ambiguas (sin sugerencia heurística): propone la venta.
@@ -8577,7 +8581,12 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
         </button>
       </div>
       <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:18}}>
-        {ghosts.length+dupGroups.length+serieGroups.length+progMatches.length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.</div>}
+        <div style={{display:'flex',gap:6}}>
+          {[['todo','Histórico'],['mes','Mes corriente']].map(([v,l])=>(
+            <span key={v} onClick={()=>setPeriodo(v)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:periodo===v?C.accent:'#fff',color:periodo===v?'#fff':C.muted,border:`1px solid ${periodo===v?C.accent:C.border}`}}>{l}</span>
+          ))}
+        </div>
+        {ghosts.length+dupGroups.length+serieGroups.length+progMatches.length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>{periodo==='mes'?'Nada que conciliar este mes.':'Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.'}</div>}
 
         {ghosts.length>0&&<div>
           {sect(0,C.overdue,'Pagadas sin folio (posible copia)','determinista',ghosts.length)}
@@ -8687,6 +8696,17 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     try{ await sendMailServer({to, subject:`Recordatorio de cobro — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
+  // Registrar pago (total o parcial/abono). Si el monto recibido < saldo → queda "abonado" (paid_amount) y la factura sigue pendiente.
+  const pagar = b => {
+    const total=b.amount||0, ya=b.paid_amount||0, saldo=Math.max(0,total-ya)
+    const raw=prompt(`Registrar pago — ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'factura'}\nSaldo: ${fmt(saldo)}\n\nMonto recibido (deja el total para pago completo):`, String(saldo))
+    if(raw==null) return
+    const monto=parseInt(String(raw).replace(/[^\d]/g,''))||0
+    if(monto<=0) return
+    const hoy=new Date().toISOString().slice(0,10)
+    if(ya+monto>=total) onStatusChange&&onStatusChange(b.id,'Pagado',hoy,{paid_amount:null})
+    else onStatusChange&&onStatusChange(b.id, b.status, undefined, {paid_amount: ya+monto})
+  }
 
   const matchEstado = b => fEstado==='all' ? b.status!=='Anulada' : fEstado==='porcobrar' ? ['Pendiente','Vencido'].includes(b.status) : b.status===fEstado
   const facturas = all.filter(b=>{
@@ -8777,10 +8797,11 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   <div style={{textAlign:'right',flexShrink:0}}>
                     <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{fmt(b.amount)}</div>
                     <div style={{fontSize:9.5,fontWeight:600,color:STAT[b.status]||C.muted}}>{b.status}</div>
+                    {b.paid_amount>0&&b.status!=='Pagado'&&<div style={{fontSize:8.5,color:C.soon,fontWeight:600}}>abonado {fmt(b.paid_amount)}</div>}
                   </div>
                 </div>
                 {['Pendiente','Vencido'].includes(b.status)&&<div style={{display:'flex',gap:6,marginTop:7}}>
-                  <button onClick={()=>{ if(confirm(`¿Marcar pagada ${lblFolio(b)} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',new Date().toISOString().slice(0,10)) }} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>
+                  <button onClick={()=>pagar(b)} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>
                   <button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>
                 </div>}
                 {assignable&&<div style={{display:'flex',gap:6,alignItems:'center',marginTop:7,flexWrap:'wrap'}}>
@@ -13610,12 +13631,13 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
-  const handleStatusChange=useCallback(async(id,status,paid_at)=>{
+  const handleStatusChange=useCallback(async(id,status,paid_at,extra)=>{
     const updates={status}
     if(paid_at!==undefined) updates.paid_at=paid_at
+    if(extra&&typeof extra==='object') Object.assign(updates,extra)   // ej. {paid_amount} para abonos parciales
     const {error}=await supabase.from('billing').update(updates).eq('id',id)
     if(error){ alert('No se pudo cambiar el estado: '+error.message); return }   // no actualizar UI si la DB no cambió
-    setBilling(p=>p.map(x=>x.id===id?{...x,status,...(paid_at!==undefined?{paid_at}:{})}:x))
+    setBilling(p=>p.map(x=>x.id===id?{...x,status,...(paid_at!==undefined?{paid_at}:{}),...(extra&&typeof extra==='object'?extra:{})}:x))
   },[])
 
   // Deshacer un pago marcado por error: la factura vuelve a Pendiente (sin fecha de pago) y
