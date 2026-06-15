@@ -10902,6 +10902,174 @@ function PapeleraModal({clients=[],onClose,onChanged}){
   )
 }
 
+// ─── REVISIÓN IA DE GMAIL → CONTACTOS DE CLIENTES ─────────────────────────────
+// Lee el Gmail corporativo (scope gmail.readonly), extrae participantes externos, los asocia a clientes
+// (dominio conocido → directo; ambiguos → IA Opus) y propone agregarlos a la ficha. Compuerta humana.
+// Privacidad: a la IA solo van encabezados (De/Para/CC/Asunto) y dominio, nunca el cuerpo.
+const ME_DOMAIN = 'leabogados.cl'
+function GmailContactosModal({clients=[], clientEntities=[], onClose}){
+  const [phase,setPhase] = useState('idle')        // idle|scanning|review|error
+  const [prog,setProg] = useState({done:0,total:0,label:''})
+  const [props_,setProps] = useState([])
+  const [dismissed,setDismissed] = useState(new Set())
+  const [accepted,setAccepted] = useState(new Set())
+  const [busyE,setBusyE] = useState('')            // email en proceso
+  const [err,setErr] = useState('')
+  const lastScan = (typeof localStorage!=='undefined' && localStorage.getItem('gmail_contactos_last'))||''
+  const clientName = id => clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
+  useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','contacto_descartado').then(({data})=>setDismissed(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
+
+  const parseAddrs = h => (h||'').split(',').map(s=>s.trim()).map(s=>{ const m=s.match(/^(.*?)<(.+?)>$/); if(m) return {name:m[1].replace(/["']/g,'').trim(), email:m[2].trim().toLowerCase()}; return {name:'', email:s.toLowerCase()} }).filter(x=>x.email.includes('@'))
+
+  const asociarIA = async(ambig)=>{
+    const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY; if(!apiKey||!ambig.length) return
+    const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>{ const ents=(clientEntities||[]).filter(e=>e.client_id===c.id); return {id:c.id,nombre:c.name,rs:ents.map(e=>e.name).filter(Boolean),rut:c.rut||ents.map(e=>e.rut).filter(Boolean)[0]||''} })
+    for(let i=0;i<ambig.length;i+=25){
+      const batch=ambig.slice(i,i+25); setProg({done:i,total:ambig.length,label:'Asociando con IA…'})
+      const prompt=`Eres asistente del estudio de abogados Liberona Escala Abogados (@leabogados.cl). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece (por dominio del email, por el nombre/empresa que aparece en los asuntos, o por la razón social) o null si no es claro. Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
+      try{
+        const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
+        const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+        arr.forEach(o=>{ const a=batch.find(x=>x.email===o.email); if(a){ if(o.client_id&&clients.some(c=>String(c.id)===String(o.client_id))){ a.client_id=o.client_id; a.byIA=true } if(o.cargo) a.cargo=o.cargo } })
+      }catch(_){}
+    }
+  }
+
+  const escanear = async(modo)=>{
+    setErr(''); setPhase('scanning'); setProg({done:0,total:0,label:'Conectando…'})
+    try{
+      const token=await driveToken()
+      if(!token){ setErr('No hay token de Google con permiso de lectura. Cierra sesión y vuelve a entrar.'); setPhase('error'); return }
+      const d=new Date(); d.setMonth(d.getMonth()-12)
+      const afterStr = (modo==='nuevos'&&lastScan) ? lastScan : `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`
+      const q=encodeURIComponent(`after:${afterStr} -in:spam -in:trash`)
+      const CAP=600; let ids=[], pageToken=''
+      setProg({done:0,total:CAP,label:'Listando correos…'})
+      while(ids.length<CAP){
+        const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=200${pageToken?`&pageToken=${pageToken}`:''}`,{headers:{Authorization:'Bearer '+token}})
+        if(!r.ok){ if(r.status===401) throw new Error('Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.'); throw new Error('Gmail list '+r.status) }
+        const j=await r.json(); (j.messages||[]).forEach(m=>ids.push(m.id)); pageToken=j.nextPageToken; if(!pageToken) break
+      }
+      ids=ids.slice(0,CAP)
+      if(!ids.length){ setProps([]); localStorage.setItem('gmail_contactos_last',`${new Date().getFullYear()}/${new Date().getMonth()+1}/${new Date().getDate()}`); setPhase('review'); return }
+      const agg={}; let done=0
+      const fetchMeta = async(id)=>{
+        try{
+          const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject`,{headers:{Authorization:'Bearer '+token}})
+          if(!r.ok) return; const j=await r.json()
+          const H={}; (j.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
+          const subj=H['subject']||''; const ds=j.internalDate?new Date(parseInt(j.internalDate)).toISOString().slice(0,10):''
+          ;[...parseAddrs(H['from']),...parseAddrs(H['to']),...parseAddrs(H['cc'])].forEach(({name,email})=>{
+            const dom=email.split('@')[1]||''
+            if(dom===ME_DOMAIN||!dom) return
+            if(/no-?reply|noreply|notif|mailer-daemon|newsletter|bounce|postmaster|sii\.cl/.test(email)) return
+            const a=agg[email]||(agg[email]={email,name:'',domain:dom,count:0,last:'',subjects:[]})
+            a.count++; if(name&&name.length>a.name.length) a.name=name; if(ds>a.last) a.last=ds
+            if(subj&&a.subjects.length<3&&!a.subjects.includes(subj)) a.subjects.push(subj)
+          })
+        }catch(_){}
+        done++; if(done%15===0) setProg({done,total:ids.length,label:'Leyendo encabezados…'})
+      }
+      const CONC=8
+      for(let i=0;i<ids.length;i+=CONC){ await Promise.all(ids.slice(i,i+CONC).map(fetchMeta)) }
+      const ce=await supabase.from('contacts').select('client_id,email')
+      const existEmails=new Set((ce.data||[]).filter(c=>c.email).map(c=>String(c.email).toLowerCase()))
+      const domClient={}; (ce.data||[]).forEach(c=>{ if(c.email){ const dm=String(c.email).split('@')[1]; if(dm&&dm!==ME_DOMAIN&&!domClient[dm]) domClient[dm]=c.client_id } })
+      let cands=Object.values(agg).filter(a=>a.count>=1 && !existEmails.has(a.email) && !dismissed.has(a.email))
+      cands.forEach(a=>{ a.client_id=domClient[a.domain]||null; a.cargo='' })
+      await asociarIA(cands.filter(a=>!a.client_id))
+      setProps(cands.sort((a,b)=>b.count-a.count))
+      localStorage.setItem('gmail_contactos_last',`${new Date().getFullYear()}/${new Date().getMonth()+1}/${new Date().getDate()}`)
+      setPhase('review')
+    }catch(e){ setErr(e.message||String(e)); setPhase('error') }
+  }
+
+  const agregar = async(a, cid)=>{
+    const clientId=cid||a.client_id; if(!clientId) return
+    setBusyE(a.email)
+    try{
+      const {error}=await supabase.from('contacts').insert({client_id:clientId, nombre:(a.name||a.email.split('@')[0]).trim(), email:a.email, cargo:a.cargo||null})
+      if(error) throw error
+      setAccepted(p=>new Set([...p,a.email])); logEvent('contactos','agregar_gmail',{email:a.email,client_id:clientId},null)
+    }catch(e){ alert('No se pudo agregar: '+e.message) }
+    setBusyE('')
+  }
+  const descartar = a=>{ learnPut('contacto_descartado',a.email,'descartado',{}); setDismissed(p=>new Set([...p,a.email])) }
+  const reasignar = (email,cid)=> setProps(p=>p.map(a=>a.email===email?{...a,client_id:cid}:a))
+  const agregarSeguros = async(list)=>{ for(const a of list){ if(!accepted.has(a.email)) await agregar(a) } }
+
+  const visibles = props_.filter(a=>!accepted.has(a.email)&&!dismissed.has(a.email))
+  const conCliente = visibles.filter(a=>a.client_id)
+  const sinCliente = visibles.filter(a=>!a.client_id)
+  const grupos = {}; conCliente.forEach(a=>{ (grupos[a.client_id]=grupos[a.client_id]||[]).push(a) })
+  const ini = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+  const selCli = {fontSize:11,color:C.muted,border:`0.5px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',marginTop:3,maxWidth:'100%'}
+  const clientesOrden = [...clients].filter(c=>c.status!=='Terminado').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'))
+  const fila = (a,asignable)=>(
+    <div key={a.email} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid #F1F3F5`}}>
+      <div style={{width:34,height:34,borderRadius:'50%',background:asignable?'#FFF8E1':'#E6EEF1',color:asignable?'#854F0B':C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{ini(a.name||a.email)}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||a.email.split('@')[0]}</div>
+        <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.email}{a.cargo?<span style={{color:'#99ABB4'}}> · {a.cargo}{a.byIA?' (IA)':''}</span>:''}</div>
+        <div style={{fontSize:10,color:'#99ABB4'}}>{a.count} correo{a.count!==1?'s':''}{a.last?` · último ${fmtFechaDMY(a.last)}`:''}</div>
+        {asignable&&<select value={a.client_id||''} onChange={e=>reasignar(a.email,e.target.value||null)} style={selCli}><option value=''>Asignar a cliente…</option>{clientesOrden.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+      </div>
+      <div style={{display:'flex',gap:6,flexShrink:0}}>
+        {a.client_id&&<button disabled={busyE===a.email} onClick={()=>agregar(a)} style={{...chipBtn('primary'),opacity:busyE===a.email?.6:1}}>Agregar</button>}
+        <button onClick={()=>descartar(a)} style={chipBtn('soft')}>Descartar</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{maxWidth:600}}>
+      {phase==='idle'&&(
+        <div style={{padding:'4px 2px'}}>
+          <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>Reviso tu Gmail corporativo y propongo <b style={{color:C.text}}>contactos de clientes</b> (nombre + correo + cargo tentativo). Tú apruebas cuáles se agregan a la ficha. A la IA solo le envío <b style={{color:C.text}}>encabezados</b> (De/Para/CC/Asunto), nunca el cuerpo.</div>
+          <button onClick={()=>escanear('global')} style={{width:'100%',height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:8}}>Revisión global (últimos 12 meses)</button>
+          {lastScan&&<button onClick={()=>escanear('nuevos')} style={{width:'100%',height:40,borderRadius:10,border:`1px solid ${C.accent}`,background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>Revisar solo nuevos (desde {lastScan})</button>}
+        </div>
+      )}
+      {phase==='scanning'&&(
+        <div style={{padding:'30px 10px',textAlign:'center'}}>
+          <Spin/>
+          <div style={{fontSize:13,color:C.text,fontWeight:600,marginTop:12}}>{prog.label}</div>
+          {prog.total>0&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{prog.done} / {prog.total}</div>}
+          <div style={{height:6,background:'#F1F3F5',borderRadius:4,overflow:'hidden',marginTop:12,maxWidth:320,marginLeft:'auto',marginRight:'auto'}}><div style={{height:'100%',width:`${prog.total?Math.round(prog.done/prog.total*100):10}%`,background:C.accent,transition:'width .2s'}}/></div>
+        </div>
+      )}
+      {phase==='error'&&(
+        <div style={{padding:'24px 10px',textAlign:'center'}}>
+          <div style={{fontSize:13,color:C.overdue,marginBottom:14,lineHeight:1.5}}>{err}</div>
+          <button onClick={()=>setPhase('idle')} style={{padding:'9px 16px',borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver</button>
+        </div>
+      )}
+      {phase==='review'&&(
+        <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <div style={{fontSize:12,color:C.muted}}><b style={{color:C.text}}>{visibles.length}</b> contacto{visibles.length!==1?'s':''} nuevo{visibles.length!==1?'s':''}{conCliente.length>0&&` · ${conCliente.length} con cliente`}</div>
+            {conCliente.length>0&&<button onClick={()=>agregarSeguros(conCliente.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer'}}>Agregar todos los seguros</button>}
+          </div>
+          {visibles.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'26px 0'}}>Sin contactos nuevos por revisar.</div>}
+          {Object.keys(grupos).map(cid=>(
+            <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'9px 14px',background:'#F5F7F9'}}>{clientName(cid)} · {grupos[cid].length}</div>
+              {grupos[cid].map(a=>fila(a,false))}
+            </div>
+          ))}
+          {sinCliente.length>0&&(
+            <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#854F0B',padding:'9px 14px',background:'#FFF8E1'}}>Sin cliente claro · {sinCliente.length} — elige a quién asignar</div>
+              {sinCliente.map(a=>fila(a,true))}
+            </div>
+          )}
+          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver al inicio</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null)
@@ -11902,6 +12070,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M7 8l-4 4 4 4'/><path d='M17 8l4 4-4 4'/><path d='M14 4l-4 16'/></svg>
                   Conciliar facturas
                 </div>}
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'gmailContactos'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
+                  Revisar Gmail (contactos)
+                </div>}
                 {actualRole==='admin'&&(userRole==='admin'
                   ? <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('limited');setTab('tasks')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
@@ -11967,6 +12139,7 @@ export default function App() {
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='conciliacion'&&<Modal title='Conciliar facturas' onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliacionModal billing={billing} setBilling={setBilling} clients={clients} clientEntities={clientEntities} sales={sales} currentUserName={user?.name} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
           const [s,b,e]=await Promise.all([
             supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
