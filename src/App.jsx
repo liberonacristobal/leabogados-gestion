@@ -5604,7 +5604,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, entityIds, expenses, clientEntities, rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar}) {
+function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar}) {
   const [selected, setSelected] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
@@ -5634,18 +5634,23 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
   const nextCorr = Math.max(0, ...rendsCliEnv.map(r=>r.correlativo||0)) + 1
   const previasN = rendsCliEnv.length
 
-  // Proyectos disponibles (de los gastos pendientes de esta RS) + sugerido (el que tiene más gastos por rendir).
+  // Proyecto = VENTA: los proyectos del cliente vienen de sus ventas/propuestas (sales.title) y de los
+  // proyectos ya escritos en gastos pendientes. Se combinan; sugerido = el de más gastos, o si no hay, la venta.
   const gastosPend = allMovs.filter(e=>e.type==='gasto' && !e.client_rendered_at)
   const proyConteo = {}; gastosPend.forEach(e=>{ const p=e.project||''; if(p) proyConteo[p]=(proyConteo[p]||0)+1 })
-  const proyectosDisp = Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])
-  const proyectoSugerido = proyectosDisp[0]||''
-  // Al cambiar de RS (o al abrir), sugerir el proyecto con más gastos pendientes.
+  const ventasProy = (sales||[]).filter(s=>String(s.client_id)===String(client.id) && s.title && !['Rechazada','Borrador'].includes(s.status) && (singleRS || !s.entity_id || String(s.entity_id)===String(selEnt)))
+  const proyToSale = {}; ventasProy.forEach(s=>{ if(!(s.title in proyToSale)) proyToSale[s.title]=s.id })
+  const proyVentas = [...new Set(ventasProy.map(s=>s.title))]
+  const proyectosDisp = [...new Set([...Object.keys(proyConteo), ...proyVentas])].sort((a,b)=>(proyConteo[b]||0)-(proyConteo[a]||0))
+  const proyectoSugerido = Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])[0] || proyVentas[0] || ''
+  // Al cambiar de RS (o al abrir), sugerir el proyecto (gastos primero, si no la venta).
   useEffect(()=>{ setProyecto(proyectosDisp.includes(proyecto)?proyecto:(proyectoSugerido||'')) }, [selEnt])
 
   // Gastos disponibles para rendir (no rendidos aun), acotados al proyecto elegido.
+  // Un gasto pertenece al proyecto si tiene esa glosa de proyecto O está vinculado a su venta (sale_id).
   const disponibles = allMovs.filter(e=>{
     if(e.type!=='gasto' || e.client_rendered_at) return false
-    if(proyecto && (e.project||'')!==proyecto) return false
+    if(proyecto){ const sid=proyToSale[proyecto]; const ok=(e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
     if(fDesde && e.date && e.date < fDesde) return false
     if(fHasta && e.date && e.date > fHasta) return false
     return true
@@ -5800,9 +5805,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
             {proyectoSugerido&&proyecto!==proyectoSugerido&&<button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button>}
           </div>
           {proyectosDisp.length>0
-            ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={inpS}><option value=''>Todos los proyectos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p} ({proyConteo[p]})</option>)}</select>
+            ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={inpS}><option value=''>Todos los proyectos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}{proyConteo[p]?` (${proyConteo[p]})`:(proyToSale[p]?' · venta':'')}</option>)}</select>
             : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Escribe el proyecto (opcional)' style={inpS}/>}
-          {proyectosDisp.length===0 && <div style={{fontSize:10,color:'#C77F18',marginTop:3}}>Esta razón social no tiene gastos por rendir. Cambia de razón social o ingresa gastos primero.</div>}
+          {gastosPend.length===0 && <div style={{fontSize:10,color:'#C77F18',marginTop:3}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
           <div style={{marginTop:8}}>
             <div style={{...lblS,marginBottom:4}}>Subproyecto <span style={{textTransform:'none',fontWeight:400,color:'#99ABB4'}}>(opcional)</span></div>
             <input value={subproyecto} onChange={e=>setSubproyecto(e.target.value)} placeholder='—' style={{...inpS,borderColor:C.border}}/>
@@ -6511,7 +6516,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling}) {
+function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
@@ -6936,7 +6941,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
       {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
@@ -8362,7 +8367,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         user={user}
         onRendicionSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))}
       />
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} rendiciones={rendiciones} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setEmailRend(r)}}/></Modal>}
     </>
   )
 
@@ -11881,7 +11886,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
