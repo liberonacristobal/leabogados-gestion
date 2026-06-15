@@ -10934,15 +10934,19 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const [sinShow,setSinShow] = useState(50)        // cuántos "por asignar" mostrar (paginado incremental)
   const lastScan = (typeof localStorage!=='undefined' && localStorage.getItem('gmail_contactos_last'))||''
   const clientName = id => clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
+  const domLearnedRef = useRef({})   // dominio → client_id aprendido (de asignaciones manuales previas)
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','contacto_descartado').then(({data})=>setDismissed(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','dominio_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[String(r.key)]=String(r.value) }); domLearnedRef.current=m },()=>{}) },[])
 
   const parseAddrs = h => (h||'').split(',').map(s=>s.trim()).map(s=>{ const m=s.match(/^(.*?)<(.+?)>$/); if(m) return {name:m[1].replace(/["']/g,'').trim(), email:m[2].trim().toLowerCase()}; return {name:'', email:s.toLowerCase()} }).filter(x=>x.email.includes('@'))
   // Match por EXTENSIÓN/dominio: la palabra clave del dominio (ej. "tarragona" de @tarragona.cl) contra
   // el nombre del cliente o de su razón social. Ignora proveedores genéricos (gmail, hotmail…).
   const PROV = /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|gmx|aol)\b/
   const clientByDomain = domain => {
-    const core = String(domain||'').split('.')[0].replace(/[^a-z0-9]/g,'')
-    if(core.length<4 || PROV.test(domain)) return null
+    const dom=String(domain||'')
+    if(domLearnedRef.current[dom] && clients.some(c=>String(c.id)===String(domLearnedRef.current[dom]))) return domLearnedRef.current[dom]   // aprendido
+    const core = dom.split('.')[0].replace(/[^a-z0-9]/g,'')
+    if(core.length<4 || PROV.test(dom)) return null
     const hit = arr => { for(const o of arr){ const n=_normTxt(o.name||'').replace(/ /g,''); if(n.length>=4 && (n.includes(core)||core.includes(n))) return o } return null }
     const c=hit(clients); if(c) return c.id
     const e=hit(clientEntities); if(e&&e.client_id) return e.client_id
@@ -11019,6 +11023,12 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
       const {error}=await supabase.from('contacts').insert({client_id:clientId, nombre:(a.name||a.email.split('@')[0]).trim(), email:a.email, cargo:a.cargo||null})
       if(error) throw error
       setAccepted(p=>new Set([...p,a.email])); logEvent('contactos','agregar_gmail',{email:a.email,client_id:clientId},null)
+      // Aprende el dominio (si fue asignación manual) y asocia al instante los demás del mismo dominio aún sin cliente.
+      if(cid && a.domain && !PROV.test(a.domain)){
+        domLearnedRef.current[a.domain]=clientId
+        learnPut('dominio_cliente', a.domain, clientId, {})
+        setProps(p=>p.map(x=>(!x.client_id && x.domain===a.domain && x.email!==a.email)?{...x,client_id:clientId,byDom:true}:x))
+      }
     }catch(e){ alert('No se pudo agregar: '+e.message) }
     setBusyE('')
   }
