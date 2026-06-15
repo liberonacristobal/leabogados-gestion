@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Hero de Tareas: sugeridas desde Gmail
+- El hero de Tareas (admin) ahora muestra **"X tareas sugeridas" desde Gmail** en el mismo formato grande que "vencen esta semana"; al tocar se **despliegan** y cada una **abre el borrador de tarea** prellenado (o se descarta). El escaneo de no leídos corre 1 vez por sesión (cacheado) reutilizando el mismo motor del scanner "Tareas +Gmail".
+
 ## 2026-06-15 — Tareas desde Gmail (IA)
 - Nuevo en el menú (admin): **"Tareas +Gmail"** — lee tus correos **no leídos** (asunto + vista previa, nunca el cuerpo completo), la IA detecta acciones/compromisos pendientes y propone **tareas** con cliente y plazo sugeridos. Compuerta humana: **Crear tarea / Editar / Descartar**; lo descartado se aprende y no se vuelve a proponer.
 
