@@ -8619,6 +8619,7 @@ function ContactsEditor({clientId,clientName}) {
     if(error){alert('Error: '+error.message);return}
     setContacts(p=>p.filter(x=>x.id!==c.id))
   }
+  const togglePrincipal=async c=>{ const nv=!c.principal; setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:nv}:x)); const {error}=await supabase.from('contacts').update({principal:nv}).eq('id',c.id); if(error){alert('Error: '+error.message); setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:!nv}:x))} }
   const initials=n=>(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const slug=s=>(s||'contacto').trim().replace(/\s+/g,'-').replace(/[^\w\-]/g,'').toLowerCase()
   const exportarUno=c=>descargarVCF(vCard(c,clientName),`${slug(c.nombre)}.vcf`)
@@ -8635,11 +8636,12 @@ function ContactsEditor({clientId,clientName}) {
         <div style={{marginTop:8}}>
           {contacts===null&&<div style={{fontSize:12,color:C.muted}}>Cargando...</div>}
           {contacts!==null&&n===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin contactos.</div>}
-          {(contacts||[]).map(c=>(
+          {[...(contacts||[])].sort((a,b)=>(b.principal?1:0)-(a.principal?1:0)).map(c=>(
             <div key={c.id} style={{display:'flex',gap:9,alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+              <button onClick={()=>togglePrincipal(c)} title={c.principal?'Principal':'Marcar principal'} style={{background:'none',border:'none',cursor:'pointer',fontSize:17,lineHeight:1,color:c.principal?C.soon:'#CBD5DB',flexShrink:0,padding:0}}>{c.principal?'★':'☆'}</button>
               <div style={{width:32,height:32,borderRadius:'50%',background:'#E6EEF1',color:C.accent,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}{c.principal&&<span style={{fontSize:9,fontWeight:700,color:'#854F0B',background:'#FFF8E1',padding:'1px 6px',borderRadius:20,marginLeft:5,textTransform:'uppercase',letterSpacing:.3}}>Principal</span>}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
                 {(c.email||c.telefono)&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[c.email,c.telefono].filter(Boolean).join(' · ')}</div>}
               </div>
               <button onClick={()=>exportarUno(c)} title='Exportar (.vcf)' style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 4px',flexShrink:0}}>Exportar</button>
