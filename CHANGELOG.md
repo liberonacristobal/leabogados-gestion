@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Modelo Excel de notaría + OT en rendiciones
+- Nuevo botón **"Descargar modelo de notaría (.xlsx)"** en carga masiva: plantilla enfocada en notaría (Concepto · Subconcepto · OT, categoría Notaria precargada, ejemplos con OT-XXXX).
+- Al **rendir o liquidar**, la rendición guarda las **OT incluidas** (`rendiciones.ot_numbers`) y se muestran en su detalle (más el OT por gasto) — para cruzar con la notaría qué OT se están pagando. (Requiere columna `rendiciones.ot_numbers`.)
+
 ## 2026-06-15 — Notaría: Subconcepto y OT en carga masiva
 - La carga masiva acepta **Subconcepto** (detalle que distingue gastos con igual concepto) y **OT** (N° de orden notarial, OT-XXXX). Ambos entran al **dedup** → ya no se marcan como duplicados gastos con el mismo concepto pero distinto subconcepto/OT. La **IA** usa subconcepto/OT/notas para **asignar el cliente** y **compone la glosa** (Concepto + Subconcepto). El **OT se guarda** y aparece en el **detalle de la rendición** al cliente. Plantilla actualizada. (Requiere columnas `expenses.subconcept` y `expenses.ot_number`.)
 
