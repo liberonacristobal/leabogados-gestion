@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Liquidación de notaría
+- Nueva sección **"Notaría"** dentro de Gastos (la preparan los limited, visible para admin): lista de gastos categoría Notaria **pendientes de pagar a la notaría** (con OT), selección, KPI "Pendiente a notaría", y **"Liquidar a notaría"** → correo con el detalle de **OT · concepto · monto** + PDF adjunto (Gmail, correo configurable). Marca propia `notaria_render_id` (ledger independiente del reembolso al cliente y de caja chica). Historial de liquidaciones a notaría con **deshacer**. (Requiere columnas `expenses.notaria_render_id` y `notaria_liquidado_at`.)
+
 ## 2026-06-15 — Modelo Excel de notaría + OT en rendiciones
 - Nuevo botón **"Descargar modelo de notaría (.xlsx)"** en carga masiva: plantilla enfocada en notaría (Concepto · Subconcepto · OT, categoría Notaria precargada, ejemplos con OT-XXXX).
 - Al **rendir o liquidar**, la rendición guarda las **OT incluidas** (`rendiciones.ot_numbers`) y se muestran en su detalle (más el OT por gasto) — para cruzar con la notaría qué OT se están pagando. (Requiere columna `rendiciones.ot_numbers`.)
