@@ -856,17 +856,35 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       let correoOk = false
       if(abrirCorreo) {
         const dest = (enviarA||'').trim() || 'ee@leabogados.cl,cl@leabogados.cl'
-        const asunto = encodeURIComponent('Liquidación caja chica — ' + me + ' — ' + periodo)
+        const asunto = 'Liquidación caja chica — ' + me + ' — ' + periodo
         const lineas = marcados.map(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; return '• '+fmtFechaDMY(e.date)+' · '+(e.concept||'—')+' · '+cn+' · '+(e.category||'Otro')+' · $'+(e.amount||0).toLocaleString('es-CL') }).join('\n')
-        const cuerpo = encodeURIComponent(
-          'Estimados,\n\nAdjunto el detalle de la liquidación de caja chica.\n\n'
-          + 'Responsable: ' + me + '\nPeríodo: ' + periodo + '\nN° de gastos: ' + marcados.length + '\n\n'
-          + 'Detalle:\n' + lineas + '\n\nTOTAL: $' + totalReal.toLocaleString('es-CL') + '\n\nQuedo a disposición para cualquier consulta.'
-        )
-        const ccStr = (cc||'').trim() ? '&cc=' + encodeURIComponent(cc.trim()) : ''
-        const mailLink = document.createElement('a')
-        mailLink.href = 'mailto:' + dest + '?subject=' + asunto + ccStr + '&body=' + cuerpo
-        mailLink.click()
+        const texto = 'Estimados,\n\nAdjunto la liquidación de caja chica.\n\nResponsable: '+me+'\nPeríodo: '+periodo+'\nN° de gastos: '+marcados.length+'\n\nDetalle:\n'+lineas+'\n\nTOTAL: $'+totalReal.toLocaleString('es-CL')+'\n\nQuedo a disposición para cualquier consulta.'
+        // Mismo flujo que la rendición al cliente: Gmail API con PDF adjunto + cuerpo HTML; si no hay token, fallback a mailto + PDF imprimible.
+        let sent=false
+        try{
+          const token = await driveToken()
+          if(token){
+            const porCli={}; marcados.forEach(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; (porCli[cn]=porCli[cn]||[]).push(e) })
+            const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            const filasHtml = Object.entries(porCli).map(([cn,gs])=>{
+              const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
+              const rows=gs.map(e=>`<tr><td style="padding:4px 0;font-size:12px;color:#3D3D3D">${fmtFechaDMY(e.date)} · ${esc((e.concept||'—'))}</td><td style="padding:4px 0;font-size:12px;color:#E24B4A;text-align:right;font-weight:bold;white-space:nowrap">-$${(e.amount||0).toLocaleString('es-CL')}</td></tr>`).join('')
+              return `<div style="margin-top:14px"><div style="font-size:13px;font-weight:bold;color:#003C50;border-bottom:1px solid #003C50;padding-bottom:3px">${esc(cn)} — $${tot.toLocaleString('es-CL')}</div><table style="width:100%;border-collapse:collapse">${rows}</table></div>`
+            }).join('')
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjunto la liquidación de caja chica de <b>${esc(me)}</b> — ${esc(periodo)}.</div><div style="background:#f5f5f5;border-radius:8px;padding:16px"><div style="font-size:13px;color:#666666">N° de gastos: <b style="color:#1a1a1a">${marcados.length}</b></div>${filasHtml}<table style="width:100%;border-collapse:collapse;border-top:1.5px solid #537281;margin-top:14px"><tr><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#1a1a1a">TOTAL</td><td style="padding-top:8px;font-size:13px;font-weight:bold;color:#E24B4A;text-align:right">-$${totalReal.toLocaleString('es-CL')}</td></tr></table></div><div style="font-size:12px;color:#999999;margin-top:16px">Se adjunta el PDF con el detalle por cliente.</div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee"><div style="font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></div></body></html>`
+            const toAll = (cc||'').trim() ? dest+','+cc.trim() : dest
+            const pdf = await liquidacionPdfBase64({me, periodo, gastos:marcados, clients})
+            await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:html, pdfBase64:pdf, pdfName:`Liquidacion ${me} ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'})
+            sent=true
+          }
+        }catch(_){ sent=false }
+        if(!sent){
+          const ccStr = (cc||'').trim() ? '&cc=' + encodeURIComponent(cc.trim()) : ''
+          const mailLink = document.createElement('a')
+          mailLink.href = 'mailto:' + dest + '?subject=' + encodeURIComponent(asunto) + ccStr + '&body=' + encodeURIComponent(texto)
+          mailLink.click()
+          try{ generatePDF() }catch(_){}   // abre el PDF imprimible para adjuntar a mano
+        }
         correoOk = true
       }
       setToast({ n: marcados.length, total: totalReal, correo: correoOk })
@@ -6793,6 +6811,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
+  const [liqDetail,setLiqDetail] = useState(null)        // liquidación de caja chica abierta desde la pill "Liquidado"
   const isAdmin = currentUser?.role==='admin'
   // Personas con caja chica activa = quienes tienen fondos entregados en petty_cash.
   const cajaPersons = useMemo(()=>[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))],[pettyCash])
@@ -6942,6 +6961,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600}}>Fondo</span>}
               {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>Rendido <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>}
+              {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):alert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>Liquidado</button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
               {isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A',fontWeight:600}}>Carga masiva</span>}
             </div>
@@ -7249,6 +7269,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
+      {liqDetail&&(()=>{ const gs=(expenses||[]).filter(e=>String(e.render_id)===String(liqDetail.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0); return (
+        <Modal title='Liquidación de caja chica' onClose={()=>setLiqDetail(null)}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{liqDetail.user_name||''} · {liqDetail.periodo||''} · {liqDetail.created_at?new Date(liqDetail.created_at).toLocaleDateString('es-CL'):''}</div>
+          {gs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin gastos en esta liquidación.</div>}
+          {gs.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return (
+            <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'7px 0',borderBottom:`0.5px solid ${C.border}`}}>
+              <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10,color:'#99ABB4'}}>{cn} · {RENDCAT(e.category)} · {fmtFechaDMY(e.date)}</div></div>
+              <span style={{fontSize:12,fontWeight:600,color:C.overdue,whiteSpace:'nowrap'}}>-{fmt(e.amount)}</span>
+            </div>
+          )})}
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:10,paddingTop:8,borderTop:`1.5px solid ${C.muted}`}}><span style={{fontSize:13,fontWeight:700,color:C.text}}>TOTAL</span><span style={{fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(tot)}</span></div>
+        </Modal>
+      )})()}
       {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
@@ -9149,6 +9182,56 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
   y += 22; doc.setTextColor(61,61,61); doc.setFont('helvetica','normal'); doc.setFontSize(10)
   doc.text('Atentamente,', 40, y); y += 15
   doc.setFont('helvetica','bold'); doc.text(user?.name||'', 40, y); y += 14
+  doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
+  return doc.output('datauristring').split(',')[1]
+}
+// PDF de la liquidación de caja chica (jsPDF) → base64. Agrupado por cliente, mismo estilo que la rendición.
+async function liquidacionPdfBase64({me, periodo, gastos, clients}){
+  const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
+  const doc = new jsPDF({unit:'pt', format:'letter'})
+  const W = doc.internal.pageSize.getWidth()
+  const total = (gastos||[]).reduce((a,e)=>a+(e.amount||0),0)
+  const porCliente = {}
+  ;(gastos||[]).forEach(e=>{ const cn=(clients||[]).find(c=>c.id===e.client_id)?.name||'Sin cliente'; (porCliente[cn]=porCliente[cn]||[]).push(e) })
+  doc.setFillColor(0,60,80); doc.rect(0,0,W,74,'F')
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16)
+  doc.text('Liquidación de caja chica', 40, 34)
+  doc.setFont('helvetica','normal'); doc.setFontSize(10)
+  doc.text(`${me||''} · ${periodo||''}`, 40, 54)
+  doc.setFont('helvetica','bold'); doc.setFontSize(12)
+  doc.text('LIBERONA ESCALA ABOGADOS', W-40, 44, {align:'right'})
+  const bw=(W-80-12)/3, by=86, bh=42
+  const kcard=(i,lbl,val)=>{ const x=40+i*(bw+6); doc.setFillColor(245,247,249); doc.roundedRect(x,by,bw,bh,4,4,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(153,171,180); doc.text(lbl.toUpperCase(), x+10, by+16); doc.setFontSize(13); doc.setTextColor(61,61,61); doc.text(val, x+10, by+34) }
+  kcard(0,'N° de gastos', String((gastos||[]).length))
+  kcard(1,'Clientes', String(Object.keys(porCliente).length))
+  kcard(2,'Total a rendir', fmtN(total))
+  let y=160
+  Object.entries(porCliente).forEach(([cn,gs])=>{
+    const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
+    if(y>690){ doc.addPage(); y=60 }
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(0,60,80)
+    doc.text(`${String(cn).slice(0,50)} — ${fmtN(tot)}`, 40, y); y+=8
+    doc.setDrawColor(0,60,80); doc.setLineWidth(1.2); doc.line(40,y,W-40,y); y+=18
+    gs.forEach(e=>{
+      if(y>700){ doc.addPage(); y=60 }
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(61,61,61)
+      doc.text(fmtFechaDMY(e.date), 40, y)
+      doc.text(String(e.concept||'—').slice(0,42), 130, y)
+      doc.setFontSize(8.5); doc.setTextColor(83,114,129)
+      doc.text(String(e.category||'Otro').slice(0,20), 130, y+11)
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(226,75,74)
+      doc.text('-'+fmtN(e.amount), W-40, y, {align:'right'})
+      y+=26
+    })
+    y+=6
+  })
+  if(y>700){ doc.addPage(); y=60 }
+  doc.setDrawColor(83,114,129); doc.setLineWidth(1.5); doc.line(40,y,W-40,y); y+=20
+  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('TOTAL LIQUIDACIÓN', 40, y)
+  doc.setTextColor(226,75,74); doc.text('-'+fmtN(total), W-40, y, {align:'right'})
+  y+=30; doc.setTextColor(61,61,61); doc.setFont('helvetica','normal'); doc.setFontSize(10)
+  doc.text('Atentamente,', 40, y); y+=15
+  doc.setFont('helvetica','bold'); doc.text(me||'', 40, y); y+=14
   doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
   return doc.output('datauristring').split(',')[1]
 }
