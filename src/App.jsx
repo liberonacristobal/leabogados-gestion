@@ -92,6 +92,15 @@ const simTexto = (a,b) => { const A=new Set(_normTxt(a).split(' ').filter(w=>w.l
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
 const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
 const logEvent = (area,action,detail,user) => { try{ supabase.from('usage_events').insert({area,action,detail:detail||{},user_name:user||null}).then(()=>{},()=>{}) }catch(e){} }
+// Razón social a mostrar en encabezados: si se pasa entityId se usa esa RS; con 1 RS, esa; si hay varias o ninguna,
+// el nombre del cliente (con conteo de RS si aplica). Devuelve {name, rut, multi}.
+const rsLabel = (clientId, clients, clientEntities, entityId) => {
+  const ents = (clientEntities||[]).filter(e=>String(e.client_id)===String(clientId))
+  if(entityId){ const e=ents.find(x=>String(x.id)===String(entityId)); if(e) return {name:e.name, rut:e.rut||'', multi:0} }
+  if(ents.length===1) return {name:ents[0].name, rut:ents[0].rut||'', multi:0}
+  const c = (clients||[]).find(x=>String(x.id)===String(clientId))
+  return {name:c?.name||'Cliente', rut:c?.rut||'', multi:ents.length>1?ents.length:0}
+}
 // Trato al cliente: a personas se les dice "Estimado [nombre de pila]" (sin señor/señora ni apellido); a empresas "Estimados".
 const _ES_EMPRESA = /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a\.?|eirl|e\.?i\.?r\.?l|inversiones|comercial|constructora|sociedad|holding|inmobiliaria|servicios|grupo|asociados|abogados|consultores|ingenier|transportes|agricola|agrícola|clinica|clínica|tech|spa\.|cia)\b/i
 const esPersona = name => { const n=(name||'').trim(); if(!n) return false; if(_ES_EMPRESA.test(n)) return false; const w=n.split(/\s+/); return w.length>=2 && w.length<=4 && !/\d/.test(n) }
@@ -2625,7 +2634,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
 // ─── SALES VIEW ───────────────────────────────────────────────────────────────
-function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActivar}) {
+function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar}) {
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
   const [fStatus,setFStatus] = useState('Activo')
@@ -2768,7 +2777,7 @@ function SalesView({sales,clients,onEdit,onAdd,onAddPropuesta,onRechazar,onActiv
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:5}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{client?.name||'—'}</div>
+                  {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.name}{rs.rut?` · ${rs.rut}`:''}</div> })()}
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
                   {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</div>}
@@ -4598,6 +4607,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <span style={{fontSize:12,color:C.accent,transform:isOpen?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
             <div style={{minWidth:0}}>
               <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+              {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name&&!rs.multi)?<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.name}</div>:null })()}
               {!isOpen&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{nDocs} doc{nDocs!==1?'s':''}{vencidoMonto>0&&<span style={{color:C.overdue,fontWeight:700}}> · {fmt(vencidoMonto)} vencido</span>}</div>}
             </div>
           </div>
@@ -8039,6 +8049,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:18,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+            {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div style={{fontSize:11,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rs.name}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
             <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
               {client.type}
               {client.status==='Terminado'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#F5F7F9',color:C.muted,fontWeight:600}}>Terminado</span>}
@@ -8419,6 +8430,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>{c.name}{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:'#E4E8EB',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4}}>Interno</span>}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:'#C77F18',background:'#FFF8E1',borderRadius:20,padding:'1px 8px'}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
+                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.name!==c.name||rs.multi)?<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:rs.name}</div>:null })()}
                 </div>
                 <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`1px solid ${ended?C.border:C.normal}`,background:ended?'#F5F7F9':'transparent',color:ended?C.muted:C.normal,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{ended?'Reactivar':'Terminar'}</button>
               </div>
@@ -10567,6 +10579,17 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const clientById = id => clients.find(c=>String(c.id)===String(id))
   const rutDe = id => { const c=clientById(id); if(c?.rut) return c.rut; const e=(clientEntities||[]).find(x=>x.client_id===id&&x.rut); return e?.rut||'' }
   const saleTitle = sid => sales.find(s=>String(s.id)===String(sid))?.title||''
+  // Razón social a mostrar en el encabezado: 1 RS → su nombre+rut; si no, el receptor consistente de las facturas; si no, el nombre del cliente.
+  const rsDe = id => {
+    const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(id))
+    if(ents.length===1) return {name:ents[0].name, rut:ents[0].rut||rutDe(id)}
+    const recs=[...new Set((billing||[]).filter(b=>String(b.client_id)===String(id)&&b.receptor_name).map(b=>b.receptor_name))]
+    if(recs.length===1){ const r=(billing||[]).find(b=>b.receptor_name===recs[0]); return {name:recs[0], rut:r?.receptor_rut||rutDe(id)} }
+    return {name:clientById(id)?.name||'Cliente', rut:rutDe(id), multi:ents.length>1?ents.length:0}
+  }
+  // Folio limpio: invoice_no a veces trae la palabra "Factura" (texto). Evita "Factura Factura 261".
+  const folio = no => { const s=String(no||'').trim(); return /^\d+$/.test(s)?`Factura ${s}`:s }
+  const folioNum = no => String(no||'').replace(/^factura\s*/i,'').trim()||'—'
   // Sospechosas: Pagado sin folio, vivas, no reembolso, no ya marcadas legítimas.
   const sospechosas = (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && b.status==='Pagado' && !b.invoice_no && !ig.has(String(b.id)))
   const grupos = {}
@@ -10672,7 +10695,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
         return (
           <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'10px 14px',background:'#F5F7F9',borderBottom:`1px solid ${C.border}`}}>
-              <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{c?.name||'Cliente'}</div>{rutDe(cid)&&<div style={{fontSize:10,color:'#99ABB4'}}>{rutDe(cid)}</div>}</div>
+              {(()=>{ const rs=rsDe(cid); return (<div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{rs.name}</div><div style={{fontSize:10,color:'#99ABB4'}}>{rs.rut}{rs.multi?` · ${rs.multi} RS`:''}</div></div>) })()}
               <div style={{textAlign:'right',flexShrink:0}}><div style={lbl}>Sin folio · {grupo.length}</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(sumF)}</div></div>
             </div>
             {reales.length>0&&<div style={{fontSize:10,color:C.muted,padding:'6px 14px',borderBottom:`1px solid ${C.border}`}}>Facturas reales con folio del cliente: <b style={{color:C.greenText}}>{fmt(sumR)}</b> en {reales.filter(r=>r.status==='Pagado').length} pagada(s)</div>}
@@ -10691,7 +10714,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
                     <div style={{border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden'}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 14px',gap:8,padding:'7px 10px',borderBottom:`1px solid ${C.border}`}}>
                         <div style={{fontSize:9,fontWeight:700,color:'#A32D2D',textTransform:'uppercase',letterSpacing:.3}}>Fantasma · sin folio</div>
-                        <div style={{fontSize:9,fontWeight:700,color:'#0F6E56',textTransform:'uppercase',letterSpacing:.3}}>Factura {m.r.invoice_no} · folio</div>
+                        <div style={{fontSize:9,fontWeight:700,color:'#0F6E56',textTransform:'uppercase',letterSpacing:.3}}>{folio(m.r.invoice_no)} · folio</div>
                         <span/>
                       </div>
                       {cmpRow(diffGlosa(b.concept,m.r.concept), diffGlosa(m.r.concept,b.concept), m.glosaSim>=0.6)}
@@ -10713,7 +10736,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
                     <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden'}}>
                       {cands.map(x=>{ const sel=String((chosenCand[b.id]||(cands[0]&&cands[0].r.id)))===String(x.r.id); return (
                         <div key={x.r.id} onClick={()=>setChosenCand(p=>({...p,[b.id]:x.r.id}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer',background:sel?'#E6EEF1':'#fff'}}>
-                          <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:sel?700:500,color:sel?C.accent:C.text}}>Factura {x.r.invoice_no}</div><div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.r.concept||'—'}</div></div>
+                          <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:sel?700:500,color:sel?C.accent:C.text}}>{folio(x.r.invoice_no)}</div><div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.r.concept||'—'}</div></div>
                           <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:C.text}}>{fmt(x.r.amount)}</div><div style={{fontSize:9,color:x.score>=0.6?C.greenText:C.soon}}>{Math.round(x.score*100)}%</div></div>
                         </div>
                       )})}
@@ -10723,7 +10746,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
                     <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden',maxHeight:'34vh',overflowY:'auto'}}>
                       {otras.map(x=>{ const [sl,sc,sb]=stPillCuota(x.status); const same=Math.abs((x.amount||0)-(b.amount||0))<=Math.max(1000,(b.amount||0)*0.01); return (
                         <div key={x.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`0.5px solid ${C.border}`}}>
-                          <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.concept||'—'}{same&&<span style={{color:C.soon,fontWeight:600}}> · = monto</span>}</div><div style={{fontSize:9,color:'#99ABB4'}}>{x.invoice_no?`F° ${x.invoice_no} · `:''}{x.status==='Pagado'?`pagada ${x.paid_at?fmtFechaDMY(x.paid_at):''}`:`vence ${x.due?fmtFechaDMY(x.due):'—'}`}</div></div>
+                          <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.concept||'—'}{same&&<span style={{color:C.soon,fontWeight:600}}> · = monto</span>}</div><div style={{fontSize:9,color:'#99ABB4'}}>{x.invoice_no?`F° ${folioNum(x.invoice_no)} · `:''}{x.status==='Pagado'?`pagada ${x.paid_at?fmtFechaDMY(x.paid_at):''}`:`vence ${x.due?fmtFechaDMY(x.due):'—'}`}</div></div>
                           <div style={{textAlign:'right',flexShrink:0,display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,fontWeight:600,padding:'1px 6px',borderRadius:10,background:sb,color:sc}}>{sl}</span><span style={{fontSize:11,fontWeight:600,color:C.text}}>{fmt(x.amount)}</span></div>
                         </div>
                       )})}
@@ -10752,12 +10775,12 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
               <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{showConc?'Ocultar ▴':'Ver ▾'}</span>
             </div>
             {showConc&&<div style={{maxHeight:'40vh',overflowY:'auto'}}>
-              {Object.keys(gC).map(cid=>{ const c=clientById(cid); const list=gC[cid]; return (
+              {Object.keys(gC).map(cid=>{ const list=gC[cid]; const rs=rsDe(cid); return (
                 <div key={cid}>
-                  <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,padding:'7px 14px 3px',borderTop:`0.5px solid ${C.border}`,background:'#FAFBFC'}}>{c?.name||'Cliente'} · {list.length}</div>
+                  <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,padding:'7px 14px 3px',borderTop:`0.5px solid ${C.border}`,background:'#FAFBFC'}}>{rs.name} · {list.length}</div>
                   {list.map(x=>(
                     <div key={x.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 14px',borderTop:`0.5px solid ${C.border}`}}>
-                      <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.greenText}}>F° {x.invoice_no}</b> · {x.concept||'—'}</div><div style={{fontSize:9,color:'#99ABB4'}}>Pagada {x.paid_at?fmtFechaDMY(x.paid_at):'—'}</div></div>
+                      <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.greenText}}>F° {folioNum(x.invoice_no)}</b> · {x.concept||'—'}</div><div style={{fontSize:9,color:'#99ABB4'}}>Pagada {x.paid_at?fmtFechaDMY(x.paid_at):'—'}</div></div>
                       <span style={{fontSize:11,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(x.amount)}</span>
                     </div>
                   ))}
@@ -11892,7 +11915,7 @@ export default function App() {
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
-            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
+            {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling}/>}
