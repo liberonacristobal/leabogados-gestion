@@ -224,7 +224,11 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
   const lrow=(l,v,neg)=>`<div style='display:flex;justify-content:space-between;align-items:baseline;padding:4px 0'><span style='font-size:10px;color:${AZUL3}'>${l}</span><span style='font-size:12px;font-weight:600;color:#fff;white-space:nowrap'>${neg?'−':''}${v}</span></div>`
   const filasPrevias = (rendicionesPrevias||[]).map(p=>lrow(`Rendición ${p.fecha?fmtFechaDMY(String(p.fecha).slice(0,10)):'anterior'}`, fmtN(p.total), true)).join('')
   const resumenBox=`<div style='background:${A};border-radius:8px;padding:14px 18px;margin-top:18px;color:#fff'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:8px'>Resumen del fondo${razon?` · ${razon}`:''}</div>${lrow('Fondos recibidos', fmtN(totFondos))}${filasPrevias}${lrow('Esta rendición', fmtN(totGastos), true)}<div style='display:flex;justify-content:space-between;align-items:baseline;padding:9px 0 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.22)'><span style='font-size:11px;font-weight:700;color:#fff'>Saldo disponible</span><span style='font-size:15px;font-weight:700;color:#fff;white-space:nowrap'>${saldo<0?'−':''}${fmtN(saldo)}</span></div></div>`
-  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'><span>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div>${dirigidoA?`<div style='font-weight:600'>Dirigido a: ${dirigidoA}</div>`:''}</div><div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table>${resumenBox}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+  // Cabecera ejecutiva (diseño A): 3 cifras clave arriba — Fondos · Gastos del período · Saldo (destacado).
+  const saldoPos = saldo>=0
+  const kpiCard = (l,v,bg,fg)=>`<div style='background:${bg};padding:12px 16px;flex:1'><div style='font-size:8px;font-weight:600;color:${fg==='#fff'?'rgba(255,255,255,.7)':AZUL3};text-transform:uppercase;letter-spacing:.4px'>${l}</div><div style='font-size:17px;font-weight:700;color:${fg};margin-top:2px;white-space:nowrap'>${v}</div></div>`
+  const kpiRow = `<div style='display:flex;gap:1px;background:${GRAY}'>${kpiCard('Fondos recibidos',fmtN(totFondos),'#fff','#0F6E56')}${kpiCard('Gastos del período',fmtN(totGastos),'#fff',TXT)}${kpiCard(saldoPos?'Saldo a favor':'Saldo pendiente',(saldo<0?'−':'')+fmtN(Math.abs(saldo)),saldoPos?'#E1F5EE':'#FCEBEB',saldoPos?'#0F6E56':'#A32D2D')}</div>`
+  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'><span>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div>${dirigidoA?`<div style='font-weight:600'>Dirigido a: ${dirigidoA}</div>`:''}</div>${kpiRow}<div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
 }
 
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
@@ -6744,7 +6748,7 @@ function ExpensesView({expenses,clients,clientEntities,onAdd,onEdit,onAddFondo,o
 
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
       {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
-      {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} onSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))} onClose={()=>setEmailRend(null)}/>}
+      {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
@@ -7648,12 +7652,14 @@ function FinancieroTab({client, clientBilling, entities, anticipos=[], billing=[
 }
 
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
-function RendicionEmailModal({r, client, user, expenses, onSent, onClose}) {
+function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose}) {
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
   // Saldo del fondo con la MISMA fuente única que el PDF y el modal: fondos − gastos ya rendidos (de la RS).
   // Negativo = el cliente debe al Estudio → se incluyen los datos bancarios.
   const entId = (det.find(e=>e.entity_id)||{}).entity_id
-  const saldoCliente = rendicionSaldo(expenses, r.client_id, entId).saldo
+  const _rs = rendicionSaldo(expenses, r.client_id, entId)
+  const saldoCliente = _rs.saldo
+  const totFondosCli = _rs.totFondos
   const debeCliente = saldoCliente < 0
   const [para,setPara] = useState(client?.email||'')
   const [asunto,setAsunto] = useState(`Rendición de gastos ${client?.name||''} — ${r.periodo}`)
@@ -7688,7 +7694,7 @@ Liberona Escala Abogados`
   }
   const verPDF = () => {
     const w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para ver el PDF.'); return }
-    w.document.write(`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición ${client?.name||''} ${r.periodo||''}</title><style>@page{size:letter portrait;margin:16mm 18mm}body{margin:0;padding:22px;font-family:'DM Sans',Arial,sans-serif}@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body>${buildHTML()}<button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`)
+    w.document.write(rendicionPdfHtml(r, client, expenses, clientEntities))   // diseño rico A (mismo que "Ver PDF" del historial)
     w.document.close()
   }
   const enviar = async() => {
@@ -7701,7 +7707,7 @@ Liberona Escala Abogados`
       const token = await driveToken()
       if(token){
         try{
-          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente))
+          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
           await sendGmailWithPdf(token, {to:para.trim(), subject:asunto, bodyText:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(_){ /* sin scope gmail.send (403) u otro: caemos al fallback */ }
@@ -8019,7 +8025,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields}/>}
       {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
-      {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
+      {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
@@ -8500,7 +8506,7 @@ async function driveToken(){
 //    (agregar a supabase.js cuando esté habilitado en Google Cloud Console). Sin ese scope,
 //    la API devuelve 403 y el modal cae al fallback de Gmail compose (sin adjunto). ──
 // PDF de la rendición (jsPDF) → base64 sin el prefijo dataURL
-async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldoMonto=0){
+async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldoMonto=0, totFondos=0){
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const doc = new jsPDF({unit:'pt', format:'letter'})
   const W = doc.internal.pageSize.getWidth()
@@ -8511,7 +8517,15 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
   doc.text(`${client?.name||''} · ${r.periodo||''}`, 40, 54)
   doc.setFont('helvetica','bold'); doc.setFontSize(12)
   doc.text('LIBERONA ESCALA ABOGADOS', W-40, 44, {align:'right'})
-  let y = 108
+  // Cabecera ejecutiva (diseño A): 3 cifras clave — Fondos · Gastos del período · Saldo
+  const saldoSigned = debeCliente ? -saldoMonto : saldoMonto
+  const bw=(W-80-12)/3, by=86, bh=42
+  const kcard=(i,lbl,val,bg,fg)=>{ const x=40+i*(bw+6); doc.setFillColor(bg[0],bg[1],bg[2]); doc.roundedRect(x,by,bw,bh,4,4,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7); const lc=fg[0]===255?[255,255,255]:[153,171,180]; doc.setTextColor(lc[0],lc[1],lc[2]); doc.text(lbl.toUpperCase(), x+10, by+16); doc.setFontSize(13); doc.setTextColor(fg[0],fg[1],fg[2]); doc.text(val, x+10, by+34) }
+  kcard(0,'Fondos recibidos',fmtN(totFondos),[245,247,249],[15,110,86])
+  kcard(1,'Gastos del período',fmtN(r.total),[245,247,249],[61,61,61])
+  const sPos=saldoSigned>=0
+  kcard(2,sPos?'Saldo a favor':'Saldo pendiente',(saldoSigned<0?'-':'')+fmtN(Math.abs(saldoSigned)),sPos?[225,245,238]:[252,235,235],sPos?[15,110,86]:[163,45,45])
+  let y = 160
   doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8.5)
   doc.text('FECHA', 40, y); doc.text('DETALLE', 135, y); doc.text('MONTO', W-40, y, {align:'right'})
   y += 8; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(40,y,W-40,y); y += 18
