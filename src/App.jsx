@@ -282,9 +282,9 @@ const AreaChip = ({area}) => {
   return <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:bg[area]||'#F5F7F9',color:'#537281',fontWeight:600,whiteSpace:'nowrap'}}>{area}</span>
 }
 const Pill = ({label,bg,color,small}) => <span style={{display:'inline-block',padding:small?'1px 7px':'2px 9px',borderRadius:20,fontSize:small?10:11,fontWeight:600,color:color||'#fff',background:bg||C.accent,whiteSpace:'nowrap'}}>{label}</span>
-const Inp = (p) => <input {...p} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none',...p.style}}/>
-const Sel = ({value,onChange,options,placeholder}) => (
-  <select value={value} onChange={onChange} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}>
+const Inp = (p) => <input {...p} style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none',...p.style}}/>
+const Sel = ({value,onChange,options,placeholder,style}) => (
+  <select value={value} onChange={onChange} style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',...style}}>
     {placeholder&&<option value=''>{placeholder}</option>}
     {options.map(o=><option key={o} value={o}>{o}</option>)}
   </select>
@@ -334,7 +334,7 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
         <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>{title}</span>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           {titleRight}
-          <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-10}}>x</button>
+          <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:22,cursor:'pointer',lineHeight:1,width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-10}}>×</button>
         </div>
       </div>}
       <div style={{padding:hideHeader?'0':'18px 20px'}}>{children}</div>
@@ -12091,8 +12091,8 @@ export default function App() {
       <link href={FONT} rel='stylesheet'/>
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-        body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
-        input,select,textarea{font-family:'DM Sans',sans-serif}
+        body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
+        input,select,textarea{font-family:'DM Sans',sans-serif;font-variant-numeric:tabular-nums}
         input:focus,select:focus,textarea:focus{border-color:${C.accent}!important;box-shadow:0 0 0 3px rgba(0,60,80,.10)}
         ::-webkit-scrollbar{width:0;height:0}
         @keyframes spin{to{transform:rotate(360deg)}}
