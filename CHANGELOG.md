@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Tareas: panel KPI + agregar a calendario
+- **Hero de Tareas** arriba de "Mis tareas" (admin y limited): titular de foco (vencidas en rojo / vencen esta semana) + **tablero de 4 KPIs** tocables (Vencidas, Esta semana, Activas, Terminadas del mes) + chips (Activas / Que asigné / Terminadas) y mini-fila **"Asigné a"** por persona. Respeta los filtros de cliente/proyecto.
+- **Ícono de calendario** en cada tarjeta de tarea (junto al visto verde): crea el **evento de vencimiento en tu Google Calendar** vía Calendar API (evento de día completo). Requiere activar el scope `calendar.events` en Google + reentrar.
+
 ## 2026-06-15 — Liquidación de caja chica = rendición
 - Al liquidar y enviar, la liquidación ahora sale por **correo con el PDF adjunto** (vía Gmail API, cuerpo HTML branded con logo + detalle por cliente), igual que la rendición al cliente; destinatario por defecto los admin (editable). Si no hay permiso de Gmail, cae al `mailto` + PDF imprimible.
 - **Pill "Liquidado"** en cada gasto del cliente que ya fue a una liquidación de caja chica; al tocarla se abre el detalle de esa liquidación (gastos, cliente, total).
