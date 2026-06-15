@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-15 — Conciliar facturas: rediseño comparable
+- Cada cuota sospechosa (Pagado sin folio) se muestra como **comparación lado a lado** Fantasma ↔ Factura real, con tabla campo-a-campo (glosa, monto, fecha pago, proyecto), **punto de coincidencia** por fila (verde/ámbar) y **veredicto de certeza** (% + "Muy probable / Probable / Posible / Poco probable").
+- **Glosas con diff**: se resaltan en negrita azul las palabras en común entre ambas; **delta de monto** cuando son casi iguales (ej. +$15).
+- **Elegir otra factura**: desplegable con las facturas reales del cliente ordenadas por score para cambiar la candidata.
+- **Otras cuotas de la venta**: desplegable que muestra las demás cuotas del proyecto (pagadas o programadas futuras), marcando las de igual monto.
+- **Ya resueltas**: lista plegable de lo dado de baja / marcado legítimo en la sesión, con **deshacer** (restaura de Papelera o quita el aprendizaje).
+
 ## 2026-06-15 — Proyecto = venta en todos lados, buscador en Ventas, propuesta editable
 - **Buscador en Ventas**: pill de búsqueda al lado de "Nueva venta / Nueva propuesta" que filtra por título de venta o nombre de cliente (ignora el filtro de estado mientras buscas).
 - **Propuestas/Borradores editables**: una venta en estado Propuesta o Borrador ahora se edita con el formulario completo (honorarios, costos, forma de cobro incl. cuotas mensuales/cuota distinta, notas), no solo "condiciones registradas". Al guardar se regeneran sus cuotas programadas (todas sin emitir → reemplazo seguro).
