@@ -1869,6 +1869,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payDocF,setPayDocF] = useState('')        // fecha del documento
   const [payingNow,setPayingNow] = useState(false)
   const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
+  const [dgl,setDgl] = useState('neto')   // pill del desglose financiero: neto | fac | cob
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
   // --- META anual: metas por año (annual_targets) + selector + histórico ---
@@ -1895,6 +1896,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     return {year,bruto,costo,neto,meta,pct}
   }
   const m = metricasAnio(selYear)
+  // Facturado/Cobrado del AÑO seleccionado (facturas emitidas en el año; cobrado = de esas, cuánto pagado).
+  const _sySel = String(selYear)
+  const facturadoSel = bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(_sySel)).reduce((a,b)=>a+(b.amount||0),0)
+  const cobradoSel = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(_sySel)).reduce((a,b)=>a+(b.amount||0),0)
+  const porCobrarSel = Math.max(0, facturadoSel - cobradoSel)
   const fmtMon = v => dashMoneda==='UF' ? (ufRef>0?fmtUFk(Math.round(v/ufRef)):'—') : fmtShort(v)
   // Años con meta cargada O con ventas registradas (así 2025/2024 aparecen al ingresar sus ventas, sin necesidad de meta)
   const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year), ...sales.filter(s=>!['Borrador','Propuesta','Rechazada'].includes(s.status)).map(s=>s.year).filter(Boolean)])].sort((a,b)=>b-a)
@@ -1940,7 +1946,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       <div style={{padding:'0 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <div style={{display:'flex',alignItems:'center',position:'relative'}}>
-            <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Revenue target</span>
+            <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Cómo va el año</span>
             <button onClick={()=>setYearMenu(o=>!o)} style={{marginLeft:5,display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:10,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:'0.06em'}}>{selYear}<span style={{fontSize:9,color:'#99ABB4'}}>{'▾'}</span></button>
             {yearMenu&&(
               <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
@@ -1957,42 +1963,44 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           </div>
         </div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-          {/* Header: 3 columnas */}
-          <div style={{display:'flex',alignItems:'stretch',padding:'14px 16px',gap:14}}>
-            <div style={{display:'flex',flexDirection:'column',justifyContent:'center',paddingRight:14,borderRight:`1px solid ${C.border}`}}>
-              <div style={{fontSize:32,fontWeight:600,color:C.accent,lineHeight:1}}>{m.pct}%</div>
-              <div style={{fontSize:12,color:'#537281',marginTop:2}}>completado</div>
+          {/* Bloque único: izquierda velocímetro de meta · derecha desglose financiero */}
+          <div style={{display:'flex',alignItems:'stretch'}}>
+            <div style={{flex:1.18,padding:'16px 14px',borderRight:`1px solid ${C.border}`,textAlign:'center',display:'flex',flexDirection:'column',justifyContent:'center'}}>
+              <div style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:2}}>Vendido vs meta</div>
+              <svg viewBox='0 0 148 86' style={{width:'100%',maxWidth:185,margin:'0 auto'}}>
+                <defs><linearGradient id='gMetaDash' x1='16' y1='0' x2='132' y2='0' gradientUnits='userSpaceOnUse'><stop offset='0' stopColor='#99ABB4'/><stop offset='0.55' stopColor='#537281'/><stop offset='1' stopColor='#003C50'/></linearGradient></defs>
+                <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke='#F1F4F6' strokeWidth='9' strokeLinecap='round'/>
+                <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke='url(#gMetaDash)' strokeWidth='9' strokeLinecap='round' strokeDasharray={`${Math.round(Math.min(100,m.pct)/100*182)} 182`}/>
+                <text x='74' y='72' textAnchor='middle' style={{fontSize:30,fontWeight:700,fill:C.accent}}>{m.pct}%</text>
+              </svg>
+              <div><span style={{fontSize:26,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(m.bruto)}</span><span style={{fontSize:14,color:'#A8B2B8'}}> / {fmtMon(m.meta)}</span></div>
+              <button onClick={()=>setRevOpen(o=>!o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#537281',marginTop:3}}>faltan {fmtMon(Math.max(0,m.meta-m.bruto))} · {ventasDelAnio.length} ventas ›</button>
+              {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:4}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
             </div>
-            <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:5,minWidth:0}}>
-              {[['Meta',m.meta,'#3D3D3D'],['Vendido',m.bruto,C.accent],['Restante',Math.max(0,m.meta-m.bruto),'#537281']].map(([l,v,col])=>(
-                <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-                  <span style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>{l}</span>
-                  <span style={{fontSize:13,fontWeight:500,color:col}}>{fmtMon(v)}</span>
-                </div>
-              ))}
+            <div style={{flex:1,padding:'16px 14px',display:'flex',flexDirection:'column'}}>
+              <div style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>Desglose financiero</div>
+              <div style={{display:'flex',gap:4,marginBottom:13}}>
+                {[['neto','Neto'],['fac','Facturado'],['cob','Cobrado']].map(([k,l])=>{ const on=dgl===k; return (
+                  <button key={k} onClick={()=>setDgl(k)} style={{flex:1,padding:'5px 2px',border:'none',borderRadius:7,background:on?C.accent:'#F5F7F9',color:on?'#fff':'#537281',fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
+                )})}
+              </div>
+              {(()=>{
+                const pc = v => m.bruto>0?Math.round(v/m.bruto*100):0
+                const D = {
+                  neto:{lbl:`Neto firma · ${pc(m.neto)}%`, val:m.neto, w:Math.min(100,pc(m.neto)), ctx:`bruto ${fmtMon(m.bruto)} − terceros ${fmtMon(m.costo)} ›`, go:'sales'},
+                  fac:{lbl:`Facturado · ${pc(facturadoSel)}%`, val:facturadoSel, w:Math.min(100,pc(facturadoSel)), ctx:'del total vendido ›', go:'billing'},
+                  cob:{lbl:`Cobrado · ${pc(cobradoSel)}%`, val:cobradoSel, w:Math.min(100,pc(cobradoSel)), ctx:`${fmtMon(porCobrarSel)} por cobrar ›`, go:'billing'},
+                }[dgl]
+                return (<>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:11,color:'#537281'}}>{D.lbl}</span><span style={{fontSize:24,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtMon(D.val)}</span></div>
+                  <div style={{fontSize:9,color:'#A8B2B8',margin:'11px 0 4px',display:'flex',justifyContent:'space-between'}}><span>0</span><span>vendido {fmtMon(m.bruto)}</span></div>
+                  <div style={{height:9,borderRadius:6,background:'#F1F4F6',overflow:'hidden'}}><div style={{height:'100%',width:`${D.w}%`,background:dgl==='cob'?C.greenText:C.normal,borderRadius:6,transition:'width .3s'}}/></div>
+                  <button onClick={()=>setTab(D.go)} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#537281',marginTop:9,textAlign:'left',padding:0}}>{D.ctx}</button>
+                </>)
+              })()}
+              <div style={{flex:1,minHeight:8}}/>
+              <button onClick={()=>setTab('billing')} style={{fontSize:11,color:'#A32D2D',background:'#FCEBEB',borderRadius:8,padding:'9px 11px',cursor:'pointer',border:'none',display:'flex',justifyContent:'space-between',alignItems:'center',width:'100%'}}><span><b>{fmtMon(porCobrarSel)} por cobrar</b></span><span>aging ›</span></button>
             </div>
-            {tendenciaPP!==null&&(
-              <div style={{display:'flex',alignItems:'center',flexShrink:0}}>
-                <div style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:10,background:'#E1F5EE',color:C.greenText,whiteSpace:'nowrap'}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>
-              </div>
-            )}
-          </div>
-          {/* Barra de progreso */}
-          <div style={{height:5,background:'#E4E8EB',overflow:'hidden'}}>
-            <div style={{height:'100%',background:C.accent,width:`${Math.min(100,m.pct)}%`,borderRadius:3,transition:'width .5s ease'}}/>
-          </div>
-          {/* KPIs — Bruto se omite (es idéntico a "Vendido" del encabezado); Neto se rotula "venta" para no confundir con el "Neto firma" del funnel */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,padding:'12px 16px'}}>
-            {[
-              ['Costo terceros',m.costo,C.overdue,`${m.bruto>0?Math.round(m.costo/m.bruto*100):0}% de la venta`],
-              ['Neto venta',m.neto,C.greenText,`margen ${m.bruto>0?Math.round(m.neto/m.bruto*100):0}%`],
-            ].map(([l,v,col,sub])=>(
-              <div key={l} style={{background:'#f5f7f9',borderRadius:8,padding:'8px 10px'}}>
-                <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,fontWeight:600,marginBottom:3}}>{l}</div>
-                <div style={{fontSize:16,fontWeight:500,color:col}}>{fmtMon(v)}</div>
-                <div style={{fontSize:10,color:'#537281',marginTop:1}}>{sub}</div>
-              </div>
-            ))}
           </div>
           {/* Trigger detalle de ventas del año (componen el Vendido) */}
           <div style={{borderTop:`1px solid ${C.border}`}}>
@@ -2055,106 +2063,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      {/* Resultado del año {selYear}: funnel Vendido → Facturado → Cobrado, TODO del mismo año (sigue el selector del Revenue target) */}
-      <div style={{padding:'16px 20px 0'}}>
-        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Resultado del año {selYear}</div>
-        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px'}}>
-          {(()=>{
-            const sy = String(selYear)
-            // Todo acotado a facturas EMITIDAS en el año (Cobrado = de esas facturas cuánto se pagó). No mezcla cobros de otros años.
-            const facturadoSel = bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(sy)).reduce((a,b)=>a+(b.amount||0),0)
-            const cobradoSel = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(sy)).reduce((a,b)=>a+(b.amount||0),0)
-            const tercerosSel = bb.filter(b=>b.issued_at?.startsWith(sy)&&b.billing_type!=='reembolso').reduce((a,b)=>a+(Number(b.monto_terceros)||0),0)
-            const netoFirma = facturadoSel - tercerosSel
-            const tasaSel = facturadoSel>0?Math.min(100,Math.round(cobradoSel/facturadoSel*100)):0
-            const tasaCol = tasaSel>=80?C.normal:tasaSel>=50?C.soon:C.overdue
-            const mS = clp => dashMoneda==='UF'?(ufRef>0?fmtUFk(clp/ufRef):'—'):fmtShort(clp)
-            // UNA sola barra = Vendido (track). Sobre ella se marcan, cada uno en su color: Facturado y Cobrado (desde la izquierda)
-            // y el Costo oficina (terceros) desde la derecha. La leyenda con los montos va color a color debajo.
-            const pw = v => m.bruto>0?Math.min(100,Math.max(0,v/m.bruto*100)):0
-            const wFac=pw(facturadoSel), wCob=pw(cobradoSel), wCosto=Math.max(tercerosSel>0?1.5:0, pw(tercerosSel))
-            // Alt 2: grilla de mini-stats (tarjeta con borde de color + label + monto). Facturado y Cobrado tocables.
-            const pctFV = m.bruto>0?Math.round(facturadoSel/m.bruto*100):0
-            // Vendido = la barra entera (encabezado, su total a la derecha). Sobre ella se marcan Facturado/Cobrado (izq) y Costo oficina (der); todos tocables.
-            const segBtn = (k)=>({position:'absolute',top:0,height:'100%',border:'none',padding:0,cursor:'pointer',outline:funnelKpi===k?'2px solid #fff':'none',outlineOffset:'-2px'})
-            const Stat = (col,l,val,{k,sub}={})=>{
-              const on=funnelKpi===k
-              const inner=(<>
-                <div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,borderRadius:2,background:col,flexShrink:0}}/>{l}{sub?<span style={{color:'#99ABB4'}}>{sub}</span>:null}{k?<span style={{fontSize:8,color:'#99ABB4',transform:on?'rotate(90deg)':'none',display:'inline-block'}}>▸</span>:null}</div>
-                <div style={{fontSize:15,fontWeight:700,color:col,marginTop:1,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div>
-              </>)
-              const st={textAlign:'left',width:'100%',background:on?'#F5F7F9':'transparent',border:'none',borderRadius:6,padding:'5px 6px',minWidth:0}
-              return k ? <button key={l} onClick={()=>setFunnelKpi(on?null:k)} style={{...st,cursor:'pointer'}}>{inner}</button> : <div key={l} style={st}>{inner}</div>
-            }
-            return (<>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:12,marginBottom:9}}>
-                <div><div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Vendido</div><div style={{fontSize:24,fontWeight:700,color:C.accent,lineHeight:1,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{mS(m.bruto)}</div></div>
-                <div style={{textAlign:'right'}}><div style={{fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Neto firma</div><div style={{fontSize:24,fontWeight:700,color:C.greenText,lineHeight:1,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{mS(netoFirma)}</div></div>
-              </div>
-              {(()=>{
-                // Globito: aparece sobre la barra mostrando el tramo tocado (monto + %)
-                const tip = funnelKpi==='facturado' ? {pos:Math.min(86,Math.max(14,wFac/2)),txt:`Facturado ${mS(facturadoSel)} · ${pctFV}%`}
-                  : funnelKpi==='cobrado' ? {pos:Math.min(86,Math.max(14,wCob/2)),txt:`Cobrado ${mS(cobradoSel)} · ${tasaSel}%`}
-                  : funnelKpi==='costo' ? {pos:Math.min(94,Math.max(8,wFac-wCosto/2)),txt:`Costo oficina ${mS(tercerosSel)} · de lo facturado`}
-                  : null
-                const costoLeft = Math.max(0, wFac-wCosto)   // el costo se marca DENTRO del facturado, en su borde derecho (lo que de lo facturado va a terceros)
-                return (
-              <div style={{position:'relative',marginBottom:10}}>
-                {tip&&<div style={{position:'absolute',bottom:'calc(100% + 5px)',left:`${tip.pos}%`,transform:'translateX(-50%)',background:C.accent,color:'#fff',fontSize:10,fontWeight:600,padding:'3px 8px',borderRadius:5,whiteSpace:'nowrap',pointerEvents:'none',zIndex:5,boxShadow:'0 2px 6px rgba(0,0,0,.18)'}}>{tip.txt}</div>}
-              <div style={{position:'relative',height:13,background:'#EEF1F3',borderRadius:7,overflow:'hidden'}}>
-                <button title='Facturado' onClick={()=>setFunnelKpi(funnelKpi==='facturado'?null:'facturado')} style={{...segBtn('facturado'),left:0,width:`${wFac}%`,background:C.normal,opacity:.4}}/>
-                <button title='Cobrado' onClick={()=>setFunnelKpi(funnelKpi==='cobrado'?null:'cobrado')} style={{...segBtn('cobrado'),left:0,width:`${wCob}%`,background:C.greenText}}/>
-                {wCosto>0&&<button title='Costo oficina (parte de lo facturado que va a terceros)' onClick={()=>setFunnelKpi(funnelKpi==='costo'?null:'costo')} style={{...segBtn('costo'),left:`${costoLeft}%`,width:`${wCosto}%`,background:C.overdue}}/>}
-                <div style={{position:'absolute',top:0,height:'100%',left:`${wCob}%`,width:1.5,background:'#fff'}}/>
-                {wCosto>0&&<div style={{position:'absolute',top:0,height:'100%',left:`${costoLeft}%`,width:1.5,background:'#fff'}}/>}
-                <div style={{position:'absolute',top:0,height:'100%',left:`${wFac}%`,width:1.5,background:'#fff'}}/>
-              </div></div>) })()}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:2}}>
-                {Stat(C.normal,'Facturado',mS(facturadoSel),{sub:` ${pctFV}%`,k:'facturado'})}
-                {Stat(C.overdue,'Costo oficina','−'+mS(tercerosSel),{k:'costo'})}
-                {Stat(C.greenText,'Cobrado',mS(cobradoSel),{k:'cobrado'})}
-                {Stat(tasaCol,'Tasa cobro',`${tasaSel}%`)}
-              </div>
-              {funnelKpi&&(()=>{
-                const lists={
-                  facturado: bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(sy)).sort((a,b)=>(b.issued_at||'')<(a.issued_at||'')?-1:1),
-                  cobrado: bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(sy)).sort((a,b)=>(b.paid_at||'')<(a.paid_at||'')?-1:1),
-                  costo: bb.filter(b=>(Number(b.monto_terceros)||0)>0&&b.issued_at?.startsWith(sy)).sort((a,b)=>(Number(b.monto_terceros)||0)<(Number(a.monto_terceros)||0)?-1:1),
-                }
-                const titulo={facturado:'Facturado '+sy,cobrado:'Cobrado (facturas '+sy+')',costo:'Costo oficina (terceros) '+sy}[funnelKpi]
-                const col={facturado:C.normal,cobrado:C.greenText,costo:C.overdue}[funnelKpi]
-                const rows=lists[funnelKpi]||[]
-                const valOf = b => funnelKpi==='costo' ? (Number(b.monto_terceros)||0) : (b.amount||0)
-                const tot=rows.reduce((a,b)=>a+valOf(b),0)
-                return (
-                  <div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 12px',borderBottom:`1px solid ${C.border}`}}>
-                      <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>{titulo} · {rows.length}</span>
-                      <span style={{fontSize:12,fontWeight:700,color:col,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
-                    </div>
-                    {rows.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'14px'}}>Sin registros.</div>}
-                    <div style={{maxHeight:300,overflowY:'auto'}}>
-                      {rows.map(b=>{
-                        const cn=clientesMap[b.client_id]||b.receptor_name||'—'
-                        const meta=funnelKpi==='cobrado'?(b.paid_at?'Pagada '+fmtFechaDMY(b.paid_at):'Pagada'):funnelKpi==='costo'?'Terceros':(b.issued_at?'Emitida '+fmtFechaDMY(b.issued_at):'')
-                        return (
-                          <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'8px 12px',borderBottom:`1px solid ${C.border}`}}>
-                            <div style={{minWidth:0}}>
-                              <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div>
-                              <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}{meta?` · ${meta}`:''}</div>
-                            </div>
-                            <span style={{fontSize:12,fontWeight:600,color:col,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(valOf(b))}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })()}
-            </>)
-          })()}
-        </div>
-      </div>
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
       <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients}/>

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Dashboard: KPI unico "Cómo va el año" (velocímetro + desglose)
+- Se fusionaron los dos bloques (Revenue target + Resultado del año) en UNO solo. Izquierda: **velocímetro de meta** con degradé azul (claro→oscuro según avance) + Vendido / Meta + faltan + N° ventas. Derecha: **Desglose financiero** con pills **Neto / Facturado / Cobrado** (barra proporcional a lo vendido) + alerta fija **"por cobrar · aging"**. Conserva selector de año, UF/CLP, "Ventas del año" y "Años anteriores". Tocables navegan a Ventas/Facturación.
+
+# Changelog
+
 ## 2026-06-15 — IA: revisar Gmail → contactos de clientes
 - Nuevo en el menú (admin): **"Revisar Gmail (contactos)"**. Lee el Gmail corporativo (scope `gmail.readonly`), extrae los participantes externos de los últimos 12 meses, los **asocia a clientes** (dominio conocido → directo; ambiguos → IA Opus que infiere cliente y cargo) y propone agregarlos a la ficha. **Compuerta humana**: Agregar / Descartar / reasignar cliente. Revisiones **parciales** ("Revisar nuevos" desde la última). Privacidad: a la IA solo van encabezados (De/Para/CC/Asunto), nunca el cuerpo. Descartados se recuerdan en `learnings` (sin re-proponer); la ficha ya tenía los campos de contacto (nombre/cargo/email/teléfono).
 
