@@ -1870,6 +1870,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payingNow,setPayingNow] = useState(false)
   const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
   const [dgl,setDgl] = useState('neto')   // pill del desglose financiero: neto | fac | cob
+  const [iaHoy,setIaHoy] = useState(null)       // resumen IA de "qué atender hoy"
+  const [iaHoyBusy,setIaHoyBusy] = useState(false)
   const [mesOficina,setMesOficina] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
 
   // --- META anual: metas por año (annual_targets) + selector + histórico ---
@@ -1937,6 +1939,48 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const movs = [...evs].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,3)
     const rs = clientEntities.filter(e=>e.client_id===c.id)
     return {fondos,gastos,saldo:fondos-gastos,movs,rs}
+  }
+
+  // --- Qué atender hoy: junta lo urgente de todas las áreas, priorizado (determinista). ---
+  const atenderHoy = useMemo(()=>{
+    const today = new Date().toISOString().slice(0,10)
+    const dlb = b => daysLeft(b.due)
+    const vencidas = bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso')
+    const porCobrar7 = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso'&&dlb(b)!=null&&dlb(b)>=0&&dlb(b)<=7)
+    const tareasVenc = (tasks||[]).filter(t=>t.status!=='Terminado'&&t.due&&String(t.due)<today)
+    const cajaUsers=['Martín','Martina']
+    const cajaSinLiq = (expenses||[]).filter(e=>e.type==='gasto'&&cajaUsers.includes(e.created_by)&&!e.rendered_at&&!e.paid_by_client&&e.category!=='Notaria')
+    const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.client_rendered_at&&!e.paid_by_client).map(e=>e.client_id))]
+    const propTardias = sales.filter(s=>s.status==='Propuesta'&&s.created_at&&Math.floor((Date.now()-new Date(s.created_at))/86400000)>14)
+    const sum = arr => arr.reduce((a,b)=>a+(b.amount||0),0)
+    const items = [
+      vencidas.length&&{sev:0,dot:C.overdue,lbl:'Facturas vencidas',val:`${vencidas.length} · ${fmtShort(sum(vencidas))}`,go:'billing',iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sum(vencidas))}`},
+      tareasVenc.length&&{sev:0,dot:C.overdue,lbl:'Tareas vencidas',val:`${tareasVenc.length}`,go:'tasks',iaTxt:`${tareasVenc.length} tareas vencidas`},
+      porCobrar7.length&&{sev:1,dot:C.soon,lbl:'Por cobrar esta semana',val:`${porCobrar7.length} · ${fmtShort(sum(porCobrar7))}`,go:'billing',iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sum(porCobrar7))})`},
+      cajaSinLiq.length&&{sev:1,dot:C.soon,lbl:'Caja chica sin liquidar',val:`${cajaSinLiq.length} · ${fmtN(sum(cajaSinLiq))}`,go:'expenses',iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
+      negatives.length&&{sev:1,dot:C.soon,lbl:'Clientes sin fondos',val:`${negatives.length} · ${fmtShort(Math.abs(totalNeg))}`,go:'clients',iaTxt:`${negatives.length} clientes sin fondos`},
+      rendCli.length&&{sev:2,dot:C.normal,lbl:'Rendiciones por hacer',val:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,go:'expenses',iaTxt:`${rendCli.length} clientes con gastos por rendir`},
+      propTardias.length&&{sev:2,dot:'#99ABB4',lbl:'Propuestas tardías (+14d)',val:`${propTardias.length} · ${fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0)))}`,go:'sales',iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
+    ].filter(Boolean).sort((a,b)=>a.sev-b.sev)
+    const head = vencidas.length ? `Hoy prioriza la cobranza: ${fmtShort(sum(vencidas))} en ${vencidas.length} factura${vencidas.length!==1?'s':''} vencida${vencidas.length!==1?'s':''}.`
+      : tareasVenc.length ? `Tienes ${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''} vencida${tareasVenc.length!==1?'s':''} por resolver.`
+      : porCobrar7.length ? `Vence cobranza esta semana: ${fmtShort(sum(porCobrar7))} en ${porCobrar7.length}.`
+      : items.length ? 'Pendientes menores por revisar.' : 'Todo al día.'
+    return {items, head}
+  },[bb,tasks,expenses,sales,negatives,totalNeg])
+
+  const resumenHoyIA = async()=>{
+    const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
+    if(!apiKey){ alert('Falta la API key de Claude.'); return }
+    if(!atenderHoy.items.length){ setIaHoy('Todo al día — sin pendientes urgentes.'); return }
+    setIaHoyBusy(true)
+    const prompt=`Eres el copiloto del socio de un estudio de abogados. Estos son los pendientes de HOY (ya calculados, no inventes cifras): ${atenderHoy.items.map(i=>i.iaTxt).join('; ')}. Escribe 2 frases MUY breves, en español de Chile, tono directo, diciendo en qué enfocarse hoy y por qué (prioriza cobranza/plazos). No listes todo, da el foco. Sin saludo ni markdown.`
+    try{
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})})
+      const data=await resp.json(); const txt=(data.content?.[0]?.text||'').trim()
+      if(txt) setIaHoy(txt)
+    }catch(e){ alert('No se pudo generar el resumen: '+(e?.message||e)) }
+    setIaHoyBusy(false)
   }
 
   return (
@@ -2061,6 +2105,26 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
+      {/* Qué atender hoy: pendientes urgentes de todas las áreas, priorizados + resumen IA */}
+      <div style={{padding:'16px 20px 0'}}>
+        <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Qué atender hoy</div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'11px 16px',background:'#FAFBFC',borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:12,color:C.text,lineHeight:1.45}}>{iaHoy||atenderHoy.head}</span>
+            {atenderHoy.items.length>0&&<button onClick={resumenHoyIA} disabled={iaHoyBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaHoyBusy?.6:1}}>{iaHoyBusy?'…':(iaHoy?'Otra vez':'Resumen IA')}</button>}
+          </div>
+          {atenderHoy.items.length===0
+            ? <div style={{fontSize:13,color:C.greenText,textAlign:'center',padding:'18px',fontWeight:600}}>Todo al día</div>
+            : atenderHoy.items.map((it,i)=>(
+              <div key={i} onClick={()=>setTab(it.go)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 16px',borderTop:i?'1px solid #F4F6F8':'none',cursor:'pointer'}}>
+                <span style={{width:9,height:9,borderRadius:'50%',background:it.dot,flexShrink:0}}/>
+                <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.lbl}</span>
+                <span style={{fontSize:12,color:'#537281',fontVariantNumeric:'tabular-nums',flexShrink:0}}>{it.val}</span>
+                <span style={{color:'#C9D2D7',flexShrink:0}}>›</span>
+              </div>
+            ))}
+        </div>
+      </div>
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
       <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients}/>

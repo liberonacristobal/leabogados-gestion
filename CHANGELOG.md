@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Dashboard: panel "Qué atender hoy" (IA)
+- Nuevo bloque bajo "Cómo va el año": junta lo urgente de todas las áreas y lo prioriza por severidad — facturas vencidas, tareas vencidas, por cobrar de la semana, caja chica sin liquidar, clientes sin fondos, rendiciones por hacer, propuestas tardías. Cada fila es tappable y navega a su sección. Incluye **headline determinista** + botón **"Resumen IA"** (Opus redacta el foco del día sobre cifras ya calculadas). Estado "Todo al día" cuando no hay pendientes.
+
+# Changelog
+
 ## 2026-06-15 — Dashboard: KPI unico "Cómo va el año" (velocímetro + desglose)
 - Se fusionaron los dos bloques (Revenue target + Resultado del año) en UNO solo. Izquierda: **velocímetro de meta** con degradé azul (claro→oscuro según avance) + Vendido / Meta + faltan + N° ventas. Derecha: **Desglose financiero** con pills **Neto / Facturado / Cobrado** (barra proporcional a lo vendido) + alerta fija **"por cobrar · aging"**. Conserva selector de año, UF/CLP, "Ventas del año" y "Años anteriores". Tocables navegan a Ventas/Facturación.
 
