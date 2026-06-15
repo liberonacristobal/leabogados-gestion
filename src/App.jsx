@@ -10550,6 +10550,10 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const [ignorados,setIgnorados] = useState(null)   // ids marcados "no es duplicado" (learnings)
   const [busy,setBusy] = useState(false)
   const [toast,setToast] = useState(null)
+  const [chosenCand,setChosenCand] = useState({})   // {fantasmaId: facturaRealId} candidata elegida a mano
+  const [expanded,setExpanded] = useState({})       // {fantasmaId: 'cuotas'|'cand'} sección abierta
+  const [resueltas,setResueltas] = useState([])     // log de la sesión: {b, tipo:'baja'|'legit'} para plegar + deshacer
+  const [showResueltas,setShowResueltas] = useState(false)
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>{ setIgnorados(new Set((data||[]).map(r=>String(r.key)))) },()=>setIgnorados(new Set())) },[])
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),5000); return ()=>clearTimeout(t) } },[toast])
   const ig = ignorados||new Set()
@@ -10561,64 +10565,163 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const grupos = {}
   sospechosas.forEach(b=>{ const k=String(b.client_id||'__'); (grupos[k]=grupos[k]||[]).push(b) })
   const realesDe = cid => (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='reembolso' && String(b.client_id)===String(cid) && b.invoice_no && ['Pagado','Pendiente'].includes(b.status))
-  const sugerencia = (b, reales) => { let best=null,bs=0; reales.forEach(r=>{ let s=0; if(r.sale_id&&b.sale_id&&String(r.sale_id)===String(b.sale_id)) s+=2; s+=Math.max(simTexto(r.concept,b.concept),simTexto(r.concept,saleTitle(b.sale_id))); if(s>bs){bs=s;best=r} }); return bs>=0.3?best:null }
-  const darDeBaja = async(ids)=>{
-    if(busy||!ids.length) return; setBusy(true)
+  // Análisis determinista fantasma↔factura real: por cada candidata, score 0..1 + señales por campo.
+  const analizar = (b, reales) => {
+    const proy = saleTitle(b.sale_id)
+    const cands = reales.map(r=>{
+      const montoDelta = (r.amount||0)-(b.amount||0)
+      const montoIgual = Math.abs(montoDelta) <= Math.max(1000, (b.amount||0)*0.01)
+      const glosaSim = Math.max(simTexto(r.concept,b.concept), simTexto(r.concept,proy))
+      const mismoProy = !!(r.sale_id&&b.sale_id&&String(r.sale_id)===String(b.sale_id)) || (!!proy&&simTexto(r.concept,proy)>=0.6)
+      const d1=b.paid_at?String(b.paid_at).slice(0,10):'', d2=r.paid_at?String(r.paid_at).slice(0,10):''
+      const mismaFecha = !!(d1&&d2&&d1===d2)
+      const montoScore = montoIgual?0.45:Math.max(0,0.45-Math.min(0.45,Math.abs(montoDelta)/Math.max(1,b.amount||1)))
+      const score = Math.min(1, montoScore + glosaSim*0.30 + (mismoProy?0.15:0) + (mismaFecha?0.10:0))
+      return {r, montoDelta, montoIgual, glosaSim, mismoProy, mismaFecha, score}
+    }).sort((a,b)=>b.score-a.score)
+    return cands
+  }
+  const veredicto = sc => sc>=0.85?['Muy probable duplicado','#A32D2D','#FCEBEB']:sc>=0.6?['Probable duplicado','#854F0B','#FFF8E1']:sc>=0.4?['Posible duplicado','#854F0B','#FFF8E1']:['Poco probable','#537281','#F5F7F9']
+  const fmtDelta = d => (d>0?'+':'−')+fmt(Math.abs(d))
+  const STOP = new Set(['de','la','el','los','las','y','del','en','por','para','con','cuota','mensual','factura','cobro','servicio','servicios','asesoria','asesoría','permanente'])
+  // Resalta en la glosa las palabras que también están en la otra (comparación visual de glosas).
+  const diffGlosa = (txt, ref) => { const set=new Set(_normTxt(ref||'').split(/\s+/).filter(w=>w.length>=3&&!STOP.has(w))); return String(txt||'—').split(/(\s+)/).map((w,i)=>{ const t=_normTxt(w); return (set.has(t)&&t.length>=3)?<b key={i} style={{color:C.accent,fontWeight:700}}>{w}</b>:<span key={i}>{w}</span> }) }
+  const darDeBaja = async(items)=>{
+    const ids=items.map(x=>x.id); if(busy||!ids.length) return; setBusy(true)
     try{
       const now=new Date().toISOString()
       const {error}=await supabase.from('billing').update({deleted_at:now}).in('id',ids)
       if(error) throw error
       if(setBilling) setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,deleted_at:now}:b))
       logEvent('conciliacion','dar_de_baja',{ids,n:ids.length},currentUserName)
-      setToast(`${ids.length} cuota(s) dada(s) de baja — están en Papelera si te equivocaste`)
+      setResueltas(p=>[...items.map(b=>({b,tipo:'baja'})),...p])
+      setToast(`${ids.length} cuota(s) dada(s) de baja — puedes deshacer en "Ya resueltas"`)
     }catch(e){ alert('Error: '+e.message) }
+    setBusy(false)
+  }
+  const deshacerBaja = async(b)=>{
+    setBusy(true)
+    try{ const {error}=await supabase.from('billing').update({deleted_at:null}).eq('id',b.id); if(error)throw error; if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,deleted_at:null}:x)); setResueltas(p=>p.filter(r=>!(r.tipo==='baja'&&r.b.id===b.id))); setToast('Cuota restaurada') }catch(e){ alert('Error: '+e.message) }
     setBusy(false)
   }
   const noEsDuplicado = (b)=>{
     learnPut('conciliacion_ok', b.id, 'legit', {concept:b.concept,client_id:b.client_id})
     logEvent('conciliacion','marcar_legitima',{id:b.id},currentUserName)
     setIgnorados(p=>new Set([...(p||[]),String(b.id)]))
+    setResueltas(p=>[{b,tipo:'legit'},...p])
+  }
+  const deshacerLegit = async(b)=>{
+    try{ await supabase.from('learnings').delete().eq('kind','conciliacion_ok').eq('key',String(b.id)) }catch(e){}
+    setIgnorados(p=>{ const n=new Set(p||[]); n.delete(String(b.id)); return n })
+    setResueltas(p=>p.filter(r=>!(r.tipo==='legit'&&r.b.id===b.id)))
   }
   const C2 = {muted:C.muted,text:C.text,border:C.border,accent:C.accent,over:C.overdue,green:C.greenText}
   const lbl = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}
   if(ignorados===null) return <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
   const claves = Object.keys(grupos)
+  // Fila comparable: valor fantasma | valor real | punto de coincidencia (verde lleno / ámbar vacío).
+  const cmpRow = (left,right,ok) => (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 14px',gap:8,padding:'6px 10px',background:ok?'#EDF7F2':'#FFFAF0',alignItems:'flex-start'}}>
+      <div style={{fontSize:11,color:C.text,lineHeight:1.35,wordBreak:'break-word'}}>{left}</div>
+      <div style={{fontSize:11,color:C.text,lineHeight:1.35,wordBreak:'break-word'}}>{right}</div>
+      <span style={{fontSize:11,color:ok?'#0F6E56':'#C77F18',lineHeight:1.35}}>{ok?'●':'○'}</span>
+    </div>
+  )
+  const stPillCuota = st => st==='Pagado'?['Pagada',C.greenText,'#E1F5EE']:st==='Programada'?['Programada',C.muted,'#F5F7F9']:st==='Pendiente'?['Pendiente',C.accent,'#E6EEF1']:[st,C.muted,'#F5F7F9']
   return (
-    <div style={{maxWidth:560}}>
+    <div style={{maxWidth:600}}>
       <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:14}}>
-        Cuotas marcadas <b style={{color:C.text}}>Pagado pero sin N° de factura</b>. Una factura pagada real lleva folio, así que estas suelen ser cuotas "fantasma" que <b style={{color:C.text}}>duplican</b> una factura real (como pasó con BM Soluciones). Revisa y da de baja las que sobran — todo va a Papelera, es reversible.
+        Cuotas marcadas <b style={{color:C.text}}>Pagado sin N° de factura</b>: una factura pagada real lleva folio, así que suelen <b style={{color:C.text}}>duplicar</b> una factura real. Compara cada una con su candidata y da de baja la que sobra — todo es reversible.
       </div>
       {claves.length===0 && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'28px 0'}}>Sin duplicados sospechosos. Todo en orden.</div>}
       {claves.map(cid=>{
         const grupo=grupos[cid]; const c=clientById(cid); const reales=realesDe(cid)
         const sumF=grupo.reduce((a,b)=>a+(b.amount||0),0); const sumR=reales.filter(r=>r.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
         return (
-          <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'10px 14px',background:'#F5F7F9'}}>
-              <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{c?.name||'Cliente'}</div>{rutDe(cid)&&<div style={{fontSize:10,color:'#99ABB4'}}>{rutDe(cid)}</div>}</div>
-              <div style={{textAlign:'right',flexShrink:0}}><div style={lbl}>Sin folio</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(sumF)}</div></div>
+          <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'10px 14px',background:'#F5F7F9',borderBottom:`1px solid ${C.border}`}}>
+              <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{c?.name||'Cliente'}</div>{rutDe(cid)&&<div style={{fontSize:10,color:'#99ABB4'}}>{rutDe(cid)}</div>}</div>
+              <div style={{textAlign:'right',flexShrink:0}}><div style={lbl}>Sin folio · {grupo.length}</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(sumF)}</div></div>
             </div>
-            {reales.length>0&&<div style={{fontSize:10,color:C.muted,padding:'6px 14px',borderBottom:`1px solid ${C.border}`}}>Facturas reales pagadas del cliente (con folio): <b style={{color:C.greenText}}>{fmt(sumR)}</b> en {reales.filter(r=>r.status==='Pagado').length}</div>}
+            {reales.length>0&&<div style={{fontSize:10,color:C.muted,padding:'6px 14px',borderBottom:`1px solid ${C.border}`}}>Facturas reales con folio del cliente: <b style={{color:C.greenText}}>{fmt(sumR)}</b> en {reales.filter(r=>r.status==='Pagado').length} pagada(s)</div>}
             {grupo.map(b=>{
-              const sug=sugerencia(b,reales)
+              const cands=analizar(b,reales)
+              const m = chosenCand[b.id] ? (cands.find(x=>String(x.r.id)===String(chosenCand[b.id]))||cands[0]) : cands[0]
+              const [vl,vfg,vbg] = m ? veredicto(m.score) : ['Sin candidata clara','#537281','#F5F7F9']
+              const otras = b.sale_id ? (billing||[]).filter(x=>!x.deleted_at&&x.billing_type!=='reembolso'&&String(x.sale_id)===String(b.sale_id)&&String(x.id)!==String(b.id)) : []
+              const proyB = saleTitle(b.sale_id)
               return (
-                <div key={b.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-                    <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div><div style={{fontSize:10,color:'#99ABB4'}}>Pagada {b.paid_at?fmtFechaDMY(b.paid_at):'—'} · sin N° de factura</div></div>
-                    <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(b.amount)}</span>
+                <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,padding:'10px 12px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:20,background:vbg,color:vfg}}>{m?`${vl} · ${Math.round(m.score*100)}%`:vl}</span>
                   </div>
-                  {sug&&<div style={{fontSize:10,color:'#854F0B',background:'#FFF8E1',borderRadius:6,padding:'4px 8px',marginTop:6}}>Parece la misma que <b>{sug.invoice_no}</b> · {sug.concept||'—'} ({fmt(sug.amount)})</div>}
+                  {m ? (
+                    <div style={{border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden'}}>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 14px',gap:8,padding:'7px 10px',borderBottom:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:9,fontWeight:700,color:'#A32D2D',textTransform:'uppercase',letterSpacing:.3}}>Fantasma · sin folio</div>
+                        <div style={{fontSize:9,fontWeight:700,color:'#0F6E56',textTransform:'uppercase',letterSpacing:.3}}>Factura {m.r.invoice_no} · folio</div>
+                        <span/>
+                      </div>
+                      {cmpRow(diffGlosa(b.concept,m.r.concept), diffGlosa(m.r.concept,b.concept), m.glosaSim>=0.6)}
+                      {cmpRow(<b style={{fontWeight:700}}>{fmt(b.amount)}</b>, <span><b style={{fontWeight:700}}>{fmt(m.r.amount)}</b>{!m.montoIgual&&m.montoDelta!==0&&<span style={{color:C.soon,fontWeight:600}}> ({fmtDelta(m.montoDelta)})</span>}</span>, m.montoIgual)}
+                      {cmpRow(b.paid_at?fmtFechaDMY(b.paid_at):'—', m.r.paid_at?fmtFechaDMY(m.r.paid_at):'—', m.mismaFecha)}
+                      {cmpRow(proyB||'—', saleTitle(m.r.sale_id)||'—', m.mismoProy)}
+                    </div>
+                  ) : (
+                    <div style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 11px',background:'#FFFAF0'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12,color:C.text}}>{b.concept||'—'}</span><b style={{fontSize:13,fontWeight:700,color:C.text}}>{fmt(b.amount)}</b></div>
+                      <div style={{fontSize:10,color:'#99ABB4',marginTop:2}}>Pagada {b.paid_at?fmtFechaDMY(b.paid_at):'—'} · sin folio · no encontré una factura real que calce</div>
+                    </div>
+                  )}
+                  <div style={{display:'flex',gap:10,marginTop:8,flexWrap:'wrap'}}>
+                    {reales.length>0&&<button onClick={()=>setExpanded(p=>({...p,[b.id]:p[b.id]==='cand'?null:'cand'}))} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>¿Otra factura? ({reales.length}) {expanded[b.id]==='cand'?'▴':'▾'}</button>}
+                    {otras.length>0&&<button onClick={()=>setExpanded(p=>({...p,[b.id]:p[b.id]==='cuotas'?null:'cuotas'}))} style={{fontSize:11,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Otras cuotas de la venta ({otras.length}) {expanded[b.id]==='cuotas'?'▴':'▾'}</button>}
+                  </div>
+                  {expanded[b.id]==='cand'&&(
+                    <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden'}}>
+                      {cands.map(x=>{ const sel=String((chosenCand[b.id]||(cands[0]&&cands[0].r.id)))===String(x.r.id); return (
+                        <div key={x.r.id} onClick={()=>setChosenCand(p=>({...p,[b.id]:x.r.id}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer',background:sel?'#E6EEF1':'#fff'}}>
+                          <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:sel?700:500,color:sel?C.accent:C.text}}>Factura {x.r.invoice_no}</div><div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.r.concept||'—'}</div></div>
+                          <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:C.text}}>{fmt(x.r.amount)}</div><div style={{fontSize:9,color:x.score>=0.6?C.greenText:C.soon}}>{Math.round(x.score*100)}%</div></div>
+                        </div>
+                      )})}
+                    </div>
+                  )}
+                  {expanded[b.id]==='cuotas'&&(
+                    <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden'}}>
+                      {otras.map(x=>{ const [sl,sc,sb]=stPillCuota(x.status); const same=Math.abs((x.amount||0)-(b.amount||0))<=Math.max(1000,(b.amount||0)*0.01); return (
+                        <div key={x.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`0.5px solid ${C.border}`}}>
+                          <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.concept||'—'}{same&&<span style={{color:C.soon,fontWeight:600}}> · = monto</span>}</div><div style={{fontSize:9,color:'#99ABB4'}}>{x.invoice_no?`F° ${x.invoice_no} · `:''}{x.status==='Pagado'?`pagada ${x.paid_at?fmtFechaDMY(x.paid_at):''}`:`vence ${x.due?fmtFechaDMY(x.due):'—'}`}</div></div>
+                          <div style={{textAlign:'right',flexShrink:0,display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,fontWeight:600,padding:'1px 6px',borderRadius:10,background:sb,color:sc}}>{sl}</span><span style={{fontSize:11,fontWeight:600,color:C.text}}>{fmt(x.amount)}</span></div>
+                        </div>
+                      )})}
+                    </div>
+                  )}
                   <div style={{display:'flex',gap:6,marginTop:8}}>
-                    <button disabled={busy} onClick={()=>darDeBaja([b.id])} style={{...chipBtn('primary'),opacity:busy?.6:1}}>Dar de baja</button>
+                    <button disabled={busy} onClick={()=>darDeBaja([b])} style={{...chipBtn('primary'),opacity:busy?.6:1}}>Dar de baja la fantasma</button>
                     <button onClick={()=>noEsDuplicado(b)} style={chipBtn('soft')}>No es duplicado</button>
                   </div>
                 </div>
               )
             })}
-            {grupo.length>1&&<div style={{padding:'10px 14px'}}><button disabled={busy} onClick={()=>darDeBaja(grupo.map(b=>b.id))} style={{...chipBtn('primary'),opacity:busy?.6:1}}>Dar de baja las {grupo.length}</button></div>}
+            {grupo.length>1&&<div style={{padding:'10px 14px'}}><button disabled={busy} onClick={()=>darDeBaja(grupo)} style={{...chipBtn('primary'),opacity:busy?.6:1}}>Dar de baja las {grupo.length}</button></div>}
           </div>
         )
       })}
+      {resueltas.length>0&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:4}}>
+          <div onClick={()=>setShowResueltas(s=>!s)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',cursor:'pointer',background:'#F5F7F9'}}>
+            <span style={{fontSize:12,color:C.muted}}>Ya resueltas en esta revisión · <b style={{color:C.text}}>{resueltas.length}</b></span>
+            <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{showResueltas?'Ocultar ▴':'Ver / deshacer ▾'}</span>
+          </div>
+          {showResueltas&&resueltas.map((rz,i)=>(
+            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 14px',borderTop:`0.5px solid ${C.border}`}}>
+              <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rz.b.concept||'—'} · {fmt(rz.b.amount)}</div><div style={{fontSize:9,color:'#99ABB4'}}>{rz.tipo==='baja'?'Dada de baja (en Papelera)':'Marcada legítima'}</div></div>
+              <button disabled={busy} onClick={()=>rz.tipo==='baja'?deshacerBaja(rz.b):deshacerLegit(rz.b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'4px 10px',cursor:'pointer',flexShrink:0}}>Deshacer</button>
+            </div>
+          ))}
+        </div>
+      )}
       {toast&&<div style={{position:'sticky',bottom:0,background:C.greenText,color:'#fff',fontSize:12,fontWeight:600,padding:'9px 12px',borderRadius:8,marginTop:8}}>{toast}</div>}
     </div>
   )
