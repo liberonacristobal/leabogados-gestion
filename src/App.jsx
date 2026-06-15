@@ -8464,7 +8464,113 @@ function ContactoTab({client, entities, onSaveFields}) {
 
 // Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
-function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling}) {
+// Asistente de conciliación: 3 pasos con compuerta humana. (1) duplicados determinista, (2) sin proyecto agrupado por serie con sugerencia, (3) programada↔real por venta+mes+tolerancia. Nada se borra/asigna solo.
+function ConciliarFacturasModal({scope=[], sales=[], clients=[], onResolveDup, onAssignSeries, onReplaceProgramada, onClose}) {
+  const act = (scope||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.status!=='Anulado')
+  const cName = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  const mes = d => (d||'').slice(0,7)
+
+  // (1) Duplicados: mismo cliente + mismo monto + mismo vencimiento, o mismo folio normalizado.
+  const dupGroups = useMemo(()=>{
+    const by={}; act.forEach(b=>{ const k=`${b.client_id}|${b.amount||0}|${b.due||b.issued_at||''}`; (by[k]=by[k]||[]).push(b) })
+    const folioBy={}; act.forEach(b=>{ const f=folioN(b.invoice_no); if(f){ const k=`${b.client_id}|f|${f}`; (folioBy[k]=folioBy[k]||[]).push(b) } })
+    const groups=[]; const seen=new Set()
+    Object.values({...by,...folioBy}).forEach(g=>{ if(g.length<2) return; const ids=g.map(x=>x.id).sort().join(','); if(seen.has(ids)) return; seen.add(ids)
+      const keep=[...g].sort((a,b)=>((b.status==='Pagado')-(a.status==='Pagado'))||((a.invoice_no===folioN(a.invoice_no)?0:1)-(b.invoice_no===folioN(b.invoice_no)?0:1))||(parseInt(folioN(a.invoice_no))||9e9)-(parseInt(folioN(b.invoice_no))||9e9))[0]
+      groups.push({rows:g, keepId:keep.id}) })
+    return groups
+  },[scope])
+
+  // (2) Sin proyecto, agrupadas por serie; sugiere venta por coincidencia de glosa base con el título.
+  const serieGroups = useMemo(()=>{
+    const sin = act.filter(b=>!b.sale_id && b.billing_type!=='reembolso')
+    const by={}; sin.forEach(b=>{ const k=serieKey(b.concept); if(!k||k.length<4) return; (by[`${b.client_id}|${k}`]=by[`${b.client_id}|${k}`]||[]).push(b) })
+    return Object.entries(by).map(([k,rows])=>{
+      const cid=rows[0].client_id
+      const cs=(sales||[]).filter(s=>String(s.client_id)===String(cid))
+      const words=new Set(rows.flatMap(r=>norm(r.concept).split(/[^a-z0-9]+/)).filter(w=>w.length>3))
+      let best=null,score=0; cs.forEach(s=>{ const n=norm(s.title).split(/[^a-z0-9]+/).filter(w=>w.length>3).filter(w=>words.has(w)).length; if(n>score){score=n;best=s} })
+      return {cid, rows:rows.sort((a,b)=>(a.due||'').localeCompare(b.due||'')), sug:score>0?best:null, sales:cs}
+    }).filter(g=>g.sales.length>0).sort((a,b)=>b.rows.length-a.rows.length)
+  },[scope,sales])
+
+  // (3) Programada ↔ real: programada con venta, busca real del mismo cliente, mismo mes (±1) y monto con tolerancia ±15%.
+  const progMatches = useMemo(()=>{
+    const progs = act.filter(b=>b.status==='Programada')
+    const reals = act.filter(b=>b.issued_at && b.status!=='Programada')
+    const out=[]
+    progs.forEach(p=>{
+      const pm=mes(p.due||p.issued_at); const a=p.amount||0; if(!a) return
+      const r = reals.find(x=>String(x.client_id)===String(p.client_id) && Math.abs((x.amount||0)-a)/a<=0.15 && (()=>{ const rm=mes(x.due||x.issued_at); if(!pm||!rm) return false; const d=(parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7))); return Math.abs(d)<=1 })())
+      if(r) out.push({prog:p, real:r})
+    })
+    return out
+  },[scope])
+
+  const sect = (n,color,title,sub,count) => (
+    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:7}}>
+      <span style={{width:18,height:18,borderRadius:'50%',background:color,color:'#fff',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{n}</span>
+      <span style={{fontSize:12.5,fontWeight:700,color}}>{title} · {count}</span>
+      <span style={{fontSize:9,color:C.muted,marginLeft:'auto'}}>{sub}</span>
+    </div>
+  )
+
+  return (
+    <>
+      <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
+        <span style={{fontSize:15,fontWeight:500,color:'#3D3D3D'}}>Conciliación de facturas</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+        </button>
+      </div>
+      <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:18}}>
+        {dupGroups.length+serieGroups.length+progMatches.length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.</div>}
+
+        {dupGroups.length>0&&<div>
+          {sect(1,C.overdue,'Duplicados','determinista',dupGroups.length+' grupos')}
+          {dupGroups.map((g,i)=>{ const drop=g.rows.filter(r=>r.id!==g.keepId); const keep=g.rows.find(r=>r.id===g.keepId); return (
+            <div key={i} style={{background:'#fff',border:`1px solid #F09595`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
+              <div style={{fontSize:12.5,fontWeight:600}}>{keep.concept||'—'} · {fmt(keep.amount)}</div>
+              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(keep.client_id)} · {g.rows.length} copias (folios {g.rows.map(r=>folioN(r.invoice_no)||'s/f').join(', ')}). Conservar F° {folioN(keep.invoice_no)||'s/f'}.</div>
+              <button onClick={()=>onResolveDup&&onResolveDup(g.keepId, drop.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Conservar 1 · eliminar {drop.length}</button>
+            </div>
+          )})}
+        </div>}
+
+        {serieGroups.length>0&&<div>
+          {sect(2,C.soon,'Sin proyecto','✦ IA sugiere',serieGroups.length+' series')}
+          {serieGroups.map((g,i)=>(
+            <div key={i} style={{background:'#fff',border:`1px solid #FAC775`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:12.5,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.rows[0].concept||'—'}</span><span style={{fontSize:10,background:'#FAEEDA',color:'#854F0B',borderRadius:10,padding:'1px 8px',fontWeight:600,flexShrink:0,marginLeft:6}}>{g.rows.length} fact.</span></div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:7}}>{cName(g.cid)}{g.sug?<> · ✦ Sugerida: <b style={{color:C.accent}}>{g.sug.title}</b></>:' · elige la venta'}</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {g.sug&&<button onClick={()=>onAssignSeries&&onAssignSeries(g.sug.id, g.rows.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Asignar las {g.rows.length} a {g.sug.title}</button>}
+                <select onChange={e=>{ if(e.target.value) onAssignSeries&&onAssignSeries(e.target.value, g.rows.map(r=>r.id)) }} defaultValue='' style={{fontSize:10,padding:'4px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}>
+                  <option value=''>{g.sug?'otra venta…':'asignar a venta…'}</option>
+                  {g.sales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>}
+
+        {progMatches.length>0&&<div>
+          {sect(3,C.accent,'Programada ↔ real','venta+mes+tolerancia',progMatches.length)}
+          {progMatches.map((m,i)=>(
+            <div key={i} style={{background:'#fff',border:`1px solid #B5D4F4`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
+              <div style={{fontSize:12.5,fontWeight:600}}>{m.prog.concept||'—'}</div>
+              <div style={{fontSize:10,color:C.accent,margin:'3px 0 7px'}}>Programada {fmt(m.prog.amount)} ≈ real {m.real.invoice_no?`F° ${folioN(m.real.invoice_no)}`:''} {fmt(m.real.amount)} ({m.real.status}). Reemplazar borra la programada.</div>
+              <button onClick={()=>onReplaceProgramada&&onReplaceProgramada(m.prog.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Reemplazar (borra programada)</button>
+            </div>
+          ))}
+        </div>}
+      </div>
+    </>
+  )
+}
+
+function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar}) {
   // Cockpit de facturas: TODAS las del cliente, con buscar + filtros combinables (proyecto=venta, estado, año).
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
@@ -8534,7 +8640,10 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
       <div style={{...card,padding:'12px 13px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
           <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600}}>Facturas · {facturas.length}</div>
-          <span onClick={()=>onAddBilling&&onAddBilling()} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>+ Nueva factura</span>
+          <div style={{display:'flex',gap:10,alignItems:'center'}}>
+            {onConciliar&&<span onClick={()=>onConciliar()} style={{fontSize:11,color:C.greenText,fontWeight:600,cursor:'pointer'}}>Conciliar</span>}
+            <span onClick={()=>onAddBilling&&onAddBilling()} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>+ Nueva factura</span>
+          </div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6,background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',marginBottom:8}}>
           <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.4'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
@@ -8811,7 +8920,7 @@ Liberona Escala Abogados`
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onConciliar,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState('resumen')
   const ufState = useUF()
@@ -9094,14 +9203,14 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
-      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)}/>}
+      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)}/>}
       {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
 
-function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete}) {
+function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onConciliar,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete}) {
   const [verProv,setVerProv] = useState(false)
 
   const handleAnularRendicion = async(r) => {
@@ -9172,6 +9281,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         onAddSale={()=>onAddSale(selected)}
         onAddBilling={()=>onAddBilling(selected)}
         onEditBilling={onEditBilling}
+        onConciliar={onConciliar}
         onRendicion={c=>setRendicionClient(c)}
         rendiciones={rendiciones}
         onAnularRendicion={handleAnularRendicion}
@@ -13253,6 +13363,19 @@ export default function App() {
       return data
     }catch(e){alert('Error: '+e.message); return null}
   },[])
+  // Resuelve un grupo de duplicados: conserva uno (y le limpia el folio "Factura ") y elimina los demás (soft-delete con deshacer).
+  const handleResolveDup=useCallback(async(keepId,dropIds)=>{
+    try{
+      const k=(billing||[]).find(b=>b.id===keepId)
+      if(k&&k.invoice_no){ const cf=folioN(k.invoice_no); if(cf&&cf!==k.invoice_no){ await supabase.from('billing').update({invoice_no:cf}).eq('id',keepId); setBilling(p=>p.map(b=>b.id===keepId?{...b,invoice_no:cf}:b)) } }
+      if(dropIds&&dropIds.length){
+        const dropped=(billing||[]).filter(b=>dropIds.includes(b.id))
+        await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',dropIds)
+        setBilling(p=>p.filter(b=>!dropIds.includes(b.id)))
+        setUndoToast({msg:`${dropIds.length} duplicado${dropIds.length!==1?'s':''} eliminado${dropIds.length!==1?'s':''}`, onUndo: async()=>{ await supabase.from('billing').update({deleted_at:null}).in('id',dropIds); setBilling(p=>{ const ex=new Set(p.map(x=>x.id)); return [...dropped.filter(d=>!ex.has(d.id)),...p] }) }})
+      }
+    }catch(e){ alert('Error: '+e.message) }
+  },[billing])
   // Asigna en lote varias facturas a una venta (hermanas de una serie) — para que no queden huérfanas. Con deshacer.
   const handleAssignSeries=useCallback(async(saleId,ids)=>{
     if(!ids?.length) return
@@ -13535,7 +13658,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete}/>}
           </div>
         )}
         {userRole==='limited'&&tab==='tasks'&&(
@@ -13546,6 +13669,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
