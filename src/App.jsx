@@ -7635,6 +7635,7 @@ function ContactoTab({client, entities, onSaveFields}) {
     if(error){alert('Error: '+error.message);return}
     setContacts(p=>p.filter(x=>x.id!==c.id))
   }
+  const togglePrincipal = async (c)=>{ const nv=!c.principal; setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:nv}:x)); const {error}=await supabase.from('contacts').update({principal:nv}).eq('id',c.id); if(error){alert('Error: '+error.message); setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:!nv}:x))} }
   const initials = (n)=> (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
 
   const inp = {width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',color:C.text}
@@ -7687,11 +7688,12 @@ function ContactoTab({client, entities, onSaveFields}) {
         </div>
         {loadingC&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Cargando...</div>}
         {!loadingC&&contacts.length===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin contactos.</div>}
-        {contacts.map(c=>(
+        {[...contacts].sort((a,b)=>(b.principal?1:0)-(a.principal?1:0)).map(c=>(
           <div key={c.id} style={{display:'flex',gap:10,alignItems:'center',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
+            <button onClick={()=>togglePrincipal(c)} title={c.principal?'Principal':'Marcar principal'} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,lineHeight:1,color:c.principal?C.soon:'#CBD5DB',flexShrink:0,padding:0}}>{c.principal?'★':'☆'}</button>
             <div style={{width:34,height:34,borderRadius:'50%',background:'#E6EEF1',color:C.accent,fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nombre}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
+              <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nombre}{c.principal&&<span style={{fontSize:9,fontWeight:700,color:'#854F0B',background:'#FFF8E1',padding:'1px 7px',borderRadius:20,marginLeft:5,textTransform:'uppercase',letterSpacing:.3}}>Principal</span>}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
               <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap'}}>
                 {c.email&&<a href={`mailto:${c.email}`} style={{color:C.accent,textDecoration:'none'}}>{c.email}</a>}
                 {c.telefono&&<span>{c.telefono}</span>}
@@ -10908,6 +10910,110 @@ function PapeleraModal({clients=[],onClose,onChanged}){
 // Lee el Gmail corporativo (scope gmail.readonly), extrae participantes externos, los asocia a clientes
 // (dominio conocido → directo; ambiguos → IA Opus) y propone agregarlos a la ficha. Compuerta humana.
 // Privacidad: a la IA solo van encabezados (De/Para/CC/Asunto) y dominio, nunca el cuerpo.
+// ─── RED PROFESIONAL: base de contactos de la red (no clientes), por país y categoría ─────────
+function RedProfesionalModal({preset=null, onClose, onSaved}){
+  const [rows,setRows] = useState(null)
+  const [q,setQ] = useState('')
+  const [catF,setCatF] = useState('')
+  const [paisF,setPaisF] = useState('')
+  const [showAdd,setShowAdd] = useState(!!preset)
+  const [edit,setEdit] = useState(null)
+  const [f,setF] = useState(preset||{nombre:'',email:'',pais:'',categoria:'',descripcion:'',web:'',linkedin:'',origen:''})
+  const [saving,setSaving] = useState(false)
+  const up=(k,v)=>setF(p=>({...p,[k]:v}))
+  const load=()=>supabase.from('red_profesional').select('*').order('created_at',{ascending:false}).then(({data})=>setRows(data||[]),()=>setRows([]))
+  useEffect(()=>{ load() },[])
+  const ini = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+  const inp = {width:'100%',height:36,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:13,color:C.text,background:'#F5F7F9',boxSizing:'border-box',outline:'none'}
+  const catCount={}; (rows||[]).forEach(r=>{ if(r.categoria) catCount[r.categoria]=(catCount[r.categoria]||0)+1 })
+  const cats = Object.keys(catCount).sort((a,b)=>catCount[b]-catCount[a])
+  const paises = [...new Set((rows||[]).map(r=>r.pais).filter(Boolean))].sort()
+  const ql=q.trim().toLowerCase()
+  const filtered = (rows||[]).filter(r=> (!ql||(r.nombre||'').toLowerCase().includes(ql)||(r.email||'').toLowerCase().includes(ql)) && (!catF||r.categoria===catF) && (!paisF||r.pais===paisF))
+  const grupos={}; filtered.forEach(r=>{ const k=r.pais||'Sin país'; (grupos[k]=grupos[k]||[]).push(r) })
+  const resetF=()=>{ setF({nombre:'',email:'',pais:'',categoria:'',descripcion:'',web:'',linkedin:'',origen:''}); setShowAdd(false); setEdit(null) }
+  const guardar=async()=>{
+    if(!f.nombre.trim()){ return }
+    setSaving(true)
+    try{
+      const payload={nombre:f.nombre.trim(),email:f.email?.trim()||null,pais:f.pais?.trim()||null,categoria:f.categoria?.trim()||null,descripcion:f.descripcion?.trim()||null,web:f.web?.trim()||null,linkedin:f.linkedin?.trim()||null,origen:f.origen?.trim()||null}
+      if(edit){ const {data,error}=await supabase.from('red_profesional').update(payload).eq('id',edit.id).select().single(); if(error)throw error; setRows(p=>p.map(x=>x.id===data.id?data:x)) }
+      else { const {data,error}=await supabase.from('red_profesional').insert(payload).select().single(); if(error)throw error; setRows(p=>[data,...(p||[])]); onSaved&&onSaved(data) }
+      resetF()
+    }catch(e){ alert('Error: '+e.message) }
+    setSaving(false)
+  }
+  const startEdit=(r)=>{ setEdit(r); setF({nombre:r.nombre||'',email:r.email||'',pais:r.pais||'',categoria:r.categoria||'',descripcion:r.descripcion||'',web:r.web||'',linkedin:r.linkedin||'',origen:r.origen||''}); setShowAdd(true) }
+  const eliminar=async(r)=>{ if(!confirm(`¿Eliminar a ${r.nombre} de la red?`)) return; await supabase.from('red_profesional').delete().eq('id',r.id); setRows(p=>p.filter(x=>x.id!==r.id)) }
+  const chip = (active) => ({fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',cursor:'pointer',whiteSpace:'nowrap',border:active?'none':`0.5px solid ${C.border}`,background:active?C.accent:'#F5F7F9',color:active?'#fff':C.muted})
+  return (
+    <div style={{maxWidth:560}}>
+      {showAdd ? (
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:C.accent,marginBottom:12}}>{edit?'Editar contacto':'Nuevo contacto de red'}</div>
+          <div style={{display:'grid',gap:8}}>
+            <input autoFocus value={f.nombre} onChange={e=>up('nombre',e.target.value)} placeholder='Nombre *' style={inp}/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <input value={f.email} onChange={e=>up('email',e.target.value)} placeholder='Email' style={inp}/>
+              <input value={f.pais} onChange={e=>up('pais',e.target.value)} placeholder='País' list='rp-paises' style={inp}/>
+            </div>
+            <datalist id='rp-paises'>{paises.map(p=><option key={p} value={p}/>)}</datalist>
+            <input value={f.categoria} onChange={e=>up('categoria',e.target.value)} placeholder='Categoría (la armas tú: abogado, notario, banca…)' list='rp-cats' style={inp}/>
+            <datalist id='rp-cats'>{cats.map(c=><option key={c} value={c}/>)}</datalist>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <input value={f.web} onChange={e=>up('web',e.target.value)} placeholder='Web' style={inp}/>
+              <input value={f.linkedin} onChange={e=>up('linkedin',e.target.value)} placeholder='LinkedIn' style={inp}/>
+            </div>
+            <input value={f.origen} onChange={e=>up('origen',e.target.value)} placeholder='Dónde lo conocí (origen)' style={inp}/>
+            <input value={f.descripcion} onChange={e=>up('descripcion',e.target.value)} placeholder='Descripción breve' style={inp}/>
+            <div style={{display:'flex',gap:8,marginTop:2}}>
+              <button onClick={preset?onClose:resetF} disabled={saving} style={{flex:1,height:40,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={guardar} disabled={saving||!f.nombre.trim()} style={{flex:2,height:40,borderRadius:9,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(saving||!f.nombre.trim())?.6:1}}>{saving?'Guardando…':(edit?'Guardar':'Agregar a la red')}</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <span style={{fontSize:12,color:C.muted}}><b style={{color:C.text}}>{(rows||[]).length}</b> contacto{(rows||[]).length!==1?'s':''} de red</span>
+            <button onClick={()=>{setEdit(null);setShowAdd(true)}} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>+ Agregar</button>
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:10}}>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre o email…' style={{...inp,flex:1}}/>
+            <select value={paisF} onChange={e=>setPaisF(e.target.value)} style={{...inp,width:'auto',color:C.muted}}><option value=''>Todo país</option>{paises.map(p=><option key={p} value={p}>{p}</option>)}</select>
+          </div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+            <span onClick={()=>setCatF('')} style={chip(!catF)}>Todos · {(rows||[]).length}</span>
+            {cats.map(c=><span key={c} onClick={()=>setCatF(catF===c?'':c)} style={chip(catF===c)}>{c} · {catCount[c]}</span>)}
+          </div>
+          {rows===null&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'20px'}}>Cargando…</div>}
+          {rows!==null&&filtered.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'24px 0'}}>Sin contactos {q||catF||paisF?'con ese filtro':'aún'}. Toca "+ Agregar".</div>}
+          {Object.keys(grupos).sort().map(pais=>(
+            <div key={pais} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:'#99ABB4',letterSpacing:.4,textTransform:'uppercase',padding:'8px 14px',background:'#FAFBFC'}}>{pais} · {grupos[pais].length}</div>
+              {grupos[pais].map(r=>(
+                <div key={r.id} style={{display:'flex',alignItems:'flex-start',gap:11,padding:'10px 14px',borderTop:`1px solid #F1F3F5`}}>
+                  <div style={{width:36,height:36,borderRadius:'50%',background:'#E6EEF1',color:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{ini(r.nombre)}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.nombre}{r.categoria&&<span style={{fontSize:9,fontWeight:700,color:C.accent,background:'#E6EEF1',padding:'1px 7px',borderRadius:20,marginLeft:6}}>{r.categoria}</span>}</div>
+                    {r.email&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.email}</div>}
+                    {(r.web||r.linkedin)&&<div style={{fontSize:11,marginTop:1}}>{r.web&&<a href={/^https?:/.test(r.web)?r.web:`https://${r.web}`} target='_blank' rel='noreferrer' style={{color:C.accent,textDecoration:'none',fontWeight:600}}>{r.web.replace(/^https?:\/\//,'')}</a>}{r.web&&r.linkedin&&<span style={{color:'#CBD5DB'}}> · </span>}{r.linkedin&&<a href={/^https?:/.test(r.linkedin)?r.linkedin:`https://${r.linkedin}`} target='_blank' rel='noreferrer' style={{color:C.accent,textDecoration:'none',fontWeight:600}}>LinkedIn</a>}</div>}
+                    {(r.descripcion||r.origen)&&<div style={{fontSize:10,color:'#99ABB4',marginTop:1}}>{r.descripcion||''}{r.descripcion&&r.origen?' · ':''}{r.origen?<span><b style={{color:C.muted}}>conocido en</b> {r.origen}</span>:''}</div>}
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
+                    <button onClick={()=>startEdit(r)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:11}}>Editar</button>
+                    <button onClick={()=>eliminar(r)} style={{background:'none',border:'none',color:C.overdue,cursor:'pointer',fontSize:11}}>Borrar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const ME_DOMAIN = 'leabogados.cl'
 // Buscador de cliente (escribe para filtrar) — para asignar contactos sin cliente claro.
 function ClientePicker({clients=[], onPick}){
@@ -11034,6 +11140,15 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
     }catch(e){ alert('No se pudo agregar: '+e.message) }
     setBusyE('')
   }
+  const aRed = async(a)=>{   // manda el contacto a Red profesional (web inferida del dominio; país/categoría se completan en la vista)
+    setBusyE(a.email)
+    try{
+      const {error}=await supabase.from('red_profesional').insert({nombre:(a.name||a.email.split('@')[0]).trim(), email:a.email, web:a.domain&&!PROV.test(a.domain)?a.domain:null})
+      if(error) throw error
+      setAccepted(p=>new Set([...p,a.email])); logEvent('contactos','a_red',{email:a.email},null)
+    }catch(e){ alert('No se pudo guardar en red: '+e.message) }
+    setBusyE('')
+  }
   const descartar = a=>{ learnPut('contacto_descartado',a.email,'descartado',{}); setDismissed(p=>new Set([...p,a.email])) }
   const reasignar = (email,cid)=> setProps(p=>p.map(a=>a.email===email?{...a,client_id:cid}:a))
   const agregarSeguros = async(list)=>{ for(const a of list){ if(!accepted.has(a.email)) await agregar(a) } }
@@ -11054,8 +11169,9 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
         <div style={{fontSize:10,color:'#99ABB4'}}>{a.count} correo{a.count!==1?'s':''}{a.last?` · último ${fmtFechaDMY(a.last)}`:''}</div>
         {asignable&&<ClientePicker clients={clientesOrden} onPick={cid=>agregar(a,cid)}/>}
       </div>
-      <div style={{display:'flex',gap:6,flexShrink:0}}>
+      <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>
         {a.client_id&&<button disabled={busyE===a.email} onClick={()=>agregar(a)} style={{...chipBtn('primary'),opacity:busyE===a.email?.6:1}}>Agregar</button>}
+        {asignable&&<button disabled={busyE===a.email} onClick={()=>aRed(a)} style={chipBtn('green')}>→ Red</button>}
         <button onClick={()=>descartar(a)} style={chipBtn('soft')}>Descartar</button>
       </div>
     </div>
@@ -12160,6 +12276,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
                   Contactos +Gmail
                 </div>}
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redProfesional'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='3.2'/><path d='M5.5 20a6.5 6.5 0 0 1 13 0'/><circle cx='19' cy='6' r='2'/><circle cx='5' cy='6' r='2'/></svg>
+                  Red profesional
+                </div>}
                 {actualRole==='admin'&&(userRole==='admin'
                   ? <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('limited');setTab('tasks')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
@@ -12226,6 +12346,7 @@ export default function App() {
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='conciliacion'&&<Modal title='Conciliar facturas' onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliacionModal billing={billing} setBilling={setBilling} clients={clients} clientEntities={clientEntities} sales={sales} currentUserName={user?.name} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
           const [s,b,e]=await Promise.all([
             supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
