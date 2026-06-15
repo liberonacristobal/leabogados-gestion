@@ -145,7 +145,7 @@ const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina'
 const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
 // Color de pill por persona, para distinguir responsables de un vistazo (Martín/Martina reusan los tonos de Caja Chica).
 const PERSON_CHIP = {
-  'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:'#EEEDFE',color:'#534AB7'},
+  'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:'#E4E8EB',color:'#537281'},
   'Rodrigo':{bg:'#FAEEDA',color:'#854F0B'}, 'Erasmo':{bg:'#E6F1FB',color:'#185FA5'}, 'Cristóbal':{bg:'#E6EEF1',color:'#003C50'},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:'#F1EFE8',color:'#5F5E5A'}
@@ -1815,7 +1815,7 @@ function DashboardTasks({tasks,clients,onEdit,onComplete,onPreview,user}) {
       'Crist\u00f3bal': ['#E6F1FB','#003C50'],
       'Erasmo':          ['#E1F5EE',C.greenText],
       'Mart\u00edn':    ['#EAF3DE','#3B6D11'],
-      'Martina':         ['#EEEDFE','#534AB7'],
+      'Martina':         ['#E4E8EB','#537281'],
       'Rodrigo':         ['#FAEEDA','#C77F18']
     }
     return map[name] || ['#F1EFE8','#537281']
@@ -2791,9 +2791,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Gestión Caja Chica — al final del Dashboard. Tarjeta por persona (Martina, Rodrigo) con saldo/sin liquidar/últ. gasto en paralelo. */}
       {(()=>{
-        const cajaUsers = ['Martín','Martina']
+        // Caja chica activa = quienes tienen fondos en petty_cash (incluye a Rodrigo u otros); no lista fija.
+        const cajaUsers = [...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))
+        if(!cajaUsers.length) return null
         const money = fmtN
-        const av = { 'Martín':['#EAF3DE','#3B6D11'], 'Martina':['#EEEDFE','#534AB7'] }
         const lbl = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:3}
         const filas = cajaUsers.map(u=>{
           const saldo = saldoCajaChica(pettyCash, expenses, u)
@@ -2815,7 +2816,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             {/* Lado a lado; en iPhone el detalle baja bajo el saldo (clase .cc-body) */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               {filas.map(f=>{
-                const [avBg,avCol]=av[f.u]||['#F1EFE8','#537281']
+                const _pc=personChip(f.u); const avBg=_pc.bg, avCol=_pc.color
                 const alerta = f.alertaSinLiq||f.alertaUlt||f.saldo<0
                 const on = cajaExp===f.u
                 return (
