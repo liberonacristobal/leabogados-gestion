@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Cockpit: Facturación histórica solo ≤2025 + Pagar rápido
+- El contenedor Facturación AAAA (emitidas sin proyecto) ahora SOLO existe para 2025 hacia atrás. En 2026+ toda factura debe tener venta/propuesta: si no la tiene, cae en Facturas sin proyecto asignado para forzar la asignación.
+- Botón Pagar en la fila de facturas pendientes/vencidas (marca pagada con fecha de hoy, con confirmación), sin entrar a editar.
+
+
 ## 2026-06-15 — Cockpit v2: Año → Proyecto → Factura (Parte 1)
 - La pestaña Financiero del cliente se reorganizó en jerarquía: franja Por cobrar/Vencido arriba, tabs por AÑO, y dentro cada PROYECTO (=venta) como acordeón con resumen (Facturado/Cobrado/Pendiente + cuotas cobradas), auto-expandiendo los que tienen vencido. Las facturas se ordenan por estado (pendientes/vencidas, programadas, pagadas). Contenedor virtual Facturación AAAA para emitidas del año sin proyecto, y sección Facturas sin proyecto asignado con + Asignar a proyecto (sugerencia ✦). Folios siempre Factura N° XX. Tocar una factura abre el editor.
 
