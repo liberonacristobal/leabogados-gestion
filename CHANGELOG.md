@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — IA: revisar Gmail → contactos de clientes
+- Nuevo en el menú (admin): **"Revisar Gmail (contactos)"**. Lee el Gmail corporativo (scope `gmail.readonly`), extrae los participantes externos de los últimos 12 meses, los **asocia a clientes** (dominio conocido → directo; ambiguos → IA Opus que infiere cliente y cargo) y propone agregarlos a la ficha. **Compuerta humana**: Agregar / Descartar / reasignar cliente. Revisiones **parciales** ("Revisar nuevos" desde la última). Privacidad: a la IA solo van encabezados (De/Para/CC/Asunto), nunca el cuerpo. Descartados se recuerdan en `learnings` (sin re-proponer); la ficha ya tenía los campos de contacto (nombre/cargo/email/teléfono).
+
 ## 2026-06-15 — Rendición: el proyecto viene de la venta/propuesta
 - El selector de Proyecto de la rendición ahora ofrece los **proyectos de las ventas/propuestas del cliente** (venta = proyecto), no solo los escritos en gastos. Se combinan con los de gastos (con su conteo) y se sugiere el correcto. Un gasto pertenece al proyecto si tiene esa glosa **o** está vinculado a la venta (sale_id).
 
