@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Entrada notaría + archivar en Gastos
+- En la barra de buscar clientes de Gastos hay una pill **"Gastos notariales"** (ámbar) que **despliega dos pills**: Carga masiva y Liquidar notaría (con el conteo de pendientes). Reemplaza los botones sueltos del header.
+- **Botón archivar** en cada cliente de la lista de Gastos (mismo ícono que Clientes): lo marca **Terminado** y sale de la lista; un toggle **"Archivados (N)"** los vuelve a mostrar. Acorta el scroll de clientes antiguos.
+
 ## 2026-06-15 — Liquidación de notaría
 - Nueva sección **"Notaría"** dentro de Gastos (la preparan los limited, visible para admin): pendientes de pagar a la notaría **agrupados por cliente con su fondo disponible** (Con fondos / Sin fondos · adelantarías) — filtro **"Solo con fondos del cliente"** por defecto + **advertencia** al incluir clientes sin fondos (no operar con plata de la oficina). Gastos **personales** (Cristóbal/Erasmo/Martín/Martina/Rodrigo, `personal_de`) en grupo propio sin chequeo de fondos. **"Liquidar a notaría"** → correo con **OT · concepto · monto** + PDF (Gmail, correo configurable). Marca `notaria_render_id` (ledger independiente). Historial con **deshacer**. (Requiere `expenses.notaria_render_id`, `notaria_liquidado_at`, `personal_de`.)
 
