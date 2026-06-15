@@ -10062,17 +10062,14 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
       <div style={{padding:'14px 20px 0'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:4}}>
           <BloqueTitulo>Mis tareas</BloqueTitulo>
-          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end'}}>
-            <input value={filterClient} onChange={e=>{setFilterClient(e.target.value);setFilterProject('')}} placeholder='Buscar cliente...' style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:11,background:filterClient?'#E6EEF1':'#F5F7F9',color:C.text,width:120}}/>
-            <select value={filterProject} disabled={projDisabled} onChange={e=>setFilterProject(e.target.value)} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${filterProject?C.accent:C.border}`,fontSize:11,maxWidth:160,background:projDisabled?'#E4E8EB':(filterProject?'#E6EEF1':'#F5F7F9'),color:projDisabled?C.muted:(filterProject?C.accent:C.text),cursor:projDisabled?'not-allowed':'pointer',opacity:projDisabled?.7:1}}>
-              <option value=''>{!filterClient?'Selecciona un cliente':proyectosCliente.length===0?'Sin proyectos':'Todos los proyectos'}</option>
-              {proyectosCliente.map(p=><option key={p} value={p}>{p}</option>)}
-            </select>
-            {(filterProject||filterClient)&&
-              <button onClick={()=>{setFilterProject('');setFilterClient('')}} style={{padding:'4px 7px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,background:'transparent',color:C.muted,cursor:'pointer'}}>×</button>
-            }
+          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end',flex:1,minWidth:0}}>
+            <div style={{position:'relative',display:'flex',alignItems:'center',flex:'1 1 130px',minWidth:120,maxWidth:220}}>
+              <input value={filterClient} onChange={e=>{setFilterClient(e.target.value);setFilterProject('')}} placeholder='Buscar cliente...' style={{width:'100%',padding:'5px 22px 5px 8px',borderRadius:7,border:`1px solid ${filterClient?C.accent:C.border}`,fontSize:12,background:filterClient?'#E6EEF1':'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}}/>
+              {filterClient&&<button onClick={()=>{setFilterClient('');setFilterProject('')}} style={{position:'absolute',right:5,background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer',lineHeight:1}}>×</button>}
+            </div>
+            <button onClick={()=>onAddTask&&onAddTask()} style={{padding:'5px 12px',borderRadius:7,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>+ Nueva tarea</button>
             {(archivadas.length>0||verArchivadas)&&
-              <button onClick={()=>setVerArchivadas(v=>!v)} style={{padding:'4px 9px',borderRadius:7,border:`1px ${verArchivadas?'solid':'dashed'} ${verArchivadas?C.accent:'#99ABB4'}`,fontSize:11,fontWeight:600,background:verArchivadas?'#E6EEF1':'transparent',color:verArchivadas?C.accent:'#99ABB4',cursor:'pointer'}}>Archivadas ({archivadas.length})</button>
+              <button onClick={()=>setVerArchivadas(v=>!v)} style={{padding:'5px 9px',borderRadius:7,border:`1px ${verArchivadas?'solid':'dashed'} ${verArchivadas?C.accent:'#99ABB4'}`,fontSize:11,fontWeight:600,background:verArchivadas?'#E6EEF1':'transparent',color:verArchivadas?C.accent:'#99ABB4',cursor:'pointer',flexShrink:0}}>Archivadas ({archivadas.length})</button>
             }
           </div>
         </div>
