@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Cockpit Parte 2b: Recordar cobro + barra de progreso
+- Botón Recordar en facturas pendientes/vencidas: envía un correo de recordatorio al cliente (desde la cuenta de oficina) con el detalle de la Factura N°, monto y vencimiento (con confirmación). Si el cliente no tiene correo, avisa.
+- Barra de progreso en el encabezado de cada proyecto (cobrado/facturado).
+
+
 ## 2026-06-15 — Asignar factura: solo a ventas del mismo año de emisión
 - El + Asignar a proyecto del cockpit solo ofrece ventas del MISMO año de emisión de la factura (no se cruzan años); si no hay venta de ese año, lo avisa. La sugerencia ✦ también respeta el año.
 
