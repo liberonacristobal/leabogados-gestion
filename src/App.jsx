@@ -10560,6 +10560,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const [resueltas,setResueltas] = useState([])     // log de la sesión: {b, tipo:'baja'|'legit'} para plegar + deshacer
   const [showResueltas,setShowResueltas] = useState(false)
   const [showConc,setShowConc] = useState(false)    // sección plegable de cuotas YA conciliadas (con folio)
+  const [cardFilter,setCardFilter] = useState(null) // null='todas' · 'match' · 'revisar' · 'conc' (filtro por tarjeta de resumen)
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>{ setIgnorados(new Set((data||[]).map(r=>String(r.key)))) },()=>setIgnorados(new Set())) },[])
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),5000); return ()=>clearTimeout(t) } },[toast])
   const ig = ignorados||new Set()
@@ -10587,6 +10588,8 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
     }).sort((a,b)=>b.score-a.score)
     return cands
   }
+  const scoreOf = b => { const cs=analizar(b,realesDe(b.client_id)); return cs[0]?cs[0].score:0 }
+  const pasaFiltro = b => cardFilter==='match' ? scoreOf(b)>=0.6 : cardFilter==='revisar' ? scoreOf(b)<0.6 : true
   const veredicto = sc => sc>=0.85?['Muy probable duplicado','#A32D2D','#FCEBEB']:sc>=0.6?['Probable duplicado','#854F0B','#FFF8E1']:sc>=0.4?['Posible duplicado','#854F0B','#FFF8E1']:['Poco probable','#537281','#F5F7F9']
   const fmtDelta = d => (d>0?'+':'−')+fmt(Math.abs(d))
   const STOP = new Set(['de','la','el','los','las','y','del','en','por','para','con','cuota','mensual','factura','cobro','servicio','servicios','asesoria','asesoría','permanente'])
@@ -10638,27 +10641,33 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   const stPillCuota = st => st==='Pagado'?['Pagada',C.greenText,'#E1F5EE']:st==='Programada'?['Programada',C.muted,'#F5F7F9']:st==='Pendiente'?['Pendiente',C.accent,'#E6EEF1']:[st,C.muted,'#F5F7F9']
   return (
     <div style={{maxWidth:600}}>
-      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:10}}>
-        Cuotas marcadas <b style={{color:C.text}}>Pagado sin N° de factura</b>: una factura pagada real lleva folio, así que suelen <b style={{color:C.text}}>duplicar</b> una factura real. Compara cada una con su candidata y da de baja la que sobra — todo es reversible.
+      <div style={{fontSize:11,color:C.muted,lineHeight:1.45,marginBottom:8}}>
+        Cuotas <b style={{color:C.text}}>Pagadas sin folio</b> que pueden <b style={{color:C.text}}>duplicar</b> una factura real. Toca una tarjeta para filtrar.
       </div>
       {(()=>{
-        let conMatch=0; sospechosas.forEach(b=>{ const cs=analizar(b,realesDe(b.client_id)); if(cs[0]&&cs[0].score>=0.6) conMatch++ })
+        let conMatch=0; sospechosas.forEach(b=>{ if(scoreOf(b)>=0.6) conMatch++ })
         const aRev=sospechosas.length-conMatch
         const concCount=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&b.status==='Pagado').length
-        const stat=(v,l,col,bg)=>(<div style={{flex:1,minWidth:74,background:bg,borderRadius:9,padding:'7px 9px',textAlign:'center'}}><div style={{fontSize:17,fontWeight:700,color:col,lineHeight:1.1}}>{v}</div><div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:2}}>{l}</div></div>)
+        const stat=(key,v,l,col,bg)=>{ const act=cardFilter===key; return (
+          <button onClick={()=>{ const nk=act?null:key; setCardFilter(nk); if(nk==='conc') setShowConc(true) }} style={{flex:1,minWidth:68,background:bg,borderRadius:9,padding:'6px 8px',textAlign:'center',border:act?`2px solid ${col}`:'2px solid transparent',cursor:'pointer'}}>
+            <div style={{fontSize:16,fontWeight:700,color:col,lineHeight:1.1}}>{v}</div>
+            <div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.2,marginTop:1}}>{l}</div>
+          </button>
+        )}
         return (
-          <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
-            {stat(sospechosas.length,'Analizadas',C.text,'#F5F7F9')}
-            {stat(conMatch,'Con match',C.accent,'#E6EEF1')}
-            {stat(aRev,'A revisar',aRev>0?'#A32D2D':C.muted,aRev>0?'#FCEBEB':'#F5F7F9')}
-            {stat(concCount,'Conciliadas',C.greenText,'#E1F5EE')}
-            {ig.size>0&&stat(ig.size,'Aprendidas',C.muted,'#F5F7F9')}
+          <div style={{display:'flex',gap:5,marginBottom:12}}>
+            {stat(null,sospechosas.length,'Analizadas',C.text,'#F5F7F9')}
+            {stat('match',conMatch,'Con match',C.accent,'#E6EEF1')}
+            {stat('revisar',aRev,'A revisar',aRev>0?'#A32D2D':C.muted,aRev>0?'#FCEBEB':'#F5F7F9')}
+            {stat('conc',concCount,'Conciliadas',C.greenText,'#E1F5EE')}
           </div>
         )
       })()}
       {claves.length===0 && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'28px 0'}}>Sin duplicados sospechosos. Todo en orden.</div>}
-      {claves.map(cid=>{
-        const grupo=grupos[cid]; const c=clientById(cid); const reales=realesDe(cid)
+      {cardFilter!=='conc' && claves.length>0 && !claves.some(cid=>(grupos[cid]||[]).filter(pasaFiltro).length>0) && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'22px 0'}}>Nada en esta categoría.</div>}
+      {cardFilter!=='conc' && claves.map(cid=>{
+        const grupo=(grupos[cid]||[]).filter(pasaFiltro); if(!grupo.length) return null
+        const c=clientById(cid); const reales=realesDe(cid)
         const sumF=grupo.reduce((a,b)=>a+(b.amount||0),0); const sumR=reales.filter(r=>r.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
         return (
           <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
@@ -11919,7 +11928,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='conciliacion'&&<Modal title='Conciliar facturas' onClose={()=>setModal(null)}><ConciliacionModal billing={billing} setBilling={setBilling} clients={clients} clientEntities={clientEntities} sales={sales} currentUserName={user?.name} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='conciliacion'&&<Modal title='Conciliar facturas' onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliacionModal billing={billing} setBilling={setBilling} clients={clients} clientEntities={clientEntities} sales={sales} currentUserName={user?.name} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
           const [s,b,e]=await Promise.all([
             supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
