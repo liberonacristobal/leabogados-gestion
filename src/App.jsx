@@ -8742,9 +8742,10 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const matchQ = b => { if(!q.trim()) return true; const s=q.toLowerCase().trim(); return `${b.concept||''} ${folioN(b.invoice_no)} ${b.amount||''} ${fmtFechaDMY(kpiDate(b))} ${saleTitle(b.sale_id)||''}`.toLowerCase().includes(s) }
           const yf = all.filter(b=>anioDe(b)===selYear && matchQ(b))
           const bySale={}, container=[], sinP=[]
-          // "Facturación AAAA" (contenedor histórico) solo 2025 hacia atrás. En 2026+ toda factura debe tener venta/propuesta → si no, va a "sin proyecto asignado".
+          // "Facturación AAAA" (contenedor histórico) solo 2025 hacia atrás Y solo facturas EMITIDAS con fecha de emisión ≤ 31-12-2025.
+          // En 2026+, o sin fecha de emisión, toda factura debe tener venta/propuesta → si no, va a "sin proyecto asignado".
           const histYear = (parseInt(selYear)||9999) <= 2025
-          yf.forEach(b=>{ if(b.sale_id){(bySale[b.sale_id]=bySale[b.sale_id]||[]).push(b)} else if(b.invoice_no && histYear){container.push(b)} else {sinP.push(b)} })
+          yf.forEach(b=>{ if(b.sale_id){(bySale[b.sale_id]=bySale[b.sale_id]||[]).push(b)} else if(b.invoice_no && histYear && b.issued_at && b.issued_at<='2025-12-31'){container.push(b)} else {sinP.push(b)} })
           const money = (rows,fn)=>rows.filter(fn).reduce((a,b)=>a+(b.amount||0),0)
           const lblFolio = b => b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')
           const renderFactura = (b,assignable)=>{
