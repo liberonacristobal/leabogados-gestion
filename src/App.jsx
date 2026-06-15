@@ -8465,7 +8465,7 @@ function ContactoTab({client, entities, onSaveFields}) {
 // Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
 // Asistente de conciliación: 3 pasos con compuerta humana. (1) duplicados determinista, (2) sin proyecto agrupado por serie con sugerencia, (3) programada↔real por venta+mes+tolerancia. Nada se borra/asigna solo.
-function ConciliarFacturasModal({scope=[], sales=[], clients=[], onResolveDup, onAssignSeries, onReplaceProgramada, onClose}) {
+function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, onResolveDup, onAssignSeries, onReplaceProgramada, onClose}) {
   const act = (scope||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.status!=='Anulado')
   const cName = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
@@ -8508,6 +8508,39 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], onResolveDup, o
     return out
   },[scope])
 
+  // (0) Fantasmas: Pagado SIN folio que es copia de una real CON folio (absorbe el tool de conciliación viejo). Respeta "no es duplicado" (learnings conciliacion_ok).
+  const [okIds,setOkIds] = useState(null)
+  useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','conciliacion_ok').then(({data})=>setOkIds(new Set((data||[]).map(r=>String(r.key)))),()=>setOkIds(new Set())) },[])
+  const igOk = okIds||new Set()
+  const ghosts = useMemo(()=>{
+    const sosp = act.filter(b=>b.status==='Pagado' && !b.invoice_no && b.billing_type!=='reembolso' && !igOk.has(String(b.id)))
+    return sosp.map(g=>{
+      const reales = act.filter(r=>r.invoice_no && String(r.client_id)===String(g.client_id) && ['Pagado','Pendiente','Vencido'].includes(r.status))
+      let best=null,score=0
+      reales.forEach(r=>{ const a=g.amount||0; const mEq=a&&Math.abs((r.amount||0)-a)/a<=0.02?0.5:0; const gl=simTexto(r.concept,g.concept)*0.5; const sc=mEq+gl; if(sc>score){score=sc;best=r} })
+      return {g, real:best, score}
+    }).filter(x=>x.real && x.score>=0.5).sort((a,b)=>b.score-a.score)
+  },[scope,okIds])
+  const marcarLegit = id => { learnPut('conciliacion_ok', String(id), '1', {}); setOkIds(p=>new Set([...(p||[]),String(id)])) }
+
+  // Opus para series ambiguas (sin sugerencia heurística): propone la venta.
+  const [aiSug,setAiSug] = useState({})
+  const [aiBusy,setAiBusy] = useState(null)
+  const sugerirIA = async(g,idx)=>{
+    const key=import.meta.env.VITE_ANTHROPIC_API_KEY; if(!key){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
+    setAiBusy(idx)
+    try{
+      const ventas=g.sales.map(s=>`${s.id} :: ${s.title}${s.year?` (${s.year})`:''}`).join('\n')
+      const concs=g.rows.slice(0,8).map(r=>`- ${r.concept} · $${(r.amount||0).toLocaleString('es-CL')}`).join('\n')
+      const prompt=`Asistente contable de un estudio de abogados. Estas facturas no están asignadas a un proyecto (venta). ¿A cuál de las ventas del cliente pertenecen? Responde SOLO con el id exacto de la venta, o la palabra ninguna.\n\nVentas del cliente:\n${ventas}\n\nFacturas:\n${concs}`
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:60,messages:[{role:'user',content:prompt}]})})
+      const j=await resp.json(); const txt=(j?.content?.[0]?.text||'').trim()
+      const m=g.sales.find(s=>txt.includes(String(s.id)))
+      if(m) setAiSug(p=>({...p,[idx]:m})); else alert('La IA no encontró una venta clara para esta serie.')
+    }catch(e){ alert('Error IA: '+e.message) }
+    setAiBusy(null)
+  }
+
   const sect = (n,color,title,sub,count) => (
     <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:7}}>
       <span style={{width:18,height:18,borderRadius:'50%',background:color,color:'#fff',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{n}</span>
@@ -8519,13 +8552,27 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], onResolveDup, o
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
-        <span style={{fontSize:15,fontWeight:500,color:'#3D3D3D'}}>Conciliación de facturas</span>
+        <span style={{fontSize:15,fontWeight:500,color:'#3D3D3D'}}>Conciliar facturas{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>todos los clientes</span>}</span>
         <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
       </div>
       <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:18}}>
-        {dupGroups.length+serieGroups.length+progMatches.length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.</div>}
+        {ghosts.length+dupGroups.length+serieGroups.length+progMatches.length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.</div>}
+
+        {ghosts.length>0&&<div>
+          {sect(0,C.overdue,'Pagadas sin folio (posible copia)','determinista',ghosts.length)}
+          {ghosts.map((x,i)=>(
+            <div key={i} style={{background:'#fff',border:`1px solid #F09595`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
+              <div style={{fontSize:12.5,fontWeight:600}}>{x.g.concept||'—'} · {fmt(x.g.amount)}</div>
+              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(x.g.client_id)} · sin folio. Parece copia de la real F° {folioN(x.real.invoice_no)} ({fmt(x.real.amount)}).</div>
+              <div style={{display:'flex',gap:6}}>
+                <button onClick={()=>onReplaceProgramada&&onReplaceProgramada(x.g.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Dar de baja la copia</button>
+                <button onClick={()=>marcarLegit(x.g.id)} style={{fontSize:10,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>No es duplicado</button>
+              </div>
+            </div>
+          ))}
+        </div>}
 
         {dupGroups.length>0&&<div>
           {sect(1,C.overdue,'Duplicados','determinista',dupGroups.length+' grupos')}
@@ -8540,19 +8587,20 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], onResolveDup, o
 
         {serieGroups.length>0&&<div>
           {sect(2,C.soon,'Sin proyecto','✦ IA sugiere',serieGroups.length+' series')}
-          {serieGroups.map((g,i)=>(
+          {serieGroups.map((g,i)=>{ const eff=g.sug||aiSug[i]; const ia=!g.sug&&aiSug[i]; return (
             <div key={i} style={{background:'#fff',border:`1px solid #FAC775`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:12.5,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.rows[0].concept||'—'}</span><span style={{fontSize:10,background:'#FAEEDA',color:'#854F0B',borderRadius:10,padding:'1px 8px',fontWeight:600,flexShrink:0,marginLeft:6}}>{g.rows.length} fact.</span></div>
-              <div style={{fontSize:10,color:C.muted,marginBottom:7}}>{cName(g.cid)}{g.sug?<> · ✦ Sugerida: <b style={{color:C.accent}}>{g.sug.title}</b></>:' · elige la venta'}</div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:7}}>{cName(g.cid)}{eff?<> · ✦ Sugerida{ia?' (IA)':''}: <b style={{color:C.accent}}>{eff.title}</b></>:' · elige la venta'}</div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                {g.sug&&<button onClick={()=>onAssignSeries&&onAssignSeries(g.sug.id, g.rows.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Asignar las {g.rows.length} a {g.sug.title}</button>}
+                {eff&&<button onClick={()=>onAssignSeries&&onAssignSeries(eff.id, g.rows.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Asignar las {g.rows.length} a {eff.title}</button>}
+                {!eff&&<button onClick={()=>sugerirIA(g,i)} disabled={aiBusy===i} style={{fontSize:10,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer',opacity:aiBusy===i?.6:1}}>{aiBusy===i?'Consultando…':'✦ Sugerir con IA'}</button>}
                 <select onChange={e=>{ if(e.target.value) onAssignSeries&&onAssignSeries(e.target.value, g.rows.map(r=>r.id)) }} defaultValue='' style={{fontSize:10,padding:'4px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}>
-                  <option value=''>{g.sug?'otra venta…':'asignar a venta…'}</option>
+                  <option value=''>{eff?'otra venta…':'asignar a venta…'}</option>
                   {g.sales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
                 </select>
               </div>
             </div>
-          ))}
+          )})}
         </div>}
 
         {progMatches.length>0&&<div>
@@ -13608,7 +13656,7 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>
                   Papelera
                 </div>}
-                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'conciliacion'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'conciliar'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M7 8l-4 4 4 4'/><path d='M17 8l4 4-4 4'/><path d='M14 4l-4 16'/></svg>
                   Conciliar facturas
                 </div>}
@@ -13669,7 +13717,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
@@ -13689,7 +13737,6 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='conciliacion'&&<Modal title='Conciliar facturas' onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliacionModal billing={billing} setBilling={setBilling} clients={clients} clientEntities={clientEntities} sales={sales} currentUserName={user?.name} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
