@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Asignar factura: solo a ventas del mismo año de emisión
+- El + Asignar a proyecto del cockpit solo ofrece ventas del MISMO año de emisión de la factura (no se cruzan años); si no hay venta de ese año, lo avisa. La sugerencia ✦ también respeta el año.
+
+
 ## 2026-06-15 — Conciliación v2: cruce por prioridad + razonamiento
 - En Sin proyecto, la IA ya no cruza solo por glosa: prioriza modalidad y N° de cuotas de la venta › monto vs cuota esperada › glosa, y muestra el RAZONAMIENTO explícito (Porque: …). El sugerir con Opus también recibe modalidad/cuotas/total de cada venta. Descuadre programada↔real muestra Factura N° de la real.
 
