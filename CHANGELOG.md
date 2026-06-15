@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Hero de Tareas sin redundancia
+- Quité el tablero de 4 tiles del hero de Tareas porque repetía el titular y los chips (Vencidas/Esta semana/Activas/Terminadas ya estaban arriba). Queda solo el hero narrativo (titular + chips + "Asigné a" + panel Gmail).
+
 ## 2026-06-15 — Hero de Tareas: sugeridas desde Gmail
 - El hero de Tareas (admin) muestra las **tareas sugeridas desde Gmail** en un **panel verde a la derecha** de la tarjeta (ocupa menos alto); al tocar se **despliega** la lista a lo ancho y cada una **abre el borrador de tarea** prellenado (o se descarta). El escaneo de no leídos corre 1 vez por sesión (cacheado) reutilizando el mismo motor del scanner "Tareas +Gmail".
 
