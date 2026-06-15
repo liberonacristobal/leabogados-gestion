@@ -10930,18 +10930,31 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   const [accepted,setAccepted] = useState(new Set())
   const [busyE,setBusyE] = useState('')            // email en proceso
   const [err,setErr] = useState('')
+  const [revTab,setRevTab] = useState('con')       // pestaña del panel: 'con' (con cliente) | 'sin' (por asignar)
+  const [revQ,setRevQ] = useState('')              // búsqueda dentro del panel
   const lastScan = (typeof localStorage!=='undefined' && localStorage.getItem('gmail_contactos_last'))||''
   const clientName = id => clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
   useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','contacto_descartado').then(({data})=>setDismissed(new Set((data||[]).map(r=>String(r.key)))),()=>{}) },[])
 
   const parseAddrs = h => (h||'').split(',').map(s=>s.trim()).map(s=>{ const m=s.match(/^(.*?)<(.+?)>$/); if(m) return {name:m[1].replace(/["']/g,'').trim(), email:m[2].trim().toLowerCase()}; return {name:'', email:s.toLowerCase()} }).filter(x=>x.email.includes('@'))
+  // Match por EXTENSIÓN/dominio: la palabra clave del dominio (ej. "tarragona" de @tarragona.cl) contra
+  // el nombre del cliente o de su razón social. Ignora proveedores genéricos (gmail, hotmail…).
+  const PROV = /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|gmx|aol)\b/
+  const clientByDomain = domain => {
+    const core = String(domain||'').split('.')[0].replace(/[^a-z0-9]/g,'')
+    if(core.length<4 || PROV.test(domain)) return null
+    const hit = arr => { for(const o of arr){ const n=_normTxt(o.name||'').replace(/ /g,''); if(n.length>=4 && (n.includes(core)||core.includes(n))) return o } return null }
+    const c=hit(clients); if(c) return c.id
+    const e=hit(clientEntities); if(e&&e.client_id) return e.client_id
+    return null
+  }
 
   const asociarIA = async(ambig)=>{
     const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY; if(!apiKey||!ambig.length) return
     const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>{ const ents=(clientEntities||[]).filter(e=>e.client_id===c.id); return {id:c.id,nombre:c.name,rs:ents.map(e=>e.name).filter(Boolean),rut:c.rut||ents.map(e=>e.rut).filter(Boolean)[0]||''} })
     for(let i=0;i<ambig.length;i+=25){
       const batch=ambig.slice(i,i+25); setProg({done:i,total:ambig.length,label:'Asociando con IA…'})
-      const prompt=`Eres asistente del estudio de abogados Liberona Escala Abogados (@leabogados.cl). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece (por dominio del email, por el nombre/empresa que aparece en los asuntos, o por la razón social) o null si no es claro. Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
+      const prompt=`Eres asistente del estudio de abogados Liberona Escala Abogados (@leabogados.cl). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. También usa el nombre/empresa que aparece en los asuntos. Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
       try{
         const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
         const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
@@ -10991,7 +11004,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
       const existEmails=new Set((ce.data||[]).filter(c=>c.email).map(c=>String(c.email).toLowerCase()))
       const domClient={}; (ce.data||[]).forEach(c=>{ if(c.email){ const dm=String(c.email).split('@')[1]; if(dm&&dm!==ME_DOMAIN&&!domClient[dm]) domClient[dm]=c.client_id } })
       let cands=Object.values(agg).filter(a=>a.count>=1 && !existEmails.has(a.email) && !dismissed.has(a.email))
-      cands.forEach(a=>{ a.client_id=domClient[a.domain]||null; a.cargo='' })
+      cands.forEach(a=>{ a.client_id = domClient[a.domain] || clientByDomain(a.domain) || null; a.cargo='' })
       await asociarIA(cands.filter(a=>!a.client_id))
       setProps(cands.sort((a,b)=>b.count-a.count))
       localStorage.setItem('gmail_contactos_last',`${new Date().getFullYear()}/${new Date().getMonth()+1}/${new Date().getDate()}`)
@@ -11080,28 +11093,48 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
           <button onClick={()=>setPhase('idle')} style={{padding:'9px 16px',borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver</button>
         </div>
       )}
-      {phase==='review'&&(
+      {phase==='review'&&(()=>{
+        const q=revQ.trim().toLowerCase()
+        const fil = a => !q || (a.name||'').toLowerCase().includes(q) || a.email.includes(q)
+        const conF = conCliente.filter(fil)
+        const sinF = sinCliente.filter(fil)
+        const gF={}; conF.forEach(a=>{ (gF[a.client_id]=gF[a.client_id]||[]).push(a) })
+        const tab=(k,l,n,col)=>{ const on=revTab===k; return (
+          <button onClick={()=>setRevTab(k)} style={{flex:1,padding:'8px 6px',border:'none',borderBottom:`2px solid ${on?col:'transparent'}`,background:'none',color:on?col:C.muted,fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{l} <span style={{fontSize:11,opacity:.85}}>{n}</span></button>
+        )}
+        return (
         <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:12,background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}>
-            <div style={{fontSize:12,color:C.muted}}><b style={{color:C.text,fontSize:15}}>{visibles.length}</b> nuevo{visibles.length!==1?'s':''}{conCliente.length>0&&<span> · <b style={{color:C.accent}}>{conCliente.length}</b> con cliente</span>}{sinCliente.length>0&&<span> · <b style={{color:'#854F0B'}}>{sinCliente.length}</b> por asignar</span>}</div>
-            {conCliente.length>0&&<button onClick={()=>agregarSeguros(conCliente.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 12px',cursor:'pointer',whiteSpace:'nowrap'}}>Agregar seguros</button>}
-          </div>
-          {visibles.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'26px 0'}}>Sin contactos nuevos por revisar.</div>}
-          {Object.keys(grupos).map(cid=>(
-            <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'9px 14px',background:'#F5F7F9'}}>{clientName(cid)} · {grupos[cid].length}</div>
-              {grupos[cid].map(a=>fila(a,false))}
-            </div>
-          ))}
-          {sinCliente.length>0&&(
-            <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:'#854F0B',padding:'9px 14px',background:'#FFF8E1'}}>Sin cliente claro · {sinCliente.length} — elige a quién asignar</div>
-              {sinCliente.map(a=>fila(a,true))}
-            </div>
-          )}
+          {visibles.length===0
+            ? <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'26px 0'}}>Sin contactos nuevos por revisar.</div>
+            : <>
+              <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:10}}>
+                {tab('con','Con cliente',conCliente.length,C.accent)}
+                {tab('sin','Por asignar',sinCliente.length,'#854F0B')}
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:10}}>
+                <input value={revQ} onChange={e=>setRevQ(e.target.value)} placeholder='Buscar nombre o correo…' style={{flex:1,height:36,border:`1px solid ${C.border}`,borderRadius:9,padding:'0 11px',fontSize:13,color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}}/>
+                {revTab==='con'&&conF.length>0&&<button onClick={()=>agregarSeguros(conF.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'9px 12px',cursor:'pointer',whiteSpace:'nowrap'}}>Agregar seguros</button>}
+              </div>
+              {revTab==='con'&&(Object.keys(gF).length===0
+                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>Nada por aquí.</div>
+                : Object.keys(gF).map(cid=>(
+                    <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.accent,padding:'8px 14px',background:'#F5F7F9'}}>{clientName(cid)} · {gF[cid].length}</div>
+                      {gF[cid].map(a=>fila(a,false))}
+                    </div>
+                  )))}
+              {revTab==='sin'&&(sinF.length===0
+                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>Nada por aquí.</div>
+                : <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'#854F0B',padding:'8px 14px',background:'#FFF8E1'}}>Por asignar · {sinF.length}{q?` de ${sinCliente.length}`:''}</div>
+                    {sinF.slice(0,40).map(a=>fila(a,true))}
+                    {sinF.length>40&&<div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'10px'}}>Mostrando 40 de {sinF.length}. Usa el buscador para acotar.</div>}
+                  </div>)}
+            </>}
           <button onClick={()=>setPhase('idle')} style={{width:'100%',height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver al inicio</button>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
