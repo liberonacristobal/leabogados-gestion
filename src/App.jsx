@@ -2258,7 +2258,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               <div style={{display:'flex',gap:14,padding:'14px 15px',alignItems:'stretch'}}>
                 {/* Izquierda: total + cantidad que requiere fondos */}
                 <div style={{flex:'0 0 40%',minWidth:0,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                  <div style={{fontSize:23,fontWeight:600,color:C.overdue,lineHeight:1.05,whiteSpace:'nowrap'}}>{fmt(totalNeg)}</div>
+                  <div style={{fontSize:22,fontWeight:600,color:C.overdue,lineHeight:1.05,whiteSpace:'nowrap'}}>{fmt(totalNeg)}</div>
                   <span style={{fontSize:10,fontWeight:600,padding:'3px 9px',borderRadius:20,background:'#FCEBEB',color:'#A32D2D',whiteSpace:'nowrap',width:'max-content',marginTop:9}}>{negatives.length} requiere{negatives.length!==1?'n':''} fondos</span>
                 </div>
                 {/* Derecha: lista con punto de gravedad, clickeable para ver detalle */}
@@ -10694,7 +10694,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
         const stat=(key,v,l,col,bg)=>{ const act=cardFilter===key; return (
           <button onClick={()=>{ const nk=act?null:key; setCardFilter(nk); if(nk==='conc') setShowConc(true) }} style={{flex:1,minWidth:68,background:bg,borderRadius:9,padding:'6px 8px',textAlign:'center',border:act?`2px solid ${col}`:'2px solid transparent',cursor:'pointer'}}>
             <div style={{fontSize:16,fontWeight:700,color:col,lineHeight:1.1}}>{v}</div>
-            <div style={{fontSize:8.5,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.2,marginTop:1}}>{l}</div>
+            <div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.2,marginTop:1}}>{l}</div>
           </button>
         )}
         return (
@@ -11131,7 +11131,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
       )}
       {phase==='review'&&(()=>{
         const tab=(k,l,n,col)=>{ const on=revTab===k; return (
-          <button onClick={()=>setRevTab(k)} style={{flex:1,padding:'9px 6px',border:'none',borderBottom:`2px solid ${on?col:'transparent'}`,background:'none',color:on?col:C.muted,fontSize:12.5,fontWeight:on?700:500,cursor:'pointer'}}>{l} <span style={{fontSize:11,fontWeight:700,color:on?'#fff':C.muted,background:on?col:'#EEF1F3',borderRadius:20,padding:'1px 7px',marginLeft:2}}>{n}</span></button>
+          <button onClick={()=>setRevTab(k)} style={{flex:1,padding:'9px 6px',border:'none',borderBottom:`2px solid ${on?col:'transparent'}`,background:'none',color:on?col:C.muted,fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{l} <span style={{fontSize:11,fontWeight:700,color:on?'#fff':C.muted,background:on?col:'#EEF1F3',borderRadius:20,padding:'1px 7px',marginLeft:2}}>{n}</span></button>
         )}
         return (
         <div>
