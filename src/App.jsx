@@ -1870,6 +1870,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payingNow,setPayingNow] = useState(false)
   const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
   const [dgl,setDgl] = useState('neto')   // pill del desglose financiero: neto | fac | cob
+  const [gaugeMode,setGaugeMode] = useState('venta')   // velocímetro de meta: venta (vendido/meta) | neto (neto/meta)
   const [iaHoy,setIaHoy] = useState(null)       // resumen IA de "qué atender hoy"
   const [iaHoyBusy,setIaHoyBusy] = useState(false)
   const [hoyOpen,setHoyOpen] = useState(false)  // pill "qué atender hoy" colapsada por defecto
@@ -2011,16 +2012,30 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           {/* Bloque único: izquierda velocímetro de meta · derecha desglose financiero */}
           <div style={{display:'flex',alignItems:'stretch'}}>
             <div style={{flex:1.18,padding:'16px 14px',borderRight:`1px solid ${C.border}`,textAlign:'center',display:'flex',flexDirection:'column',justifyContent:'center'}}>
-              <div style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:2}}>Vendido vs meta</div>
-              <svg viewBox='0 0 148 86' style={{width:'100%',maxWidth:185,margin:'0 auto'}}>
-                <defs><linearGradient id='gMetaDash' x1='16' y1='0' x2='132' y2='0' gradientUnits='userSpaceOnUse'><stop offset='0' stopColor='#99ABB4'/><stop offset='0.55' stopColor='#537281'/><stop offset='1' stopColor='#003C50'/></linearGradient></defs>
-                <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke='#F1F4F6' strokeWidth='9' strokeLinecap='round'/>
-                <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke='url(#gMetaDash)' strokeWidth='9' strokeLinecap='round' strokeDasharray={`${Math.round(Math.min(100,m.pct)/100*182)} 182`}/>
-                <text x='74' y='72' textAnchor='middle' style={{fontSize:30,fontWeight:700,fill:C.accent}}>{m.pct}%</text>
-              </svg>
-              <div><span style={{fontSize:26,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(m.bruto)}</span><span style={{fontSize:14,color:'#A8B2B8'}}> / {fmtMon(m.meta)}</span></div>
-              <button onClick={()=>setRevOpen(o=>!o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#537281',marginTop:3}}>faltan {fmtMon(Math.max(0,m.meta-m.bruto))} · {ventasDelAnio.length} ventas ›</button>
-              {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:4}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
+              {(()=>{
+                const pctVenta = m.meta>0?Math.round(m.bruto/m.meta*100):0
+                const pctNeto = m.meta>0?Math.round(m.neto/m.meta*100):0
+                const gv = gaugeMode==='neto'
+                  ? {pct:pctNeto, val:m.neto, col:C.greenText, grad:'url(#gMetaNeto)', lbl:'Neto vs meta'}
+                  : {pct:pctVenta, val:m.bruto, col:C.accent, grad:'url(#gMetaDash)', lbl:'Vendido vs meta'}
+                return (<>
+                  <div onClick={()=>setGaugeMode(g=>g==='venta'?'neto':'venta')} style={{cursor:'pointer'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:2,display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>{gv.lbl}<span style={{fontSize:8,color:'#CBD5DB',fontWeight:600}}>↺ toca</span></div>
+                    <svg viewBox='0 0 148 86' style={{width:'100%',maxWidth:185,margin:'0 auto'}}>
+                      <defs>
+                        <linearGradient id='gMetaDash' x1='16' y1='0' x2='132' y2='0' gradientUnits='userSpaceOnUse'><stop offset='0' stopColor='#99ABB4'/><stop offset='0.55' stopColor='#537281'/><stop offset='1' stopColor='#003C50'/></linearGradient>
+                        <linearGradient id='gMetaNeto' x1='16' y1='0' x2='132' y2='0' gradientUnits='userSpaceOnUse'><stop offset='0' stopColor='#9FE1CB'/><stop offset='0.55' stopColor='#1D9E75'/><stop offset='1' stopColor='#0F6E56'/></linearGradient>
+                      </defs>
+                      <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke='#F1F4F6' strokeWidth='9' strokeLinecap='round'/>
+                      <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke={gv.grad} strokeWidth='9' strokeLinecap='round' strokeDasharray={`${Math.round(Math.min(100,gv.pct)/100*182)} 182`}/>
+                      <text x='74' y='72' textAnchor='middle' style={{fontSize:30,fontWeight:700,fill:gv.col}}>{gv.pct}%</text>
+                    </svg>
+                    <div><span style={{fontSize:26,fontWeight:700,color:gv.col,fontVariantNumeric:'tabular-nums'}}>{fmtMon(gv.val)}</span><span style={{fontSize:14,color:'#A8B2B8'}}> / {fmtMon(m.meta)}</span></div>
+                  </div>
+                  <button onClick={()=>setRevOpen(o=>!o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#537281',marginTop:3}}>faltan {fmtMon(Math.max(0,m.meta-gv.val))} · {ventasDelAnio.length} ventas ›</button>
+                  {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:4}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
+                </>)
+              })()}
             </div>
             <div style={{flex:1,padding:'16px 14px',display:'flex',flexDirection:'column'}}>
               <div style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>Desglose financiero</div>
