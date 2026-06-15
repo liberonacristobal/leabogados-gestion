@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Asignar razón social por gasto
+- La razón social ahora se asigna **dentro de cada gasto** (vista interior del cliente), no en bloque: **pills** de RS si el cliente tiene ≤3 razones sociales, **selector ▾** si tiene más. El gasto ya asignado muestra "RS · [nombre]" con opción **cambiar**. Todo con deshacer. Se quitó el botón en bloque "Asignar razón social (N)" del listado (asignaba todos a la vez).
+
 ## 2026-06-15 — Caja chica (admin) + paleta
 - El panel "Gestión caja chica" del Dashboard ahora **deriva las personas de `petty_cash`** (incluye a Rodrigo y a quien tenga fondos, no una lista fija); se oculta si nadie tiene caja activa.
 - Se reemplazó el **violeta de Martina** (`#534AB7`, fuera de paleta) por un slate corporativo en toda la app (chips de persona y avatares).
