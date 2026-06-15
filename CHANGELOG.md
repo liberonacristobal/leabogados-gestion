@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Caja chica: carga masiva no la afecta
+- **Corrección:** la carga masiva ya no asigna los gastos importados a la caja chica de quien importa (`created_by` queda en null; el importador se registra en `bulk_imports`). La pertenencia a caja chica es derivada de `created_by` (+ `!paid_by_client`); no se tocó la regla de carga manual ni la rendición al cliente.
+- **Pill de clasificación** en cada gasto importado (Gastos): el admin lo asigna a la **caja chica de una persona** o lo marca **pagado con fondos del cliente** (con deshacer). Badge sutil **"Carga masiva"** para distinguir de los manuales.
+
 ## 2026-06-15 — Ingresos del año por año de venta
 - Nueva tarjeta en el **Dashboard** (tras Cash flow): **"Cobrado [año] · por año de venta"** — separa lo cobrado este año según el año de la venta de origen (2026 / 2025 / 2024 y anteriores), con barra y desglose. Lo que no tiene año cae en **"Sin año asignado"** (ámbar, tappable → Facturación).
 - Nueva cola **"Sin año"** en Facturación: facturas pagadas sin año de venta resuelto; **Asociar venta** (enlaza `sale_id`, el año deriva de `sales.year`) o **elegir el año** directo. **Aprende cliente→año** (sugerencia ✦) y no vuelve a preguntar. Requiere columna `billing.sale_year`.
