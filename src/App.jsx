@@ -6967,6 +6967,8 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
   const clientEnts = useMemo(()=>selectedClient?(clientEntities||[]).filter(e=>e.client_id===selectedClient.id):[],[clientEntities,selectedClient])
   const clientSales = useMemo(()=>selectedClient?(sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title):[],[sales,selectedClient])
   useEffect(()=>{ setF(p=>({...p, entity_id: clientEnts.length===1?clientEnts[0].id:(clientEnts.some(e=>e.id===p.entity_id)?p.entity_id:'')})) },[clientEnts])
+  // Sugerir el proyecto: la venta más reciente del cliente (venta = proyecto), si aún no se eligió.
+  useEffect(()=>{ if(!selectedClient||clientSales.length===0) return; const s=[...clientSales].sort((a,b)=>String(b.created_at||b.date||'').localeCompare(String(a.created_at||a.date||'')))[0]; setF(p=>p.sale_id||p.project?p:{...p,sale_id:s.id,project:s.title||''}) },[selectedClient,clientSales])
   const balance = selectedClient ? expenses.reduce((b,e)=> e.client_id===selectedClient.id ? b+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) : b, 0) : null
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const fmtCLP0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
@@ -7137,6 +7139,11 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       {selectedClient&&(
         <>
           {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
+          {balance!=null&&balance<=0&&(
+            <div style={{fontSize:12,color:'#854F0B',background:'#FFF8E1',border:`1px solid #FAC775`,borderRadius:8,padding:'9px 11px',marginBottom:10,lineHeight:1.4}}>
+              Estás ingresando gastos a un cliente <b>sin fondos</b>. Pídele a Erasmo o Cristóbal que soliciten fondos a <b>{selectedClient.name}</b>.
+            </div>
+          )}
 
           {rsList.length>0&&(
             <div style={{marginBottom:12,position:'relative'}}>
