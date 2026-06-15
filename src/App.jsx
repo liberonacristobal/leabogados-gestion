@@ -213,7 +213,7 @@ function rsBalances(clientId, expenses, entities){
 // FUENTE ÚNICA del documento de rendición (HTML imprimible). La usan el historial ("Ver PDF")
 // y RendicionModal (al enviar), para que ambos PDFs sean idénticos. Recibe datos ya normalizados.
 // gastos: [{date,concept,category,amount}] · fondos: [{date,concept,amount}]
-function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null }){
+function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null, project=null, subproject=null }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4', TXT='#3D3D3D'
   // Saldo disponible = fondos recibidos − rendido en tandas anteriores − esta rendición.
   const saldo = totFondos - rendidoAntes - totGastos
@@ -233,7 +233,9 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
   const saldoPos = saldo>=0
   const kpiCard = (l,v,bg,fg)=>`<div style='background:${bg};padding:12px 16px;flex:1'><div style='font-size:8px;font-weight:600;color:${fg==='#fff'?'rgba(255,255,255,.7)':AZUL3};text-transform:uppercase;letter-spacing:.4px'>${l}</div><div style='font-size:17px;font-weight:700;color:${fg};margin-top:2px;white-space:nowrap'>${v}</div></div>`
   const kpiRow = `<div style='display:flex;gap:1px;background:${GRAY}'>${kpiCard('Fondos recibidos',fmtN(totFondos),'#fff','#0F6E56')}${kpiCard('Gastos del período',fmtN(totGastos),'#fff',TXT)}${kpiCard(saldoPos?'Saldo a favor':'Saldo pendiente',(saldo<0?'−':'')+fmtN(Math.abs(saldo)),saldoPos?'#E1F5EE':'#FCEBEB',saldoPos?'#0F6E56':'#A32D2D')}</div>`
-  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'>${correlativo?`<span style='font-weight:700'>Rendición N° ${correlativo}</span><span style='${sep}'>`:''}<span ${correlativo?'':"style='font-weight:700'"}>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div>${dirigidoA?`<div style='font-weight:600'>Dirigido a: ${dirigidoA}</div>`:''}</div>${kpiRow}<div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+  const proyTxt = project ? `${project}${subproject?` · ${subproject}`:''}` : ''
+  const proyBar = proyTxt ? `<div style='background:#fff;padding:7px 26px;border-bottom:1px solid ${GRAY};font-size:10px;color:${TXT}'><span style='color:${MUTED};font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:9px'>Proyecto</span><span style='margin-left:10px;font-weight:600'>${proyTxt}</span></div>` : ''
+  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'>${correlativo?`<span style='font-weight:700'>Rendición N° ${correlativo}</span><span style='${sep}'>`:''}<span ${correlativo?'':"style='font-weight:700'"}>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div>${dirigidoA?`<div style='font-weight:600'>Dirigido a: ${dirigidoA}</div>`:''}</div>${kpiRow}${proyBar}<div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div><div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
 }
 
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
@@ -255,6 +257,7 @@ function rendicionPdfHtml(r, client, expenses, clientEntities){
     totGastos: gastos.reduce((a,e)=>a+(e.amount||0),0),
     totFondos: fondos.reduce((a,e)=>a+(e.amount||0),0),
     rendidoAntes, rendicionesPrevias: previas, correlativo: r.correlativo,
+    project: r.project || null, subproject: r.subproject || null,
   })
 }
 
@@ -5514,9 +5517,14 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
   // Movimientos del cliente, acotados a la(s) razón(es) social(es) seleccionada(s).
   // Con 1 RS todo pertenece a esa RS (incl. sin entity_id); sin selección/sin RS, todos.
   const entsCli = (clientEntities||[]).filter(e=>e.client_id===client.id)
-  const singleRS = entsCli.length===1
-  const headEnt = (entityIds&&entityIds.length===1) ? entsCli.find(e=>e.id===entityIds[0]) : (singleRS?entsCli[0]:null)
-  const inScope = e => (!entityIds||entityIds.length===0) ? true : (singleRS ? true : (!!e.entity_id && entityIds.includes(e.entity_id)))
+  const singleRS = entsCli.length<=1
+  // RS de la rendición: 1 RS → automática; varias → la elige el emisor (acota los gastos a esa RS).
+  const [selEnt,setSelEnt] = useState(()=> entsCli.length===1 ? entsCli[0].id : ((entityIds&&entityIds[0]) || (entsCli[0]&&entsCli[0].id) || null))
+  // Proyecto y subproyecto de la rendición (el emisor elige; el proyecto FILTRA los gastos).
+  const [proyecto,setProyecto] = useState('')
+  const [subproyecto,setSubproyecto] = useState('')
+  const headEnt = entsCli.length===1 ? entsCli[0] : (entsCli.find(e=>e.id===selEnt)||null)
+  const inScope = e => singleRS ? true : (selEnt ? e.entity_id===selEnt : false)
   const allMovs = expenses.filter(e=>e.client_id===client.id && inScope(e))
   const fondosDisp = allMovs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
   const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
@@ -5526,9 +5534,18 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
   const nextCorr = Math.max(0, ...rendsCliEnv.map(r=>r.correlativo||0)) + 1
   const previasN = rendsCliEnv.length
 
-  // Gastos disponibles para rendir (no rendidos aun)
+  // Proyectos disponibles (de los gastos pendientes de esta RS) + sugerido (el que tiene más gastos por rendir).
+  const gastosPend = allMovs.filter(e=>e.type==='gasto' && !e.client_rendered_at)
+  const proyConteo = {}; gastosPend.forEach(e=>{ const p=e.project||''; if(p) proyConteo[p]=(proyConteo[p]||0)+1 })
+  const proyectosDisp = Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])
+  const proyectoSugerido = proyectosDisp[0]||''
+  // Al cambiar de RS (o al abrir), sugerir el proyecto con más gastos pendientes.
+  useEffect(()=>{ setProyecto(proyectosDisp.includes(proyecto)?proyecto:(proyectoSugerido||'')) }, [selEnt])
+
+  // Gastos disponibles para rendir (no rendidos aun), acotados al proyecto elegido.
   const disponibles = allMovs.filter(e=>{
     if(e.type!=='gasto' || e.client_rendered_at) return false
+    if(proyecto && (e.project||'')!==proyecto) return false
     if(fDesde && e.date && e.date < fDesde) return false
     if(fHasta && e.date && e.date > fHasta) return false
     return true
@@ -5600,7 +5617,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
     if(fechas.length){ const ini=fechas[0], fin=fechas[fechas.length-1]; periodo = mesAno(ini)===mesAno(fin) ? mesAno(ini) : `${dia(ini)} \u2013 ${dia(fin)}` }
     // Rendiciones anteriores de este fondo (la tanda actual a\u00fan no est\u00e1 rendida \u2192 queda fuera).
     const {previas, rendidoAntes} = rendicionesPreviasDe(allMovs)
-    return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel, fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp, rendidoAntes, rendicionesPrevias: previas, correlativo: nextCorr })
+    return rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA: atencionVal||null, gastos: gastosSel, fondos: fondosList, totGastos: totalSel, totFondos: fondosDisp, rendidoAntes, rendicionesPrevias: previas, correlativo: nextCorr, project: proyecto||null, subproject: (subproyecto||'').trim()||null })
   }
 
   const handleGenerar = async(modo='pdf') => {
@@ -5621,6 +5638,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
         n_gastos: gastosSel.length,
         n_clientes: 1,
         tipo: 'cliente',
+        entity_id: selEnt||null,
+        project: proyecto||null,
+        subproject: (subproyecto||'').trim()||null,
         dirigido_a: (atencion||'').trim()||null
       })
       if(rendErr) throw new Error('No se pudo registrar la rendición: '+rendErr.message)
@@ -5633,7 +5653,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
       if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
-      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,dirigido_a:(atencion||'').trim()||null}
+      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null}
       if(onRendicionComplete) onRendicionComplete(rendObj)
       await guardarDirigido()
       // modo 'pdf': abre el documento imprimible. modo 'enviar': encadena al modal de correo.
@@ -5655,13 +5675,40 @@ function RendicionModal({client, entityIds, expenses, clientEntities, rendicione
         <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Será la N° {nextCorr}<span style={{fontSize:10,fontWeight:500,color:'#99ABB4'}}> · se confirma al enviar</span></span>
         <span style={{fontSize:11,color:C.muted,textAlign:'right'}}>{previasN>0?`${previasN} enviada${previasN!==1?'s':''} · saldo actual ${fmtN(saldoActual)}`:'Primera rendición de este cliente'}</span>
       </div>
-      {/* Razón social seleccionada */}
-      {headEnt&&(
+      {/* Razón social: 1 → fija; varias → la elige el emisor (acota los gastos) */}
+      {entsCli.length>0&&(()=>{
+        const lblS = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
+        const inpS = {width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:13,color:C.text,background:'#fff',boxSizing:'border-box'}
+        return (
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:14,fontWeight:700,color:C.text}}>{headEnt.name}</div>
-          {headEnt.rut&&<div style={{fontSize:11,color:'#99ABB4'}}>{headEnt.rut}</div>}
+          <div style={lblS}>Razón social</div>
+          {entsCli.length===1
+            ? <div style={{fontSize:14,fontWeight:700,color:C.text}}>{entsCli[0].name}{entsCli[0].rut?<span style={{fontSize:11,fontWeight:500,color:'#99ABB4'}}> · {entsCli[0].rut}</span>:''}</div>
+            : <><select value={selEnt||''} onChange={e=>setSelEnt(e.target.value||null)} style={{...inpS,borderColor:C.accent,color:C.accent,fontWeight:600}}>{entsCli.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${en.rut}`:''}</option>)}</select><div style={{fontSize:10,color:'#99ABB4',marginTop:3}}>El cliente tiene {entsCli.length} razones sociales — elige a cuál corresponde.</div></>}
         </div>
-      )}
+        )
+      })()}
+
+      {/* Proyecto (filtra los gastos) con sugerencia + Subproyecto opcional */}
+      {(()=>{
+        const lblS = {fontSize:9,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}
+        const inpS = {width:'100%',height:38,border:`1px solid ${proyecto?C.accent:C.border}`,borderRadius:8,padding:'0 10px',fontSize:13,color:C.text,background:'#fff',boxSizing:'border-box'}
+        return (
+        <div style={{marginBottom:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+            <span style={lblS}>Proyecto</span>
+            {proyectoSugerido&&proyecto!==proyectoSugerido&&<button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button>}
+          </div>
+          {proyectosDisp.length>0
+            ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={inpS}><option value=''>Todos los proyectos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p} ({proyConteo[p]})</option>)}</select>
+            : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Sin gastos por rendir en esta RS' style={inpS} disabled/>}
+          <div style={{marginTop:8}}>
+            <div style={{...lblS,marginBottom:4}}>Subproyecto <span style={{textTransform:'none',fontWeight:400,color:'#99ABB4'}}>(opcional)</span></div>
+            <input value={subproyecto} onChange={e=>setSubproyecto(e.target.value)} placeholder='—' style={{...inpS,borderColor:C.border}}/>
+          </div>
+        </div>
+        )
+      })()}
 
       {/* KPIs (rectángulos redondeados, labels grises) */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
@@ -7725,7 +7772,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     }
     return `${saludoCli(client?.name)}:
 
-Adjuntamos su rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} del período ${r.periodo||''}. En el documento adjunto encontrará el detalle de cada desembolso.${cierre}
+Adjuntamos su rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''}${r.project?` del proyecto ${r.project}${r.subproject?` (${r.subproject})`:''}`:''} correspondiente al período ${r.periodo||''}. En el documento adjunto encontrará el detalle de cada desembolso.${cierre}
 
 Quedamos atentos a cualquier consulta.
 
@@ -7742,8 +7789,8 @@ Liberona Escala Abogados`
     setAiBusy(true)
     const terminado = client?.status==='Terminado'
     const cierreTipo = saldoCliente<0?'falta_fondos':(saldoCliente>0?(terminado?'a_favor_devolver':'a_favor_proximos'):'cubierto')
-    const facts = { saludo: saludoCli(client?.name), cliente: client?.name, correlativo: r.correlativo||null, periodo: r.periodo, total_rendido: r.total, saldo: saldoCliente, tipo_cierre: cierreTipo, remitente: user?.name||'', cuenta_LEA: cierreTipo==='falta_fondos'?{titular:'Liberona Escala Abogados Limitada',rut:'77.700.387-9',banco:'Banco BICE',cuenta_corriente:'138392-2',correo:'administracion@leabogados.cl'}:null }
-    const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un CORREO BREVE (máx 6 líneas) para enviar a un cliente junto al PDF adjunto de su rendición de gastos. Español de Chile, cordial y profesional. REGLAS DURAS: usa el saludo EXACTO "${saludoCli(client?.name)}:"; NO inventes ni cambies cifras ni datos de cuenta, usa SOLO los que te paso (textualmente); menciona que el detalle está en el documento adjunto; NO listes los gastos uno a uno. Según "tipo_cierre": falta_fondos → pide transferir el saldo a su cargo a la cuenta indicada (incluye los datos de cuenta tal cual); a_favor_devolver → hay saldo a favor y se concluyó la gestión, pide sus datos de cuenta corriente a administracion@leabogados.cl para reintegrarlo; a_favor_proximos → el saldo a favor queda disponible para los próximos trabajos; cubierto → no menciones saldo. Cierra con "Saludos cordiales," y el remitente. Devuelve SOLO el texto del correo, sin asunto ni markdown. Datos:\n${JSON.stringify(facts,null,2)}`
+    const facts = { saludo: saludoCli(client?.name), cliente: client?.name, correlativo: r.correlativo||null, periodo: r.periodo, proyecto: r.project||null, subproyecto: r.subproject||null, total_rendido: r.total, saldo: saldoCliente, tipo_cierre: cierreTipo, remitente: user?.name||'', cuenta_LEA: cierreTipo==='falta_fondos'?{titular:'Liberona Escala Abogados Limitada',rut:'77.700.387-9',banco:'Banco BICE',cuenta_corriente:'138392-2',correo:'administracion@leabogados.cl'}:null }
+    const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un CORREO BREVE (máx 6 líneas) para enviar a un cliente junto al PDF adjunto de su rendición de gastos. Español de Chile, cordial y profesional. REGLAS DURAS: usa el saludo EXACTO "${saludoCli(client?.name)}:"; NO inventes ni cambies cifras ni datos de cuenta, usa SOLO los que te paso (textualmente); menciona que el detalle está en el documento adjunto; si hay "proyecto", menciónalo de forma natural en la primera frase; NO listes los gastos uno a uno. Según "tipo_cierre": falta_fondos → pide transferir el saldo a su cargo a la cuenta indicada (incluye los datos de cuenta tal cual); a_favor_devolver → hay saldo a favor y se concluyó la gestión, pide sus datos de cuenta corriente a administracion@leabogados.cl para reintegrarlo; a_favor_proximos → el saldo a favor queda disponible para los próximos trabajos; cubierto → no menciones saldo. Cierra con "Saludos cordiales," y el remitente. Devuelve SOLO el texto del correo, sin asunto ni markdown. Datos:\n${JSON.stringify(facts,null,2)}`
     try{
       const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})})
       const data = await resp.json(); const txt = (data.content?.[0]?.text||'').trim()
@@ -8585,7 +8632,7 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16)
   doc.text('Rendición de gastos', 40, 34)
   doc.setFont('helvetica','normal'); doc.setFontSize(10)
-  doc.text(`${client?.name||''} · ${r.periodo||''}`, 40, 54)
+  doc.text(`${client?.name||''} · ${r.periodo||''}${r.project?` · ${r.project}${r.subproject?` (${r.subproject})`:''}`:''}`, 40, 54)
   doc.setFont('helvetica','bold'); doc.setFontSize(12)
   doc.text('LIBERONA ESCALA ABOGADOS', W-40, 44, {align:'right'})
   // Cabecera ejecutiva (diseño A): 3 cifras clave — Fondos · Gastos del período · Saldo

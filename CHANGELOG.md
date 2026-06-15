@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Rendicion: se asocia a razon social y proyecto/subproyecto
+- La rendicion ahora se asocia a una **razon social** (si el cliente tiene 1, queda fija; si tiene varias, el emisor la elige y los gastos se acotan a esa RS) y a un **proyecto** (filtra los gastos de la RS) + **subproyecto** opcional. Se guardan en la rendicion (entity_id/project/subproject).
+- **Proyecto sugerido por IA-lite**: el modal sugiere el proyecto con mas gastos pendientes (boton "Sugerido: X"); el selector muestra el conteo de gastos por proyecto.
+- El proyecto/subproyecto aparecen en el **PDF** (barra bajo el encabezado), en el **correo** (cuerpo determinista y prompt de la IA) y en el adjunto.
+
 ## 2026-06-15 — Rendicion: IA mejora las descripciones de los gastos
 - Nuevo boton "Mejorar descripciones con IA" en el modal de rendicion: Opus profesionaliza las descripciones de los gastos seleccionados (expande abreviaciones legales EP/CV/CBR..., corrige tildes y ortografia) y las guarda. El cliente ve descripciones claras en el PDF.
 
