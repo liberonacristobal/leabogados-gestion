@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-15 — Rendición Notaría, correo Martina, Reabrir, vista clientes limited
+- **Rendición al cliente** ahora incluye gastos **sin razón social** (ej. notaría sin RS) aunque elijas una RS específica: ya no quedan fuera. La limitación de Notaría es solo de caja chica.
+- **Correo de rendición**: si tu sesión de Google no tiene el permiso de enviar (scope `gmail.send`), ahora **avisa claramente** que cierres sesión y vuelvas a entrar para activarlo (caso Martina). El flujo de envío es idéntico para limited y admin.
+- **Reabrir** rendición y liquidación de caja chica: el botón "Anular" pasó a llamarse **Reabrir** con mensaje claro (los gastos vuelven a pendientes para editar/rehacer o dejar anulada). Acceso rápido para todos.
+- **Vista de clientes (limited)** rediseñada como la de admin **sin datos financieros**: nombre │ archivar, tipo · RUT, razón social, pill de tareas pendientes y pill del abogado responsable; filtros por estado y búsqueda.
+
 ## 2026-06-15 — Notaría: marcar pagado, anulados, acción sobre el cliente
 - La acción de notaría ya no usa barra inferior: al seleccionar, se despliega un bloque **sobre el primer cliente** con **Liquidar a notaría** (paga+correo) y **Marcar pagado** (históricos ya pagados, sin correo). Historial distingue "Enviada a notaría" vs "Pagado histórico".
 - Gastos de **$1** (anulados, solo orden) salen de pendientes y van a un grupo **"Anulados"** con **Eliminar** (a papelera).
