@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Caja chica (admin) + paleta
+- El panel "Gestión caja chica" del Dashboard ahora **deriva las personas de `petty_cash`** (incluye a Rodrigo y a quien tenga fondos, no una lista fija); se oculta si nadie tiene caja activa.
+- Se reemplazó el **violeta de Martina** (`#534AB7`, fuera de paleta) por un slate corporativo en toda la app (chips de persona y avatares).
+
 ## 2026-06-15 — Tarjeta de Tareas en 3 columnas
 - Rediseño de la tarjeta de foco: **subtarjeta "vencen esta semana/vencidas"** (con tinte por urgencia) y debajo las personas a quienes asigné; **pills Activas/Que asigné/Terminadas al medio**; **subtarjeta "sugeridas desde Gmail"** a la derecha; divisorias verticales. Todo sigue siendo tappable a su sección.
 
