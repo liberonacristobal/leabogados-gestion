@@ -103,6 +103,8 @@ const rsLabel = (clientId, clients, clientEntities, entityId) => {
 }
 // Folio limpio: invoice_no a veces trae la palabra "Factura" como texto; folioN devuelve solo el número/código (para contextos con prefijo "F°").
 const folioN = no => String(no||'').replace(/^factura\s*/i,'').trim()
+// Clave de glosa para aprender gasto→proyecto: palabras significativas (≥4) ordenadas, así "Certificado dominio CBR" matchea independiente del orden.
+const glosaKey = s => _normTxt(s).split(' ').filter(w=>w.length>=4).slice(0,5).sort().join(' ')
 // Trato al cliente: a personas se les dice "Estimado [nombre de pila]" (sin señor/señora ni apellido); a empresas "Estimados".
 const _ES_EMPRESA = /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a\.?|eirl|e\.?i\.?r\.?l|inversiones|comercial|constructora|sociedad|holding|inmobiliaria|servicios|grupo|asociados|abogados|consultores|ingenier|transportes|agricola|agrícola|clinica|clínica|tech|spa\.|cia)\b/i
 const esPersona = name => { const n=(name||'').trim(); if(!n) return false; if(_ES_EMPRESA.test(n)) return false; const w=n.split(/\s+/); return w.length>=2 && w.length<=4 && !/\d/.test(n) }
@@ -7247,6 +7249,15 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
   // Asociar siempre a una RS por defecto: con una sola, se asigna sola si venía sin asignar.
   useEffect(()=>{ if(rsList.length===1 && !f.entity_id) setF(p=>({...p,entity_id:rsList[0].id})) },[f.client_id])
+  // Aprendizaje glosa→proyecto: si el gasto no tiene proyecto, sugiere el aprendido para esa glosa (mismo cliente).
+  const [sugProy,setSugProy] = useState(null)
+  useEffect(()=>{
+    if(isFondo || f.project || !f.concept || !f.client_id){ setSugProy(null); return }
+    const gk=glosaKey(f.concept); if(!gk){ setSugProy(null); return }
+    let alive=true
+    supabase.from('learnings').select('value').eq('kind','gasto_proyecto').eq('key',`${f.client_id}::${gk}`).limit(1).then(({data})=>{ if(alive) setSugProy(data&&data[0]?.value||null) },()=>{})
+    return ()=>{alive=false}
+  },[f.concept,f.client_id,f.project,isFondo])
   // Proyecto = venta: sugerencias de los títulos de ventas del cliente + proyectos ya usados en otros gastos.
   const projectOpts = useMemo(()=>{
     const set=new Set()
@@ -7285,6 +7296,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
         <Fld label='Proyecto'>
           <input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
           <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
+          {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
         </Fld>
       )}
       {!isFondo&&expense?.id&&(
@@ -10697,26 +10709,28 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
       {claves.length===0 && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'28px 0'}}>Sin duplicados sospechosos. Todo en orden.</div>}
       {cardFilter!=='conc' && claves.length>0 && !claves.some(cid=>(grupos[cid]||[]).filter(pasaFiltro).length>0) && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'22px 0'}}>Nada en esta categoría.</div>}
       {cardFilter!=='conc' && claves.map(cid=>{
-        const grupo=(grupos[cid]||[]).filter(pasaFiltro); if(!grupo.length) return null
+        const grupoAll=(grupos[cid]||[]).filter(pasaFiltro); if(!grupoAll.length) return null
+        const rsSel = pickRS[cid]||''   // '' = todas las RS; si se elige una, se filtran las cuotas a esa RS
+        const grupo = rsSel ? grupoAll.filter(b=>String(b.entity_id)===String(rsSel)) : grupoAll
         const c=clientById(cid); const reales=realesDe(cid)
         const sumF=grupo.reduce((a,b)=>a+(b.amount||0),0); const sumR=reales.filter(r=>r.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
         return (
           <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'10px 14px',background:'#F5F7F9',borderBottom:`1px solid ${C.border}`}}>
               {(()=>{
-                const c=clientById(cid); const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(cid))
-                const selId=pickRS[cid]||(ents[0]&&ents[0].id)||''; const sel=ents.find(e=>String(e.id)===String(selId))
-                const rutTxt=(sel?.rut)||rutDe(cid)
+                const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(cid))
+                const sel=ents.find(e=>String(e.id)===String(rsSel))
                 return (<div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Cliente'}</div>
                   {ents.length>1
-                    ? <select value={selId} onChange={e=>setPickRS(p=>({...p,[cid]:e.target.value}))} style={{fontSize:10,color:C.muted,border:`0.5px solid ${C.border}`,borderRadius:6,padding:'2px 6px',background:'#fff',marginTop:2,maxWidth:'100%'}}>{ents.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` | ${e.rut}`:''}</option>)}</select>
-                    : <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sel?.name?`${sel.name}${rutTxt?` | ${rutTxt}`:''}`:(rutTxt||'')}</div>}
+                    ? <select value={rsSel} onChange={e=>setPickRS(p=>({...p,[cid]:e.target.value}))} style={{fontSize:10,color:rsSel?C.accent:C.muted,fontWeight:rsSel?600:400,border:`0.5px solid ${rsSel?C.accent:C.border}`,borderRadius:6,padding:'2px 6px',background:'#fff',marginTop:2,maxWidth:'100%'}}><option value=''>Todas las razones sociales</option>{ents.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` | ${e.rut}`:''}</option>)}</select>
+                    : (ents[0]?<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ents[0].name}{ents[0].rut?` | ${ents[0].rut}`:''}</div>:(rutDe(cid)?<div style={{fontSize:10,color:'#99ABB4'}}>{rutDe(cid)}</div>:null))}
                 </div>)
               })()}
               <div style={{textAlign:'right',flexShrink:0}}><div style={lbl}>Sin folio · {grupo.length}</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{fmt(sumF)}</div></div>
             </div>
             {reales.length>0&&<div style={{fontSize:10,color:C.muted,padding:'6px 14px',borderBottom:`1px solid ${C.border}`}}>Facturas reales con folio del cliente: <b style={{color:C.greenText}}>{fmt(sumR)}</b> en {reales.filter(r=>r.status==='Pagado').length} pagada(s)</div>}
+            {grupo.length===0&&<div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'14px'}}>Esta razón social no tiene cuotas sin folio. Cambia el selector a "Todas".</div>}
             {grupo.map(b=>{
               const cands=analizar(b,reales)
               const m = chosenCand[b.id] ? (cands.find(x=>String(x.r.id)===String(chosenCand[b.id]))||cands[0]) : cands[0]
@@ -11498,6 +11512,8 @@ export default function App() {
       const prev = f.id ? (expenses||[]).find(x=>x.id===f.id) : null   // estado anterior: para reajustar la rendición si cambió el monto
       const{data,error}=await supabase.from('expenses').upsert(p).select().single()
       if(error)throw error
+      // Aprende glosa→proyecto: la próxima vez un gasto con la misma glosa sugiere este proyecto.
+      if(p.type==='gasto' && p.project && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_proyecto', `${p.client_id}::${gk}`, p.project, {}) }
       setExpenses(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       // Si se editó el MONTO de un gasto ya rendido/liquidado, reajusta el total de su rendición (no dejarlo stale).
       const renderId = prev && (prev.client_render_id || prev.render_id)
