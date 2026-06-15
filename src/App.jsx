@@ -2225,8 +2225,16 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   ? {pct:pctNeto, val:m.neto, col:C.greenText, grad:'url(#gMetaNeto)', lbl:'Neto vs meta'}
                   : {pct:pctVenta, val:m.bruto, col:C.accent, grad:'url(#gMetaDash)', lbl:'Vendido vs meta'}
                 return (<>
+                  {/* Toggle claro Bruto/Neto: destaca qué se está viendo en el velocímetro */}
+                  <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>
+                    <div style={{display:'inline-flex',background:'#F1F4F6',borderRadius:20,padding:2}}>
+                      {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; const c=k==='neto'?C.greenText:C.accent; return (
+                        <button key={k} onClick={()=>setGaugeMode(k)} style={{border:'none',cursor:'pointer',fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',padding:'3px 12px',borderRadius:20,background:on?'#fff':'transparent',color:on?c:'#A8B2B8',boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l}</button>
+                      )})}
+                    </div>
+                  </div>
                   <div onClick={()=>setGaugeMode(g=>g==='venta'?'neto':'venta')} style={{cursor:'pointer'}}>
-                    <div style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:2,display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>{gv.lbl}<span style={{fontSize:8,color:'#CBD5DB',fontWeight:600}}>↺ toca</span></div>
+                    <div style={{fontSize:9,fontWeight:600,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:2,textAlign:'center'}}>{gv.lbl}</div>
                     <svg viewBox='0 0 148 86' style={{width:'100%',maxWidth:185,margin:'0 auto'}}>
                       <defs>
                         <linearGradient id='gMetaDash' x1='16' y1='0' x2='132' y2='0' gradientUnits='userSpaceOnUse'><stop offset='0' stopColor='#99ABB4'/><stop offset='0.55' stopColor='#537281'/><stop offset='1' stopColor='#003C50'/></linearGradient>
@@ -10345,7 +10353,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
   )
 }
 
-function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName}) {
+function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,onComplete,currentUserName,setTab}) {
   const [vistaCalendario,setVistaCalendario] = useState(false)
   const [semanaOffset,setSemanaOffset] = useState(0)
   const hoy = new Date()
@@ -10412,6 +10420,15 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const kpiTermMes = terminadasAll.filter(t=>{ const cd=t.completed_at||t.created_at; return cd && new Date(cd).getTime()>=_som })
   // "Que asigné" por persona (a quién delegué y cuántas)
   const asignadasPorPersona = (()=>{ const m={}; asignadas.forEach(t=>{ (taskAssignees(t).length?taskAssignees(t):['—']).forEach(p=>{ m[p]=(m[p]||0)+1 }) }); return Object.entries(m).sort((a,b)=>b[1]-a[1]) })()
+
+  // Recordatorios de caja chica para quien tiene caja activa (limited): hace ≥10 días sin cargar gastos y/o fondo bajo (<$50.000) → conviene liquidar.
+  const tieneCaja = (pettyCash||[]).some(p=>p.user_name===me)
+  const miSaldo = saldoCajaChica(pettyCash, expenses, me)
+  const _misGastosFechas = (expenses||[]).filter(e=>e.type==='gasto'&&e.created_by===me&&e.date).map(e=>e.date).sort()
+  const _ultGasto = _misGastosFechas.length ? _misGastosFechas[_misGastosFechas.length-1] : null
+  const diasSinGasto = _ultGasto ? Math.floor((Date.now()-new Date(_ultGasto+'T12:00').getTime())/86400000) : null
+  const nudgeCargar = tieneCaja && diasSinGasto!=null && diasSinGasto>=10
+  const nudgeLiquidar = tieneCaja && miSaldo < 50000
 
   // Agregar el vencimiento de una tarea al Google Calendar corporativo (Calendar API, evento de día completo).
   const agendarTarea = async(t)=>{
@@ -10492,6 +10509,19 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   )
   return (
     <div>
+      {/* Recordatorio caja chica (solo quien tiene caja activa): sin cargar gastos hace ≥10 días y/o fondo bajo */}
+      {(nudgeCargar||nudgeLiquidar)&&(
+        <div style={{padding:'14px 20px 0'}}>
+          <div onClick={()=>setTab&&setTab('cajachica')} style={{background:'#FFF8E1',border:'1px solid #F0D88A',borderRadius:10,padding:'10px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:'#C77F18',flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0,fontSize:12,color:'#854F0B',lineHeight:1.45}}>
+              {nudgeLiquidar&&<div><b>Tu caja chica está baja</b> ({fmtN(miSaldo)}) — conviene liquidarla pronto.</div>}
+              {nudgeCargar&&<div>Hace <b>{diasSinGasto} días</b> que no cargas gastos.</div>}
+            </div>
+            <span style={{fontSize:11,fontWeight:700,color:'#854F0B',whiteSpace:'nowrap',flexShrink:0}}>Caja chica ›</span>
+          </div>
+        </div>
+      )}
       {/* Hero: foco del día (titular) + tablero de 4 KPIs (tocables → abren la sección) */}
       <div style={{padding:'14px 20px 0'}}>
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:8}}>
@@ -12842,7 +12872,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}}/>}
-            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name}/>}
+            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
