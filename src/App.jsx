@@ -7277,8 +7277,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selEnts[0].name}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
             </div>
           </div>
-          <div style={{display:'flex',gap:6}}>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
             {!selectedClient&&!showOrphans&&!showNotaria&&<button onClick={()=>setNotaMenuOpen(o=>!o)} style={{...chipBtn('soft'),background:notaMenuOpen?'#C77F18':'#FAEEDA',color:notaMenuOpen?'#fff':'#854F0B',border:'1px solid #C77F18'}}>Gastos notariales {notaMenuOpen?'▴':'▾'}</button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&<span style={{color:C.done,fontSize:16,fontWeight:300}}>|</span>}
             {!showNotaria&&<button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>}
             {!showNotaria&&<button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>}
             {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
@@ -7287,9 +7288,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
         {/* Sub-pills de Gastos notariales (se despliegan bajo la fila de acciones) */}
         {!selectedClient&&!showOrphans&&!showNotaria&&notaMenuOpen&&(
-          <div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
-            <button onClick={()=>{setNotaMenuOpen(false);onBulk()}} style={{display:'inline-flex',alignItems:'center',gap:6,background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18',borderRadius:20,padding:'6px 13px',fontSize:12,fontWeight:600,cursor:'pointer'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v12m0 0l-4-4m4 4l4-4'/><path d='M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'/></svg>Carga masiva</button>
-            <button onClick={()=>{setNotaMenuOpen(false);setShowNotaria(true)}} style={{display:'inline-flex',alignItems:'center',gap:6,background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18',borderRadius:20,padding:'6px 13px',fontSize:12,fontWeight:600,cursor:'pointer'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>Liquidar notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
+            <button onClick={()=>{setNotaMenuOpen(false);onBulk()}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Carga masiva</button>
+            <button onClick={()=>{setNotaMenuOpen(false);setShowNotaria(true)}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Liquidar notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
           </div>
         )}
 
