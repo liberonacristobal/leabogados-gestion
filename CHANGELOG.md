@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-15 — Tareas desde Gmail (IA)
+- Nuevo en el menú (admin): **"Tareas +Gmail"** — lee tus correos **no leídos** (asunto + vista previa, nunca el cuerpo completo), la IA detecta acciones/compromisos pendientes y propone **tareas** con cliente y plazo sugeridos. Compuerta humana: **Crear tarea / Editar / Descartar**; lo descartado se aprende y no se vuelve a proponer.
+
 ## 2026-06-15 — Velocímetro Bruto/Neto + aviso de caja chica al limited
 - El velocímetro "Cómo va el año" ahora tiene un **toggle Bruto / Neto** que destaca claramente cuál se está mostrando (antes solo una etiqueta gris).
 - En Tareas, a quien tiene caja chica activa se le muestra un **aviso** cuando lleva **≥10 días sin cargar gastos** y/o cuando su **fondo está bajo (< $50.000)** — "conviene liquidar pronto", con acceso directo a Caja chica.
