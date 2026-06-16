@@ -1747,7 +1747,7 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
 const esRecurrente = s => s.cobro_type==='mensual' && s.status==='Activo'
 const ventaUF = (s, ufRef) => {
   const factor = esRecurrente(s) ? 12 : 1
-  if(s.moneda==='CLP'){ const clp=(parseFloat(s.amount_clp)||0); return ufRef ? (clp*factor)/ufRef : 0 }
+  if(s.moneda==='CLP'){ const clp=(parseFloat(s.amount_clp)||0); const uref=s.uf_value||ufRef; return uref ? (clp*factor)/uref : 0 }   // UF histórica de la venta (congelada); ufRef es solo respaldo
   return (parseFloat(s.amount_uf)||0)*factor
 }
 const ventaCLP = (s, ufRef) => {
@@ -13218,7 +13218,9 @@ export default function App() {
       const {cobros, cobroType, _actualizarPago, _regenProg, _activandoPropuesta, _propAmountUF, _propAmountCLP, repartoTerceros, ...saleData} = f
       const entIdRaw = saleData.entity_id || null
       const esCLP = (f.moneda||'UF')==='CLP'
-      const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?null:(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
+      // Ventas en CLP: congelar la UF del día (la histórica de la fecha de venta) para que su equivalente en UF NO fluctúe. Al editar, se preserva la ya guardada.
+      const ufHoyCache = readUFCache()?.value || null
+      const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?((parseFloat(f.uf_value)||ufHoyCache)||null):(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
