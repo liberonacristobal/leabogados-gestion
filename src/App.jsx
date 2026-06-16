@@ -3097,7 +3097,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         {filtered.length>0&&(buscando ? (
           filtered.map(saleRow)
         ) : (<>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
             <span style={{fontSize:11,color:C.muted,fontWeight:500}}>Agrupar por</span>
             <div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>
               {[['abogado','Abogado'],['area','Área']].map(([v,l])=>{ const on=groupBy===v; return (
@@ -3105,23 +3105,28 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               )})}
             </div>
           </div>
+          {(()=>{ const totUF=grupos.reduce((a,g)=>a+g.uf,0); const on=selGroup==='__todas__'; return (
+            <div onClick={()=>setSelGroup(on?null:'__todas__')} style={{background:'#fff',border:`0.5px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:'0 10px 10px 0',padding:'8px 12px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent}`:undefined,display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8,marginBottom:8}}>
+              <span style={{fontSize:12,fontWeight:600,color:C.accent}}>Todas las ventas</span>
+              <span style={{fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:16,fontWeight:600,color:C.accent}}>{fmtUFk(totUF)}</span><span style={{fontSize:10,color:'#99ABB4'}}> · {filtered.length}</span></span>
+            </div>
+          )})()}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; return (
-              <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{background:sin?'#FBF7EF':'#fff',border:`0.5px solid ${on?col:(sin?'#FAEEDA':C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:'0 10px 10px 0',padding:'9px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
+              <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{background:sin?'#FBF7EF':'#fff',border:`0.5px solid ${on?col:(sin?'#FAEEDA':C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:'0 10px 10px 0',padding:'8px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:500,color:C.accent}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:'#854F0B',background:'#FAEEDA',borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
-                <div style={{fontSize:18,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:3}}>{fmtUFk(g.uf)}</div>
-                <div style={{fontSize:10,color:'#99ABB4'}}>{g.count} venta{g.count!==1?'s':''}</div>
+                <div style={{display:'flex',alignItems:'baseline',gap:5,marginTop:2,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(g.uf)}</span><span style={{fontSize:10,color:'#99ABB4'}}>· {g.count}</span></div>
               </div>
             )})}
           </div>
-          {selGroup&&(()=>{ const g=grupos.find(x=>x.key===selGroup); if(!g) return null; return (
+          {selGroup&&(()=>{ const isAll=selGroup==='__todas__'; const g=isAll?null:grupos.find(x=>x.key===selGroup); const rows=isAll?filtered:(g?g.rows:[]); if(!rows.length) return null; const col=isAll?C.accent:colorGrupo(selGroup); const uf=isAll?grupos.reduce((a,x)=>a+x.uf,0):g.uf; return (
             <div style={{marginTop:12}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                <span style={{width:8,height:8,borderRadius:2,background:colorGrupo(g.key)}}></span>
-                <span style={{fontSize:12,fontWeight:600,color:C.accent}}>{g.key}</span>
-                <span style={{fontSize:11,color:C.muted}}>· {g.count} venta{g.count!==1?'s':''} · {fmtUFk(g.uf)}</span>
+                <span style={{width:8,height:8,borderRadius:2,background:col}}></span>
+                <span style={{fontSize:12,fontWeight:600,color:C.accent}}>{isAll?'Todas las ventas':selGroup}</span>
+                <span style={{fontSize:11,color:C.muted}}>· {rows.length} venta{rows.length!==1?'s':''} · {fmtUFk(uf)}</span>
               </div>
-              {g.rows.map(saleRow)}
+              {rows.map(saleRow)}
             </div>
           )})()}
         </>))}
