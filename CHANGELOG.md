@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-16 — Rendir fondos: el filtro de proyecto ya no esconde gastos
+- El proyecto se auto-selecciona solo cuando hay gastos con ese tag; si los gastos no traen proyecto, queda en "Todos" (antes caía en el título de una venta y ocultaba todos los gastos disponibles → "no hay gastos para rendir" falso).
+- Cuando un filtro (proyecto o fechas) deja la lista vacía pero sí hay gastos pendientes, se muestra el aviso y un botón "Ver todos los proyectos" para limpiarlo de un toque.
+
 ## 2026-06-15 — Facturación: header limpio (una sola barra)
 - Se redujo el header de 3 filas de pills a una sola barra: ← (volver al resumen), toggle Por cliente / Todas, año en dropdown, buscar (ícono) y menú ⋯ con Resumen / Proveedores / Anticipos / Sin año. Las 4 KPI cards quedan como filtro de estado. Mucho menos ruido visual.
 
