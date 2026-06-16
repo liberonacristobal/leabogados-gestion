@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación: año global sincronizado
+- El filtro de año es único y persistente en toda Facturación (resumen + interiores comparten el mismo año, guardado en localStorage). La Ficha → Financiero lo lee al entrar y lo escribe al cambiarlo, así el año se mantiene al ir y volver entre Facturación y la Ficha del cliente.
+
+
 ## 2026-06-15 — Facturación → Ficha del cliente en un clic
 - En la vista Por cliente, cada cliente tiene Ficha → que abre directamente su Ficha → Financiero (cambia de pestaña y entra al cliente en Financiero). Detalle de proyectos/8-12 vive en la Ficha; Facturación enlaza ahí.
 
