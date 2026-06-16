@@ -2955,6 +2955,61 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const statusPillBg = st => st==='Activo'?C.accent:st==='Propuesta'?'#537281':st==='Borrador'?'#E8CC6A':st==='Rechazada'?C.overdue:st==='Terminado'?C.done:'#C77F18'
   const statusPillColor = st => st==='Borrador'?'#4A3800':undefined
 
+  // Agrupación de la lista: tiles por Abogado o Área (alternable). Buscar muestra resultados planos (sin agrupar).
+  const [groupBy,setGroupBy] = useState('abogado')
+  const [selGroup,setSelGroup] = useState(null)
+  const AREA_COL = {'Tributario':'#BA7517','Corporativo':'#534AB7'}
+  const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?'#99ABB4':personChip(k).color) : (AREA_COL[k]||'#537281')
+  const grupos = useMemo(()=>{
+    const m={}
+    filtered.forEach(s=>{
+      const k = groupBy==='abogado' ? (s.responsible||'Sin abogado') : (s.area||'Sin área')
+      if(!m[k]) m[k]={key:k,count:0,uf:0,rows:[]}
+      m[k].count++; m[k].uf+=ventaUF(s,ufRef); m[k].rows.push(s)
+    })
+    return Object.values(m).sort((a,b)=>b.uf-a.uf)
+  },[filtered,groupBy,ufRef])
+  const buscando = q.trim().length>0
+  const saleRow = s => {
+    const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
+    const client=clients.find(c=>c.id===s.client_id)
+    const isPropuesta = s.status==='Propuesta'
+    const diasPendiente = s.created_at ? Math.floor((Date.now()-new Date(s.created_at))/86400000) : 0
+    const tardio = isPropuesta && diasPendiente>14
+    return (
+      <div key={s.id}
+        onClick={()=>onEdit(s)}
+        style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?'#C77F18':C.border}`,borderLeft:tardio?`4px solid #C77F18`:undefined,cursor:'pointer'}}
+        onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?'#C77F18':C.accent}
+        onMouseLeave={e=>e.currentTarget.style.borderColor=tardio?'#C77F18':C.border}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:5}}>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
+            <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name||'—'}</div>
+            {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (rs.name!==client?.name||rs.rut)?<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.name}{rs.rut?` | ${rs.rut}`:''}</div>:null })()}
+          </div>
+          <div style={{textAlign:'right',flexShrink:0}}>
+            {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</div>}
+            {clpA>0&&<div style={{fontSize:11,color:C.muted}}>{fmt(clpA)}</div>}
+            {isPropuesta&&(
+              <div style={{display:'flex',gap:4,justifyContent:'flex-end',marginTop:4}} onClick={e=>e.stopPropagation()}>
+                <span onClick={()=>onRechazar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FCEBEB',color:C.overdue,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Rechazar</span>
+                <span onClick={()=>onActivar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.greenText,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <AreaChip area={s.area}/>
+          {groupBy==='abogado'&&s.responsible&&(()=>{ const pc=personChip(s.responsible); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{s.responsible}</span> })()}
+          <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
+          {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C77F18':C.muted}}>{diasPendiente}d pendiente</span>}
+          <span style={{marginLeft:'auto'}}><Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/></span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -3039,44 +3094,37 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
       </div>
       <div style={{padding:'4px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>}
-        {filtered.map(s=>{
-          const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
-          const client=clients.find(c=>c.id===s.client_id)
-          const isPropuesta = s.status==='Propuesta'
-          const diasPendiente = s.created_at ? Math.floor((Date.now()-new Date(s.created_at))/86400000) : 0
-          const tardio = isPropuesta && diasPendiente>14
-          return (
-            <div key={s.id}
-              onClick={()=>onEdit(s)}
-              style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?'#C77F18':C.border}`,borderLeft:tardio?`4px solid #C77F18`:undefined,cursor:'pointer'}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?'#C77F18':C.accent}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=tardio?'#C77F18':C.border}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:5}}>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
-                  <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name||'—'}</div>
-                  {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (rs.name!==client?.name||rs.rut)?<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.name}{rs.rut?` | ${rs.rut}`:''}</div>:null })()}
-                </div>
-                <div style={{textAlign:'right',flexShrink:0}}>
-                  {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</div>}
-                  {clpA>0&&<div style={{fontSize:11,color:C.muted}}>{fmt(clpA)}</div>}
-                  {isPropuesta&&(
-                    <div style={{display:'flex',gap:4,justifyContent:'flex-end',marginTop:4}} onClick={e=>e.stopPropagation()}>
-                      <span onClick={()=>onRechazar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FCEBEB',color:C.overdue,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Rechazar</span>
-                      <span onClick={()=>onActivar(s)} style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.greenText,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Activar</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <AreaChip area={s.area}/>
-                <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
-                {isPropuesta&&<span style={{fontSize:10,color:tardio?'#C77F18':C.muted}}>{diasPendiente}d pendiente</span>}
-                <span style={{marginLeft:'auto'}}><Pill label={s.status} bg={statusPillBg(s.status)} color={statusPillColor(s.status)} small/></span>
-              </div>
+        {filtered.length>0&&(buscando ? (
+          filtered.map(saleRow)
+        ) : (<>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+            <span style={{fontSize:11,color:C.muted,fontWeight:500}}>Agrupar por</span>
+            <div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>
+              {[['abogado','Abogado'],['area','Área']].map(([v,l])=>{ const on=groupBy===v; return (
+                <button key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{border:'none',background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:12,fontWeight:600,padding:'5px 14px',cursor:'pointer'}}>{l}</button>
+              )})}
             </div>
-          )
-        })}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; return (
+              <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{background:sin?'#FBF7EF':'#fff',border:`0.5px solid ${on?col:(sin?'#FAEEDA':C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:'0 10px 10px 0',padding:'9px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:500,color:C.accent}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:'#854F0B',background:'#FAEEDA',borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
+                <div style={{fontSize:18,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:3}}>{fmtUFk(g.uf)}</div>
+                <div style={{fontSize:10,color:'#99ABB4'}}>{g.count} venta{g.count!==1?'s':''}</div>
+              </div>
+            )})}
+          </div>
+          {selGroup&&(()=>{ const g=grupos.find(x=>x.key===selGroup); if(!g) return null; return (
+            <div style={{marginTop:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <span style={{width:8,height:8,borderRadius:2,background:colorGrupo(g.key)}}></span>
+                <span style={{fontSize:12,fontWeight:600,color:C.accent}}>{g.key}</span>
+                <span style={{fontSize:11,color:C.muted}}>· {g.count} venta{g.count!==1?'s':''} · {fmtUFk(g.uf)}</span>
+              </div>
+              {g.rows.map(saleRow)}
+            </div>
+          )})()}
+        </>))}
       </div>
     </div>
   )
