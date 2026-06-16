@@ -4641,6 +4641,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
   const [filter,setFilter] = useState('resumen')
+  const {uf:ufHoy} = useUF()
   const [impOpen,setImpOpen] = useState(false)
   const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
@@ -4719,6 +4720,16 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   // KPIs acotados al año/mes del filtro. Cada estado usa su fecha relevante: Programada→vencimiento, Pagado→pago, resto→emisión.
   const matchYM = dateStr => { if(!fYear&&!fMonth) return true; if(!dateStr) return false; if(fYear&&String(dateStr).slice(0,4)!==fYear) return false; if(fMonth&&String(dateStr).slice(5,7)!==fMonth) return false; return true }
   const kpiDate = b => b.status==='Programada'?b.due:(b.status==='Pagado'?(b.paid_at||b.issued_at):b.issued_at)
+  // UF en vivo: una programada en UF muestra su CLP recalculado al valor UF del día (display, no toca DB).
+  // La UF pactada de la cuota se recupera de su CLP guardado y el uf_value de la venta al generarse.
+  const ufInfoDe = b => {
+    if(b?.status!=='Programada' || !b.sale_id || !ufHoy) return null
+    const s=(sales||[]).find(x=>String(x.id)===String(b.sale_id))
+    if(!s || s.moneda==='CLP' || !s.uf_value) return null
+    const uf=(b.amount||0)/s.uf_value
+    if(!uf) return null
+    return { uf, clpHoy: Math.round(uf*ufHoy) }
+  }
   const pending=bb.filter(b=>b.status==='Pendiente'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   const overdue=bb.filter(b=>b.status==='Vencido'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   const paid=bb.filter(b=>b.status==='Pagado'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
@@ -4739,7 +4750,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   }
   // Unificado a "convertir": la cuota programada pasa a emitida (Pendiente de cobro), no se borra.
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
-  const marcarEmitida = async(b) => { if(confirm('¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.')) await emitirConRS(b) }
+  const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${ui.uf.toLocaleString('es-CL',{maximumFractionDigits:2})} UF = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(confirm(msg)) await emitirConRS(b) }
   const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
 
   const [descargando,setDescargando] = useState(false)
@@ -4859,6 +4870,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const confirmarEmitida = async(b) => {
     const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
     const ent = emitEnt ? ents.find(e=>e.id===emitEnt) : (ents.length===1?ents[0]:null)
+    const ui=ufInfoDe(b); if(ui && !confirm(`Emitir por ${ui.uf.toLocaleString('es-CL',{maximumFractionDigits:2})} UF = ${fmt(ui.clpHoy)} (UF de hoy)?`)) return
     await onEmitir(b, ent||null)
     setEmitiendo(null); setEmitEnt('')
   }
@@ -5118,14 +5130,14 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const byC={}; rows.forEach(b=>{ const cid=b.client_id||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
           const list=Object.entries(byC).map(([cid,arr])=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
-          const fila=b=>{ const er=estadoReal(b); const col=er==='Vencido'?C.overdue:er==='Pendiente'?C.soon:(er==='Pagado'||er==='Anticipada')?C.normal:C.muted; return (
+          const fila=b=>{ const er=estadoReal(b); const col=er==='Vencido'?C.overdue:er==='Pendiente'?C.soon:(er==='Pagado'||er==='Anticipada')?C.normal:C.muted; const ui=ufInfoDe(b); return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',padding:'7px 10px',marginBottom:5}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}</div>
-                  <div style={{fontSize:9.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`${b.concept||'—'} · `:''}{fmtDate(kpiDate(b))}</div>
+                  <div style={{fontSize:9.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`${b.concept||'—'} · `:''}{fmtDate(kpiDate(b))}{ui?` · ${ui.uf.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:''}</div>
                 </div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:col}}>{er}</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:col}}>{er}{ui?' · UF hoy':''}</div></div>
               </div>
               {['Pendiente','Vencido'].includes(er)&&<div style={{marginTop:6}}><button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 11px',fontWeight:600,cursor:'pointer'}}>Pagar</button></div>}
             </div>
