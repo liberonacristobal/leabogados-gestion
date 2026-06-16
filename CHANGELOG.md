@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Conciliación: panel programada vs emitida + marca reemplazada (Etapa 5)
+- El caso programada ↔ emitida ahora se muestra como panel de columnas paralelas (Programada / Emitida Factura N°) con UF de cada una, la diferencia explicada (solo por la UF del día) y el razonamiento. Botones Aprobar · reemplazar y No es match.
+- Al aprobar, la programada se MARCA como reemplazada por la emitida (replaced_by_id) y se retira de las vistas, en vez de un borrado ciego; reversible. Nunca al revés.
+
+
 ## 2026-06-15 — Ficha → Financiero: tira de 4 KPIs + capa de RS (Etapa 4)
 - La Ficha financiera del cliente muestra arriba la tira de 4 KPIs (Por cobrar / Vencido / Programado año / Cobrado año), scrolleable, coherente con el landing.
 - Clientes con 2+ razones sociales: la jerarquía pasa a Año → RS → Proyecto (los proyectos se agrupan por su razón social; los sin RS van a Sin razón social). Con 1 RS la capa es transparente.

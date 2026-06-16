@@ -8680,7 +8680,8 @@ function ContactoTab({client, entities, onSaveFields}) {
 // Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
 // Asistente de conciliación: 3 pasos con compuerta humana. (1) duplicados determinista, (2) sin proyecto agrupado por serie con sugerencia, (3) programada↔real por venta+mes+tolerancia. Nada se borra/asigna solo.
-function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, onResolveDup, onAssignSeries, onReplaceProgramada, onClose}) {
+function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, onResolveDup, onAssignSeries, onReplaceProgramada, onReplaceMatch, onClose}) {
+  const [dismissedMatch,setDismissedMatch] = useState(()=>new Set())   // matches B descartados en esta sesión ("No es match")
   const mes = d => (d||'').slice(0,7)
   // Período: 'todo' (ordenar el histórico) o 'mes' (revisión del mes corriente: emitidas por issued_at, programadas por due).
   const [periodo,setPeriodo] = useState('todo')
@@ -8860,16 +8861,29 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
           )})}
         </div>}
 
-        {progMatches.length>0&&<div>
-          {sect(3,C.accent,'Programada ↔ real','venta+mes+tolerancia',progMatches.length)}
-          {progMatches.map((m,i)=>(
+        {(()=>{ const visM=progMatches.filter(m=>!dismissedMatch.has(m.prog.id)); if(!visM.length) return null; return <div>
+          {sect(3,C.accent,'Programada ↔ emitida','venta+mes+UF tolerancia',visM.length)}
+          {visM.map((m,i)=>{
+            const s=(sales||[]).find(x=>String(x.id)===String(m.prog.sale_id)); const ufv=(s&&s.moneda!=='CLP'&&s.uf_value)?s.uf_value:null
+            const ufP=ufv?(m.prog.amount/ufv):null, ufR=ufv?(m.real.amount/ufv):null
+            const dif=(m.real.amount||0)-(m.prog.amount||0)
+            const uf=x=>x.toLocaleString('es-CL',{maximumFractionDigits:2})
+            return (
             <div key={i} style={{background:'#fff',border:`1px solid #B5D4F4`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
-              <div style={{fontSize:12.5,fontWeight:600}}>{m.prog.concept||'—'}</div>
-              <div style={{fontSize:10,color:C.accent,margin:'3px 0 7px'}}>Programada {fmt(m.prog.amount)} ≈ {m.real.invoice_no?`Factura N° ${folioN(m.real.invoice_no)}`:'real'} {fmt(m.real.amount)} ({m.real.status}) — porque: {m.razones?m.razones.join(' · '):'mismo cliente, mes y monto'}. Reemplazar borra la programada.</div>
-              <button onClick={()=>onReplaceProgramada&&onReplaceProgramada(m.prog.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Reemplazar (borra programada)</button>
+              <div style={{fontSize:12,fontWeight:600,marginBottom:7,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.prog.concept||'—'}</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7,marginBottom:8}}>
+                <div style={{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 9px'}}><div style={{fontSize:8.5,color:C.muted,textTransform:'uppercase',fontWeight:700,marginBottom:4}}>Programada</div><div style={{fontSize:11,lineHeight:1.5}}>{ufP?<b>{uf(ufP)} UF</b>:'—'}<br/>{fmt(m.prog.amount)}<br/><span style={{color:C.muted}}>UF estimada</span></div></div>
+                <div style={{background:'#E6F1FB',border:`1px solid #B5D4F4`,borderRadius:8,padding:'8px 9px'}}><div style={{fontSize:8.5,color:'#185FA5',textTransform:'uppercase',fontWeight:700,marginBottom:4}}>Emitida</div><div style={{fontSize:11,lineHeight:1.5}}><b>{m.real.invoice_no?`Factura N° ${folioN(m.real.invoice_no)}`:'real'}</b><br/>{ufR?<>{uf(ufR)} UF · </>:''}{fmt(m.real.amount)}<br/><span style={{color:C.muted}}>{m.real.status}</span></div></div>
+              </div>
+              <div style={{fontSize:10.5,color:'#0C447C',background:'#E6F1FB',borderRadius:8,padding:'6px 9px',marginBottom:6}}>Diferencia {dif>=0?'+':'−'}{fmt(Math.abs(dif))}{ufv?' — solo por la UF del día (mismas UF)':''}</div>
+              <div style={{fontSize:10.5,color:'#0F6E56',background:'#E1F5EE',borderRadius:8,padding:'6px 9px',marginBottom:8}}>Sugiero el match porque: {m.razones?m.razones.join(' · '):'mismo cliente, mes y monto'}.</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                <button onClick={()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Aprobar · reemplazar programada</button>
+                <button onClick={()=>setDismissedMatch(p=>new Set([...p,m.prog.id]))} style={{fontSize:10,color:C.overdue,background:'#fff',border:`1px solid #F09595`,borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>No es match</button>
+              </div>
             </div>
-          ))}
-        </div>}
+          )})}
+        </div> })()}
       </div>
     </>
   )
@@ -13810,6 +13824,15 @@ export default function App() {
       setUndoToast({msg:`${ids.length} factura${ids.length!==1?'s':''} asociada${ids.length!==1?'s':''} al proyecto`, onUndo: async()=>{ await supabase.from('billing').update({sale_id:null}).in('id',ids); setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,sale_id:null}:b)) }})
     }catch(e){ alert('Error: '+e.message) }
   },[])
+  // Conciliación: la programada se MARCA como reemplazada por la emitida (replaced_by_id) y se retira de las vistas (deleted_at). Reversible. Nunca al revés.
+  const handleReplaceProgramada=useCallback(async(progId,realId)=>{
+    try{
+      const row=(billing||[]).find(b=>b.id===progId)
+      await supabase.from('billing').update({deleted_at:new Date().toISOString(),replaced_by_id:realId||null}).eq('id',progId)
+      setBilling(p=>p.filter(b=>b.id!==progId))
+      setUndoToast({msg:'Programada reemplazada por la factura emitida', onUndo: async()=>{ await supabase.from('billing').update({deleted_at:null,replaced_by_id:null}).eq('id',progId); if(row) setBilling(p=>p.some(x=>x.id===progId)?p:[row,...p]) }})
+    }catch(e){ alert('Error: '+e.message) }
+  },[billing])
   const handleDeleteBilling=useCallback(async(id)=>{
     try{
       const row=billing.find(x=>x.id===id)
@@ -14095,7 +14118,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
