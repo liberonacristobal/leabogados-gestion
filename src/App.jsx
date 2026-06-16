@@ -2103,9 +2103,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const bruto = Math.round(sy.reduce((a,s)=>a+clpDeVenta(s),0))
     const costo = Math.round(sy.reduce((a,s)=>a+(((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))*ufRef)+((s.moneda==='CLP'&&s.cost_clp)?((parseFloat(s.cost_clp)||0)*(esRec(s)?12:1)):0),0))
     const neto = bruto - costo
+    // UF NOMINALES (suma directa de amount_uf, igual que la pestaña Ventas) — para que ambas vistas cuadren en modo UF. No reconvertir el CLP con la UF de hoy.
+    const brutoUF = sy.reduce((a,s)=>a+ufDeVenta(s),0)
+    const costoUF = sy.reduce((a,s)=>a+((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1))+((s.moneda==='CLP'&&s.cost_clp&&ufRef>0)?((parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1)):0),0)
+    const netoUF = brutoUF - costoUF
     const meta = Number(targets.find(t=>t.year===year)?.target_amount) || (year===currentYear?META_CLP:0)
     const pct = meta>0 ? Math.round((neto/meta)*100) : 0   // % meta sobre NETO (igual que el historial y pctMeta) — no mezclar bruto/neto
-    return {year,bruto,costo,neto,meta,pct}
+    return {year,bruto,costo,neto,brutoUF,costoUF,netoUF,meta,pct}
   }
   const m = metricasAnio(selYear)
   // Facturado/Cobrado del AÑO seleccionado (facturas emitidas en el año; cobrado = de esas, cuánto pagado).
@@ -2114,6 +2118,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const cobradoSel = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(_sySel)).reduce((a,b)=>a+(b.amount||0),0)
   const porCobrarSel = Math.max(0, facturadoSel - cobradoSel)
   const fmtMon = v => dashMoneda==='UF' ? (ufRef>0?fmtUFk(Math.round(v/ufRef)):'—') : fmtShort(v)
+  // Para cifras de VENTAS (tienen UF nominal): en modo UF usa el UF nominal directo (cuadra con la pestaña Ventas); en CLP usa el monto en pesos. NO reconvertir CLP↔UF con la UF de hoy.
+  const vMon = (uf,clp) => dashMoneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
+  const metaUF = ufRef>0 ? m.meta/ufRef : 0
   // Ingresos cobrados en el año seleccionado, separados por AÑO DE VENTA (de sales.year vía sale_id, o sale_year manual).
   // Lo que no tiene año resuelto cae en "sin asignar" → se asigna en la cola de Facturación.
   const ingresosPorAnioVenta = useMemo(()=>{
@@ -2144,7 +2151,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [revOpen,setRevOpen] = useState(false)
   const ventasDelAnio = useMemo(()=> sales
     .filter(s=>s.year===selYear && !['Borrador','Propuesta','Rechazada'].includes(s.status))
-    .map(s=>({s, bruto: clpDeVenta(s)}))
+    .map(s=>({s, bruto: clpDeVenta(s), brutoUF: ufDeVenta(s)}))
     .sort((a,b)=>b.bruto-a.bruto)
   ,[sales,selYear,ufRef])
 
@@ -2238,11 +2245,12 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{display:'flex',alignItems:'stretch'}}>
             <div style={{flex:1.18,padding:'16px 14px',borderRight:`1px solid ${C.border}`,textAlign:'center',display:'flex',flexDirection:'column',justifyContent:'center'}}>
               {(()=>{
-                const pctVenta = m.meta>0?Math.round(m.bruto/m.meta*100):0
-                const pctNeto = m.meta>0?Math.round(m.neto/m.meta*100):0
+                const denom = dashMoneda==='UF' ? metaUF : m.meta
+                const pctVenta = denom>0?Math.round((dashMoneda==='UF'?m.brutoUF:m.bruto)/denom*100):0
+                const pctNeto  = denom>0?Math.round((dashMoneda==='UF'?m.netoUF:m.neto)/denom*100):0
                 const gv = gaugeMode==='neto'
-                  ? {pct:pctNeto, val:m.neto, col:C.greenText, grad:'url(#gMetaNeto)', lbl:'Neto vs meta'}
-                  : {pct:pctVenta, val:m.bruto, col:C.accent, grad:'url(#gMetaDash)', lbl:'Vendido vs meta'}
+                  ? {pct:pctNeto, val:m.neto, valUF:m.netoUF, col:C.greenText, grad:'url(#gMetaNeto)', lbl:'Neto vs meta'}
+                  : {pct:pctVenta, val:m.bruto, valUF:m.brutoUF, col:C.accent, grad:'url(#gMetaDash)', lbl:'Vendido vs meta'}
                 return (<>
                   {/* Toggle claro Bruto/Neto: destaca qué se está viendo en el velocímetro */}
                   <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>
@@ -2263,9 +2271,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke={gv.grad} strokeWidth='9' strokeLinecap='round' strokeDasharray={`${Math.round(Math.min(100,gv.pct)/100*182)} 182`}/>
                       <text x='74' y='72' textAnchor='middle' style={{fontSize:30,fontWeight:700,fill:gv.col}}>{gv.pct}%</text>
                     </svg>
-                    <div><span style={{fontSize:26,fontWeight:700,color:gv.col,fontVariantNumeric:'tabular-nums'}}>{fmtMon(gv.val)}</span><span style={{fontSize:14,color:'#A8B2B8'}}> / {fmtMon(m.meta)}</span></div>
+                    <div><span style={{fontSize:26,fontWeight:700,color:gv.col,fontVariantNumeric:'tabular-nums'}}>{vMon(gv.valUF,gv.val)}</span><span style={{fontSize:14,color:'#A8B2B8'}}> / {vMon(metaUF,m.meta)}</span></div>
                   </div>
-                  <button onClick={()=>setRevOpen(o=>!o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#537281',marginTop:3}}>faltan {fmtMon(Math.max(0,m.meta-gv.val))} · {ventasDelAnio.length} ventas ›</button>
+                  <button onClick={()=>setRevOpen(o=>!o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#537281',marginTop:3}}>faltan {vMon(Math.max(0,metaUF-gv.valUF),Math.max(0,m.meta-gv.val))} · {ventasDelAnio.length} ventas ›</button>
                   {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:4}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
                 </>)
               })()}
@@ -2279,14 +2287,15 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               </div>
               {(()=>{
                 const pc = v => m.bruto>0?Math.round(v/m.bruto*100):0
+                const ufEq = v => ufRef>0?v/ufRef:0
                 const D = {
-                  neto:{lbl:`Neto firma · ${pc(m.neto)}%`, val:m.neto, w:Math.min(100,pc(m.neto)), ctx:`bruto ${fmtMon(m.bruto)} − terceros ${fmtMon(m.costo)} ›`, go:'sales'},
-                  fac:{lbl:`Facturado · ${pc(facturadoSel)}%`, val:facturadoSel, w:Math.min(100,pc(facturadoSel)), ctx:'del total vendido ›', go:'billing'},
-                  cob:{lbl:`Cobrado · ${pc(cobradoSel)}%`, val:cobradoSel, w:Math.min(100,pc(cobradoSel)), ctx:`${fmtMon(porCobrarSel)} por cobrar ›`, go:'billing'},
+                  neto:{lbl:`Neto firma · ${pc(m.neto)}%`, val:m.neto, valUF:m.netoUF, w:Math.min(100,pc(m.neto)), ctx:`bruto ${vMon(m.brutoUF,m.bruto)} − terceros ${vMon(m.costoUF,m.costo)} ›`, go:'sales'},
+                  fac:{lbl:`Facturado · ${pc(facturadoSel)}%`, val:facturadoSel, valUF:ufEq(facturadoSel), w:Math.min(100,pc(facturadoSel)), ctx:'del total vendido ›', go:'billing'},
+                  cob:{lbl:`Cobrado · ${pc(cobradoSel)}%`, val:cobradoSel, valUF:ufEq(cobradoSel), w:Math.min(100,pc(cobradoSel)), ctx:`${fmtMon(porCobrarSel)} por cobrar ›`, go:'billing'},
                 }[dgl]
                 return (<>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:11,color:'#537281'}}>{D.lbl}</span><span style={{fontSize:24,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtMon(D.val)}</span></div>
-                  <div style={{fontSize:9,color:'#A8B2B8',margin:'11px 0 4px',display:'flex',justifyContent:'space-between'}}><span>0</span><span>vendido {fmtMon(m.bruto)}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:11,color:'#537281'}}>{D.lbl}</span><span style={{fontSize:24,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{vMon(D.valUF,D.val)}</span></div>
+                  <div style={{fontSize:9,color:'#A8B2B8',margin:'11px 0 4px',display:'flex',justifyContent:'space-between'}}><span>0</span><span>vendido {vMon(m.brutoUF,m.bruto)}</span></div>
                   <div style={{height:9,borderRadius:6,background:'#F1F4F6',overflow:'hidden'}}><div style={{height:'100%',width:`${D.w}%`,background:dgl==='cob'?C.greenText:C.normal,borderRadius:6,transition:'width .3s'}}/></div>
                   <button onClick={()=>setTab(D.go)} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#537281',marginTop:9,textAlign:'left',padding:0}}>{D.ctx}</button>
                 </>)
@@ -2303,7 +2312,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <button onClick={()=>setRevOpen(false)} style={{background:'none',border:'none',color:'#99ABB4',fontSize:10,cursor:'pointer',textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Ocultar</button>
                 </div>
                 {ventasDelAnio.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0 8px'}}>Sin ventas registradas este año.</div>}
-                {ventasDelAnio.map(({s,bruto})=>{
+                {ventasDelAnio.map(({s,bruto,brutoUF})=>{
                   const cn=clients.find(c=>String(c.id)===String(s.client_id))?.name||'—'
                   return (
                     <div key={s.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
@@ -2311,14 +2320,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                         <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div>
                         <div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'—'}{esRec(s)?' · recurrente':''}</div>
                       </div>
-                      <span style={{fontSize:12,fontWeight:600,color:C.accent,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtMon(bruto)}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:C.accent,flexShrink:0,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{vMon(brutoUF,bruto)}</span>
                     </div>
                   )
                 })}
                 {ventasDelAnio.length>0&&(
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,paddingTop:8,fontWeight:700}}>
                     <span style={{fontSize:11,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Vendido {selYear}</span>
-                    <span style={{fontSize:13,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtMon(m.bruto)}</span>
+                    <span style={{fontSize:13,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{vMon(m.brutoUF,m.bruto)}</span>
                   </div>
                 )}
               </div>
@@ -2343,7 +2352,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     <span style={{fontSize:12,fontWeight:500,color:col}}>{y}</span>
                     <div style={{height:5,background:'#E4E8EB',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,pctMetaNeto)}%`,borderRadius:3}}/></div>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:'#3D3D3D'}}>{fmtMon(my.neto)}</div>
+                      <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:'#3D3D3D'}}>{vMon(my.netoUF,my.neto)}</div>
                       <div style={{fontSize:10,color:'#537281'}}>{esActual?`${pctMetaNeto}% · en curso`:`${pctMetaNeto}% meta`}</div>
                     </div>
                   </div>
