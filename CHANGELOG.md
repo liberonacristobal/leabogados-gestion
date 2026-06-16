@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Facturación Por cliente: capa de RS + subtotales por grupo (Etapa 2)
+- Cada grupo de estado (Vencidas/Emitidas/Programadas/Pagadas/Anuladas) muestra subtotal + conteo en su encabezado, y es colapsable; Pagadas y Anuladas vienen colapsadas por defecto.
+- Clientes con 2+ razones sociales: se agrupan por RS (con su subtotal pendiente), y dentro de cada RS van los grupos por estado; facturas sin RS van a Sin razón social. Con 1 RS la capa es transparente. La fila del cliente muestra la RS/RUT (o N razones sociales).
+
+
 ## 2026-06-15 — Facturación: año global sincronizado
 - El filtro de año es único y persistente en toda Facturación (resumen + interiores comparten el mismo año, guardado en localStorage). La Ficha → Financiero lo lee al entrar y lo escribe al cambiarlo, así el año se mantiene al ir y volver entre Facturación y la Ficha del cliente.
 
