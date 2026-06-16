@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación: header limpio (una sola barra)
+- Se redujo el header de 3 filas de pills a una sola barra: ← (volver al resumen), toggle Por cliente / Todas, año en dropdown, buscar (ícono) y menú ⋯ con Resumen / Proveedores / Anticipos / Sin año. Las 4 KPI cards quedan como filtro de estado. Mucho menos ruido visual.
+
+
 ## 2026-06-15 — Facturación: vistas de estado coherentes (todo al acordeón Por cliente)
 - Las KPI cards (Por cobrar/Programado/Vencido/Cobrado) y las tabs de estado del Resumen ya no abren la lista vieja agrupada por cliente: llevan al MISMO acordeón Por cliente filtrado por ese estado. Se quitó la franja redundante dentro de Por cliente (las KPI cards de arriba ya la cubren). El botón ↓ Programadas se mantiene cuando se ve el estado Programadas.
 
