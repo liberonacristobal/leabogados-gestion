@@ -6200,7 +6200,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const gastosYaRend = allMovs.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
   const saldoActual = fondosDisp - gastosYaRend
   // Correlativo por cliente: se cuenta solo sobre las rendiciones ENVIADAS (correlativo grabado). Tentativo = max + 1.
-  const rendsCliEnv = (rendiciones||[]).filter(r=>String(r.client_id)===String(client.id) && r.correlativo)
+  const rendsCliEnv = (rendiciones||[]).filter(r=>String(r.client_id)===String(client.id) && r.correlativo && !r.anulada_at)
   const nextCorr = Math.max(0, ...rendsCliEnv.map(r=>r.correlativo||0)) + 1
   const previasN = rendsCliEnv.length
 
@@ -7191,15 +7191,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [hFichaDesde,setHFichaDesde] = useState('')
   const [hFichaHasta,setHFichaHasta] = useState('')
   const handleAnularRendicion = async(r) => {
-    if(!confirm('\u00bfReabrir esta rendici\u00f3n? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
+    if(!confirm('\u00bfAnular esta rendici\u00f3n? Queda registrada como ANULADA (con su PDF para auditor\u00eda), los gastos vuelven a estar disponibles para rendir y se anula el cobro de reembolso asociado.')) return
     try {
+      const now = new Date().toISOString()
+      // Foto del PDF ANTES de liberar los gastos: el registro anulado conserva su detalle aunque los gastos queden libres.
+      let pdf = r.pdf_html
+      if(!pdf){ try{ const cl=clients.find(c=>c.id===r.client_id); pdf=rendicionPdfHtml(r,cl,expenses,clientEntities) }catch(_){} }
       const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
-      if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendición (quedarían huérfanos)
+      if(ue) throw ue   // si no se liberan los gastos, NO marcar anulada (quedarían inconsistentes)
       const reembolsos=await anularReembolsoDeRendicion(r, billing)
-      await supabase.from('rendiciones').delete().eq('id',r.id)
-      if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
+      const patch={anulada_at:now, anulada_por:currentUserName||null}
+      if(pdf&&!r.pdf_html) patch.pdf_html=pdf
+      const {error:re}=await supabase.from('rendiciones').update(patch).eq('id',r.id)
+      if(re) throw re
+      if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,...patch}:x))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
-      if(reembolsos.length){ if(setBilling) setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); alert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
+      if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); alert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
     } catch(e) { alert('Error: '+e.message) }
   }
   // Anula la rendición de UN gasto: lo desvincula y ajusta el total/contador de su rendición (la elimina si queda en 0).
@@ -7215,7 +7222,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         const r=(rendiciones||[]).find(x=>x.id===renderId)
         if(r){
           const nuevoN=Math.max(0,(r.n_gastos||0)-1), nuevoTotal=(r.total||0)-(e.amount||0)
-          if(nuevoN<=0){ await supabase.from('rendiciones').delete().eq('id',renderId); if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==renderId)) }
+          if(nuevoN<=0){
+            // Al quedar sin gastos, la rendición se borra → también hay que anular su cobro de reembolso (si lo había), o quedaría huérfano cobrable.
+            const reembolsos=await anularReembolsoDeRendicion(r, billing)
+            await supabase.from('rendiciones').delete().eq('id',renderId); if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==renderId))
+            if(reembolsos.length&&setBilling) setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b))
+          }
           else { await supabase.from('rendiciones').update({total:nuevoTotal,n_gastos:nuevoN}).eq('id',renderId); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===renderId?{...x,total:nuevoTotal,n_gastos:nuevoN}:x)) }
         }
       }
@@ -7492,16 +7504,18 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
   // ── Historial de rendiciones (helpers compartidos lista + ficha) ──
   const HH = {fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}
-  const estadoBadge = r => r.sent_at
+  const estadoBadge = r => r.anulada_at
+    ? <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#FCEBEB',color:C.overdue,whiteSpace:'nowrap'}}>Anulada</span>
+    : r.sent_at
     ? <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#E1F5EE',color:C.greenText,whiteSpace:'nowrap'}}>Enviada</span>
     : <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#FFF8E1',color:'#C77F18',whiteSpace:'nowrap'}}>Pendiente</span>
   const rsOfRend = r => { const g=expenses.find(e=>e.client_render_id===r.id&&e.entity_id); const ent=g?(clientEntities||[]).find(x=>x.id===g.entity_id):null; return (ent&&ent.name)||'' }
-  const verPdfRend = r => { const cl=clients.find(c=>c.id===r.client_id); const w=window.open('','_blank'); if(w){ w.document.write(rendicionPdfHtml(r,cl,expenses,clientEntities)); w.document.close() } }
+  const verPdfRend = r => { const cl=clients.find(c=>c.id===r.client_id); const w=window.open('','_blank'); if(w){ w.document.write(r.pdf_html||rendicionPdfHtml(r,cl,expenses,clientEntities)); w.document.close() } }
   const renderRendRow = (r,showClient) => {
     const cl=clients.find(x=>x.id===r.client_id)
     const rs=showClient?'':rsOfRend(r)
     return (
-      <div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`}}>
+      <div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`,opacity:r.anulada_at?0.6:1}}>
         <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
@@ -7515,7 +7529,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const gastos=expenses.filter(e=>e.client_render_id===r.id)
           return <div style={{marginTop:8,padding:'8px 11px',background:'#F5F7F9',borderRadius:8}}>
             {r.ot_numbers&&<div style={{fontSize:10,color:'#185FA5',fontWeight:600,marginBottom:6,paddingBottom:6,borderBottom:`1px solid ${C.border}`}}>OT incluidas: {r.ot_numbers}</div>}
-            {gastos.length===0?<div style={{fontSize:11,color:C.muted}}>Sin detalle de gastos.</div>:gastos.map((e,i)=>(
+            {gastos.length===0?<div style={{fontSize:11,color:C.muted}}>{r.anulada_at?'Rendición anulada — usa "Ver PDF" para ver el detalle congelado.':'Sin detalle de gastos.'}</div>:gastos.map((e,i)=>(
               <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 0',borderBottom:i<gastos.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>
                 <div style={{minWidth:0}}>
                   <div style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:'#185FA5',fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div>
@@ -7527,10 +7541,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
         })()}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
-          <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Reabrir</button>
+          {r.anulada_at
+            ? <span style={{fontSize:10,color:C.overdue,fontWeight:600}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</span>
+            : <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.overdue,background:'none',border:`1px solid ${C.overdue}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>}
           <div style={{display:'flex',gap:6}}>
             <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
-            {cl&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
+            {cl&&!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
           </div>
         </div>
       </div>
@@ -9553,24 +9569,30 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           {(()=>{
             const rends=(rendiciones||[]).filter(r=>r.client_id===client.id&&r.tipo==='cliente').sort((a,b)=>b.created_at>a.created_at?1:-1)
             if(!rends.length) return null
+            const verPdf=r=>{ const w=window.open('','_blank'); if(w){ w.document.write(r.pdf_html||rendicionPdfHtml(r,client,expenses,clientEntities)); w.document.close() } }
             return (<div style={{marginTop:12}}>
               <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Rendiciones</div>
               {rends.map(r=>(
-                <div key={r.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div key={r.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.border}`,opacity:r.anulada_at?0.6:1}}>
+                  <div onClick={()=>verPdf(r)} style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',cursor:'pointer'}}>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div>
                       <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
-                      {r.sent_at
+                      {r.anulada_at
+                        ? <div style={{fontSize:10,fontWeight:600,color:C.overdue,marginTop:2}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</div>
+                        : r.sent_at
                         ? <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:2}}>Enviada {new Date(r.sent_at).toLocaleDateString('es-CL')}</div>
                         : <div style={{fontSize:10,fontWeight:600,color:'#C77F18',marginTop:2}}>Pendiente de envío</div>}
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                       <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
-                      {onAnularRendicion&&<button onClick={()=>onAnularRendicion(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Reabrir</button>}
+                      {onAnularRendicion&&!r.anulada_at&&<button onClick={e=>{e.stopPropagation();onAnularRendicion(r)}} style={{fontSize:10,color:C.overdue,background:'none',border:`1px solid ${C.overdue}`,borderRadius:5,padding:'2px 7px',cursor:'pointer'}}>Anular</button>}
                     </div>
                   </div>
-                  <button onClick={()=>setEmailRend(r)} style={{marginTop:6,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>
+                  <div style={{display:'flex',gap:6,marginTop:6}}>
+                    <button onClick={()=>verPdf(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
+                    {!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>}
+                  </div>
                 </div>
               ))}
             </div>)
@@ -9650,15 +9672,21 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   const [verProv,setVerProv] = useState(false)
 
   const handleAnularRendicion = async(r) => {
-    if(!confirm('\u00bfReabrir esta rendici\u00f3n? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
+    if(!confirm('\u00bfAnular esta rendici\u00f3n? Queda registrada como ANULADA (con su PDF para auditor\u00eda), los gastos vuelven a estar disponibles para rendir y se anula el cobro de reembolso asociado.')) return
     try {
+      const now = new Date().toISOString()
+      let pdf = r.pdf_html
+      if(!pdf){ try{ const cl=clients.find(c=>c.id===r.client_id); pdf=rendicionPdfHtml(r,cl,expenses,clientEntities) }catch(_){} }
       const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
       if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendici\u00f3n (quedar\u00edan hu\u00e9rfanos)
       const reembolsos=await anularReembolsoDeRendicion(r, billing)
-      await supabase.from('rendiciones').delete().eq('id',r.id)
-      if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
+      const patch={anulada_at:now, anulada_por:user?.name||null}
+      if(pdf&&!r.pdf_html) patch.pdf_html=pdf
+      const {error:re}=await supabase.from('rendiciones').update(patch).eq('id',r.id)
+      if(re) throw re
+      if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,...patch}:x))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
-      if(reembolsos.length){ if(setBilling) setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); alert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
+      if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); alert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
     } catch(e) { alert('Error: '+e.message) }
   }
   const [sFilter,setSFilter] = useState('Activo')

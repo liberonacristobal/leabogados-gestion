@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-16 — Rendiciones: anular deja rastro + reembolso consistente + historial clickeable
+- "Reabrir" pasa a ser "Anular": la rendición ya NO se borra — queda registrada como **Anulada** (con quién y cuándo) y su **PDF se congela** para auditoría. Los gastos vuelven a estar disponibles para rendir.
+- La anulación ahora se refleja en **todas las áreas**, incluido el **cobro de reembolso** (pasa a Anulada). Antes, al anular gasto por gasto, el reembolso quedaba huérfano cobrable — corregido en todas las vías.
+- Historial de rendiciones en la **ficha del cliente** ahora es **clickeable**: tocar abre el PDF; pill "Anulada" atenuada; "Ver PDF" explícito; sin "Enviar" en las anuladas.
+- Las anuladas no cuentan para el correlativo de la siguiente rendición.
+
 ## 2026-06-16 — Rendir fondos: el filtro de proyecto ya no esconde gastos
 - El proyecto se auto-selecciona solo cuando hay gastos con ese tag; si los gastos no traen proyecto, queda en "Todos" (antes caía en el título de una venta y ocultaba todos los gastos disponibles → "no hay gastos para rendir" falso).
 - Cuando un filtro (proyecto o fechas) deja la lista vacía pero sí hay gastos pendientes, se muestra el aviso y un botón "Ver todos los proyectos" para limpiarlo de un toque.
