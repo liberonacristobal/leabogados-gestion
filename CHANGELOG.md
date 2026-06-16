@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-16 — Ventas: encabezado "Vendido del año" que cuadra con el Dashboard
+- Nuevo encabezado: **Vendido {año}** (grande, UF) a la izquierda = Activas + Terminadas, el mismo universo que usa el Dashboard (antes el total mostraba solo el filtro de estado, por defecto Activas → descalce con el Dashboard).
+- Al costado derecho, desglose en chips tintados: **Activas** (verde) y **Terminadas** (gris), con su monto y conteo — así el total es auditable (Total = Activas + Terminadas).
+- Cifras en **UF por defecto**; tocar la tarjeta alterna todo a **CLP** y de vuelta.
+- Refleja el **año seleccionado** (independiente del filtro de estado de la lista de abajo).
+
 ## 2026-06-16 — Rendiciones: anular deja rastro + reembolso consistente + historial clickeable
 - "Reabrir" pasa a ser "Anular": la rendición ya NO se borra — queda registrada como **Anulada** (con quién y cuándo) y su **PDF se congela** para auditoría. Los gastos vuelven a estar disponibles para rendir.
 - La anulación ahora se refleja en **todas las áreas**, incluido el **cobro de reembolso** (pasa a Anulada). Antes, al anular gasto por gasto, el reembolso quedaba huérfano cobrable — corregido en todas las vías.

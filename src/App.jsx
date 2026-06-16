@@ -2914,6 +2914,15 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   },[sales,clients,q,fYear,fArea,fStatus])
   const totalUF = filtered.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const totalCLP = Math.round(filtered.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
+  // Encabezado "Vendido del año" = Activo + Terminado del año seleccionado (mismo universo que el Dashboard), independiente del filtro de la lista. UF por defecto, toca para CLP.
+  const [montoUF,setMontoUF] = useState(true)
+  const yearSales = sales.filter(s=> !fYear || String(s.year)===fYear)
+  const actYr = yearSales.filter(s=>s.status==='Activo')
+  const termYr = yearSales.filter(s=>s.status==='Terminado')
+  const sumUF = arr=>arr.reduce((a,s)=>a+ventaUF(s,ufRef),0)
+  const sumCLP = arr=>Math.round(arr.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
+  const vendUF=sumUF(actYr)+sumUF(termYr), vendCLP=sumCLP(actYr)+sumCLP(termYr)
+  const fmtMonto = (uf,clp)=> montoUF ? fmtUFk(uf) : fmtShort(clp)
   const years = [...new Set(sales.map(s=>s.year).filter(Boolean))].sort((a,b)=>b-a)
   if(!years.includes(currentYear)) years.unshift(currentYear)
 
@@ -3004,16 +3013,23 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
             </div>
           </div>
         ):(
-          filtered.length>0&&(
+          (actYr.length>0||termYr.length>0)&&(
             <>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:4}}>
-              <div style={{background:'#E6EEF1',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL UF</div>
-                <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(totalUF)}</div>
+            <div onClick={()=>setMontoUF(v=>!v)} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'14px 16px',cursor:'pointer',display:'flex',gap:12,alignItems:'center',marginBottom:4}}>
+              <div style={{flex:'1.05',minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',color:C.muted}}>Vendido {fYear||'total'}</div>
+                <div style={{fontSize:30,fontWeight:500,color:C.accent,marginTop:2,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtMonto(vendUF,vendCLP)}</div>
+                <div style={{fontSize:10,color:'#99ABB4',marginTop:5}}>{montoUF?'en UF':'en CLP'} · toca para {montoUF?'$':'UF'}</div>
               </div>
-              <div style={{background:'#EEF3E3',borderRadius:9,padding:'8px 12px',border:`1px solid ${C.border}`}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>TOTAL CLP</div>
-                <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{fmt(totalCLP)}</div>
+              <div style={{flex:'1',minWidth:0,display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{background:'#E1F5EE',borderRadius:9,padding:'7px 10px'}}>
+                  <div style={{fontSize:10,fontWeight:600,letterSpacing:'.03em',textTransform:'uppercase',color:'#0F6E56'}}>Activas · {actYr.length}</div>
+                  <div style={{fontSize:18,fontWeight:500,color:'#0F6E56',fontVariantNumeric:'tabular-nums'}}>{fmtMonto(sumUF(actYr),sumCLP(actYr))}</div>
+                </div>
+                <div style={{background:'#EEF1F3',borderRadius:9,padding:'7px 10px'}}>
+                  <div style={{fontSize:10,fontWeight:600,letterSpacing:'.03em',textTransform:'uppercase',color:C.muted}}>Terminadas · {termYr.length}</div>
+                  <div style={{fontSize:18,fontWeight:500,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(sumUF(termYr),sumCLP(termYr))}</div>
+                </div>
               </div>
             </div>
             <div style={{display:'flex',justifyContent:'flex-end',marginBottom:4}}><UFStamp {...ufState}/></div>
