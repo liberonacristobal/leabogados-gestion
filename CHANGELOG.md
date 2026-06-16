@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-16 — Rendiciones: editar en sitio (sin anular)
+- Botón "Editar" en cada rendición (historial de Gastos y ficha del cliente): reabre el modal con sus gastos pre-marcados.
+- Puedes agregar/quitar gastos, cambiar dirigido a / proyecto / subproyecto / OT / razón social y guardar — actualiza la MISMA rendición (mismo número y fecha), no la anula ni crea otra.
+- Si cambias el total y hay un cobro de reembolso vinculado, se ajusta su monto solo. Si no cambias nada, queda idéntica.
+- Los gastos que ya están en la rendición siempre se muestran (el filtro de proyecto/fecha solo acota los candidatos a agregar).
+
 ## 2026-06-16 — Ventas: lista agrupada en tiles (Abogado / Área), adiós al scroll infinito
 - La lista plana de ~44 ventas pasa a **tiles agrupadas** (2 por fila) con **subtotal UF + conteo** por grupo. De un vistazo ves todos los grupos sin scroll; tocas una tile y abajo aparecen sus ventas.
 - **Agrupar por** alternable: `[Abogado | Área]`. Cada tile lleva el color de la persona; "Sin abogado" se resalta con etiqueta "asignar".

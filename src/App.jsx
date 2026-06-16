@@ -6226,13 +6226,14 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
 }
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
-function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar}) {
-  const [selected, setSelected] = useState(new Set())
+function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling}) {
+  const esEdicion = !!editRend
+  const [selected, setSelected] = useState(()=> editRend ? new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>e.id)) : new Set())
   const [saving, setSaving] = useState(false)
   const [fDesde, setFDesde] = useState('')
   const [fHasta, setFHasta] = useState('')
   const [contacts, setContacts] = useState([])
-  const [atencion, setAtencion] = useState('')
+  const [atencion, setAtencion] = useState(editRend?.dirigido_a||'')
   const [prefilled, setPrefilled] = useState(false)   // "Dirigido a" precargado de rendición anterior
   const [limpiandoIA, setLimpiandoIA] = useState(false)
 
@@ -6241,10 +6242,10 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const entsCli = (clientEntities||[]).filter(e=>e.client_id===client.id)
   const singleRS = entsCli.length<=1
   // RS de la rendición: 1 RS → automática; varias → la elige el emisor (acota los gastos a esa RS).
-  const [selEnt,setSelEnt] = useState(()=> entsCli.length===1 ? entsCli[0].id : ((entityIds&&entityIds[0]) || (entsCli[0]&&entsCli[0].id) || null))
-  // Proyecto y subproyecto de la rendición (el emisor elige; el proyecto FILTRA los gastos).
-  const [proyecto,setProyecto] = useState('')
-  const [subproyecto,setSubproyecto] = useState('')
+  const [selEnt,setSelEnt] = useState(()=> editRend?.entity_id || (entsCli.length===1 ? entsCli[0].id : ((entityIds&&entityIds[0]) || (entsCli[0]&&entsCli[0].id) || null)))
+  // Proyecto y subproyecto de la rendición (el emisor elige; el proyecto FILTRA los gastos al crear; al editar es solo metadata).
+  const [proyecto,setProyecto] = useState(editRend?.project||'')
+  const [subproyecto,setSubproyecto] = useState(editRend?.subproject||'')
   const headEnt = entsCli.length===1 ? entsCli[0] : (entsCli.find(e=>e.id===selEnt)||null)
   // Multi-RS: al elegir una RS se incluyen sus gastos Y los SIN razón social (ej. notaría sin RS) — no deben quedar fuera de la rendición.
   const inScope = e => singleRS ? true : (selEnt ? (e.entity_id===selEnt || !e.entity_id) : true)
@@ -6277,15 +6278,19 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   // Default automático: SOLO un proyecto que tenga gastos disponibles; nunca un título de venta sin gastos (ocultaría todo). Si no hay, "Todos".
   const proyectoDefault = Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])[0] || ''
   // Al cambiar de RS (o al abrir), preseleccionar solo si hay un proyecto con gastos; si no, dejar "Todos" para no esconder nada.
-  useEffect(()=>{ setProyecto(proyectosDisp.includes(proyecto)?proyecto:proyectoDefault) }, [selEnt])
+  useEffect(()=>{ if(esEdicion) return; setProyecto(proyectosDisp.includes(proyecto)?proyecto:proyectoDefault) }, [selEnt])
 
   // Gastos disponibles para rendir (no rendidos aun), acotados al proyecto elegido.
   // Un gasto pertenece al proyecto si tiene esa glosa de proyecto O está vinculado a su venta (sale_id).
   const disponibles = allMovs.filter(e=>{
-    if(e.type!=='gasto' || e.client_rendered_at) return false
-    if(proyecto){ const sid=proyToSale[proyecto]; const ok=(e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
-    if(fDesde && e.date && e.date < fDesde) return false
-    if(fHasta && e.date && e.date > fHasta) return false
+    if(e.type!=='gasto') return false
+    const mine = esEdicion && String(e.client_render_id)===String(editRend.id)   // gasto que YA está en esta rendición: siempre visible (pre-marcado)
+    if(e.client_rendered_at && !mine) return false   // gastos de OTRA rendición no entran
+    if(!mine){   // los filtros de proyecto/fecha solo acotan los candidatos a AGREGAR, nunca esconden los propios
+      if(proyecto){ const sid=proyToSale[proyecto]; const ok=(e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
+      if(fDesde && e.date && e.date < fDesde) return false
+      if(fHasta && e.date && e.date > fHasta) return false
+    }
     return true
   }).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
 
@@ -6299,7 +6304,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     supabase.from('contacts').select('*').eq('client_id',client.id).order('created_at').then(({data})=>{
       if(!alive||!data) return
       setContacts(data)
-      if(data[0]?.nombre){ setAtencion(data[0].nombre); setPrefilled(true) }
+      if(!esEdicion && data[0]?.nombre){ setAtencion(data[0].nombre); setPrefilled(true) }
     })
     return ()=>{alive=false}
   },[client.id])
@@ -6404,6 +6409,39 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     setSaving(false)
   }
 
+  // EDITAR en sitio: actualiza la MISMA rendición (mismo id/correlativo/fecha), agrega/quita gastos, re-marca y ajusta el reembolso. No la anula ni crea otra.
+  const handleGuardarEdicion = async() => {
+    if(!esEdicion || !gastosSel.length) return
+    setSaving(true)
+    try {
+      const now = new Date().toISOString()
+      const prevIds = new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>String(e.id)))
+      const selIds = new Set(gastosSel.map(e=>String(e.id)))
+      const toAdd = gastosSel.filter(e=>!prevIds.has(String(e.id)))
+      const toRemove = (expenses||[]).filter(e=>prevIds.has(String(e.id)) && !selIds.has(String(e.id)))
+      const otNums = [...new Set(gastosSel.map(e=>e.ot_number).filter(Boolean))].join(', ')
+      const patch = {total:totalSel, n_gastos:gastosSel.length, entity_id:selEnt||null, project:proyecto||null, subproject:(subproyecto||'').trim()||null, dirigido_a:(atencion||'').trim()||null, ot_numbers:otNums||null}
+      const {error:re} = await supabase.from('rendiciones').update(patch).eq('id',editRend.id)
+      if(re) throw new Error('No se pudo actualizar la rendición: '+re.message)
+      for(const e of toAdd){ await supabase.from('expenses').update({client_rendered_at:now, client_render_id:editRend.id}).eq('id',e.id) }
+      for(const e of toRemove){ await supabase.from('expenses').update({client_rendered_at:null, client_render_id:null}).eq('id',e.id) }
+      // Ajustar el cobro de reembolso vinculado (si existe y no está anulado) al nuevo total
+      let reembAjust=null
+      const reemb=(billing||[]).find(b=>b.billing_type==='reembolso'&&b.status!=='Anulada'&&(b.notes||'').includes('Rendición ID '+editRend.id))
+      if(reemb && reemb.amount!==totalSel){ const {error:be}=await supabase.from('billing').update({amount:totalSel}).eq('id',reemb.id); if(!be) reembAjust={id:reemb.id} }
+      if(setExpenses) setExpenses(p=>p.map(e=>{
+        if(toAdd.find(x=>x.id===e.id)) return {...e,client_rendered_at:now,client_render_id:editRend.id}
+        if(toRemove.find(x=>x.id===e.id)) return {...e,client_rendered_at:null,client_render_id:null}
+        return e
+      }))
+      if(setRendiciones) setRendiciones(p=>p.map(r=>r.id===editRend.id?{...r,...patch}:r))
+      if(reembAjust&&setBilling) setBilling(p=>p.map(b=>b.id===reembAjust.id?{...b,amount:totalSel}:b))
+      await guardarDirigido()
+      onClose&&onClose()
+    } catch(e){ alert('Error: '+e.message) }
+    setSaving(false)
+  }
+
   const lblG = {fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:2}
   const fK = fondosDisp>0?{c:'#1D9E75',bg:'#E1F5EE'}:fondosDisp===0?{c:'#C77F18',bg:'#FEF6EE'}:{c:'#E24B4A',bg:'#FCEBEB'}
   const sK = saldoActual>0?{c:'#1D9E75',bg:'#E1F5EE'}:{c:'#E24B4A',bg:'#FCEBEB'}
@@ -6412,7 +6450,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     <div>
       {/* Contexto de continuidad: correlativo que tendrá + rendiciones anteriores + saldo actual */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:12,paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
-        <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Será la N° {nextCorr}<span style={{fontSize:10,fontWeight:500,color:'#99ABB4'}}> · se confirma al enviar</span></span>
+        <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{esEdicion?<>Editando rendición{editRend.correlativo?` N° ${editRend.correlativo}`:''}<span style={{fontSize:10,fontWeight:500,color:'#99ABB4'}}> · no la anula</span></>:<>Será la N° {nextCorr}<span style={{fontSize:10,fontWeight:500,color:'#99ABB4'}}> · se confirma al enviar</span></>}</span>
         <span style={{fontSize:11,color:C.muted,textAlign:'right'}}>{previasN>0?`${previasN} enviada${previasN!==1?'s':''} · saldo actual ${fmtN(saldoActual)}`:'Primera rendición de este cliente'}</span>
       </div>
       {/* Razón social: 1 → fija; varias → la elige el emisor (acota los gastos) */}
@@ -6545,6 +6583,12 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       {/* Botones */}
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        {esEdicion ? (
+          <button disabled={!selected.size||saving} onClick={handleGuardarEdicion}
+            style={{flex:3,padding:11,borderRadius:10,border:'none',background:selected.size?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+            {saving?'Guardando…':'Guardar cambios'}
+          </button>
+        ) : (<>
         <button disabled={!selected.size||saving} onClick={()=>handleGenerar('pdf')}
           style={{flex:1.3,padding:11,borderRadius:10,border:`1px solid ${selected.size?C.accent:C.done}`,background:'#fff',color:selected.size?C.accent:C.done,fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
           {saving?'…':'↓ PDF'}
@@ -6553,6 +6597,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
           style={{flex:1.7,padding:11,borderRadius:10,border:'none',background:selected.size?'#1D9E75':C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
           {saving?'Generando…':'Enviar al cliente'}
         </button>
+        </>)}
       </div>
     </div>
   )
@@ -7243,6 +7288,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
   const [openRS,setOpenRS] = useState(()=>new Set())        // RS expandidas (acordeón 2+ RS)
   const [rendicionClient,setRendicionClient] = useState(null)
+  const [rendEdit,setRendEdit] = useState(null)   // rendición en edición (abre RendicionModal en modo edición)
   const [showHistorial,setShowHistorial] = useState(false)
   const [emailRend,setEmailRend] = useState(null)
   const [hFiltCliente,setHFiltCliente] = useState('')
@@ -7606,6 +7652,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             ? <span style={{fontSize:10,color:C.overdue,fontWeight:600}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</span>
             : <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.overdue,background:'none',border:`1px solid ${C.overdue}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>}
           <div style={{display:'flex',gap:6}}>
+            {cl&&!r.anulada_at&&<button onClick={()=>{setRendEdit(r);setRendEntityIds([]);setRendicionClient(cl)}} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Editar</button>}
             <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
             {cl&&!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
           </div>
@@ -7658,7 +7705,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {!selectedClient&&!showOrphans&&!showNotaria&&<span style={{color:C.done,fontSize:16,fontWeight:300}}>|</span>}
             {!showNotaria&&<button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>}
             {!showNotaria&&<button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>}
-            {selectedClient&&<button onClick={()=>{setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
+            {selectedClient&&<button onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
           </div>
         </div>
 
@@ -7964,7 +8011,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div style={{display:'flex',justifyContent:'space-between',marginTop:10,paddingTop:8,borderTop:`1.5px solid ${C.muted}`}}><span style={{fontSize:13,fontWeight:700,color:C.text}}>TOTAL</span><span style={{fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(tot)}</span></div>
         </Modal>
       )})()}
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([])}} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={`${rendEdit?'Editar rendición':'Rendición'} — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
@@ -9433,7 +9480,7 @@ Liberona Escala Abogados`
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onConciliar,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,user,onRendicionSent,onSaveFields,initialFtab}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onConciliar,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState(initialFtab||'resumen')
   const ufState = useUF()
@@ -9651,6 +9698,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,marginTop:6}}>
+                    {onEditRendicion&&!r.anulada_at&&<button onClick={()=>onEditRendicion(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Editar</button>}
                     <button onClick={()=>verPdf(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
                     {!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>}
                   </div>
@@ -9757,6 +9805,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   const [selected,setSelected] = useState(null)
   const [forceFtab,setForceFtab] = useState(null)
   const [rendicionClient,setRendicionClient] = useState(null)
+  const [rendEdit,setRendEdit] = useState(null)   // rendición en edición (RendicionModal modo edición)
   // Abrir la ficha de un cliente (en Financiero) cuando llega la señal desde otra vista (ej. Facturación → Ficha).
   useEffect(()=>{ if(openFichaId){ const c=clients.find(x=>String(x.id)===String(openFichaId)); if(c){ setForceFtab('financiero'); setSelected(c) } onOpenedFicha&&onOpenedFicha() } },[openFichaId])
 
@@ -9813,13 +9862,14 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         onConciliar={onConciliar}
         onAssignSeries={onAssignSeries}
         onStatusChange={onStatusChange}
-        onRendicion={c=>setRendicionClient(c)}
+        onRendicion={c=>{setRendEdit(null);setRendicionClient(c)}}
+        onEditRendicion={r=>{const c=clients.find(x=>String(x.id)===String(r.client_id)); if(c){setRendEdit(r);setRendicionClient(c)}}}
         rendiciones={rendiciones}
         onAnularRendicion={handleAnularRendicion}
         user={user}
         onRendicionSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))}
       />
-      {rendicionClient&&<Modal title={`Rendición — ${rendicionClient.name}`} onClose={()=>setRendicionClient(null)} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>setRendicionClient(null)} setExpenses={setExpenses} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={`${rendEdit?'Editar rendición':'Rendición'} — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>}
     </>
   )
 
