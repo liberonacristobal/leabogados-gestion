@@ -5351,7 +5351,54 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               </div>
             )}
           </>
-        ) : (
+        ) : filter==='all' ? (()=>{
+          const hoy=new Date().toISOString().slice(0,10)
+          const addDays=(d,n)=>{ if(!d) return ''; const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10) }
+          const venceDe=b=> b.due || (b.issued_at?addDays(b.issued_at,30):'')
+          const estadoReal=b=> (b.status==='Pendiente' && venceDe(b) && venceDe(b)<hoy) ? 'Vencido' : b.status
+          const matchEst=b=>{ if(estSel.size===0) return true; const er=estadoReal(b); return estSel.has(er)||(estSel.has('Pagado')&&er==='Anticipada') }
+          let rows=bb.filter(b=>!b.deleted_at)
+          if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
+          if(q.trim()) rows=rows.filter(b=>{ const cl=clients.find(x=>x.id===b.client_id); const s=q.toLowerCase(); return (cl?.name||'').toLowerCase().includes(s)||(b.concept||'').toLowerCase().includes(s)||folioN(b.invoice_no).toLowerCase().includes(s) })
+          rows=rows.filter(matchEst)
+          const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
+          const mesC=d=>(d||'').slice(0,7); const conc=new Set()
+          bb.filter(b=>b.status==='Programada'&&!b.deleted_at).forEach(p=>{ const a=p.amount||0; if(!a) return; const pm=mesC(p.due||p.issued_at); const reals=bb.filter(r=>!r.deleted_at&&r.issued_at&&r.status!=='Programada'&&r.status!=='Anulada'&&String(r.client_id)===String(p.client_id)); const hit=reals.some(r=>{ const dM=Math.abs((r.amount||0)-a)/a; if(dM>0.15) return false; const rm=mesC(r.due||r.issued_at); if(!pm||!rm) return false; const d=(parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7))); return Math.abs(d)<=1 }); if(hit) conc.add(p.id) })
+          const GR=[['Vencidas',b=>estadoReal(b)==='Vencido',C.overdue,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Emitidas pendientes',b=>estadoReal(b)==='Pendiente',C.soon,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Programadas',b=>b.status==='Programada',C.muted,(a,b)=>(a.due||'').localeCompare(b.due||'')],['Pagadas',b=>['Pagado','Anticipada'].includes(b.status),C.normal,(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')],['Anuladas',b=>b.status==='Anulada',C.muted,()=>0]]
+          const defC=lbl=>lbl==='Pagadas'||lbl==='Anuladas'
+          const filaAll=b=>{ const er=estadoReal(b); const col=er==='Vencido'?C.overdue:er==='Pendiente'?C.soon:(er==='Pagado'||er==='Anticipada')?C.normal:C.muted; const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); return (
+            <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',padding:'7px 10px',marginBottom:5}}>
+              <div onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rs.name}</span>:''}</div>
+                  <div style={{fontSize:9.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''} · {fmtDate(kpiDate(b))}</div>
+                </div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:col}}>{er}</div></div>
+              </div>
+              <div style={{display:'flex',gap:6,marginTop:6}}>
+                {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 11px',fontWeight:600,cursor:'pointer'}}>Pagar</button>}
+                {b.status==='Programada'&&conc.has(b.id)&&<button onClick={()=>onConciliar&&onConciliar(cl)} style={{fontSize:10,background:'#FFF8E1',color:'#854F0B',border:'1px solid #FAC775',borderRadius:8,padding:'3px 11px',fontWeight:600,cursor:'pointer'}}>⚠ Conciliar</button>}
+              </div>
+            </div>
+          )}
+          const estChips=[['Programada','Programadas'],['Pendiente','Emitidas'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
+          return (<div>
+            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
+              {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
+              {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
+            </div>
+            {rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>}
+            {GR.map(([lbl,pred,col,srt])=>{ const gr=rows.filter(pred).sort(srt); if(!gr.length) return null; const key=`all|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:!defC(lbl); const sub=gr.reduce((a,b)=>a+montoDe(b),0); return (
+              <div key={key} style={{marginBottom:4}}>
+                <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',background:'#F5F7F9',borderRadius:8,padding:'6px 11px',marginBottom:5}}>
+                  <span style={{fontSize:10,fontWeight:700,color:col,textTransform:'uppercase'}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:col}}>{fmt(sub)}</span>
+                </div>
+                {isOpen&&gr.map(filaAll)}
+              </div>
+            )})}
+          </div>)
+        })() : (
           <>
             {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{isProg?'Sin facturas programadas':filter==='terceros'?'Sin facturas con costos de proveedores':'Sin cobros'}</div>}
             {grouped.map(renderClientGroup)}
