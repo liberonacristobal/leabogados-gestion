@@ -4973,7 +4973,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           )})}
         </div>}
         {filter!=='resumen'&&<div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
-          {[['resumen','Resumen'],['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=>(
+          {[['resumen','Resumen'],['clientes','Por cliente'],['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'0 0 auto',padding:'6px 12px',borderRadius:20,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
           {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&<button onClick={()=>setShowBuscar(s=>!s)} style={{flex:'0 0 auto',marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:20,border:`1px solid ${C.accent}`,background:(q||showBuscar)?C.accent:'#E6EEF1',color:(q||showBuscar)?'#fff':C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',maxWidth:160,overflow:'hidden'}}>
@@ -5090,6 +5090,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                 <span style={{color:C.muted,fontWeight:600}}>Al día {fmt(porCobrar-venAll)}</span>
               </div>
             </div>
+            <button onClick={()=>go('clientes')} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:16}}>Ver detalle por cliente →</button>
             <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600,marginBottom:7}}>Estados</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
               {tab('emitidas','Por cobrar',porCobrar,C.accent)}
@@ -5104,6 +5105,56 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{cursor:'pointer',fontWeight:600,color:C.soon}}>Sin año · {sinAnio.length}</span>}
             </div>
           </div>)
+        })()
+        : filter==='clientes' ? (()=>{
+          const hoy=new Date().toISOString().slice(0,10)
+          const addDays=(d,n)=>{ if(!d) return ''; const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10) }
+          const venceDe=b=> b.due || (b.issued_at?addDays(b.issued_at,30):'')
+          // Vencida DERIVADA: emitida pendiente cuyo vencimiento (o emisión + 30 días) ya pasó.
+          const estadoReal=b=> (b.status==='Pendiente' && venceDe(b) && venceDe(b)<hoy) ? 'Vencido' : b.status
+          let rows=bb.filter(b=>!b.deleted_at)
+          if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
+          if(q.trim()) rows=rows.filter(b=>{ const c=clients.find(x=>x.id===b.client_id); return (c?.name||'').toLowerCase().includes(q.toLowerCase()) })
+          const byC={}; rows.forEach(b=>{ const cid=b.client_id||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
+          const list=Object.entries(byC).map(([cid,arr])=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
+          if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
+          const fila=b=>{ const er=estadoReal(b); const col=er==='Vencido'?C.overdue:er==='Pendiente'?C.soon:(er==='Pagado'||er==='Anticipada')?C.normal:C.muted; return (
+            <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',padding:'7px 10px',marginBottom:5}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}</div>
+                  <div style={{fontSize:9.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`${b.concept||'—'} · `:''}{fmtDate(kpiDate(b))}</div>
+                </div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:col}}>{er}</div></div>
+              </div>
+              {['Pendiente','Vencido'].includes(er)&&<div style={{marginTop:6}}><button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 11px',fontWeight:600,cursor:'pointer'}}>Pagar</button></div>}
+            </div>
+          )}
+          return (<div>{list.map(({c,arr})=>{
+            const open=openClients.has(c.id)
+            const nP=arr.filter(b=>b.status==='Programada').length
+            const nE=arr.filter(b=>estadoReal(b)==='Pendiente').length
+            const nV=arr.filter(b=>estadoReal(b)==='Vencido').length
+            const nPag=arr.filter(b=>['Pagado','Anticipada'].includes(b.status)).length
+            const pend=arr.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+(b.amount||0),0)
+            const prox=arr.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))[0]
+            const grupos=[['Vencidas',arr.filter(b=>estadoReal(b)==='Vencido').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Emitidas pendientes',arr.filter(b=>estadoReal(b)==='Pendiente').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Programadas',arr.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))],['Pagadas',arr.filter(b=>['Pagado','Anticipada'].includes(b.status)).sort((a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''))],['Anuladas',arr.filter(b=>b.status==='Anulada')]]
+            return (
+              <div key={c.id} style={{border:`1px solid ${nV>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
+                <div onClick={()=>toggleClient(c.id)} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>{pend>0&&<span style={{fontSize:13,fontWeight:700,color:nV>0?C.overdue:C.soon,flexShrink:0}}>{fmt(pend)}</span>}</div>
+                  <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap'}}>
+                    {nP>0&&<span style={{fontSize:8.5,background:'#F1EFE8',color:'#5F5E5A',borderRadius:9,padding:'1px 7px'}}>{nP} prog</span>}
+                    {nE>0&&<span style={{fontSize:8.5,background:'#E6EEF1',color:'#003C50',borderRadius:9,padding:'1px 7px'}}>{nE} emit</span>}
+                    {nV>0&&<span style={{fontSize:8.5,background:'#FCEBEB',color:'#A32D2D',borderRadius:9,padding:'1px 7px'}}>{nV} venc</span>}
+                    {nPag>0&&<span style={{fontSize:8.5,background:'#E1F5EE',color:'#0F6E56',borderRadius:9,padding:'1px 7px'}}>{nPag} pag</span>}
+                  </div>
+                  {prox&&<div style={{fontSize:9,color:C.muted,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Próxima a emitir: {prox.concept||'—'} · {fmtDate(prox.due)}</div>}
+                </div>
+                {open&&<div style={{padding:'0 11px 9px'}}>{grupos.map(([lbl,gr])=> gr.length?(<div key={lbl}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase',fontWeight:700,letterSpacing:.4,margin:'7px 0 4px'}}>{lbl}</div>{gr.map(fila)}</div>):null)}</div>}
+              </div>
+            )
+          })}</div>)
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (

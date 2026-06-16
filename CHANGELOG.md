@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación: vista Por cliente (acordeón) [Etapa 1]
+- Nueva vista Por cliente: una fila por cliente (colapsada) con mini-resumen de estados (N prog/emit/venc/pag), monto pendiente y próxima a emitir. Al expandir, las facturas se agrupan por estado en orden Vencidas → Emitidas pendientes → Programadas → Pagadas → Anuladas, ordenadas dentro de cada grupo. Vencida DERIVADA automáticamente (emitida pendiente con vencimiento o emisión+30 días pasado). Pagar rápido en fila. Accesible desde el chip Por cliente y el botón del Resumen. Factura N° nunca abreviado.
+
+
 ## 2026-06-15 — Facturación global: landing Resumen + aging + FAB (Etapa A)
 - La pestaña Facturación abre por defecto en un Resumen: 2 KPIs (Por cobrar / Vencido), tabla de aging (Por vencer / 1–30 / 31–60 / 61–90 / 90+), accesos por estado (Por cobrar, Vencidas, Cobradas, Programadas) y enlaces a Anticipos/Proveedores/Checklist/Sin año. Chip Resumen para volver. Botón flotante (FAB) para nueva factura. Toda la lógica existente (anticipos, terceros, SII, export, pago) intacta.
 
