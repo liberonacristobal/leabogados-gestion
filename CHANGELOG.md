@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-16 — Cuotas: no se crean programadas por cobros ya pagados
+- Al guardar/editar una venta con cobro por cuotas, ya no se genera una factura Programada por un monto que ya está cubierto por facturas pagadas de esa misma venta (la programada es para un cobro futuro; si ya hay pagada, ese cobro ya ocurrió). Evita programadas fantasma que inflaban el "por cobrar" (caso ventas de regularización ya cobradas).
+
 ## 2026-06-16 — Ventas en pesos: se congela la UF del día (cifras 100% históricas)
 - Al crear una venta/propuesta en pesos (CLP), ahora se guarda la UF del día (`uf_value`), igual que en las ventas en UF. Antes quedaba en null y su equivalente en UF fluctuaba con la UF de hoy.
 - `ventaUF` usa esa UF histórica para las ventas en pesos (la UF de hoy queda solo como respaldo). Resultado: el monto en UF de toda venta queda congelado a su fecha y no se actualiza nunca → cero fluctuación, cero descalce Ventas↔Dashboard.

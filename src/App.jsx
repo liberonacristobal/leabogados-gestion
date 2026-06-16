@@ -13226,13 +13226,23 @@ export default function App() {
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       // Insertar cuotas (función reutilizable)
       const insertarCuotas = async() => {
+        // Resguardo: no crear una programada por un cobro ya cubierto por facturas PAGADAS de esta venta.
+        // La programada es para un cobro FUTURO; si ya existe una factura pagada, ese cobro ya ocurrió (la programada sería fantasma/duplicada).
+        let cubierto = 0
+        try {
+          const {data:pg} = await supabase.from('billing').select('amount').eq('sale_id',data.id).eq('status','Pagado').neq('billing_type','reembolso').is('deleted_at',null)
+          cubierto = (pg||[]).reduce((a,b)=>a+(b.amount||0),0)
+        } catch(_){}
         for(const c of cobros){
+          let monto = c.monto||0
+          if(cubierto>0){ const usa=Math.min(cubierto,monto); cubierto-=usa; monto-=usa }   // descuenta lo ya pagado
+          if(monto<=0) continue   // cobro ya cubierto por una factura pagada → no se crea programada
           await supabase.from('billing').insert({
             client_id:data.client_id,
             sale_id:data.id,
             entity_id:entIdRaw,
             concept:`${data.title} — ${c.label}`,
-            amount:c.monto,
+            amount:monto,
             status:'Programada',
             due:c.fecha,
             billing_type:'honorarios',
