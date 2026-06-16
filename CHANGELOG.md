@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación: vistas de estado coherentes (todo al acordeón Por cliente)
+- Las KPI cards (Por cobrar/Programado/Vencido/Cobrado) y las tabs de estado del Resumen ya no abren la lista vieja agrupada por cliente: llevan al MISMO acordeón Por cliente filtrado por ese estado. Se quitó la franja redundante dentro de Por cliente (las KPI cards de arriba ya la cubren). El botón ↓ Programadas se mantiene cuando se ve el estado Programadas.
+
+
 ## 2026-06-15 — Conciliación: panel programada vs emitida + marca reemplazada (Etapa 5)
 - El caso programada ↔ emitida ahora se muestra como panel de columnas paralelas (Programada / Emitida Factura N°) con UF de cada una, la diferencia explicada (solo por la UF del día) y el razonamiento. Botones Aprobar · reemplazar y No es match.
 - Al aprobar, la programada se MARCA como reemplazada por la emitida (replaced_by_id) y se retira de las vistas, en vez de un borrado ciego; reversible. Nunca al revés.
