@@ -5092,6 +5092,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const cobAll=bb.filter(b=>b.status==='Pagado'&&inResYear(b.paid_at||b.issued_at)).reduce((a,b)=>a+(b.amount||0),0)
           const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
           const resYears=[...new Set(bb.map(b=>String(b.paid_at||b.issued_at||b.due||'').slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+          const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
+          const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
           const go=f=>{setFilter(f);clearSel&&clearSel()}
           const tab=(f,l,v,col)=>(<button key={f} onClick={()=>go(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:col}}>{fmt(v)}</div></button>)
           return (<div>
@@ -5120,11 +5122,17 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               {tab('programadas','Programadas '+(resYear==='all'?'(total)':resYear),progAll,C.muted)}
             </div>
             <div style={{fontSize:9,color:C.muted,marginBottom:16,lineHeight:1.4}}>Cobradas y Programadas según el año seleccionado. Por cobrar y Vencidas son el total pendiente actual (no dependen del año).</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:9}}>
-              <button onClick={()=>go('anticipos')} style={{background:'#E6EEF1',border:`1px solid #99ABB4`,borderRadius:10,padding:'13px',fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}>Anticipos</button>
-              <button onClick={()=>go('terceros')} style={{background:'#E6EEF1',border:`1px solid #99ABB4`,borderRadius:10,padding:'13px',fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}>Proveedores</button>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              <span onClick={()=>go('anticipos')} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:antDisp>0?C.accent:C.muted,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
+                <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={antDisp>0?C.accent:'#99ABB4'} strokeWidth='2'><rect x='3' y='6' width='18' height='13' rx='2'/><path d='M16 6V4H8v2M3 11h18'/></svg>
+                Anticipos{antDisp>0&&<><span style={{width:5,height:5,borderRadius:'50%',background:'#EF9F27',display:'inline-block'}}/><b style={{color:C.greenText}}>{fmtShort(antDisp)}</b></>}
+              </span>
+              <span onClick={()=>go('terceros')} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:provPorPagar>0?C.accent:C.muted,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
+                <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={provPorPagar>0?C.accent:'#99ABB4'} strokeWidth='2'><path d='M3 7h13v9H3zM16 10h3l2 3v3h-5'/><circle cx='7.5' cy='18.5' r='1.5'/><circle cx='17.5' cy='18.5' r='1.5'/></svg>
+                Proveedores{provPorPagar>0&&<><span style={{width:5,height:5,borderRadius:'50%',background:'#EF9F27',display:'inline-block'}}/><b style={{color:'#854F0B'}}>{fmtShort(provPorPagar)}</b></>}
+              </span>
+              {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{fontSize:11,fontWeight:600,color:'#854F0B',border:'1px solid #FAC775',background:'#FFF8E1',borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>Sin año · {sinAnio.length}</span>}
             </div>
-            {sinAnio.length>0&&<div onClick={()=>go('sinanio')} style={{fontSize:11,color:C.soon,fontWeight:600,cursor:'pointer'}}>Facturas sin año · {sinAnio.length}</div>}
           </div>)
         })()
         : filter==='clientes' ? (()=>{
