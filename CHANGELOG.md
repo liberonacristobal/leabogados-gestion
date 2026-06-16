@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-16 — Dashboard: el "vendido" en UF ahora cuadra con Ventas
+- En modo UF, el Dashboard mostraba el total en pesos reconvertido con la UF de hoy (7.554), mientras Ventas suma los UF nominales (7.615) — los ~61 UF de diferencia eran puro arrastre de conversión.
+- Ahora el bruto/neto/vendido del Dashboard en modo UF usa los **UF nominales** (suma directa de los montos en UF, misma fuente que Ventas y que la meta). Las dos vistas cuadran. En modo CLP no cambia nada.
+
 ## 2026-06-16 — Rendiciones: editar en sitio (sin anular)
 - Botón "Editar" en cada rendición (historial de Gastos y ficha del cliente): reabre el modal con sus gastos pre-marcados.
 - Puedes agregar/quitar gastos, cambiar dirigido a / proyecto / subproyecto / OT / razón social y guardar — actualiza la MISMA rendición (mismo número y fecha), no la anula ni crea otra.
