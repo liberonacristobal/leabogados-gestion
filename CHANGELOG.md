@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación: vista Todas por estado (Etapa 3)
+- La vista Todas ahora agrupa las facturas por estado (Vencidas → Emitidas → Programadas → Pagadas → Anuladas) con subtotal+conteo por grupo (colapsables, Pagadas/Anuladas cerradas), no por cliente. Cada fila: cliente + RS, Factura N°/concepto, monto (UF del día en programadas), estado, y Pagar / ⚠ Conciliar; tocar abre el detalle. Filtros multi-select de estado + Limpiar, año global y buscador.
+
+
 ## 2026-06-15 — Facturación Por cliente: capa de RS + subtotales por grupo (Etapa 2)
 - Cada grupo de estado (Vencidas/Emitidas/Programadas/Pagadas/Anuladas) muestra subtotal + conteo en su encabezado, y es colapsable; Pagadas y Anuladas vienen colapsadas por defecto.
 - Clientes con 2+ razones sociales: se agrupan por RS (con su subtotal pendiente), y dentro de cada RS van los grupos por estado; facturas sin RS van a Sin razón social. Con 1 RS la capa es transparente. La fila del cliente muestra la RS/RUT (o N razones sociales).
