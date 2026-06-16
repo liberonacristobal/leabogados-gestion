@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Ficha → Financiero: tira de 4 KPIs + capa de RS (Etapa 4)
+- La Ficha financiera del cliente muestra arriba la tira de 4 KPIs (Por cobrar / Vencido / Programado año / Cobrado año), scrolleable, coherente con el landing.
+- Clientes con 2+ razones sociales: la jerarquía pasa a Año → RS → Proyecto (los proyectos se agrupan por su razón social; los sin RS van a Sin razón social). Con 1 RS la capa es transparente.
+
+
 ## 2026-06-15 — Facturación: vista Todas por estado (Etapa 3)
 - La vista Todas ahora agrupa las facturas por estado (Vencidas → Emitidas → Programadas → Pagadas → Anuladas) con subtotal+conteo por grupo (colapsables, Pagadas/Anuladas cerradas), no por cliente. Cada fila: cliente + RS, Factura N°/concepto, monto (UF del día en programadas), estado, y Pagar / ⚠ Conciliar; tocar abre el detalle. Filtros multi-select de estado + Limpiar, año global y buscador.
 
