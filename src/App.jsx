@@ -4643,9 +4643,10 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [filter,setFilter] = useState('resumen')
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
-  const [resYear,setResYear] = useState('all')   // año de referencia para Cobradas/Programadas del Resumen ('all' = histórico)
   const [impOpen,setImpOpen] = useState(false)
-  const [fYear,setFYear] = useState(String(currentYear))
+  // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
+  const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
+  useEffect(()=>{ try{ localStorage.setItem('fac_year', fYear||'') }catch(e){} },[fYear])
   const [fMonth,setFMonth] = useState('')
   const [showMeses,setShowMeses] = useState(false)
   const [showBuscar,setShowBuscar] = useState(false)
@@ -5088,7 +5089,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
           const porCobrar=pend.reduce((a,b)=>a+(b.amount||0),0)
           const venAll=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
-          const inResYear=(dateStr)=> resYear==='all' || String(dateStr||'').slice(0,4)===resYear
+          const inResYear=(dateStr)=> !fYear || String(dateStr||'').slice(0,4)===fYear
           const cobAll=bb.filter(b=>b.status==='Pagado'&&inResYear(b.paid_at||b.issued_at)).reduce((a,b)=>a+(b.amount||0),0)
           const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
           const resYears=[...new Set(bb.map(b=>String(b.paid_at||b.issued_at||b.due||'').slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
@@ -5112,14 +5113,14 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7,gap:8,flexWrap:'wrap'}}>
               <span style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Estados</span>
               <div style={{display:'flex',gap:4}}>
-                {[['all','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v} onClick={()=>setResYear(v)} style={{fontSize:9.5,fontWeight:600,borderRadius:12,padding:'2px 9px',cursor:'pointer',border:`1px solid ${resYear===v?C.accent:C.border}`,background:resYear===v?'#E6EEF1':'#fff',color:resYear===v?C.accent:C.muted}}>{l}</span>)}
+                {[['','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v||'t'} onClick={()=>setFYear(v)} style={{fontSize:9.5,fontWeight:600,borderRadius:12,padding:'2px 9px',cursor:'pointer',border:`1px solid ${fYear===v?C.accent:C.border}`,background:fYear===v?'#E6EEF1':'#fff',color:fYear===v?C.accent:C.muted}}>{l}</span>)}
               </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:7}}>
               {tab('emitidas','Por cobrar',porCobrar,C.accent)}
               {tab('vencido','Vencidas',venAll,C.overdue)}
-              {tab('pagado','Cobradas '+(resYear==='all'?'(total)':resYear),cobAll,C.normal)}
-              {tab('programadas','Programadas '+(resYear==='all'?'(total)':resYear),progAll,C.muted)}
+              {tab('pagado','Cobradas '+(fYear?fYear:'(total)'),cobAll,C.normal)}
+              {tab('programadas','Programadas '+(fYear?fYear:'(total)'),progAll,C.muted)}
             </div>
             <div style={{fontSize:9,color:C.muted,marginBottom:16,lineHeight:1.4}}>Cobradas y Programadas según el año seleccionado. Por cobrar y Vencidas son el total pendiente actual (no dependen del año).</div>
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -8824,10 +8825,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const [fProj,setFProj] = useState('all')      // 'all' | sale_id | 'sin'
   const [fEstado,setFEstado] = useState('all')  // 'all' | 'Programada' | 'porcobrar' | 'Pagado' | 'Anulada'
   const [fAnio,setFAnio] = useState('all')
-  // Jerarquía Año → Proyecto → Factura (cockpit v2)
-  const [selYear,setSelYear] = useState(aniosList[0]||'')
+  // Jerarquía Año → Proyecto → Factura (cockpit v2). Año sincronizado con Facturación (localStorage 'fac_year').
+  const pickYear = () => { try{ const g=localStorage.getItem('fac_year'); if(g && aniosList.includes(g)) return g }catch(e){} return aniosList[0]||'' }
+  const [selYear,setSelYear] = useState(pickYear)
+  const setYearSync = y => { setSelYear(y); try{ localStorage.setItem('fac_year', y||'') }catch(e){} }
   const [openProj,setOpenProj] = useState(()=>new Set())
-  useEffect(()=>{ setSelYear(aniosList[0]||'') },[client.id])
+  useEffect(()=>{ setSelYear(pickYear()) },[client.id])
   const toggleProj = id => setOpenProj(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Al abrir un año, expandir solo los proyectos con algo vencido (lo accionable visible sin clics).
   useEffect(()=>{ const ov=new Set(); (clientBilling||[]).forEach(b=>{ if(!b.deleted_at && b.sale_id && b.status==='Vencido' && (kpiDate(b)||'').slice(0,4)===selYear) ov.add(String(b.sale_id)) }); setOpenProj(ov) },[selYear,client.id])
@@ -8924,7 +8927,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           {q&&<span onClick={()=>setQ('')} style={{fontSize:14,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>}
         </div>
         {aniosList.length>0&&<div style={{display:'flex',gap:6,marginBottom:11,overflowX:'auto',scrollbarWidth:'none'}}>
-          {aniosList.map(y=>(<span key={y} onClick={()=>setSelYear(y)} style={{flexShrink:0,fontSize:12,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:selYear===y?C.accent:'#fff',color:selYear===y?'#fff':C.muted,border:`1px solid ${selYear===y?C.accent:C.border}`}}>{y}</span>))}
+          {aniosList.map(y=>(<span key={y} onClick={()=>setYearSync(y)} style={{flexShrink:0,fontSize:12,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:selYear===y?C.accent:'#fff',color:selYear===y?'#fff':C.muted,border:`1px solid ${selYear===y?C.accent:C.border}`}}>{y}</span>))}
         </div>}
         {(()=>{
           if(!aniosList.length) return <div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Este cliente no tiene facturas todavía.</div>
