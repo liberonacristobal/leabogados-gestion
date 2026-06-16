@@ -4643,6 +4643,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [filter,setFilter] = useState('resumen')
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
+  const [groupOpen,setGroupOpen] = useState({})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
   const [impOpen,setImpOpen] = useState(false)
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
@@ -5189,11 +5190,24 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             const mesC=d=>(d||'').slice(0,7)
             const conciliables=new Set()
             arr.filter(b=>b.status==='Programada').forEach(p=>{ const a=p.amount||0; if(!a) return; const pm=mesC(p.due||p.issued_at); const hit=realesC.some(r=>{ const dM=Math.abs((r.amount||0)-a)/a; if(dM>0.15) return false; const rm=mesC(r.due||r.issued_at); if(!pm||!rm) return false; const d=(parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7))); return Math.abs(d)<=1 }); if(hit) conciliables.add(p.id) })
-            const grupos=[['Vencidas',visible.filter(b=>estadoReal(b)==='Vencido').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Emitidas pendientes',visible.filter(b=>estadoReal(b)==='Pendiente').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Programadas',visible.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))],['Pagadas',visible.filter(b=>['Pagado','Anticipada'].includes(b.status)).sort((a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''))],['Anuladas',visible.filter(b=>b.status==='Anulada')]]
+            const rsList=(clientEntities||[]).filter(e=>String(e.client_id)===String(c.id))
+            const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
+            const GRUPOS=[['Vencidas',b=>estadoReal(b)==='Vencido',C.overdue,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Emitidas pendientes',b=>estadoReal(b)==='Pendiente',C.soon,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Programadas',b=>b.status==='Programada',C.muted,(a,b)=>(a.due||'').localeCompare(b.due||'')],['Pagadas',b=>['Pagado','Anticipada'].includes(b.status),C.normal,(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')],['Anuladas',b=>b.status==='Anulada',C.muted,()=>0]]
+            const defColapsado=lbl=> lbl==='Pagadas'||lbl==='Anuladas'
+            const renderGrupos=(facts,sk)=> GRUPOS.map(([lbl,pred,col,srt])=>{ const gr=facts.filter(pred).sort(srt); if(!gr.length) return null; const key=`${sk}|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:!defColapsado(lbl); const sub=gr.reduce((a,b)=>a+montoDe(b),0); return (
+              <div key={key}>
+                <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',margin:'7px 0 4px'}}>
+                  <span style={{fontSize:8.5,color:col,textTransform:'uppercase',fontWeight:700,letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
+                  <span style={{fontSize:10,fontWeight:700,color:col}}>{fmt(sub)}</span>
+                </div>
+                {isOpen&&gr.map(b=>fila(b,conciliables.has(b.id),c))}
+              </div>
+            )})
             return (
               <div key={c.id} style={{border:`1px solid ${nV>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
                 <div onClick={()=>toggleClient(c.id)} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>{pend>0&&<span style={{fontSize:13,fontWeight:700,color:nV>0?C.overdue:C.soon,flexShrink:0}}>{fmt(pend)}</span>}</div>
+                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.multi||rs.name!==c.name||rs.rut)?<div style={{fontSize:9,color:rs.multi?'#854F0B':'#99ABB4',fontWeight:rs.multi?600:400,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rs.name}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
                   <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap'}}>
                     {nP>0&&<span style={{fontSize:8.5,background:'#F1EFE8',color:'#5F5E5A',borderRadius:9,padding:'1px 7px'}}>{nP} prog</span>}
                     {nE>0&&<span style={{fontSize:8.5,background:'#E6EEF1',color:'#003C50',borderRadius:9,padding:'1px 7px'}}>{nE} emit</span>}
@@ -5204,7 +5218,18 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   </div>
                   {prox&&<div style={{fontSize:9,color:C.muted,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Próxima a emitir: {prox.concept||'—'} · {fmtDate(prox.due)}</div>}
                 </div>
-                {open&&<div style={{padding:'0 11px 9px'}}>{grupos.map(([lbl,gr])=> gr.length?(<div key={lbl}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase',fontWeight:700,letterSpacing:.4,margin:'7px 0 4px'}}>{lbl}</div>{gr.map(b=>fila(b,conciliables.has(b.id),c))}</div>):null)}</div>}
+                {open&&<div style={{padding:'0 11px 9px'}}>{
+                  rsList.length>=2 ? (()=>{
+                    const byRS={}; visible.forEach(b=>{ const k=b.entity_id?String(b.entity_id):'sin'; (byRS[k]=byRS[k]||[]).push(b) })
+                    const order=[...rsList.map(e=>String(e.id)),'sin'].filter(k=>byRS[k]&&byRS[k].length)
+                    return order.map(k=>{ const facts=byRS[k]; const ent=rsList.find(e=>String(e.id)===k); const rsName=ent?`${ent.name}${ent.rut?` · ${ent.rut}`:''}`:'Sin razón social'; const rsPend=facts.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+montoDe(b),0); return (
+                      <div key={k} style={{marginTop:6}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:k==='sin'?'#FFF8E1':'#E6EEF1',borderRadius:7,padding:'5px 9px'}}><span style={{fontSize:10.5,fontWeight:700,color:k==='sin'?'#854F0B':'#003C50',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsName}</span>{rsPend>0&&<span style={{fontSize:9,color:C.muted,flexShrink:0,marginLeft:6}}>pend. {fmt(rsPend)}</span>}</div>
+                        {renderGrupos(facts, c.id+'|'+k)}
+                      </div>
+                    )})
+                  })() : renderGrupos(visible, c.id)
+                }</div>}
               </div>
             )
           })}</div>)
