@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación → Ficha del cliente en un clic
+- En la vista Por cliente, cada cliente tiene Ficha → que abre directamente su Ficha → Financiero (cambia de pestaña y entra al cliente en Financiero). Detalle de proyectos/8-12 vive en la Ficha; Facturación enlaza ahí.
+
+
 ## 2026-06-15 — Resumen Facturación: año en Cobradas/Programadas, volver, Anticipos/Proveedores, sin Checklist
 - Cobradas y Programadas ahora se distinguen por año (toggle Total / 2026 / 2025…); Por cobrar y Vencidas siguen siendo el total pendiente actual, con nota aclaratoria.
 - Botón Volver al resumen visible al entrar a cualquier estado.
