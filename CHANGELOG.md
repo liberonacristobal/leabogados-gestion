@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación Por cliente: pill ⚠ Conciliar (Etapa 4)
+- En la vista Por cliente, las facturas programadas con posible emitida equivalente (mismo cliente, monto ±15%, mes ±1) muestran pill ⚠ Conciliar; el encabezado del cliente muestra ⚠ N conciliar. Al tocar, abre el asistente de conciliación de ese cliente (cruce por prioridad + razonamiento + compuerta humana). Cierra el rediseño de la pestaña Facturación.
+
+
 ## 2026-06-15 — Facturación Por cliente: filtros por estado + franja accionable (Etapa 3)
 - Vista Por cliente: franja Por cobrar / Vencido (tocar filtra), chips multi-select por estado (Programadas/Emitidas/Vencidas/Pagadas/Anuladas) que reducen lo que se muestra en el acordeón, y botón Limpiar. Los clientes sin facturas del estado filtrado se ocultan.
 
