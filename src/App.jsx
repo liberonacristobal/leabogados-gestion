@@ -5087,7 +5087,6 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
       )})()}
 
       <div style={{padding:'10px 20px 100px'}}>
-        {filter!=='resumen'&&<div onClick={()=>{setFilter('resumen');clearSel&&clearSel()}} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',marginBottom:10}}>← Volver al resumen</div>}
         {filter==='resumen' ? (()=>{
           const hoy=new Date().toISOString().slice(0,10)
           const pend=bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
