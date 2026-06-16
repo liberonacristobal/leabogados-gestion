@@ -6213,8 +6213,10 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const proyVentas = [...new Set(ventasProy.map(s=>s.title))]
   const proyectosDisp = [...new Set([...Object.keys(proyConteo), ...proyVentas])].sort((a,b)=>(proyConteo[b]||0)-(proyConteo[a]||0))
   const proyectoSugerido = Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])[0] || proyVentas[0] || ''
-  // Al cambiar de RS (o al abrir), sugerir el proyecto (gastos primero, si no la venta).
-  useEffect(()=>{ setProyecto(proyectosDisp.includes(proyecto)?proyecto:(proyectoSugerido||'')) }, [selEnt])
+  // Default automático: SOLO un proyecto que tenga gastos disponibles; nunca un título de venta sin gastos (ocultaría todo). Si no hay, "Todos".
+  const proyectoDefault = Object.keys(proyConteo).sort((a,b)=>proyConteo[b]-proyConteo[a])[0] || ''
+  // Al cambiar de RS (o al abrir), preseleccionar solo si hay un proyecto con gastos; si no, dejar "Todos" para no esconder nada.
+  useEffect(()=>{ setProyecto(proyectosDisp.includes(proyecto)?proyecto:proyectoDefault) }, [selEnt])
 
   // Gastos disponibles para rendir (no rendidos aun), acotados al proyecto elegido.
   // Un gasto pertenece al proyecto si tiene esa glosa de proyecto O está vinculado a su venta (sale_id).
@@ -6430,7 +6432,12 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
           {selected.size===disponibles.length?'Desmarcar todo':'Seleccionar todo'}
         </button>}
       </div>
-      {disponibles.length===0&&<div style={{color:'#537281',textAlign:'center',padding:20,fontSize:12}}>No hay gastos pendientes de rendir</div>}
+      {disponibles.length===0&&(gastosPend.length>0&&(proyecto||fDesde||fHasta)
+        ? <div style={{textAlign:'center',padding:20,fontSize:12,color:'#537281'}}>
+            Hay {gastosPend.length} gasto{gastosPend.length!==1?'s':''} pendiente{gastosPend.length!==1?'s':''} de rendir, pero el filtro los está ocultando.
+            <button onClick={()=>{setProyecto('');setFDesde('');setFHasta('')}} style={{display:'block',margin:'8px auto 0',fontSize:11,fontWeight:600,color:'#003C50',background:'#E6EEF1',border:'none',borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>Ver todos los proyectos</button>
+          </div>
+        : <div style={{color:'#537281',textAlign:'center',padding:20,fontSize:12}}>No hay gastos pendientes de rendir</div>)}
       <div style={{maxHeight:280,overflowY:'auto',marginBottom:12}}>
         {disponibles.map(e=>{
           const isSel=selected.has(e.id)
