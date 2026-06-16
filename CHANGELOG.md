@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-15 — Resumen Facturación: año en Cobradas/Programadas, volver, Anticipos/Proveedores, sin Checklist
+- Cobradas y Programadas ahora se distinguen por año (toggle Total / 2026 / 2025…); Por cobrar y Vencidas siguen siendo el total pendiente actual, con nota aclaratoria.
+- Botón Volver al resumen visible al entrar a cualquier estado.
+- Anticipos y Proveedores como botones prominentes en el Resumen. Checklist eliminado de la vista.
+
+
 ## 2026-06-15 — Facturación Por cliente: pill ⚠ Conciliar (Etapa 4)
 - En la vista Por cliente, las facturas programadas con posible emitida equivalente (mismo cliente, monto ±15%, mes ±1) muestran pill ⚠ Conciliar; el encabezado del cliente muestra ⚠ N conciliar. Al tocar, abre el asistente de conciliación de ese cliente (cruce por prioridad + razonamiento + compuerta humana). Cierra el rediseño de la pestaña Facturación.
 

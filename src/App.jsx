@@ -4643,6 +4643,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [filter,setFilter] = useState('resumen')
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
+  const [resYear,setResYear] = useState('all')   // año de referencia para Cobradas/Programadas del Resumen ('all' = histórico)
   const [impOpen,setImpOpen] = useState(false)
   const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
@@ -4986,7 +4987,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           )})}
         </div>}
         {filter!=='resumen'&&<div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
-          {[['resumen','Resumen'],['clientes','Por cliente'],['all','Todas'],['terceros','Proveedores'],['checklist','Checklist'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=>(
+          {[['resumen','← Resumen'],['clientes','Por cliente'],['all','Todas'],['terceros','Proveedores'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=>(
             <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'0 0 auto',padding:'6px 12px',borderRadius:20,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
           ))}
           {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&<button onClick={()=>setShowBuscar(s=>!s)} style={{flex:'0 0 auto',marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:20,border:`1px solid ${C.accent}`,background:(q||showBuscar)?C.accent:'#E6EEF1',color:(q||showBuscar)?'#fff':C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',maxWidth:160,overflow:'hidden'}}>
@@ -5080,15 +5081,17 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
       )})()}
 
       <div style={{padding:'10px 20px 100px'}}>
+        {filter!=='resumen'&&<div onClick={()=>{setFilter('resumen');clearSel&&clearSel()}} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',marginBottom:10}}>← Volver al resumen</div>}
         {filter==='resumen' ? (()=>{
           const hoy=new Date().toISOString().slice(0,10)
           const pend=bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
           const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
           const porCobrar=pend.reduce((a,b)=>a+(b.amount||0),0)
           const venAll=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
-          const cobAll=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
-          const progAll=bb.filter(b=>b.status==='Programada').reduce((a,b)=>a+(b.amount||0),0)
-          const buckets=[['Por vencer',b=>dias(b)<=0,C.muted],['1–30 días',b=>dias(b)>=1&&dias(b)<=30,C.soon],['31–60 días',b=>dias(b)>=31&&dias(b)<=60,'#BA7517'],['61–90 días',b=>dias(b)>=61&&dias(b)<=90,C.overdue],['90+ días',b=>dias(b)>90,'#A32D2D']]
+          const inResYear=(dateStr)=> resYear==='all' || String(dateStr||'').slice(0,4)===resYear
+          const cobAll=bb.filter(b=>b.status==='Pagado'&&inResYear(b.paid_at||b.issued_at)).reduce((a,b)=>a+(b.amount||0),0)
+          const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
+          const resYears=[...new Set(bb.map(b=>String(b.paid_at||b.issued_at||b.due||'').slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
           const go=f=>{setFilter(f);clearSel&&clearSel()}
           const tab=(f,l,v,col)=>(<button key={f} onClick={()=>go(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:col}}>{fmt(v)}</div></button>)
           return (<div>
@@ -5104,19 +5107,24 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               </div>
             </div>
             <button onClick={()=>go('clientes')} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:16}}>Ver detalle por cliente →</button>
-            <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600,marginBottom:7}}>Estados</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7,gap:8,flexWrap:'wrap'}}>
+              <span style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Estados</span>
+              <div style={{display:'flex',gap:4}}>
+                {[['all','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v} onClick={()=>setResYear(v)} style={{fontSize:9.5,fontWeight:600,borderRadius:12,padding:'2px 9px',cursor:'pointer',border:`1px solid ${resYear===v?C.accent:C.border}`,background:resYear===v?'#E6EEF1':'#fff',color:resYear===v?C.accent:C.muted}}>{l}</span>)}
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:7}}>
               {tab('emitidas','Por cobrar',porCobrar,C.accent)}
               {tab('vencido','Vencidas',venAll,C.overdue)}
-              {tab('pagado','Cobradas',cobAll,C.normal)}
-              {tab('programadas','Programadas',progAll,C.muted)}
+              {tab('pagado','Cobradas '+(resYear==='all'?'(total)':resYear),cobAll,C.normal)}
+              {tab('programadas','Programadas '+(resYear==='all'?'(total)':resYear),progAll,C.muted)}
             </div>
-            <div style={{display:'flex',gap:16,flexWrap:'wrap',fontSize:11}}>
-              <span onClick={()=>go('anticipos')} style={{cursor:'pointer',fontWeight:600,color:C.accent}}>Anticipos</span>
-              <span onClick={()=>go('terceros')} style={{cursor:'pointer',fontWeight:600,color:C.accent}}>Proveedores</span>
-              <span onClick={()=>go('checklist')} style={{cursor:'pointer',fontWeight:600,color:C.accent}}>Checklist</span>
-              {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{cursor:'pointer',fontWeight:600,color:C.soon}}>Sin año · {sinAnio.length}</span>}
+            <div style={{fontSize:9,color:C.muted,marginBottom:16,lineHeight:1.4}}>Cobradas y Programadas según el año seleccionado. Por cobrar y Vencidas son el total pendiente actual (no dependen del año).</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:9}}>
+              <button onClick={()=>go('anticipos')} style={{background:'#E6EEF1',border:`1px solid #99ABB4`,borderRadius:10,padding:'13px',fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}>Anticipos</button>
+              <button onClick={()=>go('terceros')} style={{background:'#E6EEF1',border:`1px solid #99ABB4`,borderRadius:10,padding:'13px',fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}>Proveedores</button>
             </div>
+            {sinAnio.length>0&&<div onClick={()=>go('sinanio')} style={{fontSize:11,color:C.soon,fontWeight:600,cursor:'pointer'}}>Facturas sin año · {sinAnio.length}</div>}
           </div>)
         })()
         : filter==='clientes' ? (()=>{
