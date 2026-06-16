@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-16 — Ventas en pesos: se congela la UF del día (cifras 100% históricas)
+- Al crear una venta/propuesta en pesos (CLP), ahora se guarda la UF del día (`uf_value`), igual que en las ventas en UF. Antes quedaba en null y su equivalente en UF fluctuaba con la UF de hoy.
+- `ventaUF` usa esa UF histórica para las ventas en pesos (la UF de hoy queda solo como respaldo). Resultado: el monto en UF de toda venta queda congelado a su fecha y no se actualiza nunca → cero fluctuación, cero descalce Ventas↔Dashboard.
+
 ## 2026-06-16 — Dashboard: el "vendido" en UF ahora cuadra con Ventas
 - En modo UF, el Dashboard mostraba el total en pesos reconvertido con la UF de hoy (7.554), mientras Ventas suma los UF nominales (7.615) — los ~61 UF de diferencia eran puro arrastre de conversión.
 - Ahora el bruto/neto/vendido del Dashboard en modo UF usa los **UF nominales** (suma directa de los montos en UF, misma fuente que Ventas y que la meta). Las dos vistas cuadran. En modo CLP no cambia nada.
