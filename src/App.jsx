@@ -3075,6 +3075,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
                 <div style={{fontSize:11,fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',color:C.muted}}>Vendido {fYear||'total'}</div>
                 <div style={{fontSize:30,fontWeight:500,color:C.accent,marginTop:2,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtMonto(vendUF,vendCLP)}</div>
                 <div style={{fontSize:10,color:'#99ABB4',marginTop:5}}>{montoUF?'en UF':'en CLP'} · toca para {montoUF?'$':'UF'}</div>
+                <div style={{marginTop:6}} onClick={e=>e.stopPropagation()}><UFStamp {...ufState}/></div>
               </div>
               <div style={{flex:'1',minWidth:0,display:'flex',flexDirection:'column',gap:8}}>
                 <div style={{background:'#E1F5EE',borderRadius:9,padding:'7px 10px'}}>
@@ -3087,7 +3088,6 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
                 </div>
               </div>
             </div>
-            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:4}}><UFStamp {...ufState}/></div>
             </>
           )
         )}
@@ -3097,21 +3097,13 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         {filtered.length>0&&(buscando ? (
           filtered.map(saleRow)
         ) : (<>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-            <span style={{fontSize:11,color:C.muted,fontWeight:500}}>Agrupar por</span>
-            <div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>
-              {[['abogado','Abogado'],['area','Área']].map(([v,l])=>{ const on=groupBy===v; return (
-                <button key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{border:'none',background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:12,fontWeight:600,padding:'5px 14px',cursor:'pointer'}}>{l}</button>
-              )})}
-            </div>
-          </div>
-          {(()=>{ const totUF=grupos.reduce((a,g)=>a+g.uf,0); const on=selGroup==='__todas__'; return (
-            <div onClick={()=>setSelGroup(on?null:'__todas__')} style={{background:'#fff',border:`0.5px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:'0 10px 10px 0',padding:'8px 12px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent}`:undefined,display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8,marginBottom:8}}>
-              <span style={{fontSize:12,fontWeight:600,color:C.accent}}>Todas las ventas</span>
-              <span style={{fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:16,fontWeight:600,color:C.accent}}>{fmtUFk(totUF)}</span><span style={{fontSize:10,color:'#99ABB4'}}> · {filtered.length}</span></span>
-            </div>
-          )})()}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {(()=>{ const totUF=grupos.reduce((a,g)=>a+g.uf,0); const on=selGroup==='__todas__'; return (
+              <div onClick={()=>setSelGroup(on?null:'__todas__')} style={{background:'#fff',border:`0.5px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:'0 10px 10px 0',padding:'8px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent}`:undefined}}>
+                <div style={{fontSize:12,fontWeight:500,color:C.accent}}>Todas las ventas</div>
+                <div style={{display:'flex',alignItems:'baseline',gap:5,marginTop:2,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(totUF)}</span><span style={{fontSize:10,color:'#99ABB4'}}>· {filtered.length}</span></div>
+              </div>
+            )})()}
             {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; return (
               <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{background:sin?'#FBF7EF':'#fff',border:`0.5px solid ${on?col:(sin?'#FAEEDA':C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:'0 10px 10px 0',padding:'8px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:500,color:C.accent}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:'#854F0B',background:'#FAEEDA',borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
