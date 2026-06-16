@@ -4644,6 +4644,10 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
   const [groupOpen,setGroupOpen] = useState({})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
+  // Navegación por estado: todas las KPI cards / tabs de estado llevan al MISMO acordeón "Por cliente" filtrado por ese estado (vistas coherentes, no listas viejas distintas).
+  const ESTADO_MAP={emitidas:['Pendiente','Vencido'],programadas:['Programada'],vencido:['Vencido'],pagado:['Pagado']}
+  const irAEstado = fl => { setFilter('clientes'); setEstSel(new Set(ESTADO_MAP[fl]||[])) }
+  const estadoActivo = fl => filter==='clientes' && [...estSel].sort().join(',')===(ESTADO_MAP[fl]||[]).slice().sort().join(',') && estSel.size>0
   const [impOpen,setImpOpen] = useState(false)
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
@@ -4965,7 +4969,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {isProg&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
+            {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
               {impOpen&&<>
@@ -4981,8 +4985,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:9}}>
-          {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Programado',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=filter===fl; return (
-            <button key={l} onClick={()=>{setFilter(fl);clearSel()}} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 8px',border:`1.5px solid ${on?col:C.border}`,cursor:'pointer',minWidth:0}}>
+          {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Programado',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=estadoActivo(fl); return (
+            <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 8px',border:`1.5px solid ${on?col:C.border}`,cursor:'pointer',minWidth:0}}>
               <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
               <div style={{fontSize:12,fontWeight:700,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
             </button>
@@ -5097,7 +5101,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
           const go=f=>{setFilter(f);clearSel&&clearSel()}
-          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>go(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:col}}>{fmt(v)}</div></button>)
+          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:col}}>{fmt(v)}</div></button>)
           return (<div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16}}>
               <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Por cobrar · facturas emitidas sin pagar</div>
@@ -5167,10 +5171,6 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const vencidoTot=rows.filter(b=>estadoReal(b)==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
           const estChips=[['Programada','Programadas'],['Pendiente','Emitidas'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
           return (<div>
-            <div style={{display:'flex',gap:7,marginBottom:9}}>
-              <div onClick={()=>setEstSel(new Set(['Pendiente','Vencido']))} style={{flex:1,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase'}}>Por cobrar</div><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmt(porCobrarTot)}</div></div>
-              <div onClick={()=>setEstSel(new Set(['Vencido']))} style={{flex:1,background:vencidoTot>0?'#FCEBEB':'#fff',border:`1px solid ${vencidoTot>0?'#F7C1C1':C.border}`,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}><div style={{fontSize:8,color:vencidoTot>0?'#A32D2D':C.muted,textTransform:'uppercase'}}>Vencido</div><div style={{fontSize:14,fontWeight:700,color:vencidoTot>0?C.overdue:C.text}}>{fmt(vencidoTot)}</div></div>
-            </div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
               {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
               {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
