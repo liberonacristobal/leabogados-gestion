@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-16 — Ventas: lista agrupada en tiles (Abogado / Área), adiós al scroll infinito
+- La lista plana de ~44 ventas pasa a **tiles agrupadas** (2 por fila) con **subtotal UF + conteo** por grupo. De un vistazo ves todos los grupos sin scroll; tocas una tile y abajo aparecen sus ventas.
+- **Agrupar por** alternable: `[Abogado | Área]`. Cada tile lleva el color de la persona; "Sin abogado" se resalta con etiqueta "asignar".
+- La **búsqueda** muestra resultados planos (sin agrupar) para ir directo.
+- Las filas siguen siendo tappables → ficha de la venta. Respeta los filtros de estado/año.
+
 ## 2026-06-16 — Ventas: encabezado "Vendido del año" que cuadra con el Dashboard
 - Nuevo encabezado: **Vendido {año}** (grande, UF) a la izquierda = Activas + Terminadas, el mismo universo que usa el Dashboard (antes el total mostraba solo el filtro de estado, por defecto Activas → descalce con el Dashboard).
 - Al costado derecho, desglose en chips tintados: **Activas** (verde) y **Terminadas** (gris), con su monto y conteo — así el total es auditable (Total = Activas + Terminadas).
