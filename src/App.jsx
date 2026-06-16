@@ -8972,17 +8972,15 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
 
   return (
     <div style={{padding:'16px 20px 60px'}}>
-      {/* Franja: Por cobrar / Vencido (los 2 números que importan) */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 12px'}}>
-          <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.3}}>Por cobrar</div>
-          <div style={{fontSize:17,fontWeight:700,color:porCobrar>0?C.soon:C.text}}>{fmt(porCobrar)}</div>
+      {/* Tira de 4 KPIs del cliente (heredada del landing), scroll horizontal; Programado/Cobrado por año */}
+      {(()=>{
+        const cobYear=real.filter(b=>b.status==='Pagado'&&String(b.paid_at||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
+        const progYear=real.filter(b=>b.status==='Programada'&&String(b.due||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
+        const K=[['Por cobrar',porCobrar,porCobrar>0?C.soon:C.text,false],['Vencido',overdueTot,overdueTot>0?C.overdue:C.text,overdueTot>0],['Programado '+(selYear||''),progYear,C.muted,false],['Cobrado '+(selYear||''),cobYear,C.normal,false]]
+        return <div style={{display:'flex',gap:7,overflowX:'auto',marginBottom:12,paddingBottom:2,scrollbarWidth:'none'}}>
+          {K.map(([l,v,col,alert])=>(<div key={l} style={{flex:'0 0 auto',background:alert?'#FCEBEB':C.card,border:`1px solid ${alert?'#F7C1C1':C.border}`,borderRadius:10,padding:'7px 11px'}}><div style={{fontSize:8,color:alert?'#A32D2D':C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{fmt(v)}</div></div>))}
         </div>
-        <div style={{background:overdueTot>0?'#FCEBEB':C.card,border:`1px solid ${overdueTot>0?'#F7C1C1':C.border}`,borderRadius:10,padding:'9px 12px'}}>
-          <div style={{fontSize:9,color:overdueTot>0?'#A32D2D':C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.3}}>Vencido</div>
-          <div style={{fontSize:17,fontWeight:700,color:overdueTot>0?C.overdue:C.text}}>{fmt(overdueTot)}</div>
-        </div>
-      </div>
+      })()}
 
       {/* Cockpit v2: Año → Proyecto → Factura */}
       <div style={{...card,padding:'12px 13px'}}>
@@ -9058,7 +9056,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const nada = !saleIds.length && !container.length && !sinP.length
           return (<>
             {nada&&<div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Sin facturas en {selYear}{q?' con esa búsqueda':''}.</div>}
-            {saleIds.map(sid=>{
+            {(()=>{ const renderProyecto = sid => {
               const s=clientSales.find(x=>String(x.id)===String(sid)); const rows=bySale[sid]; const open=openProj.has(String(sid))
               const fac=money(rows,esFacturada), cob=money(rows,b=>b.status==='Pagado'), pen=money(rows,b=>['Pendiente','Vencido'].includes(b.status))
               const cuotasCob=rows.filter(b=>['Pagado','Anticipada'].includes(b.status)).length
@@ -9072,7 +9070,19 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   {open&&<div style={{padding:'0 11px 9px'}}>{renderGroupRows(rows)}</div>}
                 </div>
               )
-            })}
+            }
+            if(entities.length>=2){
+              const sByRS={}; saleIds.forEach(sid=>{ const s2=clientSales.find(x=>String(x.id)===String(sid)); const k=s2&&s2.entity_id?String(s2.entity_id):'sin'; (sByRS[k]=sByRS[k]||[]).push(sid) })
+              const order=[...entities.map(e=>String(e.id)),'sin'].filter(k=>sByRS[k]&&sByRS[k].length)
+              return order.map(k=>{ const ent=entities.find(e=>String(e.id)===k); const rsName=ent?(ent.name+(ent.rut?(' · '+ent.rut):'')):'Sin razón social'; return (
+                <div key={'rs'+k} style={{marginBottom:8}}>
+                  <div style={{background:k==='sin'?'#FFF8E1':'#E6EEF1',borderRadius:7,padding:'5px 9px',marginBottom:6}}><span style={{fontSize:10.5,fontWeight:700,color:k==='sin'?'#854F0B':'#003C50'}}>{rsName}</span></div>
+                  {sByRS[k].map(renderProyecto)}
+                </div>
+              )})
+            }
+            return saleIds.map(renderProyecto)
+            })()}
             {container.length>0&&(()=>{ const open=openProj.has('__cont'); return (
               <div style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
                 <div onClick={()=>toggleProj('__cont')} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
