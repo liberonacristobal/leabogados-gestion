@@ -4649,6 +4649,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const irAEstado = fl => { setFilter('clientes'); setEstSel(new Set(ESTADO_MAP[fl]||[])) }
   const estadoActivo = fl => filter==='clientes' && [...estSel].sort().join(',')===(ESTADO_MAP[fl]||[]).slice().sort().join(',') && estSel.size>0
   const [impOpen,setImpOpen] = useState(false)
+  const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
   useEffect(()=>{ try{ localStorage.setItem('fac_year', fYear||'') }catch(e){} },[fYear])
@@ -4992,15 +4993,24 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             </button>
           )})}
         </div>}
-        {filter!=='resumen'&&<div style={{display:'flex',gap:6,marginBottom:8,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
-          {[['resumen','← Resumen'],['clientes','Por cliente'],['all','Todas'],['terceros','Proveedores'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=>(
-            <button key={v} onClick={()=>{setFilter(v);clearSel()}} style={{flex:'0 0 auto',padding:'6px 12px',borderRadius:20,border:`1px solid ${filter===v?C.accent:C.border}`,background:filter===v?'#E6EEF1':'transparent',color:filter===v?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
-          ))}
-          {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&<button onClick={()=>setShowBuscar(s=>!s)} style={{flex:'0 0 auto',marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:20,border:`1px solid ${C.accent}`,background:(q||showBuscar)?C.accent:'#E6EEF1',color:(q||showBuscar)?'#fff':C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',maxWidth:160,overflow:'hidden'}}>
-            <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' style={{flexShrink:0}}><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
-            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q||'Buscar'}</span>
-            {q&&<span onClick={e=>{e.stopPropagation();setQ('')}} style={{flexShrink:0,fontSize:13,lineHeight:1}}>×</span>}
-          </button>}
+        {filter!=='resumen'&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9,flexWrap:'wrap'}}>
+          <span onClick={()=>{setFilter('resumen');clearSel()}} title='Volver al resumen' style={{fontSize:16,color:C.accent,cursor:'pointer',flexShrink:0,lineHeight:1}}>←</span>
+          <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
+            {[['clientes','Por cliente'],['all','Todas']].map(([v,l])=><span key={v} onClick={()=>{setFilter(v);clearSel()}} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:filter===v?C.accent:'transparent',color:filter===v?'#fff':C.muted}}>{l}</span>)}
+          </div>
+          <select value={fYear} onChange={e=>{setFYear(e.target.value); if(!e.target.value)setFMonth('')}} style={{fontSize:11,fontWeight:600,border:`1px solid ${fYear?C.accent:C.border}`,borderRadius:20,padding:'5px 9px',background:fYear?'#E6EEF1':'#fff',color:fYear?C.accent:C.muted,cursor:'pointer',flexShrink:0,appearance:'none'}}>
+            <option value=''>Todos los años</option>
+            {years.map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+          <div style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:10,flexShrink:0}}>
+            <button onClick={()=>setShowBuscar(s=>!s)} title='Buscar' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',cursor:'pointer',color:(q||showBuscar)?C.accent:C.muted,padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg></button>
+            <div style={{position:'relative'}}>
+              <span onClick={()=>setMoreOpen(o=>!o)} title='Más' style={{fontSize:20,color:C.muted,cursor:'pointer',letterSpacing:1,lineHeight:1}}>⋯</span>
+              {moreOpen&&<><div onClick={()=>setMoreOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/><div style={{position:'absolute',top:26,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:160,overflow:'hidden'}}>
+                {[['resumen','Resumen'],['terceros','Proveedores'],['anticipos','Anticipos'],['sinanio',sinAnio.length?`Sin año · ${sinAnio.length}`:'Sin año']].map(([v,l])=><div key={v} onClick={()=>{setMoreOpen(false);setFilter(v);clearSel()}} style={{padding:'10px 13px',fontSize:13,color:filter===v?C.accent:C.text,fontWeight:filter===v?600:400,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{l}</div>)}
+              </div></>}
+            </div>
+          </div>
         </div>}
         {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
@@ -5012,17 +5022,6 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <button onClick={()=>setShowBuscar(false)} style={{flexShrink:0,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Listo</button>
           </div>
         )}
-        <div style={{display:'flex',gap:6,marginBottom:(fYear&&showMeses)?6:4,overflowX:'auto',scrollbarWidth:'none',msOverflowStyle:'none'}}>
-          {[['','Todos'],...years.map(y=>[y,y])].map(([v,l])=>{ const on=fYear===v; return (
-            <button key={v||'all'} onClick={()=>{setFYear(v); if(!v){setFMonth('');setShowMeses(false)}}} style={{flexShrink:0,height:28,padding:'0 13px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l}</button>
-          )})}
-          {fYear&&<button onClick={()=>setShowMeses(s=>!s)} style={{flexShrink:0,height:28,padding:'0 11px',borderRadius:20,border:`1px solid ${fMonth?C.accent:C.border}`,background:fMonth?'#E6EEF1':'#fff',color:fMonth?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{fMonth?MONTHS[parseInt(fMonth)-1].slice(0,3):'Mes'} {showMeses?'▴':'▾'}</button>}
-        </div>
-        {fYear&&showMeses&&<div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:5,marginBottom:4}}>
-          {[['','Todos'],...MONTHS.map((m,i)=>[String(i+1).padStart(2,'0'),m.slice(0,3)])].map(([v,l])=>{ const on=fMonth===v; return (
-            <button key={v||'all'} onClick={()=>{setFMonth(v);setShowMeses(false)}} style={{height:27,borderRadius:7,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',padding:0}}>{l}</button>
-          )})}
-        </div>}
         </>}
         {(openClients.size>0||(isProg&&selected.size>0))&&(
           <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
