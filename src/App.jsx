@@ -4642,6 +4642,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
   const [filter,setFilter] = useState('resumen')
   const {uf:ufHoy} = useUF()
+  const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
   const [impOpen,setImpOpen] = useState(false)
   const [fYear,setFYear] = useState(String(currentYear))
   const [fMonth,setFMonth] = useState('')
@@ -5124,6 +5125,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const venceDe=b=> b.due || (b.issued_at?addDays(b.issued_at,30):'')
           // Vencida DERIVADA: emitida pendiente cuyo vencimiento (o emisión + 30 días) ya pasó.
           const estadoReal=b=> (b.status==='Pendiente' && venceDe(b) && venceDe(b)<hoy) ? 'Vencido' : b.status
+          const matchEst=b=>{ if(estSel.size===0) return true; const er=estadoReal(b); return estSel.has(er)||(estSel.has('Pagado')&&er==='Anticipada') }
           let rows=bb.filter(b=>!b.deleted_at)
           if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
           if(q.trim()) rows=rows.filter(b=>{ const c=clients.find(x=>x.id===b.client_id); return (c?.name||'').toLowerCase().includes(q.toLowerCase()) })
@@ -5142,7 +5144,21 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               {['Pendiente','Vencido'].includes(er)&&<div style={{marginTop:6}}><button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:'#E1F5EE',color:C.greenText,border:'none',borderRadius:8,padding:'3px 11px',fontWeight:600,cursor:'pointer'}}>Pagar</button></div>}
             </div>
           )}
-          return (<div>{list.map(({c,arr})=>{
+          const porCobrarTot=rows.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+(b.amount||0),0)
+          const vencidoTot=rows.filter(b=>estadoReal(b)==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+          const estChips=[['Programada','Programadas'],['Pendiente','Emitidas'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
+          return (<div>
+            <div style={{display:'flex',gap:7,marginBottom:9}}>
+              <div onClick={()=>setEstSel(new Set(['Pendiente','Vencido']))} style={{flex:1,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase'}}>Por cobrar</div><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmt(porCobrarTot)}</div></div>
+              <div onClick={()=>setEstSel(new Set(['Vencido']))} style={{flex:1,background:vencidoTot>0?'#FCEBEB':'#fff',border:`1px solid ${vencidoTot>0?'#F7C1C1':C.border}`,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}><div style={{fontSize:8,color:vencidoTot>0?'#A32D2D':C.muted,textTransform:'uppercase'}}>Vencido</div><div style={{fontSize:14,fontWeight:700,color:vencidoTot>0?C.overdue:C.text}}>{fmt(vencidoTot)}</div></div>
+            </div>
+            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
+              {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
+              {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
+            </div>
+            {list.map(({c,arr})=>{
+            const visible=arr.filter(matchEst)
+            if(!visible.length) return null
             const open=openClients.has(c.id)
             const nP=arr.filter(b=>b.status==='Programada').length
             const nE=arr.filter(b=>estadoReal(b)==='Pendiente').length
@@ -5150,7 +5166,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             const nPag=arr.filter(b=>['Pagado','Anticipada'].includes(b.status)).length
             const pend=arr.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+(b.amount||0),0)
             const prox=arr.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))[0]
-            const grupos=[['Vencidas',arr.filter(b=>estadoReal(b)==='Vencido').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Emitidas pendientes',arr.filter(b=>estadoReal(b)==='Pendiente').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Programadas',arr.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))],['Pagadas',arr.filter(b=>['Pagado','Anticipada'].includes(b.status)).sort((a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''))],['Anuladas',arr.filter(b=>b.status==='Anulada')]]
+            const grupos=[['Vencidas',visible.filter(b=>estadoReal(b)==='Vencido').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Emitidas pendientes',visible.filter(b=>estadoReal(b)==='Pendiente').sort((a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||''))],['Programadas',visible.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))],['Pagadas',visible.filter(b=>['Pagado','Anticipada'].includes(b.status)).sort((a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''))],['Anuladas',visible.filter(b=>b.status==='Anulada')]]
             return (
               <div key={c.id} style={{border:`1px solid ${nV>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
                 <div onClick={()=>toggleClient(c.id)} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>

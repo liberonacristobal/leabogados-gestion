@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15 — Facturación Por cliente: filtros por estado + franja accionable (Etapa 3)
+- Vista Por cliente: franja Por cobrar / Vencido (tocar filtra), chips multi-select por estado (Programadas/Emitidas/Vencidas/Pagadas/Anuladas) que reducen lo que se muestra en el acordeón, y botón Limpiar. Los clientes sin facturas del estado filtrado se ocultan.
+
+
 ## 2026-06-15 — Facturación: UF en vivo en programadas + confirmación al emitir (Etapa 2)
 - Las facturas programadas en UF muestran su equivalente en CLP recalculado al valor UF del día (solo display, no toca la DB; la UF pactada no cambia). La fila muestra X UF y el CLP al día.
 - Al emitir una programada (Ya emitida / Confirmar emitida), confirmación explícita con el monto en UF y su equivalente en CLP al día antes de generar la Factura N°.
