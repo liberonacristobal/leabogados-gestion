@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-15 — Facturación: UF en vivo en programadas + confirmación al emitir (Etapa 2)
+- Las facturas programadas en UF muestran su equivalente en CLP recalculado al valor UF del día (solo display, no toca la DB; la UF pactada no cambia). La fila muestra X UF y el CLP al día.
+- Al emitir una programada (Ya emitida / Confirmar emitida), confirmación explícita con el monto en UF y su equivalente en CLP al día antes de generar la Factura N°.
+
+
 ## 2026-06-15 — Facturación: vista Por cliente (acordeón) [Etapa 1]
 - Nueva vista Por cliente: una fila por cliente (colapsada) con mini-resumen de estados (N prog/emit/venc/pag), monto pendiente y próxima a emitir. Al expandir, las facturas se agrupan por estado en orden Vencidas → Emitidas pendientes → Programadas → Pagadas → Anuladas, ordenadas dentro de cada grupo. Vencida DERIVADA automáticamente (emitida pendiente con vencimiento o emisión+30 días pasado). Pagar rápido en fila. Accesible desde el chip Por cliente y el botón del Resumen. Factura N° nunca abreviado.
 
