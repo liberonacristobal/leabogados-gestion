@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-17 — Auditoría: fixes de código + uniformidad de razón social
+- **Saldo del cliente con fuente única**: la ficha ahora calcula fondos/gastos/saldo con `fgCliente` (mismo criterio que la lista de Gastos y el Dashboard); antes usaba un filtro distinto que podía divergir.
+- **Razón social en Title Case al mostrar** (`titleCaseRS`): la RS del SII deja de gritar en MAYÚSCULAS en la app (ficha, listas, ventas, facturación, conciliación, Gastos); respeta SpA/Ltda/S.A. y conectores. El dato crudo del SII NO se toca.
+- **Uniformidad de paleta**: el nombre del cliente siempre en grafito (no azul); la RS subtítulo en AZUL2 (`C.muted`), peso 400 (se quitaron colores hardcodeados off-paleta).
+- **Gastos landing**: mensaje de vacío correcto en vista Archivados; el acceso "Sin cliente" se muestra siempre.
+- **Anti-duplicado de facturas**: al ingresar PDFs, el chequeo de folio existente normaliza "318" / "Factura 318" (evita la duplicación que generó 21 facturas dobles).
+
 ## 2026-06-17 — Gastos: Historial de rendiciones como ícono en el encabezado
 - El "Historial de rendiciones" dejó de ser un bloque colapsable al pie de la lista. Ahora es un **ícono (reloj) en el encabezado**; al tocarlo abre el historial como panel (con ← para volver), dejando el landing 100% enfocado en encontrar clientes. Mismos filtros (cliente/desde/hasta) y acciones de cada rendición.
 
