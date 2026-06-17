@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — Tarjeta "Personales · debes a la oficina" en Gastos
+- Nueva tarjeta en el landing de Gastos con los gastos personales (personal_de): limited ve solo el suyo ("Tus gastos personales · debes a la oficina $X"), admin ve a todos por persona. Se despliega al tocar; cada gasto abre su ficha. Los gastos personales se excluyen del bucket "Sin cliente" (ya tienen dueño).
+
 ## 2026-06-17 — Carga masiva: "¿De quién es?" en el preview
 - En el preview de la carga, las filas sin cliente externo (sin cliente u oficina) muestran "¿De quién es?" con chips de los 5 miembros: marcar una la deja como personal de ese miembro (sale del cliente) en el momento de cargar, sin triagear después. "Quitar" revierte.
 
