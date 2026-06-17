@@ -9738,9 +9738,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         <div style={{marginBottom:20}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text}}>Gastos y Fondos</div>
-            <div style={{display:'flex',gap:6}}>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
               <button onClick={()=>onAddFondo(client)} style={chipBtn('green')}>+ Fondo</button>
               <button onClick={()=>onAddGasto(client)} style={chipBtn('soft')}>+ Gasto</button>
+              {clientExpenses.length>0&&<button onClick={()=>onRendicion(client)} style={chipBtn('greenSolid')}>Rendir fondos</button>}
             </div>
           </div>
           {clientExpenses.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin movimientos</div>}
@@ -9775,9 +9776,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             )
           })}
           {clientExpenses.length>5&&<div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'8px 0'}}>+{clientExpenses.length-5} más en Gastos y Fondos</div>}
-          {clientExpenses.length>0&&(
-            <button onClick={()=>onRendicion(client)} style={{...chipBtn('greenSolid'),width:'100%',height:34,marginTop:8}}>↓ Rendir fondos</button>
-          )}
           {(()=>{
             const rends=(rendiciones||[]).filter(r=>r.client_id===client.id&&r.tipo==='cliente').sort((a,b)=>b.created_at>a.created_at?1:-1)
             if(!rends.length) return null
