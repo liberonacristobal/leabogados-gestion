@@ -9498,6 +9498,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const toggleSale = id => setOpenSale(p=>{const s=new Set(p); s.has(id)?s.delete(id):s.add(id); return s})
   const [openSaleGrp,setOpenSaleGrp] = useState(()=>new Set())   // grupos de ventas (Activas/Terminadas), colapsados por defecto
   const toggleSaleGrp = k => setOpenSaleGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
+  const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
   const ufState = useUF()
   const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || 40000
   const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -9554,10 +9555,16 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           const entities = (clientEntities||[]).filter(e=>e.client_id===client.id)
           if(!entities.length) return null
           return (
-            <div style={{marginBottom:16,padding:'10px 14px',borderRadius:10,background:'#F5F7F9',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:8}}>Razones sociales facturadas</div>
-              {entities.map(e=>(
-                <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+            <div style={{marginBottom:16,padding:'4px 14px',borderRadius:10,background:'#F5F7F9',border:`1px solid ${C.border}`}}>
+              <div className="lf-row" onClick={()=>setOpenEnt(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600}}>
+                  <span aria-hidden="true" style={{display:'inline-block',transform:openEnt?'rotate(90deg)':'none',transition:'transform .12s',fontSize:14,lineHeight:1}}>›</span>
+                  Razones sociales facturadas
+                </div>
+                <span style={{fontSize:9,color:C.muted,fontWeight:700}}>{entities.length}</span>
+              </div>
+              {openEnt&&entities.map(e=>(
+                <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name||'—'}</div>
                   <div style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</div>
                   <Chev/>
