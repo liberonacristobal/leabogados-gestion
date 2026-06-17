@@ -7127,6 +7127,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Estado de cada fila para la vista previa. montoBad es ortogonal al match.
   const montoBad = r => r.monto==null || r.monto<=0
   const bucketOf = r => (r.client_id||r.isInternal||r.personal_de) ? 'auto' : (r.suggestion ? 'sug' : (r.candidates?.length ? 'rev' : 'man'))
+  // Glosa final tal como se guardará: si la IA ya compuso (conceptoFix) se usa el concepto; si no, se concatena el subconcepto. Igual que el insert.
+  const glosaFinal = r => { const sub=(r.subconcepto||'').trim(), base=(r.concepto||'').trim(); return (!r.conceptoFix && sub && !base.toLowerCase().includes(sub.toLowerCase())) ? `${base} — ${sub}` : base }
   const listas = (rows||[]).filter(rowReady)
   const sugeridos = (rows||[]).filter(r=>!!r.suggestion)
   const nAuto = (rows||[]).filter(r=>bucketOf(r)==='auto').length
@@ -7262,7 +7264,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                   {bad&&<div style={{fontSize:11,color:C.overdue,fontWeight:600,marginBottom:6}}>Sin monto válido — se importa como $0 solo con "Importar todo".</div>}
                   {/* concepto (con corrección de IA si aplica) */}
-                  {r.conceptoFix&&r.conceptoOrig&&<div style={{fontSize:11,marginBottom:4}}><span style={{color:C.muted,textDecoration:'line-through',marginRight:6}}>{r.conceptoOrig}</span><span style={{color:C.normal,fontWeight:600}}>{r.concepto}</span><span style={{color:C.muted,marginLeft:6}}>· corregido por IA</span></div>}
+                  {/* Glosa final combinada (lo que se guarda), en una línea. Concepto + Subconcepto quedan editables debajo. */}
+                  <div style={{display:'flex',alignItems:'baseline',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+                    <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,flexShrink:0}}>Glosa</span>
+                    <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{glosaFinal(r)||'—'}</span>
+                    {r.conceptoFix&&<span style={{fontSize:9,fontWeight:700,color:C.greenText,background:'#E1F5EE',borderRadius:4,padding:'1px 6px',flexShrink:0}}>IA</span>}
+                  </div>
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} placeholder='Concepto'
                       style={{flex:'1 1 140px',minWidth:120,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}/>
