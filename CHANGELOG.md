@@ -12,6 +12,9 @@
 ## 2026-06-17 — Carga masiva: "¿De quién es?" en el preview
 - En el preview de la carga, las filas sin cliente externo (sin cliente u oficina) muestran "¿De quién es?" con chips de los 5 miembros: marcar una la deja como personal de ese miembro (sale del cliente) en el momento de cargar, sin triagear después. "Quitar" revierte.
 
+## 2026-06-17 — Asignar responsable desde la ficha del cliente
+- En el encabezado de la ficha, el chip de responsable es tocable: si no hay, dice "Asignar responsable ▾"; al tocarlo aparecen los 5 abogados para asignar (o "Quitar"). Sirve para que los clientes ocasionales (bucket "General") se asignen a un abogado que gestione el cobro.
+
 ## 2026-06-17 — Triage de oficina colapsado (menos recargado)
 - En el gasto de oficina, el triage ahora es un solo pill "Oficina ▾" por defecto; al tocarlo aparecen los 5 miembros para reasignarlo (o "es de la oficina" para cerrar). Antes mostraba siempre los 5 chips + hint, lo que recargaba la tarjeta.
 
