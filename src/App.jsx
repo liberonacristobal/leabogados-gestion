@@ -7507,6 +7507,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Agrupa los pendientes: por cliente (con su saldo de fondos), personales (personal_de) y sin asignar.
   const notaGroups = useMemo(()=>{ const byClient={},personal={},sin=[]; notariaPend.forEach(e=>{ if(e.client_id){(byClient[e.client_id]=byClient[e.client_id]||[]).push(e)} else if(e.personal_de){(personal[e.personal_de]=personal[e.personal_de]||[]).push(e)} else sin.push(e) }); return {byClient,personal,sin} },[notariaPend])
   const marcarPersonal = async(e,persona)=>{ const patch={personal_de:persona||null, paid_by_client: persona?false:(e.category==='Notaria')}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); setNotaPersonaPick(null) }catch(err){alert('Error: '+err.message)} }
+  // Triage de gasto de oficina (Liberona Escala) → personal de un miembro: lo saca del folder de la oficina y queda como personal.
+  const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
+  const triagePersonal = async(e,persona)=>{ const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)) }catch(err){alert('Error: '+err.message)} }
   const notaRow = e => { const on=selNota.has(e.id); return (
     <div key={e.id} onClick={()=>toggleNota(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?'#EEF3F6':'transparent'}}>
       <span style={{width:18,height:18,borderRadius:5,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
@@ -7648,9 +7651,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):alert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>Liquidado</button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E6EEF1',color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
               {isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A',fontWeight:600}}>Carga masiva</span>}
+              {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10,padding:'1px 8px',borderRadius:20,background:pc.bg,color:pc.color,fontWeight:700}}>Personal · {e.personal_de}</span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
+            {!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(
+              <div style={{marginTop:7}} onClick={stop}>
+                <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:5}}>¿De quién es?</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {PERSONAS_NOTA.map(p=>{const pc=personChip(p);return <button key={p} onClick={()=>triagePersonal(e,p)} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{p}</button>})}
+                  <span style={{fontSize:11,color:C.muted,alignSelf:'center'}}>· déjalo así si es de la oficina</span>
+                </div>
+              </div>
+            )}
             {needsClass&&(
               <div style={{marginTop:6}} onClick={stop}>
                 {e.created_by ? (
@@ -8452,6 +8465,15 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       {!isFondo&&f.category==='Notaria'&&(
         <Fld label='OT (notaría)'><Inp value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206'/></Fld>
       )}
+      {!isFondo&&(
+        <Fld label='Personal de un miembro'>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+            {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const on=f.personal_de===m;const pc=personChip(m);return <button key={m} type='button' onClick={()=>up('personal_de',on?null:m)} style={{fontSize:12,borderRadius:20,padding:'5px 12px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:`1px solid ${on?pc.color:pc.color+'33'}`}}>{m}</button>})}
+            {f.personal_de&&<button type='button' onClick={()=>up('personal_de',null)} style={{fontSize:12,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>}
+          </div>
+          {f.personal_de&&<div style={{fontSize:11,color:C.muted,marginTop:5}}>Se guarda como gasto personal de {f.personal_de} (sale del cliente).</div>}
+        </Fld>
+      )}
       <Fld label='Cliente'>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <span style={{fontSize:13,fontWeight:600,color:client?C.text:C.overdue}}>{client?.name||'Sin cliente'}</span>
@@ -8479,7 +8501,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.amount} onClick={()=>onSave({...f,amount:parseInt(f.amount)||0,subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!f.amount} onClick={()=>onSave({...f,amount:parseInt(f.amount)||0,subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
