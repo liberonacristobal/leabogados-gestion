@@ -7270,7 +7270,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
               <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Abogados</span>
               {ents.map(([k,n])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; return (
-                <button key={k} onClick={()=>setRespFilter(on?null:k)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',border:`1px solid ${on?pc.color:'transparent'}`,background:pc.bg,color:pc.color}}>{sin?'Sin responsable':k} · {n}</button>
+                <button key={k} onClick={()=>setRespFilter(on?null:k)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',border:`1px solid ${on?pc.color:'transparent'}`,background:pc.bg,color:pc.color}}>{sin?'General':k} · {n}</button>
               )})}
               {respFilter&&<button onClick={()=>setRespFilter(null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
             </div>
@@ -7895,7 +7895,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const col=verPos?C.greenText:'#A32D2D'; const a=Math.abs(amt),sg=amt<0?'-':''; const amtK = a>=1e6?`$${sg}${(a/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}M`:(a>=1e3?`$${sg}${Math.round(a/1e3)}K`:fmt(amt)); return (
                     <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderRadius:9,padding:'6px 7px',cursor:'pointer',background:on?pc.bg:'#fff',minWidth:0}}>
                       <div style={{fontSize:13.5,fontWeight:700,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{amtK}</div>
-                      <div style={{fontSize:9,fontWeight:700,color:pc.color,textTransform:'uppercase',letterSpacing:'0.02em',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'Sin resp.':k}</div>
+                      <div style={{fontSize:9,fontWeight:700,color:pc.color,textTransform:'uppercase',letterSpacing:'0.02em',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'General':k}</div>
                     </div>
                   )})}
                 </div>
