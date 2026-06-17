@@ -8104,7 +8104,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <div key={c.id} onClick={()=>setSelectedClient(c)} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'9px 12px',borderBottom:`1px solid #EEF1F3`,borderLeft:`3px solid ${neg?C.overdue:C.normal}`,cursor:'pointer'}}>
                   <div style={{width:32,height:32,borderRadius:'50%',background:neg?'#FCEBEB':'#E1F5EE',color:neg?'#A32D2D':C.greenText,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:6}}>{c.name}{c.is_occasional&&<span style={{fontSize:9,fontWeight:600,color:'#5F5E5A',background:'#F1EFE8',borderRadius:3,padding:'1px 6px',flexShrink:0}}>ocasional</span>}</div>
                     <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsLine}</div>
                   </div>
                   {onToggleClientStatus&&<button onClick={ev=>{ev.stopPropagation();onToggleClientStatus(c)}} title={c.status==='Terminado'?'Reactivar cliente':'Archivar de la lista'} style={{width:26,height:26,borderRadius:6,border:`0.5px solid ${c.status==='Terminado'?C.normal:C.border}`,background:'#fff',color:c.status==='Terminado'?C.greenText:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,flexShrink:0}}>
@@ -9755,6 +9755,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div style={{fontSize:11,color:C.muted,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${titleCaseRS(rs.name)}${rs.rut?` | ${rs.rut}`:''}`}</div>:null })()}
             <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
               {client.type}
+              {client.is_occasional&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A',fontWeight:600}}>ocasional</span>}
               {client.status==='Terminado'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#F5F7F9',color:C.muted,fontWeight:600}}>Terminado</span>}
               {client.status==='Prospecto'&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#FFF8E1',color:'#C77F18',fontWeight:600}}>Prospecto</span>}
               {(()=>{ const pc=responsable?personChip(responsable):null; return <button onClick={()=>setRespPick(v=>!v)} style={{fontSize:10,background:pc?pc.bg:'#F1EFE8',color:pc?pc.color:'#5F5E5A',borderRadius:10,padding:'1px 8px',fontWeight:600,border:'none',cursor:'pointer'}}>{responsable?`${responsable} ▾`:'Asignar responsable ▾'}</button> })()}
@@ -10128,15 +10129,15 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   // Actualizar selected cuando cambian los datos
   useEffect(()=>{ if(selected) setSelected(clients.find(c=>c.id===selected.id)||null) },[clients])
 
-  const activeN=clients.filter(c=>!c.is_internal&&(c.status||'Activo')==='Activo').length
-  const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
-  const prospectoN=clients.filter(c=>!c.is_internal&&c.status==='Prospecto').length
+  const activeN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&(c.status||'Activo')==='Activo').length
+  const endedN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&c.status==='Terminado').length
+  const prospectoN=clients.filter(c=>!c.is_internal&&!c.is_occasional&&c.status==='Prospecto').length
   // Responsable de un cliente = responsable de su venta más reciente (campo responsible en sales)
   const responsableDe = useMemo(()=>{ const m={}; clients.forEach(c=>{ if(c.abogado_responsable) m[c.id]=c.abogado_responsable }); [...sales].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[s.client_id]) m[s.client_id]=s.responsible }); return m },[clients,sales])
   const responsables = useMemo(()=>[...new Set(Object.values(responsableDe))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es')),[responsableDe])
   const tareasDe = useMemo(()=>{ const m={}; tasks.forEach(t=>{ if(t.client_id&&t.status!=='Terminado') m[t.client_id]=(m[t.client_id]||0)+1 }); return m },[tasks])
   const cl = useMemo(()=>{
-    let base = clients
+    let base = clients.filter(c=>!c.is_occasional)   // los ocasionales viven en Gastos/cobranza, no en la lista formal
     if(sFilter==='Activo') base=base.filter(c=>(c.status||'Activo')==='Activo')
     else if(sFilter==='Terminado') base=base.filter(c=>c.status==='Terminado')
     else if(sFilter==='Prospecto') base=base.filter(c=>c.status==='Prospecto')
