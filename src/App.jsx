@@ -7892,11 +7892,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   {respFilter&&<button onClick={()=>setRespFilter(null)} style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:7}}>
-                  {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=verPos?C.greenText:'#A32D2D'; return (
-                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderLeft:`3px solid ${pc.color}`,borderRadius:10,padding:'8px 10px',cursor:'pointer',background:on?pc.bg:'#fff'}}>
-                      <div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'0.05em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'Sin responsable':k}</div>
-                      <div style={{fontSize:15,fontWeight:700,color:col,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(amt)}</div>
-                      <div style={{fontSize:9,color:'#99ABB4',marginTop:2}}>{n} {n===1?'cliente':'clientes'}</div>
+                  {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const col=verPos?C.greenText:'#A32D2D'; const a=Math.abs(amt),sg=amt<0?'-':''; const amtK = a>=1e6?`$${sg}${(a/1e6).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2})}M`:(a>=1e3?`$${sg}${Math.round(a/1e3)}K`:fmt(amt)); return (
+                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderRadius:10,padding:'8px 10px',cursor:'pointer',background:on?pc.bg:'#fff'}}>
+                      <div style={{fontSize:17,fontWeight:700,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{amtK}</div>
+                      <div style={{fontSize:11,fontWeight:700,color:pc.color,textTransform:'uppercase',letterSpacing:'0.04em',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'Sin resp.':k}</div>
                     </div>
                   )})}
                 </div>
