@@ -6659,8 +6659,9 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate}) {
+function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
+  const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
   const [cargando,setCargando] = useState(false)
@@ -7043,7 +7044,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const fecha = parseFecha(getField('fecha'))
         const monto = parseMonto(getField('monto'))
         if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return null  // fila vacía
-        const categoria = tipo==='fondo' ? 'Fondo' : mapCategoria(getField('categoria'))
+        const categoria = tipo==='fondo' ? 'Fondo' : (notaria && !String(getField('categoria')||'').trim() ? 'Notaria' : mapCategoria(getField('categoria')))
         // Gasto personal de un miembro de la oficina: "Personal · Martín" / "Personal: Martín" → personal_de (no es cliente).
         const _pm = nombre.match(/^\s*personal\s*[·:.\-]\s*(.+)$/i)
         let personalDe = null
@@ -7174,31 +7175,37 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Paso 1: tipo + subir archivo */}
       {!rows&&(
         <>
-          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Sube un Excel — la app reconoce las columnas solas.</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-            {[['gasto','Gastos'],['fondo','Fondos']].map(([v,l])=>(
-              <button key={v} type='button' onClick={()=>setTipo(v)} style={{padding:'10px',borderRadius:8,border:`2px solid ${tipo===v?C.accent:C.border}`,background:tipo===v?'#E6EEF1':'transparent',color:tipo===v?C.accent:C.muted,fontSize:13,fontWeight:700,cursor:'pointer'}}>{l}</button>
-            ))}
-          </div>
-          <label style={{display:'block',padding:'24px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#F5F7F9'}}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:notaria?14:10}}>{notaria?'Sube el Excel de notaría — la app reconoce las columnas y deja la categoría en Notaría.':'Sube un Excel — la app reconoce las columnas solas.'}</div>
+          {!notaria&&(
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+              {[['gasto','Gastos'],['fondo','Fondos']].map(([v,l])=>(
+                <button key={v} type='button' onClick={()=>setTipo(v)} style={{padding:'10px',borderRadius:8,border:`2px solid ${tipo===v?C.accent:C.border}`,background:tipo===v?'#E6EEF1':'transparent',color:tipo===v?C.accent:C.muted,fontSize:13,fontWeight:700,cursor:'pointer'}}>{l}</button>
+              ))}
+            </div>
+          )}
+          <label style={{display:'block',padding:notaria?'30px 24px':'24px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#F5F7F9'}}>
             <input type='file' accept='.xlsx,.xls' onChange={onFile} style={{display:'none'}}/>
-            <div style={{fontSize:13,color:C.accent,fontWeight:600}}>{cargando?'Leyendo...':'Seleccionar archivo Excel'}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:4}}>.xlsx o .xls</div>
+            <div style={{fontSize:notaria?15:13,color:C.accent,fontWeight:600}}>{cargando?'Leyendo...':(notaria?'Seleccionar Excel de notaría':'Seleccionar archivo Excel')}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4}}>{notaria?'.xlsx · categoría Notaría automática':'.xlsx o .xls'}</div>
           </label>
           <div style={{textAlign:'center',marginTop:12}}>
-            <button type='button' onClick={descargarPlantilla} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>
-              {genPlantilla?'Generando plantilla...':'Descargar plantilla modelo (.xlsx)'}
-            </button>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Incluye hojas Gastos, Fondos e Instrucciones con ejemplos</div>
-            <button type='button' onClick={descargarPlantillaNotaria} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline',marginTop:8}}>
+            {!notaria&&(<>
+              <button type='button' onClick={descargarPlantilla} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>
+                {genPlantilla?'Generando plantilla...':'Descargar plantilla modelo (.xlsx)'}
+              </button>
+              <div style={{fontSize:10,color:C.muted,marginTop:3}}>Incluye hojas Gastos, Fondos e Instrucciones con ejemplos</div>
+            </>)}
+            <button type='button' onClick={descargarPlantillaNotaria} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline',marginTop:notaria?0:8}}>
               {genPlantilla?'Generando…':'Descargar modelo de notaría (.xlsx)'}
             </button>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Enfocado en notaría: Concepto · Subconcepto · OT, categoría Notaria precargada</div>
+            {!notaria&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Enfocado en notaría: Concepto · Subconcepto · OT, categoría Notaria precargada</div>}
           </div>
           {bulkImports.length>0&&(
             <div style={{marginTop:18,paddingTop:14,borderTop:`0.5px solid ${C.border}`}}>
-              <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Importaciones recientes</div>
-              <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+              {notaria
+                ? <button type='button' onClick={()=>setShowRecientes(s=>!s)} style={{background:'none',border:'none',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}>Importaciones recientes ({bulkImports.length}) {showRecientes?'▴':'▾'}</button>
+                : <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Importaciones recientes</div>}
+              {(!notaria||showRecientes)&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:notaria?8:0}}>
                 {bulkImports.map((b,i)=>(
                   <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:i<bulkImports.length-1?`0.5px solid ${C.border}`:'none'}}>
                     <div style={{flex:1,minWidth:0}}>
@@ -7210,7 +7217,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                       : <button onClick={()=>setUndoTarget({batchId:b.id,count:b.row_count})} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer',flexShrink:0}}>Deshacer</button>}
                   </div>
                 ))}
-              </div>
+              </div>}
             </div>
           )}
           {undoTarget&&<UndoConfirm target={undoTarget} undoing={undoing} onCancel={()=>setUndoTarget(null)} onConfirm={async()=>{ setUndoing(true); const ok=await onUndoImport(undoTarget.batchId); setUndoing(false); if(ok) setUndoTarget(null) }}/>}
@@ -14430,7 +14437,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:{notaria:true}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)}/>}
@@ -14455,7 +14462,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title='Carga masiva' onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
