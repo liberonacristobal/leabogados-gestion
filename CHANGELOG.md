@@ -1,7 +1,7 @@
 # Changelog
 
-## 2026-06-17 — Filtro por abogado responsable en Gastos
-- Fila de chips de responsable en el landing de Gastos (con el nº de clientes en saldo negativo de cada uno = carga de cobranza). Tocar uno filtra tanto las tarjetas Saldo negativo/a favor (totales del responsable) como la lista de clientes. "Todos" lo limpia. Sirve para saber quién tiene que salir a cobrar.
+## 2026-06-17 — Cobranza por responsable (mini-tarjetas) en Gastos
+- Debajo de los saldos globales, mini-tarjetas por abogado responsable con la **deuda por cobrar** de cada uno = suma de los saldos negativos de SUS clientes (NO se compensa con los clientes que están a favor). Ordenadas por mayor deuda. Tocar una filtra las tarjetas globales y la lista a ese responsable; el saldo (negativo/a favor) decide qué muestran las mini (por cobrar vs a favor). "Todos" limpia.
 
 ## 2026-06-17 — Tarjeta "Personales · debes a la oficina" en Gastos
 - Nueva tarjeta en el landing de Gastos con los gastos personales (personal_de): limited ve solo el suyo ("Tus gastos personales · debes a la oficina $X"), admin ve a todos por persona. Se despliega al tocar; cada gasto abre su ficha. Los gastos personales se excluyen del bucket "Sin cliente" (ya tienen dueño).

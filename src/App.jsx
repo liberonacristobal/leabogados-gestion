@@ -7860,8 +7860,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
           const baseList = respFilter ? baseAll.filter(c=> respFilter==='__sin__' ? !c.abogado_responsable : c.abogado_responsable===respFilter) : baseAll
           const negL=baseList.filter(c=>saldoDe(c)<0), posL=baseList.filter(c=>saldoDe(c)>=0)
-          // Responsables presentes (con su nº de clientes en saldo negativo = carga de cobranza). Tocar filtra tarjetas y lista.
-          const respList = (()=>{ const m=new Map(); baseAll.forEach(c=>{ const k=c.abogado_responsable||'__sin__'; const o=m.get(k)||{neg:0,n:0}; o.n++; if(saldoDe(c)<0)o.neg++; m.set(k,o) }); return [...m.entries()].sort((a,b)=>b[1].neg-a[1].neg) })()
+          // Por responsable: deuda = suma de saldos negativos de SUS clientes (NO se compensa con los que están a favor). 'a favor' análogo.
+          const respList = (()=>{ const m=new Map(); baseAll.forEach(c=>{ const k=c.abogado_responsable||'__sin__'; const o=m.get(k)||{negAmt:0,negN:0,posAmt:0,posN:0}; const s=saldoDe(c); if(s<0){o.negAmt+=s;o.negN++}else{o.posAmt+=s;o.posN++} m.set(k,o) }); return [...m.entries()] })()
+          const verPos = saldoFilter==='pos'
+          const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
           const cards=[['neg','Saldo negativo',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','Saldo a favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
             <div style={{display:'flex',gap:8,marginBottom:8}}>
@@ -7882,13 +7884,21 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 )
               })}
             </div>
-            {respList.length>1&&(
-              <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:8}}>
-                <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Responsable</span>
-                {respList.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; return (
-                  <button key={k} onClick={()=>setRespFilter(on?null:k)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`${on?2:0.5}px solid ${on?pc.color:'transparent'}`}}>{sin?'Sin responsable':k}{o.neg>0&&<span style={{marginLeft:5,color:'#A32D2D'}}>· {o.neg}</span>}</button>
-                )})}
-                {respFilter&&<button onClick={()=>setRespFilter(null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
+            {respCobranza.length>1&&(
+              <div style={{marginBottom:8}}>
+                <div style={{display:'flex',alignItems:'center',marginBottom:6}}>
+                  <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{verPos?'A favor por responsable':'Por cobrar por responsable'}</span>
+                  {respFilter&&<button onClick={()=>setRespFilter(null)} style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:7}}>
+                  {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=verPos?C.greenText:'#A32D2D'; return (
+                    <div key={k} onClick={()=>setRespFilter(on?null:k)} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderLeft:`3px solid ${pc.color}`,borderRadius:9,padding:'7px 9px',cursor:'pointer',background:on?pc.bg:'#fff'}}>
+                      <span style={{fontSize:10,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:20,padding:'1px 8px'}}>{sin?'Sin responsable':k}</span>
+                      <div style={{fontSize:13,fontWeight:700,color:col,marginTop:5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(amt)}</div>
+                      <div style={{fontSize:9,color:C.muted}}>{n} {verPos?(n===1?'cliente a favor':'clientes a favor'):(n===1?'cliente por cobrar':'clientes por cobrar')}</div>
+                    </div>
+                  )})}
+                </div>
               </div>
             )}
             {(()=>{
