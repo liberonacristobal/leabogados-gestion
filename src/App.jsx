@@ -6659,7 +6659,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false}) {
+function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
@@ -7130,6 +7130,25 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const bucketOf = r => (r.client_id||r.isInternal||r.personal_de) ? 'auto' : (r.suggestion ? 'sug' : (r.candidates?.length ? 'rev' : 'man'))
   // Glosa final tal como se guardará: si la IA ya compuso (conceptoFix) se usa el concepto; si no, se concatena el subconcepto. Igual que el insert.
   const glosaFinal = r => { const sub=(r.subconcepto||'').trim(), base=(r.concepto||'').trim(); return (!r.conceptoFix && sub && !base.toLowerCase().includes(sub.toLowerCase())) ? `${base} — ${sub}` : base }
+  // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
+  const _normOt = s => String(s||'').replace(/\D/g,'')
+  const _STOPDUP = new Set(['para','por','con','los','las','del','sociedad','servicios','contrato','publica','especial','acciones','copia','legalizada','prestacion','mandato','reduccion','protocolizacion','autorizacion','pacto','junta','escritura'])
+  const _toksDup = s => new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=4&&!_STOPDUP.has(w)))
+  const dupInfo = useMemo(()=>{
+    const m={}
+    const byOt=new Map(); (expenses||[]).forEach(e=>{ if(!e.deleted_at&&e.ot_number){ const o=_normOt(e.ot_number); if(o) byOt.set(o,e) } })
+    ;(rows||[]).forEach(r=>{
+      const info={}
+      const o=_normOt(r.ot); if(o&&byOt.has(o)) info.otDup=byOt.get(o)
+      if(r.client_id){
+        const rt=_toksDup(`${r.concepto} ${r.subconcepto||''}`)
+        const cand=(expenses||[]).find(e=>{ if(e.deleted_at||e.bulk_import_id||e.client_id!==r.client_id) return false; const et=_toksDup(`${e.concept} ${e.subconcept||''}`); let n=0; et.forEach(w=>{ if(rt.has(w)) n++ }); return n>=2 })
+        if(cand) info.manualDup=cand
+      }
+      if(info.otDup||info.manualDup) m[r.id]=info
+    })
+    return m
+  },[rows,expenses])
   const listas = (rows||[]).filter(rowReady)
   const sugeridos = (rows||[]).filter(r=>!!r.suggestion)
   const nAuto = (rows||[]).filter(r=>bucketOf(r)==='auto').length
@@ -7162,6 +7181,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {resultado.sinCliente>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinCliente}</b> sin cliente</span>}
         {resultado.sinFecha>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinFecha}</b> sin fecha</span>}
         {resultado.dupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.dupOmit}</b> duplicados omitidos</span>}
+        {resultado.otDupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.otDupOmit}</b> con OT ya cargada</span>}
       </div>
       {resultado.sinCliente>0&&<div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.45}}>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</div>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
@@ -7277,6 +7297,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{glosaFinal(r)||'—'}</span>
                     {r.conceptoFix&&<span style={{fontSize:9,fontWeight:700,color:C.greenText,background:'#E1F5EE',borderRadius:4,padding:'1px 6px',flexShrink:0}}>IA</span>}
                   </div>
+                  {dupInfo[r.id]?.otDup&&<div style={{fontSize:11,fontWeight:600,color:'#A32D2D',background:'#FCEBEB',border:'1px solid #F7C1C1',borderRadius:6,padding:'5px 8px',marginBottom:6}}>OT ya cargada antes — se omitirá al importar (no se duplica).</div>}
+                  {dupInfo[r.id]?.manualDup&&!dupInfo[r.id]?.otDup&&<div style={{fontSize:11,fontWeight:600,color:'#854F0B',background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:6,padding:'5px 8px',marginBottom:6}}>¿Duplica un gasto cargado a mano? «{(dupInfo[r.id].manualDup.concept||'').slice(0,40)}» · {fmt(dupInfo[r.id].manualDup.amount)}. Revísalo antes de importar.</div>}
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} placeholder='Concepto'
                       style={{flex:'1 1 140px',minWidth:120,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}/>
@@ -13668,8 +13690,11 @@ export default function App() {
   const handleBulkImport=useCallback(async(filas,{tipo,filename})=>{
     const keyOf = e => `${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}|${(e.subconcept||'').trim().toLowerCase()}|${(e.ot_number||'').trim().toLowerCase()}`
     const vistos = new Set((expenses||[]).map(keyOf))
+    // Dedupe por OT: la OT es única por trámite. Si una OT ya existe (no borrada), se omite aunque cambie monto/texto.
+    const normOt = s => String(s||'').replace(/\D/g,'')
+    const otVistos = new Set((expenses||[]).filter(e=>!e.deleted_at && e.ot_number).map(e=>normOt(e.ot_number)).filter(Boolean))
     const batchId = crypto.randomUUID()
-    let dupOmit=0, sinCliente=0, sinFecha=0
+    let dupOmit=0, otDupOmit=0, sinCliente=0, sinFecha=0
     const payloads=[]
     for(const r of filas){
       // Glosa final = concepto compuesto con subconcepto (si la IA no lo compuso ya); subconcepto y OT se guardan aparte.
@@ -13688,14 +13713,16 @@ export default function App() {
         // caja chica de una persona, o pagada con fondos del cliente. A futuro las masivas son solo Notaría (ya excluidas).
         created_by: null, bulk_import_id:batchId,
       }
+      const ot = normOt(row.ot_number)
+      if(ot && otVistos.has(ot)){ otDupOmit++; continue }   // OT ya cargada → no duplicar
       const k = keyOf(row)
       if(vistos.has(k)){ dupOmit++; continue }
-      vistos.add(k)
+      vistos.add(k); if(ot) otVistos.add(ot)
       if(!row.client_id) sinCliente++
       if(!row.date) sinFecha++
       payloads.push(row)
     }
-    if(payloads.length===0) return {imported:0,dupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
+    if(payloads.length===0) return {imported:0,dupOmit,otDupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
     const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null})
     if(bErr) throw bErr
     const inserted=[]
@@ -13706,7 +13733,7 @@ export default function App() {
     }
     setExpenses(p=>[...inserted,...p])
     setBulkImports(p=>[{id:batchId,created_at:new Date().toISOString(),created_by:user?.name||null,row_count:inserted.length,filename:filename||null,status:'active'},...p].slice(0,10))
-    return {imported:inserted.length, dupOmit, sinCliente, sinFecha, batchId, filename}
+    return {imported:inserted.length, dupOmit, otDupOmit, sinCliente, sinFecha, batchId, filename}
   },[expenses,user])
 
   // Deshacer una carga masiva: elimina sus gastos y marca el lote como anulado.
@@ -14462,7 +14489,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
