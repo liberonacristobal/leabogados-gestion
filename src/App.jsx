@@ -12196,7 +12196,9 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
         const status = estadoCol || (pago?'Pagado':'Pendiente')
         let error=null
         if(monto==null) error='Monto inválido'; else if(monto<=0) error='Monto debe ser > 0'
-        const dup = factura && (billing||[]).some(b=>String(b.invoice_no||'').replace(/\.0$/,'')===factura)
+        // dedupe por folio NORMALIZADO (soporta "340" == "Factura 340" == "340.0"); evita la doble carga que duplicó facturas.
+        const _nf = v => folioN(String(v||'').replace(/\.0$/,'')).toLowerCase()
+        const dup = factura && _nf(factura)!=='' && (billing||[]).some(b=>_nf(b.invoice_no)===_nf(factura))
         // Pagada sin fecha → se infiere emisión + 20 días (criterio del estudio); se marca como estimada.
         const pagoFinal = pago || (status==='Pagado'&&emision?pagoInferido(emision):null)
         const pagoEstimado = !pago && !!pagoFinal
