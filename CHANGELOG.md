@@ -1,8 +1,10 @@
 # Changelog
 
 ## 2026-06-17 — Ficha del cliente: todo clickeable (mobile y desktop)
-- El tab Resumen dejó de ser plano: cada venta abre la venta, cada cobro pendiente abre la factura, cada gasto/fondo abre su registro, cada tarea abre la tarea, y cada razón social va al tab Contacto. Los KPIs (Vendido/Por cobrar/Cobrado) saltan a Financiero.
-- Affordance visual: chevron `›` a la derecha de cada fila (AZUL3), fondo tenue + chevron más oscuro al hover/tocar, cursor pointer, alto de toque cómodo en iPhone. Reusa los modales existentes (sale/billing/task/expenseEdit), sin tocar lógica de datos.
+- El tab Resumen dejó de ser plano: cada cobro pendiente abre la factura, cada gasto/fondo abre su registro, cada tarea abre la tarea, y cada razón social va al tab Contacto. Los KPIs (Vendido/Por cobrar/Cobrado) saltan a Financiero.
+- **Ventas en acordeón**: tocar una venta la despliega y muestra sus facturas (pagadas y pendientes), cada una clickeable para abrirla; enlace "Editar venta" dentro. Resuelve que una venta Terminada lleve a sus facturas, no al formulario de edición. Muestra el monto en UF o CLP según la venta.
+- **Cobros pendientes en acordeón por razón social**: colapsado por defecto (se ve RS + conteo + monto), se despliega al tocar.
+- Affordance visual: chevron `›` que rota al expandir, fondo tenue + chevron más oscuro al hover/tocar, cursor pointer, alto de toque cómodo en iPhone. Gastos/Fondos y Tareas quedan en secciones separadas. Reusa los modales existentes (sale/billing/task/expenseEdit), sin tocar lógica de datos.
 
 ## 2026-06-16 — Cuotas: no se crean programadas por cobros ya pagados
 - Al guardar/editar una venta con cobro por cuotas, ya no se genera una factura Programada por un monto que ya está cubierto por facturas pagadas de esa misma venta (la programada es para un cobro futuro; si ya hay pagada, ese cobro ya ocurrió). Evita programadas fantasma que inflaban el "por cobrar" (caso ventas de regularización ya cobradas).
