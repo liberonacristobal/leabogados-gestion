@@ -7130,6 +7130,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const bucketOf = r => (r.client_id||r.isInternal||r.personal_de) ? 'auto' : (r.suggestion ? 'sug' : (r.candidates?.length ? 'rev' : 'man'))
   // Glosa final tal como se guardará: si la IA ya compuso (conceptoFix) se usa el concepto; si no, se concatena el subconcepto. Igual que el insert.
   const glosaFinal = r => { const sub=(r.subconcepto||'').trim(), base=(r.concepto||'').trim(); return (!r.conceptoFix && sub && !base.toLowerCase().includes(sub.toLowerCase())) ? `${base} — ${sub}` : base }
+  // Triage en el preview: marcar una fila como personal de un miembro (sale del cliente). El cliente «oficina» o sin cliente muestra "¿De quién es?".
+  const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) }
+  const asignarPersonal = (rowId,persona)=>setRows(p=>p.map(r=>r.id===rowId?{...r,personal_de:persona||null,client_id:null,clientName:null,entity_id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:persona?'personal':'none',confidence:persona?100:0}:r))
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
   const _normOt = s => String(s||'').replace(/\D/g,'')
   const _STOPDUP = new Set(['para','por','con','los','las','del','sociedad','servicios','contrato','publica','especial','acciones','copia','legalizada','prestacion','mandato','reduccion','protocolizacion','autorizacion','pacto','junta','escritura'])
@@ -7310,11 +7313,21 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     )}
                   </div>
                   {r.subconcepto&&<input value={r.subconcepto} onChange={e=>editarCampo(r.id,'subconcepto',e.target.value)} placeholder='Subconcepto' style={{width:'100%',marginTop:6,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.muted,outline:'none',boxSizing:'border-box'}}/>}
+                  {/* ¿De quién es? — solo cuando no calzó un cliente externo (sin cliente u oficina): a un miembro (personal) o se deja para la oficina */}
+                  {tipo==='gasto'&&!r.personal_de&&(!r.client_id||esOficinaCli(r.client_id))&&(
+                    <div style={{marginTop:7}}>
+                      <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:5}}>¿De quién es? <span style={{textTransform:'none',letterSpacing:0,fontWeight:400}}>· o déjalo para la oficina</span></div>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const pc=personChip(m);return <button key={m} type='button' onClick={()=>asignarPersonal(r.id,m)} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{m}</button>})}
+                      </div>
+                    </div>
+                  )}
                   {/* resolución de cliente según estado */}
                   <div style={{marginTop:7}}>
                     {bucket==='auto'&&r.personal_de&&(
                       <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end'}}>
                         <span style={{fontSize:12,color:C.accent,fontWeight:700,marginRight:'auto',display:'inline-flex',alignItems:'center',gap:6}}>Personal · {(()=>{ const pc=personChip(r.personal_de); return <span style={{fontSize:11,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px'}}>{r.personal_de}</span> })()}</span>
+                        <button type='button' onClick={()=>asignarPersonal(r.id,null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>
                         <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Asignar cliente'/>
                       </div>
                     )}
