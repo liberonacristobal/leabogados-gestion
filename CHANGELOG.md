@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-17 — Conciliación bancaria · Fase 1 (importación + identificación)
+- Nuevo módulo (read-only). Parser BICE en `src/cartola.js` (cuentas honorarios/gastos, RUT/nombre desde glosa, año desde glosa/período, traspasos internos = es_interno, dedup por hash). `ConciliacionView` en App.jsx, entrada en el menú ☰ "Conciliación bancaria" (admin), pantalla completa.
+- Carga multi-archivo .xlsx (upsert por hash, re-subir no duplica), resuelve cliente por alias → razón social → cliente → receptor de factura; KPIs (abonos/cargos/internos/sin identificar), reporte por archivo con verificación vs Total del banco (✓ si diferencia 0), subvistas Abonos/Cargos, filtro "abonos en cuenta Gastos", crear alias. NO concilia (Fase 2). SQL corrido a mano. Prompt en docs/.
+
 ## 2026-06-17 — Gastos: landing como resumen (lista de clientes oculta por defecto)
 - El landing de Gastos parte como resumen (tarjetas de saldo + cobranza por responsable + personales); la lista de clientes ya NO se muestra por defecto. Aparece al tocar un saldo, un responsable, "Todos", "Archivados", o al buscar. Mensaje guía cuando está oculta. saldoFilter por defecto pasa a 'todos'.
 

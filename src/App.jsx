@@ -12,6 +12,7 @@ import {
   upsertBilling, updateBillingStatus, DEMO
 } from './supabase'
 import { demoData } from './demoData'
+import { parseCartola, normRut as crNormRut } from './cartola'
 import logoBlanco from './le-logo-blanco.png'
 
 const FONT = "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
@@ -13442,6 +13443,210 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   )
 }
 
+// ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
+function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}){
+  const [movs,setMovs] = useState([])
+  const [loading,setLoading] = useState(true)
+  const [importing,setImporting] = useState(false)
+  const [prog,setProg] = useState(null)          // {done,total}
+  const [reportes,setReportes] = useState(null)  // resultado por archivo del último lote
+  const [aliases,setAliases] = useState([])
+  const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
+  const [soloGastos,setSoloGastos] = useState(false)
+  const [soloSinId,setSoloSinId] = useState(false)
+  const [aliasFor,setAliasFor] = useState(null)  // id del movimiento con el picker de alias abierto
+  const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+
+  const cargar = useCallback(async()=>{
+    setLoading(true)
+    const [{data:m},{data:a}] = await Promise.all([
+      supabase.from('cartola_movimientos').select('*').order('fecha',{ascending:false}).limit(8000),
+      supabase.from('cliente_alias').select('*'),
+    ])
+    setMovs(m||[]); setAliases(a||[]); setLoading(false)
+  },[])
+  useEffect(()=>{ cargar() },[cargar])
+
+  const cmap = useMemo(()=>{ const m={}; clients.forEach(c=>m[c.id]=c.name); return m },[clients])
+  // Resolución de cliente por RUT: alias → razón social → cliente → receptor de factura.
+  const resolver = useMemo(()=>{
+    const alias={},ent={},cli={},rec={}
+    aliases.forEach(a=>{ const k=crNormRut(a.rut_pagador); if(k) alias[k]=a.cliente_id })
+    clientEntities.forEach(e=>{ const k=crNormRut(e.rut); if(k&&!ent[k]) ent[k]=e.client_id })
+    clients.forEach(c=>{ const k=crNormRut(c.rut); if(k&&!cli[k]) cli[k]=c.id })
+    billing.forEach(b=>{ const k=crNormRut(b.receptor_rut); if(k&&!rec[k]) rec[k]=b.client_id })
+    return rut=>{ const k=crNormRut(rut); if(!k) return null; return alias[k]||ent[k]||cli[k]||rec[k]||null }
+  },[aliases,clientEntities,clients,billing])
+
+  const onFiles = async(fileList)=>{
+    const files=[...(fileList||[])]; if(!files.length) return
+    setImporting(true); setReportes(null); setProg({done:0,total:files.length})
+    const reps=[]
+    try{
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      for(let fi=0; fi<files.length; fi++){
+        const file=files[fi]
+        try{
+          const buf=await file.arrayBuffer()
+          const wb=XLSX.read(buf,{type:'array'})
+          const sheet=wb.Sheets[wb.SheetNames[0]]
+          const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false})
+          const res=parseCartola(aoa,{filename:file.name})
+          const rows=res.movimientos.map(m=>({ ...m, cliente_id: m.es_interno?null:resolver(m.rut_contraparte), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
+          // dedup: cuántos son nuevos vs ya cargados
+          let nuevos=rows.length
+          if(rows.length){
+            const {data:ex}=await supabase.from('cartola_movimientos').select('hash').in('hash',rows.map(r=>r.hash))
+            const set=new Set((ex||[]).map(x=>x.hash)); nuevos=rows.filter(r=>!set.has(r.hash)).length
+            // upsert en tandas (idempotente por hash)
+            for(let i=0;i<rows.length;i+=200){ await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash'}) }
+          }
+          const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
+          const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
+          const sinId=abo.filter(r=>!r.es_interno && !r.cliente_id).length
+          reps.push({ file:file.name, cuenta:res.cuenta, rol:res.rol_cuenta, ok:!res.error, error:res.error||null,
+            nAbonos:abo.length, sumAbonos:sumA, nCargos:car.length, sumCargos:sumC,
+            internos:rows.filter(r=>r.es_interno).length, sinId, nuevos, dup:rows.length-nuevos,
+            verA: res.totalAbonos!=null?{banco:res.totalAbonos,parsed:sumA,diff:sumA-res.totalAbonos}:null,
+            verC: res.totalCargos!=null?{banco:res.totalCargos,parsed:sumC,diff:sumC-res.totalCargos}:null })
+        }catch(e){ reps.push({ file:file.name, ok:false, error:e.message }) }
+        setProg({done:fi+1,total:files.length})
+      }
+      setReportes(reps)
+      await cargar()
+    }catch(e){ alert('Error al leer: '+e.message) }
+    setImporting(false); setProg(null)
+  }
+
+  const crearAlias = async(mov,clientId)=>{
+    const rut=mov.rut_contraparte; if(!rut||!clientId) return
+    try{
+      await supabase.from('cliente_alias').upsert({rut_pagador:rut,nombre_pagador:mov.nombre_contraparte||null,cliente_id:clientId},{onConflict:'rut_pagador'})
+      const k=crNormRut(rut)
+      await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('rut_contraparte',rut)
+      setMovs(p=>p.map(m=>crNormRut(m.rut_contraparte)===k&&!m.cliente_id?{...m,cliente_id:clientId}:m))
+      setAliases(p=>[...p.filter(a=>crNormRut(a.rut_pagador)!==k),{rut_pagador:rut,cliente_id:clientId,nombre_pagador:mov.nombre_contraparte}])
+      setAliasFor(null)
+    }catch(e){ alert('Error al crear alias: '+e.message) }
+  }
+
+  // KPIs globales
+  const G = useMemo(()=>{
+    const abo=movs.filter(m=>m.tipo==='abono'&&!m.es_interno), car=movs.filter(m=>m.tipo==='cargo'&&!m.es_interno)
+    return { nMov:movs.length, nAbo:abo.length, sumAbo:abo.reduce((a,m)=>a+m.monto,0), nCar:car.length, sumCar:car.reduce((a,m)=>a+m.monto,0),
+      internos:movs.filter(m=>m.es_interno).length, sinId:abo.filter(m=>!m.cliente_id).length }
+  },[movs])
+
+  const lista = useMemo(()=>{
+    let l=movs.filter(m=> sub==='abonos' ? m.tipo==='abono' : m.tipo==='cargo')
+    if(sub==='abonos'){
+      if(soloGastos) l=l.filter(m=>m.rol_cuenta==='gastos'&&!m.es_interno&&m.cliente_id)
+      if(soloSinId)  l=l.filter(m=>!m.es_interno&&!m.cliente_id)
+    }
+    return l.slice(0,400)
+  },[movs,sub,soloGastos,soloSinId])
+
+  const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
+
+  return (
+    <div style={{paddingBottom:80}}>
+      <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:-.4}}>Conciliación bancaria</div>
+          <span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>{loading?'Cargando…':`${G.nMov} movimientos`}</span>
+        </div>
+      </div>
+
+      <div style={{padding:'14px 20px 0'}}>
+        {/* Carga multi-archivo */}
+        <label style={{display:'block',padding:'18px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#F5F7F9',marginBottom:12}}>
+          <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}} disabled={importing}/>
+          <div style={{fontSize:14,color:C.accent,fontWeight:600}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Subir cartolas BICE (.xlsx) — varias a la vez'}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:3}}>2025 y 2026, ambas cuentas. Re-subir no duplica.</div>
+        </label>
+
+        {/* Reporte del último lote */}
+        {reportes&&(
+          <div style={{marginBottom:14,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            <div style={{fontSize:10,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.4,padding:'8px 12px',background:'#F5F7F9'}}>Último import · {reportes.length} archivo{reportes.length!==1?'s':''}</div>
+            {reportes.map((r,i)=>{
+              const okA=r.verA&&r.verA.diff===0, okC=r.verC&&r.verC.diff===0
+              return (
+                <div key={i} style={{padding:'9px 12px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
+                  {r.error
+                    ? <div style={{color:C.overdue,marginTop:3}}>Error: {r.error}</div>
+                    : <div style={{color:C.muted,marginTop:3,lineHeight:1.6}}>
+                        Abonos {r.nAbonos} · {fmtM(r.sumAbonos)} {r.verA&&<span style={{color:okA?C.greenText:C.overdue,fontWeight:600}}>({okA?'✓ cuadra':`dif ${fmtM(r.verA.diff)}`})</span>}<br/>
+                        Cargos {r.nCargos} · {fmtM(r.sumCargos)} {r.verC&&<span style={{color:okC?C.greenText:C.overdue,fontWeight:600}}>({okC?'✓ cuadra':`dif ${fmtM(r.verC.diff)}`})</span>}<br/>
+                        Internos {r.internos} · Sin identificar {r.sinId} · <b>{r.nuevos} nuevos</b>{r.dup?` · ${r.dup} ya estaban`:''}
+                      </div>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* KPIs globales */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:12}}>
+          {[['Abonos',`${G.nAbo}`,fmtM(G.sumAbo),'#0F6E56'],['Cargos',`${G.nCar}`,fmtM(G.sumCar),'#A32D2D'],['Internos',`${G.internos}`,'',C.muted],['Sin identificar',`${G.sinId}`,'',G.sinId?'#C77F18':C.muted]].map(([l,n,sub2,col])=>(
+            <div key={l} style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'7px 9px'}}>
+              <div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
+              <div style={{fontSize:15,fontWeight:700,color:col}}>{n}</div>
+              {sub2&&<div style={{fontSize:9,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub2}</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* Subvista + filtros */}
+        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
+          {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
+            <button key={v} onClick={()=>setSub(v)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:8,border:`1px solid ${sub===v?C.accent:C.border}`,background:sub===v?'#E6EEF1':'#fff',color:sub===v?C.accent:C.muted,cursor:'pointer'}}>{l}</button>
+          ))}
+          {sub==='abonos'&&<>
+            <button onClick={()=>{setSoloSinId(s=>!s);setSoloGastos(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloSinId?'#FFF8E1':'#F5F7F9',color:soloSinId?'#C77F18':C.muted,cursor:'pointer'}}>Sin identificar</button>
+            <button onClick={()=>{setSoloGastos(s=>!s);setSoloSinId(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloGastos?'#FAEEDA':'#F5F7F9',color:soloGastos?'#854F0B':C.muted,cursor:'pointer'}}>Abonos en cuenta Gastos</button>
+          </>}
+          <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length>lista.length?'+ (top 400)':''}</span>
+        </div>
+
+        {/* Lista */}
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+          {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>Sin movimientos. Sube una cartola para empezar.</div>}
+          {lista.map(m=>{
+            const rc=rolChip(m.rol_cuenta)
+            const cliName=m.cliente_id?cmap[m.cliente_id]:null
+            return (
+              <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #EEF1F3`,borderLeft:`3px solid ${m.es_interno?C.border:m.tipo==='abono'?C.normal:C.overdue}`}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2,flexWrap:'wrap'}}>
+                  <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color}}>{rc.t}</span>
+                  {m.es_interno&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A'}}>Interno</span>}
+                  <span style={{fontSize:11,color:C.muted}}>{m.fecha}</span>
+                  <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
+                </div>
+                <div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||(m.es_interno?'Traspaso interno':'—')}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}</div>
+                {!m.es_interno&&(
+                  cliName
+                    ? <div style={{fontSize:11,color:C.greenText,fontWeight:600,marginTop:2}}>{cliName}</div>
+                    : m.tipo==='abono'
+                      ? <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
+                          {aliasFor===m.id
+                            ? <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>crearAlias(m,cid)} label='Asignar a cliente' placeholder='Buscar cliente por nombre o RUT…'/>
+                            : <button onClick={()=>setAliasFor(m.id)} disabled={!m.rut_contraparte} style={{fontSize:11,fontWeight:600,padding:'3px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:m.rut_contraparte?C.accent:C.muted,cursor:m.rut_contraparte?'pointer':'default'}}>{m.rut_contraparte?'Sin identificar · crear alias':'Sin RUT'}</button>}
+                        </div>
+                      : null
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div style={{fontSize:10,color:C.muted,marginTop:10,lineHeight:1.5}}>Fase 1: solo importa e identifica. No marca facturas ni concilia (eso viene en la Fase 2).</div>
+      </div>
+    </div>
+  )
+}
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null)
@@ -14587,6 +14792,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M7 8l-4 4 4 4'/><path d='M17 8l4 4-4 4'/><path d='M14 4l-4 16'/></svg>
                   Conciliar facturas
                 </div>}
+                {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setTab('conciliacion')}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><path d='M3 10h18'/><path d='M7 15h4'/></svg>
+                  Conciliación bancaria
+                </div>}
                 {userRole==='admin'&&<div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'gmailContactos'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
                   Contactos +Gmail
@@ -14630,6 +14839,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
+            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} user={user} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:{notaria:true}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
