@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — Fix: glosa IA se cortaba en cargas grandes
+- Al pasar TODAS las filas por la IA, los lotes de 50 con `max_tokens:4000` truncaban la respuesta JSON → el lote completo se descartaba y la glosa quedaba en crudo. Ahora lotes de 20 + `max_tokens:8000`, y si una respuesta llega cortada se recuperan los objetos completos en vez de perder el lote.
+
 ## 2026-06-17 — Carga masiva Notaría: glosa IA en todas + gastos personales
 - **Glosa uniforme**: la carga masiva ahora pasa TODAS las filas por la IA para componer/limpiar la glosa (Concepto + Subconcepto, tildes, mayúsculas, abreviaturas legales), no solo las que no calzaron por cliente. El match de cliente se aplica solo a las filas aún sin asignar.
 - **Gasto personal de un miembro**: en la columna Cliente, "Personal · Martín" (o ":") enruta el gasto a `personal_de` (no a un cliente), con `paid_by_client=false`; cae directo como "Personal · [persona]" sin marcado manual. Documentado en la plantilla modelo.

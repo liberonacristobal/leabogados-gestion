@@ -6900,11 +6900,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const resp = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-opus-4-8',max_tokens:4000,messages:[{role:'user',content:prompt}]})
+        body:JSON.stringify({model:'claude-opus-4-8',max_tokens:8000,messages:[{role:'user',content:prompt}]})
       })
       const data = await resp.json()
       const raw = (data.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
-      const arr = JSON.parse(raw)
+      let arr
+      try{ arr = JSON.parse(raw) }
+      catch(_){ const cut = raw.lastIndexOf('}'); try{ arr = cut>0 ? JSON.parse(raw.slice(0,cut+1)+']') : [] }catch(__){ arr = [] } }  // respuesta truncada → recupera objetos completos
       return Array.isArray(arr) ? arr : []
     }catch(e){ return [] }
   }
@@ -6932,7 +6934,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       // IA: compone/limpia la GLOSA de TODAS las filas (uniformidad) y resuelve el cliente solo de las que siguen sin asignar.
       const aiRows = rows.filter(r=> r.concepto || r.subconcepto)
       if(aiRows.length && import.meta.env.VITE_ANTHROPIC_API_KEY){
-        const lotes=[]; for(let i=0;i<aiRows.length;i+=50) lotes.push(aiRows.slice(i,i+50))
+        const lotes=[]; for(let i=0;i<aiRows.length;i+=20) lotes.push(aiRows.slice(i,i+20))
         setMatchProg({done:0,total:lotes.length})
         for(let li=0; li<lotes.length; li++){
           const lote = lotes[li]
