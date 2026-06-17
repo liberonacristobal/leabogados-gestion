@@ -6683,7 +6683,7 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
   // Razones sociales (entidades) del cliente
   const entsOf = cid => (clientEntities||[]).filter(e=>e.client_id===cid)
   // Fila lista para cargar: con cliente, sin error y con razón social resuelta (auto si 1, elegida si varias)
-  const rowReady = r => !!r.client_id && !r.error && (entsOf(r.client_id).length<=1 || !!r.entity_id)
+  const rowReady = r => (!!r.client_id || !!r.personal_de) && !r.error && (!!r.personal_de || entsOf(r.client_id).length<=1 || !!r.entity_id)
 
   // ExcelJS (escritura con estilos/validación/comentarios — SheetJS community no los soporta) cargado por CDN al descargar
   const loadExcelJS = () => new Promise((resolve,reject)=>{
@@ -6815,6 +6815,8 @@ function CargaMasivaModal({clients,clientEntities,onSave,onBulkImport,bulkImport
         'OT: el número de orden de la notaría (ej. OT-1284). Se guarda y aparece en la rendición al cliente y queda asociado a la rendición para cruzarlo con la notaría.',
         'Categoría: dejar "Notaria". La IA corrige la redacción y compone la glosa (Concepto + Subconcepto) al cargar.',
         'Dos filas con igual RUT, fecha, monto y concepto pero distinto Subconcepto u OT NO son duplicados.',
+        'Gasto personal de un miembro de la oficina: en la columna Cliente escribe "Personal · Martín" (o el miembro que sea). Se carga como gasto personal de esa persona, no como cliente.',
+        'Si la notaría incluye un trámite que NO es nuestro (ni de un cliente ni de la oficina): no lo cargues, elimina esa fila.',
       ].forEach(t=>ins.addRow({t}))
       ins.getRow(1).eachCell(c=>{ c.font=headFont; c.fill=headFill })
       const buf=await wb.xlsx.writeBuffer()
@@ -6917,7 +6919,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       // Fuzzy en bloques, cediendo el hilo cada 20 filas para no congelar Safari.
       for(let i=0;i<rows.length;i++){
         const r = rows[i]
-        if(r.client_id || (!r.rut && !r.nombre)){ if(!r.client_id){ r.matchMethod='none'; r.confidence=0 } continue }
+        if(r.client_id || r.personal_de || (!r.rut && !r.nombre)){ if(!r.client_id && !r.personal_de){ r.matchMethod='none'; r.confidence=0 } continue }
         const cs = candidatos(r.nombre||r.rut)
         const top = cs[0]
         if(top && top.score>=90){ const ents=entsOf(top.c.id); r.client_id=top.c.id; r.clientName=top.c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='name_fuzzy'; r.confidence=top.score }
@@ -6927,8 +6929,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         if(i%20===19){ setRows(rows.map(x=>({...x}))); await yield0() }
       }
       setRows(rows.map(r=>({...r})))
-      // IA: solo los sin resolver por fuzzy
-      const aiRows = rows.filter(r=>r._needsAI)
+      // IA: compone/limpia la GLOSA de TODAS las filas (uniformidad) y resuelve el cliente solo de las que siguen sin asignar.
+      const aiRows = rows.filter(r=> r.concepto || r.subconcepto)
       if(aiRows.length && import.meta.env.VITE_ANTHROPIC_API_KEY){
         const lotes=[]; for(let i=0;i<aiRows.length;i+=50) lotes.push(aiRows.slice(i,i+50))
         setMatchProg({done:0,total:lotes.length})
@@ -6939,6 +6941,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const r = lote[(o.index||0)-1]; if(!r) return
             const conf = Number(o.confidence)||0
             if(o.concepto_corregido && o.concepto_corregido.trim() && o.concepto_corregido.trim()!==r.concepto){ r.conceptoOrig=r.concepto; r.concepto=o.concepto_corregido.trim(); r.conceptoFix=true }
+            if(r.client_id || r.personal_de) return   // fila ya resuelta: de la IA solo se toma la glosa, no se re-asigna cliente
             if(o.is_internal){ r.isInternal=true; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null; return }
             if(o.client_id && conf>=85){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ const ents=entsOf(c.id); r.client_id=c.id; r.clientName=c.name; r.entity_id=ents.length===1?ents[0].id:null; r.matchMethod='ai'; r.confidence=conf; r.aiReason=o.reason||null } }
             else if(o.client_id && conf>=65){ const c=clients.find(c=>String(c.id)===String(o.client_id)); if(c){ r.suggestion={id:c.id,name:c.name}; r.confidence=conf; r.matchMethod='ai'; r.aiReason=o.reason||null } }
@@ -6979,6 +6982,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const n = parseInt(limpio,10)
     return isNaN(n) ? null : n
   }
+
+  // Miembros de la oficina: un gasto "Personal · Martín" / "Personal: Martín" en la columna Cliente
+  // se enruta a personal_de (no es cliente). Convención para la carga masiva de notaría.
+  const MIEMBROS_NOTA = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
 
   // Sinónimos de columna (lowercased). El parser reconoce cualquiera de estos encabezados, en cualquier orden.
   const COLALIAS = {
@@ -7035,15 +7042,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const monto = parseMonto(getField('monto'))
         if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return null  // fila vacía
         const categoria = tipo==='fondo' ? 'Fondo' : mapCategoria(getField('categoria'))
-        const ex = exactMatch(rut,nombre)
+        // Gasto personal de un miembro de la oficina: "Personal · Martín" / "Personal: Martín" → personal_de (no es cliente).
+        const _pm = nombre.match(/^\s*personal\s*[·:.\-]\s*(.+)$/i)
+        let personalDe = null
+        if(_pm){ const cand=catNorm(_pm[1]); personalDe = MIEMBROS_NOTA.find(p=>catNorm(p)===cand) || _pm[1].trim() }
+        const ex = personalDe ? {client:null,method:'personal',entity_id:null} : exactMatch(rut,nombre)
         let cli=ex.client, method=ex.method, entId=ex.entity_id
-        if(!cli){ const al=aliasClient(nombre); if(al){ cli=al; method='aprendido'; entId=null } }   // memoria aprendida
+        if(!cli&&!personalDe){ const al=aliasClient(nombre); if(al){ cli=al; method='aprendido'; entId=null } }   // memoria aprendida
         const ents=cli?entsOf(cli.id):[]
         let error=null
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: cli?method:undefined, confidence: cli?(method==='name_exact'?95:100):undefined, error, dup:false}
+        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='name_exact'?95:100):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
       let parsed = []
@@ -7094,7 +7105,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const src = p.find(r=>r.id===rowId)
       srcNombre = src?.nombre || null
       const key = src ? rawKey(src) : null
-      const apply = r => ({...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'})
+      const apply = r => ({...r,client_id:clientId,clientName:c?.name||null,entity_id:ents.length===1?ents[0].id:null,suggestion:null,candidates:null,isInternal:false,personal_de:null,matchMethod:'manual'})
       return p.map(r=>{
         if(r.id===rowId) return apply(r)
         if(key && rawKey(r)===key && r.matchMethod!=='manual') return apply(r)  // iguales aún no fijados a mano
@@ -7113,7 +7124,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 
   // Estado de cada fila para la vista previa. montoBad es ortogonal al match.
   const montoBad = r => r.monto==null || r.monto<=0
-  const bucketOf = r => (r.client_id||r.isInternal) ? 'auto' : (r.suggestion ? 'sug' : (r.candidates?.length ? 'rev' : 'man'))
+  const bucketOf = r => (r.client_id||r.isInternal||r.personal_de) ? 'auto' : (r.suggestion ? 'sug' : (r.candidates?.length ? 'rev' : 'man'))
   const listas = (rows||[]).filter(rowReady)
   const sugeridos = (rows||[]).filter(r=>!!r.suggestion)
   const nAuto = (rows||[]).filter(r=>bucketOf(r)==='auto').length
@@ -7236,8 +7247,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               const bad = montoBad(r)
               const ents = r.client_id ? entsOf(r.client_id) : []
               const bg = bad?'#FCEBEB':(bucket==='auto'?'#E1F5EE':bucket==='sug'?'#FFF8E1':bucket==='rev'?'#FCEBEB':'#F5F7F9')
-              const badge = bad?['Error',C.overdue,'#fff']:(bucket==='auto'?[r.isInternal?'Interno':r.matchMethod==='aprendido'?'Aprendido':'Auto',C.normal,'#fff']:bucket==='sug'?[`Sugerido ${r.confidence||''}%`,'#C77F18','#fff']:bucket==='rev'?[`Revisar ${r.confidence||''}%`,C.overdue,'#fff']:['Sin cliente',C.muted,'#fff'])
-              if(r.isInternal&&!bad) badge[1]=C.muted
+              const badge = bad?['Error',C.overdue,'#fff']:(bucket==='auto'?[r.personal_de?'Personal':r.isInternal?'Interno':r.matchMethod==='aprendido'?'Aprendido':'Auto',C.normal,'#fff']:bucket==='sug'?[`Sugerido ${r.confidence||''}%`,'#C77F18','#fff']:bucket==='rev'?[`Revisar ${r.confidence||''}%`,C.overdue,'#fff']:['Sin cliente',C.muted,'#fff'])
+              if((r.isInternal||r.personal_de)&&!bad) badge[1]=C.muted
               return (
                 <div key={r.id} style={{padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:bg,boxShadow:bad?`inset 3px 0 0 ${C.overdue}`:'none'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
@@ -7263,7 +7274,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   {r.subconcepto&&<input value={r.subconcepto} onChange={e=>editarCampo(r.id,'subconcepto',e.target.value)} placeholder='Subconcepto' style={{width:'100%',marginTop:6,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.muted,outline:'none',boxSizing:'border-box'}}/>}
                   {/* resolución de cliente según estado */}
                   <div style={{marginTop:7}}>
-                    {bucket==='auto'&&!r.isInternal&&(
+                    {bucket==='auto'&&r.personal_de&&(
+                      <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end'}}>
+                        <span style={{fontSize:12,color:C.accent,fontWeight:700,marginRight:'auto',display:'inline-flex',alignItems:'center',gap:6}}>Personal · {(()=>{ const pc=personChip(r.personal_de); return <span style={{fontSize:11,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px'}}>{r.personal_de}</span> })()}</span>
+                        <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Asignar cliente'/>
+                      </div>
+                    )}
+                    {bucket==='auto'&&!r.isInternal&&!r.personal_de&&(
                       <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',flexWrap:'wrap'}}>
                         <span style={{fontSize:12,color:C.normal,fontWeight:600,marginRight:'auto',display:'inline-flex',alignItems:'center',gap:6}}>{r.clientName}{(()=>{ const resp=clients.find(c=>c.id===r.client_id)?.abogado_responsable; if(!resp) return null; const pc=personChip(resp); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px',fontWeight:600}}>{resp}</span> })()}</span>
                         {ents.length>1&&(
@@ -7451,7 +7468,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const PERSONAS_NOTA = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Agrupa los pendientes: por cliente (con su saldo de fondos), personales (personal_de) y sin asignar.
   const notaGroups = useMemo(()=>{ const byClient={},personal={},sin=[]; notariaPend.forEach(e=>{ if(e.client_id){(byClient[e.client_id]=byClient[e.client_id]||[]).push(e)} else if(e.personal_de){(personal[e.personal_de]=personal[e.personal_de]||[]).push(e)} else sin.push(e) }); return {byClient,personal,sin} },[notariaPend])
-  const marcarPersonal = async(e,persona)=>{ try{ await supabase.from('expenses').update({personal_de:persona||null}).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,personal_de:persona||null}:x)); setNotaPersonaPick(null) }catch(err){alert('Error: '+err.message)} }
+  const marcarPersonal = async(e,persona)=>{ const patch={personal_de:persona||null, paid_by_client: persona?false:(e.category==='Notaria')}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); setNotaPersonaPick(null) }catch(err){alert('Error: '+err.message)} }
   const notaRow = e => { const on=selNota.has(e.id); return (
     <div key={e.id} onClick={()=>toggleNota(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?'#EEF3F6':'transparent'}}>
       <span style={{width:18,height:18,borderRadius:5,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
@@ -13643,7 +13660,8 @@ export default function App() {
         amount:r.monto||0, concept:_concept, subconcept:_sub||null, ot_number:(r.ot||'').trim()||null, notas:r.notas||null,
         category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
         date:r.fecha||null, project:r.proyecto||null, sale_id:null,
-        paid_by_client: tipo!=='fondo'&&r.categoria==='Notaria',
+        personal_de: r.personal_de||null,
+        paid_by_client: tipo!=='fondo'&&r.categoria==='Notaria'&&!r.personal_de,
         // Carga masiva NO entra a caja chica: la pertenencia se deriva de created_by, así que se deja null
         // (el importador queda registrado en bulk_imports.created_by). El admin la clasifica luego con la pill:
         // caja chica de una persona, o pagada con fondos del cliente. A futuro las masivas son solo Notaría (ya excluidas).

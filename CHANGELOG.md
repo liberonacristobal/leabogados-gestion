@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-17 — Carga masiva Notaría: glosa IA en todas + gastos personales
+- **Glosa uniforme**: la carga masiva ahora pasa TODAS las filas por la IA para componer/limpiar la glosa (Concepto + Subconcepto, tildes, mayúsculas, abreviaturas legales), no solo las que no calzaron por cliente. El match de cliente se aplica solo a las filas aún sin asignar.
+- **Gasto personal de un miembro**: en la columna Cliente, "Personal · Martín" (o ":") enruta el gasto a `personal_de` (no a un cliente), con `paid_by_client=false`; cae directo como "Personal · [persona]" sin marcado manual. Documentado en la plantilla modelo.
+
 ## 2026-06-17 — Auditoría: fixes de código + uniformidad de razón social
 - **Saldo del cliente con fuente única**: la ficha ahora calcula fondos/gastos/saldo con `fgCliente` (mismo criterio que la lista de Gastos y el Dashboard); antes usaba un filtro distinto que podía divergir.
 - **Razón social en Title Case al mostrar** (`titleCaseRS`): la RS del SII deja de gritar en MAYÚSCULAS en la app (ficha, listas, ventas, facturación, conciliación, Gastos); respeta SpA/Ltda/S.A. y conectores. El dato crudo del SII NO se toca.
