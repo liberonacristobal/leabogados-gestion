@@ -9496,6 +9496,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const toggleRS = n => setOpenRS(p=>{const s=new Set(p); s.has(n)?s.delete(n):s.add(n); return s})
   const [openSale,setOpenSale] = useState(()=>new Set())   // ventas expandidas (muestran sus facturas), colapsadas por defecto
   const toggleSale = id => setOpenSale(p=>{const s=new Set(p); s.has(id)?s.delete(id):s.add(id); return s})
+  const [openSaleGrp,setOpenSaleGrp] = useState(()=>new Set())   // grupos de ventas (Activas/Terminadas), colapsados por defecto
+  const toggleSaleGrp = k => setOpenSaleGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const ufState = useUF()
   const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || 40000
   const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -9587,48 +9589,76 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             <div style={{fontSize:13,fontWeight:600,color:C.text}}>Ventas</div>
           </div>
           {clientSales.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin ventas registradas</div>}
-          {clientSales.map(s=>{
-            const saleTasks = clientTasks.filter(t=>t.project===s.title)
-            const saleBills = clientBilling.filter(b=>b.sale_id===s.id&&!b.deleted_at).sort((a,b)=>new Date(a.issued_at||0)-new Date(b.issued_at||0))
-            const open = openSale.has(s.id)
-            return (
-            <div key={s.id}>
-              <div className="lf-row" onClick={()=>toggleSale(s.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
-                <span aria-hidden="true" style={{display:'inline-block',transform:open?'rotate(90deg)':'none',transition:'transform .12s',fontSize:15,lineHeight:1,color:C.done,flexShrink:0}}>›</span>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
-                  <div style={{display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
-                    <AreaChip area={s.area}/>
-                    <span style={{fontSize:10,color:C.muted}}>{s.year}</span>
-                    <Pill label={s.status} bg={s.status==='Activo'?C.accent:s.status==='Propuesta'?'#537281':s.status==='Borrador'?'#E8CC6A':s.status==='Rechazada'?C.overdue:s.status==='Terminado'?C.done:'#C77F18'} color={s.status==='Borrador'?'#4A3800':undefined} small/>
-                    {saleBills.length>0&&<span style={{fontSize:10,color:C.muted}}>{saleBills.length} factura{saleBills.length!==1?'s':''}</span>}
-                  </div>
-                </div>
-                {(s.amount_uf>0||s.amount_clp>0)&&<div style={{fontSize:13,fontWeight:700,color:C.accent,flexShrink:0,marginLeft:8}}>{s.amount_uf>0?fmtUF(s.amount_uf):fmtShort(s.amount_clp)}</div>}
-              </div>
-              {open&&(
-                <div style={{paddingLeft:21,borderBottom:`1px solid ${C.border}`}}>
-                  {saleBills.length===0&&<div style={{fontSize:11,color:C.muted,padding:'8px 0'}}>Sin facturas vinculadas</div>}
-                  {saleBills.map(b=>{
-                    const pagada=b.status==='Pagado'
-                    return (
-                    <div key={b.id} className={onEditBilling?'lf-row':undefined} onClick={onEditBilling?()=>onEditBilling(b):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
-                      <div style={{minWidth:0,flex:1}}>
-                        <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
-                        <div style={{fontSize:10,color:C.muted,display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
-                          <span>{b.invoice_no||'—'}</span><span>·</span>
-                          <Pill label={b.status} bg={pagada?C.normal:b.status==='Vencido'?C.overdue:b.status==='Programada'?C.done:b.status==='Anulada'?'#99ABB4':C.soon} small/>
-                        </div>
-                      </div>
-                      <div style={{fontSize:12,fontWeight:600,color:pagada?C.greenText:C.text,flexShrink:0}}>{fmt(b.amount)}</div>
-                      {onEditBilling&&<Chev/>}
+          {(()=>{
+            const renderSale = s => {
+              const saleBills = clientBilling.filter(b=>b.sale_id===s.id&&!b.deleted_at).sort((a,b)=>new Date(a.issued_at||0)-new Date(b.issued_at||0))
+              const open = openSale.has(s.id)
+              return (
+              <div key={s.id}>
+                <div className="lf-row" onClick={()=>toggleSale(s.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <span aria-hidden="true" style={{display:'inline-block',transform:open?'rotate(90deg)':'none',transition:'transform .12s',fontSize:15,lineHeight:1,color:C.done,flexShrink:0}}>›</span>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
+                    <div style={{display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
+                      <AreaChip area={s.area}/>
+                      <span style={{fontSize:10,color:C.muted}}>{s.year}</span>
+                      {saleBills.length>0&&<span style={{fontSize:10,color:C.muted}}>{saleBills.length} factura{saleBills.length!==1?'s':''}</span>}
                     </div>
-                  )})}
-                  {onOpenSale&&<div onClick={()=>onOpenSale(s)} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer',padding:'9px 0'}}>Editar venta →</div>}
+                  </div>
+                  {(s.amount_uf>0||s.amount_clp>0)&&<div style={{fontSize:13,fontWeight:700,color:C.accent,flexShrink:0,marginLeft:8}}>{s.amount_uf>0?fmtUF(s.amount_uf):fmtShort(s.amount_clp)}</div>}
                 </div>
-              )}
-            </div>
-          )})}
+                {open&&(
+                  <div style={{paddingLeft:21,borderBottom:`1px solid ${C.border}`}}>
+                    {saleBills.length===0&&<div style={{fontSize:11,color:C.muted,padding:'8px 0'}}>Sin facturas vinculadas</div>}
+                    {saleBills.map(b=>{
+                      const pagada=b.status==='Pagado'
+                      return (
+                      <div key={b.id} className={onEditBilling?'lf-row':undefined} onClick={onEditBilling?()=>onEditBilling(b):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+                          <div style={{fontSize:10,color:C.muted,display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
+                            <span>{b.invoice_no||'—'}</span><span>·</span>
+                            <Pill label={b.status} bg={pagada?C.normal:b.status==='Vencido'?C.overdue:b.status==='Programada'?C.done:b.status==='Anulada'?'#99ABB4':C.soon} small/>
+                          </div>
+                        </div>
+                        <div style={{fontSize:12,fontWeight:600,color:pagada?C.greenText:C.text,flexShrink:0}}>{fmt(b.amount)}</div>
+                        {onEditBilling&&<Chev/>}
+                      </div>
+                    )})}
+                    {onOpenSale&&<div onClick={()=>onOpenSale(s)} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer',padding:'9px 0'}}>Editar venta →</div>}
+                  </div>
+                )}
+              </div>
+              )
+            }
+            const sortOld = arr => [...arr].sort((a,b)=>((a.year||0)-(b.year||0))||(new Date(a.created_at||0)-new Date(b.created_at||0)))
+            const known = new Set(['Activo','Terminado'])
+            const grupos = [
+              {k:'Activo',lbl:'Activas',col:C.accent,items:sortOld(clientSales.filter(s=>s.status==='Activo'))},
+              {k:'Terminado',lbl:'Terminadas',col:C.done,items:sortOld(clientSales.filter(s=>s.status==='Terminado'))},
+            ]
+            const otras = sortOld(clientSales.filter(s=>!known.has(s.status)))
+            if(otras.length) grupos.push({k:'__otras__',lbl:'Otras',col:C.muted,items:otras})
+            return grupos.filter(g=>g.items.length>0).map(g=>{
+              const gopen = openSaleGrp.has(g.k)
+              const totUF = g.items.reduce((a,s)=>a+ventaUF(s,ufRef),0)
+              return (
+                <div key={g.k} style={{marginBottom:8}}>
+                  <div className="lf-row" onClick={()=>toggleSaleGrp(g.k)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`2px solid ${g.col}`}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:g.col,textTransform:'uppercase',letterSpacing:.3}}>
+                      <span aria-hidden="true" style={{display:'inline-block',transform:gopen?'rotate(90deg)':'none',transition:'transform .12s',fontSize:15,lineHeight:1}}>›</span>
+                      {g.lbl}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                      <span style={{fontSize:9,color:C.muted,fontWeight:600}}>{g.items.length}</span>
+                      <span style={{fontSize:11,fontWeight:700,color:g.col}}>{fmtUFk(totUF)}</span>
+                    </div>
+                  </div>
+                  {gopen&&g.items.map(renderSale)}
+                </div>
+              )
+            })
+          })()}
         </div>
 
         {/* Cobros pendientes */}
