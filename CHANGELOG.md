@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — Carga masiva desde Notaría: modal solo-notaría
+- El botón Carga masiva de Notaría ahora abre un modal enfocado ("Carga masiva · Notaría"): sin toggle Gastos/Fondos, sin plantilla genérica, solo el modelo de notaría, dropzone grande e importaciones recientes plegadas tras un link. Si no hay columna Categoría, las filas caen como Notaría por defecto. El modal general (con toggle/plantilla) sigue disponible si se invoca sin el flag notaría.
+
 ## 2026-06-17 — OT de notaría visible en tarjeta y edición
 - La OT (`ot_number`) se guardaba pero no se mostraba en la tarjeta del gasto ni en el modal de Editar. Ahora aparece como pill azul `OT-XXXX` en las tarjetas (lista de Gastos y ficha del cliente) y como campo editable "OT (notaría)" en el modal de Editar (cuando la categoría es Notaría). El flujo a la rendición/liquidación ya la usaba.
 
