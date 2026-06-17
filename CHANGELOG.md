@@ -4,7 +4,9 @@
 - El tab Resumen dejó de ser plano: cada cobro pendiente abre la factura, cada gasto/fondo abre su registro, cada tarea abre la tarea, y cada razón social va al tab Contacto. Los KPIs (Vendido/Por cobrar/Cobrado) saltan a Financiero.
 - **Ventas agrupadas por estado**: dos grupos en acordeón colapsado — "Activas" y "Terminadas" (cada uno con conteo y UF total), ordenados de la más antigua a la más nueva. Tocar una venta la despliega y muestra sus facturas (pagadas y pendientes), cada una clickeable para abrirla; enlace "Editar venta" dentro. Resuelve que una venta Terminada lleve a sus facturas, no al formulario de edición. Monto en UF o CLP según la venta.
 - **Cobros pendientes en acordeón por razón social**: colapsado por defecto (se ve RS + conteo + monto), se despliega al tocar.
+- **Razones sociales facturadas** también en acordeón colapsado (con conteo); cada RS lleva al tab Contacto.
 - Affordance visual: chevron `›` que rota al expandir, fondo tenue + chevron más oscuro al hover/tocar, cursor pointer, alto de toque cómodo en iPhone. Gastos/Fondos y Tareas quedan en secciones separadas. Reusa los modales existentes (sale/billing/task/expenseEdit), sin tocar lógica de datos.
+- **Vista limited** (Martín/Martina/Rodrigo) emparejada en lo que les corresponde: gastos/fondos y tareas ahora clickeables (abren su registro) y razones sociales en acordeón. Aplica a todos los clientes (es un componente único por rol).
 
 ## 2026-06-16 — Cuotas: no se crean programadas por cobros ya pagados
 - Al guardar/editar una venta con cobro por cuotas, ya no se genera una factura Programada por un monto que ya está cubierto por facturas pagadas de esa misma venta (la programada es para un cobro futuro; si ya hay pagada, ese cobro ya ocurrió). Evita programadas fantasma que inflaban el "por cobrar" (caso ventas de regularización ya cobradas).

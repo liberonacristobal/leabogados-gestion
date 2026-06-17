@@ -400,11 +400,12 @@ function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
   )
 }
 
-function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onSaveFields,onImportDrive}) {
+function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onEditTask,onEditExpense,onSaveFields,onImportDrive}) {
   const [q,setQ] = useState('')
   const [selected,setSelected] = useState(null)
   const [confirmEdit,setConfirmEdit] = useState(null)
   const [openRend,setOpenRend] = useState(null)
+  const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
   const [sFilter,setSFilter] = useState('Activo')
   const [ftab,setFtab] = useState('resumen')
 
@@ -452,6 +453,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
     const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
+    const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
 
     return (
       <div style={{paddingBottom:100}}>
@@ -473,12 +475,19 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
         <div style={{padding:'16px 20px 0',display:ftab==='resumen'?'block':'none'}}>
 
           {entities.length>0&&(
-            <div style={{marginBottom:16,padding:'10px 14px',borderRadius:10,background:'#F5F7F9',border:'1px solid #E4E8EB'}}>
-              <div style={{fontSize:10,color:'#537281',textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:8}}>Razones sociales facturadas</div>
-              {entities.map(e=>(
-                <div key={e.id} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid #E4E8EB'}}>
-                  <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D'}}>{e.name||'—'}</div>
+            <div style={{marginBottom:16,padding:'4px 14px',borderRadius:10,background:'#F5F7F9',border:'1px solid #E4E8EB'}}>
+              <div className="lf-row" onClick={()=>setOpenEnt(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:10,color:'#537281',textTransform:'uppercase',letterSpacing:.5,fontWeight:600}}>
+                  <span aria-hidden="true" style={{display:'inline-block',transform:openEnt?'rotate(90deg)':'none',transition:'transform .12s',fontSize:14,lineHeight:1}}>›</span>
+                  Razones sociales facturadas
+                </div>
+                <span style={{fontSize:9,color:'#537281',fontWeight:700}}>{entities.length}</span>
+              </div>
+              {openEnt&&entities.map(e=>(
+                <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:'1px solid #E4E8EB'}}>
+                  <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name||'—'}</div>
                   <div style={{fontSize:11,color:'#537281',fontFamily:'monospace'}}>{e.rut}</div>
+                  <Chev/>
                 </div>
               ))}
             </div>
@@ -510,13 +519,14 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
               const isFondo=e.type==='fondo'
               const catBg=CATS[e.category]||CATS['Otro']
               return (
-                <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:'1px solid #E4E8EB'}}>
+                <div key={e.id} className={onEditExpense?'lf-row':undefined} onClick={onEditExpense?()=>onEditExpense(e):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #E4E8EB'}}>
                   <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
                     {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                     {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E1F5EE',color:'#1D9E75',fontWeight:600,flexShrink:0}}>Fondo</span>}
                     <span style={{fontSize:12,color:'#3D3D3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                   </div>
                   <div style={{fontSize:12,fontWeight:600,color:isFondo?'#1D9E75':'#E24B4A',flexShrink:0,marginLeft:8}}>{isFondo?'+':'-'}${e.amount.toLocaleString('es-CL')}</div>
+                  {onEditExpense&&<Chev/>}
                 </div>
               )
             })}
@@ -572,9 +582,12 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
             </div>
             {clientTasks.length===0&&<div style={{fontSize:12,color:'#537281'}}>Sin tareas activas</div>}
             {clientTasks.map(t=>(
-              <div key={t.id} style={{padding:'8px 0',borderBottom:'1px solid #E4E8EB'}}>
-                <div style={{fontSize:13,color:'#3D3D3D',fontWeight:500}}>{t.title}</div>
-                {t.due&&<div style={{fontSize:11,color:'#537281',marginTop:2}}>Vence: {fmtFechaDMY(t.due)}</div>}
+              <div key={t.id} className={onEditTask?'lf-row':undefined} onClick={onEditTask?()=>onEditTask(t):undefined} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 0',borderBottom:'1px solid #E4E8EB'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,color:'#3D3D3D',fontWeight:500}}>{t.title}</div>
+                  {t.due&&<div style={{fontSize:11,color:'#537281',marginTop:2}}>Vence: {fmtFechaDMY(t.due)}</div>}
+                </div>
+                {onEditTask&&<Chev/>}
               </div>
             ))}
           </div>
@@ -14358,7 +14371,7 @@ export default function App() {
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)}/>}
           </div>
         )}
