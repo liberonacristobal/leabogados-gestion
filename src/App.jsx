@@ -7305,6 +7305,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const cajaPersons = useMemo(()=>[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))],[pettyCash])
   const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
+  const [openSaldoGrp,setOpenSaldoGrp] = useState(()=>new Set(['neg']))   // landing: Saldo negativo abierto, Saldo a favor colapsado
+  const toggleSaldoGrp = k => setOpenSaldoGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
@@ -7392,9 +7394,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const archivadosG = useMemo(()=>clientsWithMovs.filter(c=>c.status==='Terminado').length,[clientsWithMovs])
   const filteredClients = useMemo(()=>{
     let list = verArchivadosG ? clientsWithMovs.filter(c=>c.status==='Terminado') : clientsWithMovs.filter(c=>c.status!=='Terminado')
-    if(q.trim()) list = list.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()))
+    if(q.trim()){
+      const nq=q.toLowerCase()
+      list = list.filter(c=>{
+        if((c.name||'').toLowerCase().includes(nq)) return true
+        if((c.rut||'').toLowerCase().includes(nq)) return true
+        return (clientEntities||[]).some(e=>e.client_id===c.id&&(((e.name||'').toLowerCase().includes(nq))||((e.rut||'').toLowerCase().includes(nq))))
+      })
+    }
     return list
-  },[clientsWithMovs,q,verArchivadosG])
+  },[clientsWithMovs,q,verArchivadosG,clientEntities])
 
   const filtered = useMemo(()=>{
     if(!selectedClient) return []
@@ -7744,7 +7753,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
         {/* Vista general: búsqueda */}
         {!selectedClient&&!showOrphans&&!showNotaria&&(
-          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{marginBottom:4}}/>
+          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…' style={{marginBottom:4}}/>
         )}
       </div>
 
@@ -7881,67 +7890,62 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {/* Vista general: lista de clientes con saldo */}
       {!selectedClient&&!showOrphans&&!showNotaria&&(
         <div style={{padding:'4px 20px 100px'}}>
-          {orphans.length>0&&(
-            <div onClick={()=>setShowOrphans(true)} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:600,color:C.text}}>Sin cliente · por asignar</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{orphans.length} gasto{orphans.length!==1?'s':''} importado{orphans.length!==1?'s':''} sin cliente — asígnalos cuando puedas</div>
-              </div>
-              <span style={{fontSize:13,fontWeight:700,color:C.soon}}>{fmt(orphans.reduce((a,e)=>a+(e.amount||0),0))}</span>
-              <span style={{fontSize:16,color:C.muted}}>›</span>
-            </div>
-          )}
-          {archivadosG>0&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}><button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:11,fontWeight:600,padding:'4px 10px',borderRadius:7,border:`1px ${verArchivadosG?'solid':'dashed'} ${verArchivadosG?C.accent:'#99ABB4'}`,background:verArchivadosG?'#E6EEF1':'transparent',color:verArchivadosG?C.accent:'#99ABB4',cursor:'pointer'}}>Archivados ({archivadosG})</button></div>}
-          {filteredClients.length===0&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
-          {filteredClients.map(c=>{
-            const b=balances[c.id]||{fondos:0,gastos:0}
-            const sal=b.fondos-b.gastos
-            return (
-              <div key={c.id} onClick={()=>setSelectedClient(c)} style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:`3px solid ${sal<0?C.overdue:C.normal}`,cursor:'pointer'}}
-                onMouseEnter={x=>x.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.08)'}
-                onMouseLeave={x=>x.currentTarget.style.boxShadow='none'}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:4}}>
-                  <div style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
-                    <span style={{fontWeight:600,fontSize:14,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
-                    {onToggleClientStatus&&<>
-                      <span style={{color:C.done,fontSize:14,fontWeight:300,flexShrink:0}}>|</span>
-                      <button onClick={ev=>{ev.stopPropagation();onToggleClientStatus(c)}} title={c.status==='Terminado'?'Reactivar cliente':'Archivar de la lista'} style={{width:24,height:24,borderRadius:6,border:`0.5px solid ${c.status==='Terminado'?C.normal:C.border}`,background:'#fff',color:c.status==='Terminado'?C.greenText:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,flexShrink:0}}>
-                        {c.status==='Terminado'
-                          ? <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>
-                          : <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}
-                      </button>
-                    </>}
+          {(()=>{
+            const initials = n => (n||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
+            const saldoDe = c => (balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
+            const alpha = (a,b)=>a.name.localeCompare(b.name,'es')
+            const searching = !!q.trim()
+            const row = c => {
+              const sal=saldoDe(c), neg=sal<0
+              const ents=(clientEntities||[]).filter(x=>x.client_id===c.id)
+              const rsLine = ents.length>1 ? `${ents.length} razones sociales` : (ents[0] ? `${ents[0].name}${ents[0].rut?` · ${ents[0].rut}`:''}` : 'Sin razón social')
+              return (
+                <div key={c.id} onClick={()=>setSelectedClient(c)} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'9px 12px',borderBottom:`1px solid #EEF1F3`,borderLeft:`3px solid ${neg?C.overdue:C.normal}`,cursor:'pointer'}}>
+                  <div style={{width:32,height:32,borderRadius:'50%',background:neg?'#FCEBEB':'#E1F5EE',color:neg?'#A32D2D':C.greenText,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                    <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsLine}</div>
                   </div>
-                  <div style={{fontSize:15,fontWeight:700,color:sal<0?C.overdue:C.normal,flexShrink:0}}>{fmt(sal)}</div>
+                  {onToggleClientStatus&&<button onClick={ev=>{ev.stopPropagation();onToggleClientStatus(c)}} title={c.status==='Terminado'?'Reactivar cliente':'Archivar de la lista'} style={{width:26,height:26,borderRadius:6,border:`0.5px solid ${c.status==='Terminado'?C.normal:C.border}`,background:'#fff',color:c.status==='Terminado'?C.greenText:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,flexShrink:0}}>
+                    {c.status==='Terminado'
+                      ? <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>
+                      : <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}
+                  </button>}
+                  <div style={{fontSize:14,fontWeight:700,color:neg?C.overdue:C.normal,flexShrink:0}}>{fmt(sal)}</div>
                 </div>
-                {(()=>{
-                  const ents=(clientEntities||[]).filter(x=>x.client_id===c.id)
-                  const rb=rsBalances(c.id, expenses, ents)
-                  if(rb.porRS.length===0 && !rb.sin) return (
-                    <div style={{display:'flex',gap:16,fontSize:11,color:C.muted}}><span>Fondos: {fmt(b.fondos)}</span><span>Gastos: {fmt(b.gastos)}</span></div>
-                  )
-                  const totalRS=rb.porRS.length+(rb.sin?1:0)
-                  if(totalRS===1){
-                    const ent=rb.porRS[0]?rb.porRS[0].entity:null
-                    return (<div style={{marginTop:3}}>
-                      <span style={{fontSize:12,color:C.muted}}>{ent?ent.name:'Sin razón social'}{ent?.rut?` · ${ent.rut}`:''}</span>
-                    </div>)
-                  }
-                  const linea=(label,saldo,it)=>(
-                    <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'2px 0'}}>
-                      <span style={{color:C.muted,fontStyle:it?'italic':'normal',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
-                      <span style={{fontWeight:600,color:saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(saldo)}</span>
-                    </div>
-                  )
-                  return (<div style={{marginTop:6,paddingTop:6,borderTop:`0.5px solid ${C.border}`}}>
-                    {rb.porRS.map(r=>linea(`${r.entity.name}${r.entity.rut?` · ${r.entity.rut}`:''}`, r.saldo, false))}
-                    {rb.sin&&linea('Sin razón social', rb.sin.saldo, true)}
-                  </div>)
-                })()}
-                {/* Asignación de RS movida a cada gasto en la vista interior (por gasto, no en bloque) */}
+              )
+            }
+            const grupo = (key,label,col,tint) => {
+              const list = filteredClients.filter(c=> key==='neg'?saldoDe(c)<0:saldoDe(c)>=0).sort(alpha)
+              if(!list.length) return null
+              const open = openSaldoGrp.has(key) || searching
+              const tot = list.reduce((a,c)=>a+saldoDe(c),0)
+              return (
+                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+                  <div onClick={()=>toggleSaldoGrp(key)} className='lf-row' style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',background:tint}}>
+                    <span style={{display:'flex',alignItems:'center',gap:7,fontSize:11,fontWeight:600,color:col,textTransform:'uppercase',letterSpacing:'0.04em'}}><span aria-hidden='true' style={{display:'inline-block',transform:open?'rotate(90deg)':'none',transition:'transform .12s',fontSize:14}}>›</span>{label}</span>
+                    <span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:11,fontWeight:700,color:'#fff',background:col,borderRadius:20,padding:'1px 8px'}}>{list.length}</span><span style={{fontSize:12,fontWeight:700,color:col}}>{fmt(tot)}</span></span>
+                  </div>
+                  {open&&list.map(row)}
+                </div>
+              )
+            }
+            const hayGrupos = filteredClients.length>0
+            return (<>
+              {grupo('neg','Saldo negativo','#A32D2D','#FCEBEB')}
+              {grupo('pos','Saldo a favor',C.greenText,'#E1F5EE')}
+              {!hayGrupos&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
+              <div style={{display:'flex',gap:8}}>
+                {orphans.length>0&&!verArchivadosG&&(
+                  <div onClick={()=>setShowOrphans(true)} className='lf-row' style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8,background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
+                    <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sin cliente · {orphans.length}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:C.soon}}>{fmt(orphans.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                  </div>
+                )}
+                {archivadosG>0&&<button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,padding:'10px 12px',borderRadius:10,border:`1px ${verArchivadosG?'solid':'dashed'} ${verArchivadosG?C.accent:'#99ABB4'}`,background:verArchivadosG?'#E6EEF1':'#fff',color:verArchivadosG?C.accent:'#537281',cursor:'pointer',whiteSpace:'nowrap'}}>{verArchivadosG?'← Activos':`Archivados · ${archivadosG}`}</button>}
               </div>
-            )
-          })}
+            </>)
+          })()}
           <div style={{marginTop:10,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
             <div onClick={()=>setShowHistorial(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
               <span style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Historial de rendiciones</span>
