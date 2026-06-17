@@ -15,6 +15,9 @@
 ## 2026-06-17 — Asignar responsable desde la vista de Gastos del cliente
 - En el detalle de Gastos de un cliente (donde se ven los ocasionales, ocultos de la lista formal), el encabezado trae el chip "Asignar responsable ▾" / "Responsable: X ▾" para asignar/cambiar el abogado que gestiona el cobro (usa handleUpdateClientFields). Antes solo estaba en la ficha de la pestaña Clientes, inaccesible para ocasionales.
 
+## 2026-06-17 — Crear ocasional ya con responsable (carga masiva)
+- En el preview, "+ Ocasional" despliega los abogados (o "Sin responsable"): al elegir, crea el cliente ocasional ya con ese `abogado_responsable` y le asigna el gasto, sin tener que entrar a la ficha después. handleCreateOccasional ahora acepta responsable.
+
 ## 2026-06-17 — Clientes ocasionales: crear al vuelo (paso 2)
 - "+ Ocasional" en el preview de carga masiva (filas sin cliente, usa el nombre de la columna Cliente) y en "Sin cliente" (huérfanos, pide el nombre). Crea un cliente liviano `is_occasional=true` y le asigna el gasto. `handleCreateOccasional` reusa el cliente si ya existe con ese nombre.
 
