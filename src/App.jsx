@@ -9489,7 +9489,7 @@ Liberona Escala Abogados`
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onConciliar,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onOpenSale,onEditTask,onEditExpense,onConciliar,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState(initialFtab||'resumen')
   const ufState = useUF()
@@ -9516,6 +9516,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   clientTasks.forEach(t=>{ const k=t.project||'__none__'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
 
   const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
+
+  // Chevron de affordance (fila clickeable) — paleta corporativa, hover lo oscurece vía .lf-row:hover
+  const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
 
   return (
     <div style={{paddingBottom:100}}>
@@ -9548,9 +9551,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             <div style={{marginBottom:16,padding:'10px 14px',borderRadius:10,background:'#F5F7F9',border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:8}}>Razones sociales facturadas</div>
               {entities.map(e=>(
-                <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{e.name||'—'}</div>
+                <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:12,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name||'—'}</div>
                   <div style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</div>
+                  <Chev/>
                 </div>
               ))}
             </div>
@@ -9560,14 +9564,15 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         {/* Resumen financiero */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
           {[
-            ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent],
-            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?'#FCEBEB':'#F5F7F9',totalPorCobrar>0?C.overdue:C.muted],
-            ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal],
-            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?'#FCEBEB':'#E1F5EE',saldoFondos<0?C.overdue:C.normal],
-          ].map(([l,v,bg,col])=>(
-            <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+            ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent,'financiero'],
+            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?'#FCEBEB':'#F5F7F9',totalPorCobrar>0?C.overdue:C.muted,'financiero'],
+            ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal,'financiero'],
+            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?'#FCEBEB':'#E1F5EE',saldoFondos<0?C.overdue:C.normal,null],
+          ].map(([l,v,bg,col,go])=>(
+            <div key={l} onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`,position:'relative',cursor:go?'pointer':'default'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
               <div style={{fontSize:14,fontWeight:700,color:col}}>{v}</div>
+              {go&&<span className="lf-chev" aria-hidden="true" style={{position:'absolute',top:9,right:10,fontSize:15,lineHeight:1,color:C.done}}>›</span>}
             </div>
           ))}
         </div>
@@ -9581,7 +9586,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           {clientSales.map(s=>{
             const saleTasks = clientTasks.filter(t=>t.project===s.title)
             return (
-            <div key={s.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+            <div key={s.id} className={onOpenSale?'lf-row':undefined} onClick={onOpenSale?()=>onOpenSale(s):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
                 <div style={{display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
@@ -9592,6 +9597,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                 </div>
               </div>
               {s.amount_uf>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent,flexShrink:0,marginLeft:12}}>{fmtUF(s.amount_uf)}</div>}
+              {onOpenSale&&<Chev/>}
             </div>
           )})}
         </div>
@@ -9622,7 +9628,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     <div style={{fontSize:11,fontWeight:700,color:col}}>{fmt(g.items.reduce((a,b)=>a+(b.amount||0),0))}</div>
                   </div>
                   {g.items.map(b=>(
-                    <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
+                    <div key={b.id} className={onEditBilling?'lf-row':undefined} onClick={onEditBilling?()=>onEditBilling(b):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
                       <div style={{minWidth:0,flex:1}}>
                         <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
                         <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,marginTop:2}}>
@@ -9632,6 +9638,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                         </div>
                       </div>
                       <div style={{fontSize:13,fontWeight:700,color:b.status==='Vencido'?C.overdue:C.text,flexShrink:0,marginLeft:12}}>{fmt(b.amount)}</div>
+                      {onEditBilling&&<Chev/>}
                     </div>
                   ))}
                 </div>
@@ -9668,7 +9675,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             const isFondo=e.type==='fondo'
             const catBg=CATS[e.category]||CATS['Otro']
             return (
-              <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+              <div key={e.id} className={onEditExpense?'lf-row':undefined} onClick={onEditExpense?()=>onEditExpense(e):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
                 <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
                   {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600,flexShrink:0}}>{e.category}</span>}
                   {isFondo&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600,flexShrink:0}}>Fondo</span>}
@@ -9676,6 +9683,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                   <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
                 </div>
                 <div style={{fontSize:12,fontWeight:600,color:isFondo?C.normal:C.overdue,flexShrink:0,marginLeft:8}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
+                {onEditExpense&&<Chev/>}
               </div>
             )
           })}
@@ -9741,7 +9749,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                   </div>
                 </div>
                 {taskList.map(t=>(
-                  <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 14px',borderBottom:`1px solid ${C.border}`}}>
+                  <div key={t.id} className={onEditTask?'lf-row':undefined} onClick={onEditTask?()=>onEditTask(t):undefined} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'10px 14px',borderBottom:`1px solid ${C.border}`}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
@@ -9751,6 +9759,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                         {t.note&&<><span>·</span><span style={{fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</span></>}
                       </div>
                     </div>
+                    {onEditTask&&<Chev mt={2}/>}
                   </div>
                 ))}
               </div>
@@ -9762,7 +9771,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             <div style={{marginBottom:10}}>
               <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Sin proyecto</div>
               {taskGroups['__none__'].map(t=>(
-                <div key={t.id} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                <div key={t.id} className={onEditTask?'lf-row':undefined} onClick={onEditTask?()=>onEditTask(t):undefined} style={{display:'flex',gap:8,alignItems:'flex-start',padding:'8px 0',borderBottom:`1px solid ${C.border}`}}>
                   <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,color:C.text,fontWeight:500}}>{t.title}</div>
@@ -9771,6 +9780,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                       {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
                     </div>
                   </div>
+                  {onEditTask&&<Chev mt={2}/>}
                 </div>
               ))}
             </div>
@@ -9786,7 +9796,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   )
 }
 
-function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onConciliar,onAssignSeries,onStatusChange,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha}) {
+function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onConciliar,onAssignSeries,onStatusChange,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha}) {
   const [verProv,setVerProv] = useState(false)
 
   const handleAnularRendicion = async(r) => {
@@ -9868,6 +9878,9 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         onAddSale={()=>onAddSale(selected)}
         onAddBilling={()=>onAddBilling(selected)}
         onEditBilling={onEditBilling}
+        onOpenSale={onOpenSale}
+        onEditTask={onEditTask}
+        onEditExpense={onEditExpense}
         onConciliar={onConciliar}
         onAssignSeries={onAssignSeries}
         onStatusChange={onStatusChange}
@@ -14272,7 +14285,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:null})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)}/>}
           </div>
         )}
         {userRole==='limited'&&tab==='tasks'&&(
