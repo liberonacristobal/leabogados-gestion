@@ -7720,21 +7720,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {(selectedClient||showOrphans||showNotaria)&&(
-              <button onClick={()=>{setSelectedClient(null);setShowOrphans(false);setShowNotaria(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+            {(selectedClient||showOrphans||showNotaria||showHistorial)&&(
+              <button onClick={()=>{setSelectedClient(null);setShowOrphans(false);setShowNotaria(false);setShowHistorial(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
             )}
             <div>
               <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                {showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
+                {showHistorial?'Historial de rendiciones':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
               </div>
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{selEnts[0].name}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
             </div>
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            {!selectedClient&&!showOrphans&&!showNotaria&&<button onClick={()=>setNotaMenuOpen(o=>!o)} style={{...chipBtn('soft'),background:notaMenuOpen?'#C77F18':'#FAEEDA',color:notaMenuOpen?'#fff':'#854F0B',border:'1px solid #C77F18'}}>Gastos notariales {notaMenuOpen?'▴':'▾'}</button>}
-            {!selectedClient&&!showOrphans&&!showNotaria&&<span style={{color:C.done,fontSize:16,fontWeight:300}}>|</span>}
-            {!showNotaria&&<button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>}
-            {!showNotaria&&<button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial de rendiciones' aria-label='Historial de rendiciones' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setNotaMenuOpen(o=>!o)} style={{...chipBtn('soft'),background:notaMenuOpen?'#C77F18':'#FAEEDA',color:notaMenuOpen?'#fff':'#854F0B',border:'1px solid #C77F18'}}>Gastos notariales {notaMenuOpen?'▴':'▾'}</button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<span style={{color:C.done,fontSize:16,fontWeight:300}}>|</span>}
+            {!showNotaria&&!showHistorial&&<button onClick={()=>selectedClient?onAddFondo(selectedClient):onAddFondo()} style={chipBtn('green')}>+ Fondo</button>}
+            {!showNotaria&&!showHistorial&&<button onClick={()=>selectedClient?onAdd(selectedClient):onAdd()} style={chipBtn('primary')}>+ Gastos</button>}
             {selectedClient&&<button onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
           </div>
         </div>
@@ -7751,7 +7752,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
-        {!selectedClient&&!showOrphans&&!showNotaria&&(()=>{
+        {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&(()=>{
           const baseList = verArchivadosG ? clientsWithMovs.filter(c=>c.status==='Terminado') : clientsWithMovs.filter(c=>c.status!=='Terminado')
           const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
           const negL=baseList.filter(c=>saldoDe(c)<0), posL=baseList.filter(c=>saldoDe(c)>=0)
@@ -7917,7 +7918,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {/* Vista general: lista de clientes con saldo */}
       {!selectedClient&&!showOrphans&&!showNotaria&&(
         <div style={{padding:'4px 20px 100px'}}>
-          {(()=>{
+          {!showHistorial&&(()=>{
             const initials = n => (n||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
             const saldoDe = c => (balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
             const alpha = (a,b)=>a.name.localeCompare(b.name,'es')
@@ -7959,34 +7960,28 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               </div>
             </>)
           })()}
-          <div style={{marginTop:10,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
-            <div onClick={()=>setShowHistorial(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}>
-              <span style={{fontSize:11,fontWeight:500,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'0.06em'}}>Historial de rendiciones</span>
-              <span style={{fontSize:13,color:'#99ABB4',transform:showHistorial?'rotate(180deg)':'none',transition:'transform .15s'}}>▾</span>
-            </div>
-            {showHistorial&&(
-              <div style={{marginTop:12}}>
-                <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
-                  <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
-                    <option value=''>Todos los clientes</option>
-                    {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
-                  </select>
-                  <input type='month' value={hFiltDesde} onChange={e=>setHFiltDesde(e.target.value)} placeholder='Desde' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
-                  <input type='month' value={hFiltHasta} onChange={e=>setHFiltHasta(e.target.value)} placeholder='Hasta' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
-                </div>
-                {(()=>{
-                  const rends=(rendiciones||[]).filter(r=>{
-                    if(r.tipo!=='cliente') return false
-                    if(hFiltCliente&&r.client_id!==hFiltCliente) return false
-                    if(hFiltDesde&&r.created_at?.slice(0,7)<hFiltDesde) return false
-                    if(hFiltHasta&&r.created_at?.slice(0,7)>hFiltHasta) return false
-                    return true
-                  }).sort((a,b)=>b.created_at>a.created_at?1:-1)
-                  return renderHistorialTable(rends,true)
-                })()}
+          {showHistorial&&(
+            <div style={{padding:'2px 0 0'}}>
+              <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
+                <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
+                  <option value=''>Todos los clientes</option>
+                  {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
+                </select>
+                <input type='month' value={hFiltDesde} onChange={e=>setHFiltDesde(e.target.value)} placeholder='Desde' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
+                <input type='month' value={hFiltHasta} onChange={e=>setHFiltHasta(e.target.value)} placeholder='Hasta' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
               </div>
-            )}
-          </div>
+              {(()=>{
+                const rends=(rendiciones||[]).filter(r=>{
+                  if(r.tipo!=='cliente') return false
+                  if(hFiltCliente&&r.client_id!==hFiltCliente) return false
+                  if(hFiltDesde&&r.created_at?.slice(0,7)<hFiltDesde) return false
+                  if(hFiltHasta&&r.created_at?.slice(0,7)>hFiltHasta) return false
+                  return true
+                }).sort((a,b)=>b.created_at>a.created_at?1:-1)
+                return renderHistorialTable(rends,true)
+              })()}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — Gastos: Historial de rendiciones como ícono en el encabezado
+- El "Historial de rendiciones" dejó de ser un bloque colapsable al pie de la lista. Ahora es un **ícono (reloj) en el encabezado**; al tocarlo abre el historial como panel (con ← para volver), dejando el landing 100% enfocado en encontrar clientes. Mismos filtros (cliente/desde/hasta) y acciones de cada rendición.
+
 ## 2026-06-17 — Gastos: landing con tarjetas-filtro y lista densa (encontrar cliente rápido)
 - La lista de la pestaña Gastos deja de ser un scroll plano de tarjetas grandes. Arriba van dos **tarjetas-filtro divididas** — **Saldo negativo** (monto | nº clientes) y **Saldo a favor** —; tocas una y la lista filtra (la activa con borde de color), **default Saldo negativo**. "Todos" (a la derecha del buscador) limpia el filtro.
 - **Filas densas** (iniciales + nombre + razón social + saldo), orden alfabético.
