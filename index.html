@@ -15,6 +15,15 @@
   <title>LE Abogados · Gestión</title>
   <style>
     html, body { margin:0; padding:0; background:#0F0F0F; }
+    /* Filas clickeables de la ficha del cliente (affordance: hover/active + chevron) */
+    .lf-row { cursor:pointer; transition:background .12s; }
+    .lf-row:hover { background:#F5F7F9; }
+    .lf-row:active { background:#EEF1F3; }
+    .lf-row .lf-chev { color:#99ABB4; transition:color .12s; }
+    .lf-row:hover .lf-chev { color:#537281; }
+    .lf-kpi { cursor:pointer; transition:transform .1s; }
+    .lf-kpi:active { transform:scale(.985); }
+    .lf-kpi:hover .lf-chev { color:#537281; }
   </style>
 </head>
 <body>
