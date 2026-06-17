@@ -7305,8 +7305,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const cajaPersons = useMemo(()=>[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))],[pettyCash])
   const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
-  const [openSaldoGrp,setOpenSaldoGrp] = useState(()=>new Set())   // landing: ambos grupos colapsados por defecto
-  const toggleSaldoGrp = k => setOpenSaldoGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
+  const [saldoFilter,setSaldoFilter] = useState('neg')   // landing: filtro por tarjeta (neg | pos | todos), default Saldo negativo
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
@@ -7751,10 +7750,37 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {/* Vista cliente seleccionado: KPIs (totales de todas las RS) */}
         {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
 
-        {/* Vista general: búsqueda */}
-        {!selectedClient&&!showOrphans&&!showNotaria&&(
-          <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…' style={{marginBottom:4}}/>
-        )}
+        {/* Vista general: tarjetas-filtro + búsqueda */}
+        {!selectedClient&&!showOrphans&&!showNotaria&&(()=>{
+          const baseList = verArchivadosG ? clientsWithMovs.filter(c=>c.status==='Terminado') : clientsWithMovs.filter(c=>c.status!=='Terminado')
+          const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
+          const negL=baseList.filter(c=>saldoDe(c)<0), posL=baseList.filter(c=>saldoDe(c)>=0)
+          const cards=[['neg','Saldo negativo',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','Saldo a favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
+          return (<>
+            <div style={{display:'flex',gap:8,marginBottom:8}}>
+              {cards.map(([k,lbl,tot,n,col,tint,brd])=>{
+                const active=saldoFilter===k
+                return (
+                  <div key={k} onClick={()=>setSaldoFilter(active?'todos':k)} className='lf-kpi' style={{flex:1,minWidth:0,display:'flex',alignItems:'stretch',background:active?tint:'#fff',border:`${active?2:1}px solid ${active?brd:C.border}`,borderRadius:12,overflow:'hidden',cursor:'pointer'}}>
+                    <div style={{flex:1,minWidth:0,padding:'8px 10px'}}>
+                      <div style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:'0.03em',fontWeight:600}}>{lbl}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:col,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(tot)}</div>
+                    </div>
+                    <div style={{width:1,background:active?brd:C.border,opacity:active?.35:1,margin:'7px 0'}}></div>
+                    <div style={{padding:'8px 10px',textAlign:'center',display:'flex',flexDirection:'column',justifyContent:'center',flexShrink:0}}>
+                      <div style={{fontSize:18,fontWeight:700,color:col,lineHeight:1}}>{n}</div>
+                      <div style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:'0.02em'}}>clientes</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+              <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…'/></div>
+              <button onClick={()=>{setSaldoFilter('todos');setQ('')}} style={{fontSize:12,fontWeight:600,color:(saldoFilter==='todos'&&!q.trim())?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 6px'}}>Todos</button>
+            </div>
+          </>)
+        })()}
       </div>
 
       {/* Vista Notaría: pendientes de liquidar a la notaría + liquidaciones (historial) */}
@@ -7894,7 +7920,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const initials = n => (n||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
             const saldoDe = c => (balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
             const alpha = (a,b)=>a.name.localeCompare(b.name,'es')
-            const searching = !!q.trim()
             const row = c => {
               const sal=saldoDe(c), neg=sal<0
               const ents=(clientEntities||[]).filter(x=>x.client_id===c.id)
@@ -7915,26 +7940,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
               )
             }
-            const grupo = (key,label,col,tint) => {
-              const list = filteredClients.filter(c=> key==='neg'?saldoDe(c)<0:saldoDe(c)>=0).sort(alpha)
-              if(!list.length) return null
-              const open = openSaldoGrp.has(key) || searching
-              const tot = list.reduce((a,c)=>a+saldoDe(c),0)
-              return (
-                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
-                  <div onClick={()=>toggleSaldoGrp(key)} className='lf-row' style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',background:tint}}>
-                    <span style={{display:'flex',alignItems:'center',gap:7,fontSize:11,fontWeight:600,color:col,textTransform:'uppercase',letterSpacing:'0.04em'}}><span aria-hidden='true' style={{display:'inline-block',transform:open?'rotate(90deg)':'none',transition:'transform .12s',fontSize:14}}>›</span>{label}</span>
-                    <span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:11,fontWeight:700,color:'#fff',background:col,borderRadius:20,padding:'1px 8px'}}>{list.length}</span><span style={{fontSize:12,fontWeight:700,color:col}}>{fmt(tot)}</span></span>
-                  </div>
-                  {open&&list.map(row)}
-                </div>
-              )
-            }
-            const hayGrupos = filteredClients.length>0
+            const searchingNow = !!q.trim()
+            let list = filteredClients
+            if(!searchingNow && saldoFilter!=='todos') list = list.filter(c=> saldoFilter==='neg'?saldoDe(c)<0:saldoDe(c)>=0)
+            list = [...list].sort(alpha)
             return (<>
-              {grupo('neg','Saldo negativo','#A32D2D','#FCEBEB')}
-              {grupo('pos','Saldo a favor',C.greenText,'#E1F5EE')}
-              {!hayGrupos&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
+              {list.length===0&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
+              {list.length===0&&orphans.length>0&&<div style={{color:C.muted,textAlign:'center',padding:'18px 0',fontSize:12}}>Sin clientes en {saldoFilter==='neg'?'saldo negativo':saldoFilter==='pos'?'saldo a favor':'esta vista'}</div>}
+              {list.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>{list.map(row)}</div>}
               <div style={{display:'flex',gap:8}}>
                 {orphans.length>0&&!verArchivadosG&&(
                   <div onClick={()=>setShowOrphans(true)} className='lf-row' style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8,background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
