@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — OT de notaría visible en tarjeta y edición
+- La OT (`ot_number`) se guardaba pero no se mostraba en la tarjeta del gasto ni en el modal de Editar. Ahora aparece como pill azul `OT-XXXX` en las tarjetas (lista de Gastos y ficha del cliente) y como campo editable "OT (notaría)" en el modal de Editar (cuando la categoría es Notaría). El flujo a la rendición/liquidación ya la usaba.
+
 ## 2026-06-17 — Fix: glosa IA se cortaba en cargas grandes
 - Al pasar TODAS las filas por la IA, los lotes de 50 con `max_tokens:4000` truncaban la respuesta JSON → el lote completo se descartaba y la glosa quedaba en crudo. Ahora lotes de 20 + `max_tokens:8000`, y si una respuesta llega cortada se recuperan los objetos completos en vez de perder el lote.
 
