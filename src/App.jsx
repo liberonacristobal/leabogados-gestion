@@ -13547,6 +13547,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
   },[movs,sub,soloGastos,soloSinId])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
+  // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
+  const tipoMov = d => { const s=(d||'').toLowerCase()
+    if(s.includes('tarjeta')) return 'Pago tarjeta de crédito'
+    if(s.includes('pago sii')||s.includes('tesoreria')||s.includes('impuesto')) return 'Pago SII / impuestos'
+    if(s.includes('comisi')||s.includes('mantencion')||s.includes('mantención')) return 'Comisión / mantención banco'
+    if(s.includes('cheque')) return 'Cheque'
+    if(s.includes('previred')||s.includes('cotizac')) return 'Previred / cotizaciones'
+    if(s.includes('remuneraci')||s.includes('sueldo')||s.includes('nomina')) return 'Remuneraciones'
+    if(s.includes('transf')) return 'Transferencia (sin RUT en glosa)'
+    return 'Movimiento bancario' }
 
   return (
     <div style={{paddingBottom:80}}>
@@ -13636,7 +13646,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
                   <span style={{fontSize:11,color:C.muted}}>{m.fecha}</span>
                   <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                 </div>
-                <div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||(m.es_interno?'Traspaso interno':'—')}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}</div>
+                <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}</div>
+                {!m.nombre_contraparte&&!m.es_interno&&m.descripcion&&<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{m.descripcion}</div>}
                 {!m.es_interno&&(
                   cliName
                     ? <div style={{fontSize:11,color:C.greenText,fontWeight:600,marginTop:2}}>{cliName}</div>
