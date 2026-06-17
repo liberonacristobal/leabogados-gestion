@@ -7892,10 +7892,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:7}}>
                   {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=verPos?C.greenText:'#A32D2D'; return (
-                    <div key={k} onClick={()=>setRespFilter(on?null:k)} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderLeft:`3px solid ${pc.color}`,borderRadius:9,padding:'7px 9px',cursor:'pointer',background:on?pc.bg:'#fff'}}>
-                      <span style={{fontSize:10,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:20,padding:'1px 8px'}}>{sin?'Sin responsable':k}</span>
-                      <div style={{fontSize:13,fontWeight:700,color:col,marginTop:5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(amt)}</div>
-                      <div style={{fontSize:9,color:C.muted}}>{n} {verPos?(n===1?'cliente a favor':'clientes a favor'):(n===1?'cliente por cobrar':'clientes por cobrar')}</div>
+                    <div key={k} onClick={()=>setRespFilter(on?null:k)} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderLeft:`3px solid ${pc.color}`,borderRadius:10,padding:'8px 10px',cursor:'pointer',background:on?pc.bg:'#fff'}}>
+                      <div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'0.05em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'Sin responsable':k}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:col,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(amt)}</div>
+                      <div style={{fontSize:9,color:'#99ABB4',marginTop:2}}>{n} {n===1?'cliente':'clientes'}</div>
                     </div>
                   )})}
                 </div>
