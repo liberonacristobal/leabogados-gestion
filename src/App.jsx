@@ -7133,8 +7133,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Triage en el preview: marcar una fila como personal de un miembro (sale del cliente). El cliente «oficina» o sin cliente muestra "¿De quién es?".
   const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) }
   const asignarPersonal = (rowId,persona)=>setRows(p=>p.map(r=>r.id===rowId?{...r,personal_de:persona||null,client_id:null,clientName:null,entity_id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:persona?'personal':'none',confidence:persona?100:0}:r))
-  // Crea un cliente ocasional con el nombre de la fila (columna Cliente) y le asigna el gasto en el preview.
-  const crearOcasional = async(r)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm); if(c) setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)) }
+  // Crea un cliente ocasional con el nombre de la fila (columna Cliente), opcionalmente con responsable, y le asigna el gasto.
+  const crearOcasional = async(r,responsable)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm,responsable); if(c) setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)); setOcasPick(null) }
+  const [ocasPick,setOcasPick] = useState(null)   // id de la fila con el selector de responsable del ocasional abierto
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
   const _normOt = s => String(s||'').replace(/\D/g,'')
   const _STOPDUP = new Set(['para','por','con','los','las','del','sociedad','servicios','contrato','publica','especial','acciones','copia','legalizada','prestacion','mandato','reduccion','protocolizacion','autorizacion','pacto','junta','escritura'])
@@ -7367,9 +7368,18 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                       </select>
                     )}
                     {bucket==='man'&&(
-                      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                        <div style={{flex:'1 1 160px',minWidth:0}}><AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Buscar cliente por nombre o RUT…'/></div>
-                        {r.nombre&&onCreateOccasional&&<button onClick={()=>crearOcasional(r)} title={`Crear cliente ocasional "${r.nombre}"`} style={{flexShrink:0,fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional</button>}
+                      <div>
+                        <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                          <div style={{flex:'1 1 160px',minWidth:0}}><AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Buscar cliente por nombre o RUT…'/></div>
+                          {r.nombre&&onCreateOccasional&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} title={`Crear cliente ocasional "${r.nombre}"`} style={{flexShrink:0,fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${ocasPick===r.id?C.accent:C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional {ocasPick===r.id?'▴':'▾'}</button>}
+                        </div>
+                        {ocasPick===r.id&&(
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:6}}>
+                            <span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · responsable:</span>
+                            {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
+                            <button onClick={()=>crearOcasional(r,null)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:'#F1EFE8',color:'#5F5E5A',border:'none'}}>Sin responsable</button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -14044,13 +14054,16 @@ export default function App() {
     setSaving(false)
   },[])
 
-  // Crear (o reusar) un cliente ocasional liviano. Devuelve el cliente. Reusa si ya existe uno con el mismo nombre.
-  const handleCreateOccasional=useCallback(async(name)=>{
+  // Crear (o reusar) un cliente ocasional liviano, opcionalmente con responsable. Devuelve el cliente. Reusa si ya existe por nombre.
+  const handleCreateOccasional=useCallback(async(name,responsable)=>{
     const nm=(name||'').trim(); if(!nm) return null
     const ex=clients.find(c=>(c.name||'').trim().toLowerCase()===nm.toLowerCase())
-    if(ex) return ex
+    if(ex){
+      if(responsable && !ex.abogado_responsable){ try{ const up=await upsertClient({...ex,abogado_responsable:responsable,updated_at:new Date().toISOString()}); setClients(p=>p.map(x=>x.id===up.id?up:x)); return up }catch(_){ return ex } }
+      return ex
+    }
     try{
-      const saved=await upsertClient({name:nm,is_occasional:true,status:'Activo',updated_at:new Date().toISOString()})
+      const saved=await upsertClient({name:nm,is_occasional:true,status:'Activo',abogado_responsable:responsable||null,updated_at:new Date().toISOString()})
       setClients(p=>[...p,saved].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')))
       return saved
     }catch(e){ alert('Error al crear cliente ocasional: '+e.message); return null }
