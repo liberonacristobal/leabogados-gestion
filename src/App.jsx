@@ -7395,6 +7395,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [showPersonales,setShowPersonales] = useState(false)   // tarjeta de gastos personales por pagar a la oficina
   const [respFilter,setRespFilter] = useState(null)            // filtro por abogado responsable del cliente (null = todos, '__sin__' = sin responsable)
   const [verTodos,setVerTodos] = useState(false)               // "Todos": mostrar la lista completa de clientes (por defecto la lista está oculta = solo resumen)
+  const [triageOpen,setTriageOpen] = useState(null)            // id del gasto de oficina cuyo triage de miembros está desplegado
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
@@ -7674,11 +7675,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
             {!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(
               <div style={{marginTop:7}} onClick={stop}>
-                <div style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:5}}>¿De quién es?</div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {PERSONAS_NOTA.map(p=>{const pc=personChip(p);return <button key={p} onClick={()=>triagePersonal(e,p)} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{p}</button>})}
-                  <span style={{fontSize:11,color:C.muted,alignSelf:'center'}}>· déjalo así si es de la oficina</span>
-                </div>
+                {triageOpen===e.id ? (
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                    {PERSONAS_NOTA.map(p=>{const pc=personChip(p);return <button key={p} onClick={()=>{triagePersonal(e,p);setTriageOpen(null)}} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{p}</button>})}
+                    <button onClick={()=>setTriageOpen(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>es de la oficina</button>
+                  </div>
+                ) : (
+                  <button onClick={()=>setTriageOpen(e.id)} style={{fontSize:11,fontWeight:600,color:'#5F5E5A',background:'#F1EFE8',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Oficina ▾</button>
+                )}
               </div>
             )}
             {needsClass&&(

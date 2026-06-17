@@ -12,6 +12,9 @@
 ## 2026-06-17 — Carga masiva: "¿De quién es?" en el preview
 - En el preview de la carga, las filas sin cliente externo (sin cliente u oficina) muestran "¿De quién es?" con chips de los 5 miembros: marcar una la deja como personal de ese miembro (sale del cliente) en el momento de cargar, sin triagear después. "Quitar" revierte.
 
+## 2026-06-17 — Triage de oficina colapsado (menos recargado)
+- En el gasto de oficina, el triage ahora es un solo pill "Oficina ▾" por defecto; al tocarlo aparecen los 5 miembros para reasignarlo (o "es de la oficina" para cerrar). Antes mostraba siempre los 5 chips + hint, lo que recargaba la tarjeta.
+
 ## 2026-06-17 — Gastos de oficina: triage a miembro o a la oficina
 - Los gastos bajo «Liberona Escala» (oficina) muestran "¿De quién es?" con chips de los 5 miembros: tocar uno lo manda a `personal_de` (sale del folder de la oficina y queda como "Personal · [nombre]"); dejarlo así = gasto de la oficina. Pill "Personal · [nombre]" en la tarjeta.
 - El modal de Editar gasto trae un selector "Personal de un miembro" (chips): al asignar, el gasto sale del cliente y queda personal.
