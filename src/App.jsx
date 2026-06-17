@@ -7305,7 +7305,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const cajaPersons = useMemo(()=>[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))],[pettyCash])
   const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
-  const [openSaldoGrp,setOpenSaldoGrp] = useState(()=>new Set(['neg']))   // landing: Saldo negativo abierto, Saldo a favor colapsado
+  const [openSaldoGrp,setOpenSaldoGrp] = useState(()=>new Set())   // landing: ambos grupos colapsados por defecto
   const toggleSaldoGrp = k => setOpenSaldoGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
