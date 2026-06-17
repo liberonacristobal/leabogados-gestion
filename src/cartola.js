@@ -4,8 +4,8 @@
 
 export const RUT_PROPIO = '77.700.387-9'
 export const CUENTAS = [
-  { rol: 'honorarios', num: '40383', codigo: '403', etiqueta: '01-40383-4' },
-  { rol: 'gastos',     num: '38392', codigo: '138', etiqueta: '01-38392-2' },
+  { rol: 'honorarios', num: '1403834', codigo: '403', etiqueta: '01-40383-4' },
+  { rol: 'gastos',     num: '1383922', codigo: '138', etiqueta: '01-38392-2' },
 ]
 
 // RUT a solo dígitos + K mayúscula (sin puntos ni guion). '' si vacío.

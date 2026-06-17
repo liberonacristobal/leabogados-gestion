@@ -13454,7 +13454,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
   const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
   const [soloGastos,setSoloGastos] = useState(false)
   const [soloSinId,setSoloSinId] = useState(false)
-  const [aliasFor,setAliasFor] = useState(null)  // id del movimiento con el picker de alias abierto
+  const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
+  const [editForm,setEditForm] = useState({rut:'',nombre:''})
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
 
   const cargar = useCallback(async()=>{
@@ -13499,7 +13500,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
             const {data:ex}=await supabase.from('cartola_movimientos').select('hash').in('hash',rows.map(r=>r.hash))
             const set=new Set((ex||[]).map(x=>x.hash)); nuevos=rows.filter(r=>!set.has(r.hash)).length
             // upsert en tandas (idempotente por hash)
-            for(let i=0;i<rows.length;i+=200){ await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash'}) }
+            for(let i=0;i<rows.length;i+=200){ await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}) }
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
@@ -13518,16 +13519,43 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
     setImporting(false); setProg(null)
   }
 
-  const crearAlias = async(mov,clientId)=>{
-    const rut=mov.rut_contraparte; if(!rut||!clientId) return
+  // Identificar un movimiento: opcionalmente fija RUT/nombre editados, asigna el cliente y APRENDE el alias
+  // (RUT pagador → cliente) para identificar ese y los futuros con el mismo RUT.
+  const identificar = async(mov,clientId)=>{
+    if(!clientId) return
+    const rut = (editForm.rut||'').trim() || mov.rut_contraparte || null
+    const nombre = (editForm.nombre||'').trim() || mov.nombre_contraparte || null
     try{
-      await supabase.from('cliente_alias').upsert({rut_pagador:rut,nombre_pagador:mov.nombre_contraparte||null,cliente_id:clientId},{onConflict:'rut_pagador'})
-      const k=crNormRut(rut)
-      await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('rut_contraparte',rut)
-      setMovs(p=>p.map(m=>crNormRut(m.rut_contraparte)===k&&!m.cliente_id?{...m,cliente_id:clientId}:m))
-      setAliases(p=>[...p.filter(a=>crNormRut(a.rut_pagador)!==k),{rut_pagador:rut,cliente_id:clientId,nombre_pagador:mov.nombre_contraparte}])
-      setAliasFor(null)
-    }catch(e){ alert('Error al crear alias: '+e.message) }
+      await supabase.from('cartola_movimientos').update({cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}).eq('id',mov.id)
+      let learnedK=null
+      if(rut){
+        await supabase.from('cliente_alias').upsert({rut_pagador:rut,nombre_pagador:nombre,cliente_id:clientId},{onConflict:'rut_pagador'})
+        learnedK=crNormRut(rut)
+        await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('rut_contraparte',rut)
+        setAliases(p=>[...p.filter(a=>crNormRut(a.rut_pagador)!==learnedK),{rut_pagador:rut,cliente_id:clientId,nombre_pagador:nombre}])
+      }
+      setMovs(p=>p.map(m=> m.id===mov.id ? {...m,cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}
+        : (learnedK&&crNormRut(m.rut_contraparte)===learnedK&&!m.cliente_id ? {...m,cliente_id:clientId} : m)))
+      setEditMov(null); setEditForm({rut:'',nombre:''})
+    }catch(e){ alert('Error: '+e.message) }
+  }
+  // Guardar solo RUT/nombre editados (sin asignar cliente): re-resuelve por si el RUT ya está en el sistema.
+  const guardarRut = async(mov)=>{
+    const rut=(editForm.rut||'').trim()||null, nombre=(editForm.nombre||'').trim()||mov.nombre_contraparte||null
+    const cid = rut?resolver(rut):mov.cliente_id||null
+    try{
+      await supabase.from('cartola_movimientos').update({rut_contraparte:rut,nombre_contraparte:nombre,cliente_id:cid}).eq('id',mov.id)
+      setMovs(p=>p.map(m=>m.id===mov.id?{...m,rut_contraparte:rut,nombre_contraparte:nombre,cliente_id:cid}:m))
+      setEditMov(null); setEditForm({rut:'',nombre:''})
+    }catch(e){ alert('Error: '+e.message) }
+  }
+  // Cruce: para un traspaso interno, busca el abono de cliente del MISMO monto en la otra cuenta (≈ misma fecha).
+  const origenInterno = mov => {
+    if(!mov.es_interno) return null
+    const cand = movs.filter(x=>x.tipo==='abono'&&!x.es_interno&&x.cliente_id&&x.monto===mov.monto&&x.rol_cuenta!==mov.rol_cuenta)
+    if(!cand.length) return null
+    cand.sort((a,b)=>Math.abs(new Date(a.fecha)-new Date(mov.fecha))-Math.abs(new Date(b.fecha)-new Date(mov.fecha)))
+    return cand[0]
   }
 
   // KPIs globales
@@ -13648,16 +13676,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
                 </div>
                 <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}</div>
                 {!m.nombre_contraparte&&!m.es_interno&&m.descripcion&&<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{m.descripcion}</div>}
+                {m.es_interno&&(()=>{ const o=origenInterno(m); return o?<div style={{fontSize:11,color:C.accent,marginTop:2}}>↔ posible origen: <b>{o.cliente_id?cmap[o.cliente_id]:o.nombre_contraparte}</b> · abono en cuenta {o.rol_cuenta==='gastos'?'Gastos':'Honorarios'}</div>:null })()}
                 {!m.es_interno&&(
-                  cliName
-                    ? <div style={{fontSize:11,color:C.greenText,fontWeight:600,marginTop:2}}>{cliName}</div>
-                    : m.tipo==='abono'
-                      ? <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
-                          {aliasFor===m.id
-                            ? <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>crearAlias(m,cid)} label='Asignar a cliente' placeholder='Buscar cliente por nombre o RUT…'/>
-                            : <button onClick={()=>setAliasFor(m.id)} disabled={!m.rut_contraparte} style={{fontSize:11,fontWeight:600,padding:'3px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:m.rut_contraparte?C.accent:C.muted,cursor:m.rut_contraparte?'pointer':'default'}}>{m.rut_contraparte?'Sin identificar · crear alias':'Sin RUT'}</button>}
+                  editMov===m.id
+                    ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+                          <input value={editForm.rut} onChange={e=>setEditForm(f=>({...f,rut:e.target.value}))} placeholder='RUT (ej. 76.123.456-7)' style={{flex:'1 1 130px',minWidth:0,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,outline:'none'}}/>
+                          <input value={editForm.nombre} onChange={e=>setEditForm(f=>({...f,nombre:e.target.value}))} placeholder='Nombre' style={{flex:'1 1 130px',minWidth:0,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,outline:'none'}}/>
                         </div>
-                      : null
+                        <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                          <div style={{flex:'1 1 160px',minWidth:0}}><AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>identificar(m,cid)} label='Asignar cliente (aprende)' placeholder='Buscar cliente…'/></div>
+                          <button onClick={()=>guardarRut(m)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>Guardar RUT</button>
+                          <button onClick={()=>{setEditMov(null);setEditForm({rut:'',nombre:''})}} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+                        </div>
+                      </div>
+                    : <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2}} onClick={e=>e.stopPropagation()}>
+                        {cliName
+                          ? <span style={{fontSize:11,color:C.greenText,fontWeight:600}}>{cliName}</span>
+                          : <span style={{fontSize:11,color:'#C77F18',fontWeight:600}}>Sin identificar</span>}
+                        <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
+                      </div>
                 )}
               </div>
             )
