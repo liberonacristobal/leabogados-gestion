@@ -7393,6 +7393,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [q,setQ] = useState('')
   const [saldoFilter,setSaldoFilter] = useState('neg')   // landing: filtro por tarjeta (neg | pos | todos), default Saldo negativo
   const [showPersonales,setShowPersonales] = useState(false)   // tarjeta de gastos personales por pagar a la oficina
+  const [respFilter,setRespFilter] = useState(null)            // filtro por abogado responsable del cliente (null = todos, '__sin__' = sin responsable)
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
@@ -7488,8 +7489,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         return (clientEntities||[]).some(e=>e.client_id===c.id&&(((e.name||'').toLowerCase().includes(nq))||((e.rut||'').toLowerCase().includes(nq))))
       })
     }
+    if(respFilter) list = list.filter(c=> respFilter==='__sin__' ? !c.abogado_responsable : c.abogado_responsable===respFilter)
     return list
-  },[clientsWithMovs,q,verArchivadosG,clientEntities])
+  },[clientsWithMovs,q,verArchivadosG,clientEntities,respFilter])
 
   const filtered = useMemo(()=>{
     if(!selectedClient) return []
@@ -7854,9 +7856,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
         {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&(()=>{
-          const baseList = verArchivadosG ? clientsWithMovs.filter(c=>c.status==='Terminado') : clientsWithMovs.filter(c=>c.status!=='Terminado')
+          const baseAll = verArchivadosG ? clientsWithMovs.filter(c=>c.status==='Terminado') : clientsWithMovs.filter(c=>c.status!=='Terminado')
           const saldoDe = c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
+          const baseList = respFilter ? baseAll.filter(c=> respFilter==='__sin__' ? !c.abogado_responsable : c.abogado_responsable===respFilter) : baseAll
           const negL=baseList.filter(c=>saldoDe(c)<0), posL=baseList.filter(c=>saldoDe(c)>=0)
+          // Responsables presentes (con su nº de clientes en saldo negativo = carga de cobranza). Tocar filtra tarjetas y lista.
+          const respList = (()=>{ const m=new Map(); baseAll.forEach(c=>{ const k=c.abogado_responsable||'__sin__'; const o=m.get(k)||{neg:0,n:0}; o.n++; if(saldoDe(c)<0)o.neg++; m.set(k,o) }); return [...m.entries()].sort((a,b)=>b[1].neg-a[1].neg) })()
           const cards=[['neg','Saldo negativo',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','Saldo a favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
             <div style={{display:'flex',gap:8,marginBottom:8}}>
@@ -7877,6 +7882,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 )
               })}
             </div>
+            {respList.length>1&&(
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:8}}>
+                <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Responsable</span>
+                {respList.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; return (
+                  <button key={k} onClick={()=>setRespFilter(on?null:k)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`${on?2:0.5}px solid ${on?pc.color:'transparent'}`}}>{sin?'Sin responsable':k}{o.neg>0&&<span style={{marginLeft:5,color:'#A32D2D'}}>· {o.neg}</span>}</button>
+                )})}
+                {respFilter&&<button onClick={()=>setRespFilter(null)} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
+              </div>
+            )}
             {(()=>{
               const persGastos=(expenses||[]).filter(e=>e.type!=='fondo'&&e.personal_de&&!e.deleted_at&&!e.client_id)
               const mine = isAdmin ? persGastos : persGastos.filter(e=>e.personal_de===currentUserName)
@@ -7918,7 +7932,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             })()}
             <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
               <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…'/></div>
-              <button onClick={()=>{setSaldoFilter('todos');setQ('');setVerArchivadosG(false)}} style={{fontSize:12,fontWeight:600,color:(saldoFilter==='todos'&&!q.trim()&&!verArchivadosG)?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
+              <button onClick={()=>{setSaldoFilter('todos');setQ('');setVerArchivadosG(false);setRespFilter(null)}} style={{fontSize:12,fontWeight:600,color:(saldoFilter==='todos'&&!q.trim()&&!verArchivadosG&&!respFilter)?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
               {archivadosG>0&&<><span style={{color:C.border,fontSize:12}}>·</span><button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,color:verArchivadosG?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Archivados · {archivadosG}</button></>}
             </div>
           </>)
