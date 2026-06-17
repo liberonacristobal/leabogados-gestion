@@ -7897,13 +7897,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:`repeat(${respCobranza.length},minmax(0,1fr))`,gap:5}}>
                   {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=amt<0?'#A32D2D':C.greenText; const a=Math.abs(amt),sg=amt<0?'-':''; const amtK = a>=1e6?`$${sg}${(a/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}M`:(a>=1e3?`$${sg}${Math.round(a/1e3)}K`:fmt(amt)); return (
-                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderRadius:9,padding:'6px 7px',cursor:'pointer',background:on?pc.bg:'#fff',minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6}}>
-                        <span style={{fontSize:13.5,fontWeight:700,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',flex:1,minWidth:0}}>{amtK}</span>
-                        <span style={{width:1,height:11,background:C.border,flexShrink:0}}></span>
-                        <span style={{fontSize:10,fontWeight:600,color:'#99ABB4',flexShrink:0}}>{n}</span>
+                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderRadius:9,cursor:'pointer',background:on?pc.bg:'#fff',minWidth:0,display:'flex',alignItems:'stretch',overflow:'hidden'}}>
+                      <div style={{flex:1,minWidth:0,padding:'6px 8px'}}>
+                        <div style={{fontSize:13.5,fontWeight:700,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{amtK}</div>
+                        <div style={{fontSize:9,fontWeight:700,color:pc.color,textTransform:'uppercase',letterSpacing:'0.02em',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'General':k}</div>
                       </div>
-                      <div style={{fontSize:9,fontWeight:700,color:pc.color,textTransform:'uppercase',letterSpacing:'0.02em',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'General':k}</div>
+                      <div style={{width:1,background:C.border,margin:'6px 0',flexShrink:0}}></div>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:'0 9px',flexShrink:0}}>
+                        <span style={{fontSize:11,fontWeight:600,color:'#99ABB4'}}>{n}</span>
+                      </div>
                     </div>
                   )})}
                 </div>
