@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-17 — Gastos: landing agrupado y denso (encontrar cliente rápido)
+- La lista de la pestaña Gastos deja de ser un scroll plano de tarjetas grandes. Ahora se agrupa en **Saldo negativo** (abierto por defecto) y **Saldo a favor** (colapsado), cada grupo con conteo + monto y orden alfabético; filas densas (iniciales + nombre + razón social + saldo).
+- **Buscador difuso**: ahora encuentra por nombre, RUT o razón social (antes solo nombre).
+- "Sin cliente" y "Archivados" pasan a accesos compactos al pie; "Gastos notariales" se mantiene como pill en el encabezado. El detalle por cliente y el flujo de rendición no cambian.
+
 ## 2026-06-17 — Ficha del cliente: todo clickeable (mobile y desktop)
 - El tab Resumen dejó de ser plano: cada cobro pendiente abre la factura, cada gasto/fondo abre su registro, cada tarea abre la tarea, y cada razón social va al tab Contacto. Los KPIs (Vendido/Por cobrar/Cobrado) saltan a Financiero.
 - **Ventas agrupadas por estado**: dos grupos en acordeón colapsado — "Activas" y "Terminadas" (cada uno con conteo y UF total), ordenados de la más antigua a la más nueva. Tocar una venta la despliega y muestra sus facturas (pagadas y pendientes), cada una clickeable para abrirla; enlace "Editar venta" dentro. Resuelve que una venta Terminada lleve a sus facturas, no al formulario de edición. Monto en UF o CLP según la venta.
