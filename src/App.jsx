@@ -13479,7 +13479,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
   },[aliases,clientEntities,clients,billing])
 
   const onFiles = async(fileList)=>{
-    const files=[...(fileList||[])]; if(!files.length) return
+    const files=[...(fileList||[])].filter(f=>/\.xlsx?$/i.test(f.name)); if(!files.length) return
     setImporting(true); setReportes(null); setProg({done:0,total:files.length})
     const reps=[]
     try{
@@ -13560,11 +13560,22 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
 
       <div style={{padding:'14px 20px 0'}}>
         {/* Carga multi-archivo */}
-        <label style={{display:'block',padding:'18px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#F5F7F9',marginBottom:12}}>
-          <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}} disabled={importing}/>
-          <div style={{fontSize:14,color:C.accent,fontWeight:600}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Subir cartolas BICE (.xlsx) — varias a la vez'}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:3}}>2025 y 2026, ambas cuentas. Re-subir no duplica.</div>
-        </label>
+        <div style={{padding:'16px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',background:'#F5F7F9',marginBottom:12}}>
+          <div style={{fontSize:14,color:C.accent,fontWeight:600,marginBottom:8}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Cargar cartolas BICE (.xlsx)'}</div>
+          {!importing&&(
+            <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+              <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
+                Elegir archivos
+              </label>
+              <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                <input type='file' webkitdirectory='' directory='' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
+                Seleccionar carpeta
+              </label>
+            </div>
+          )}
+          <div style={{fontSize:11,color:C.muted,marginTop:8}}>Varios a la vez o una carpeta entera (ambas cuentas). Re-subir no duplica.</div>
+        </div>
 
         {/* Reporte del último lote */}
         {reportes&&(
