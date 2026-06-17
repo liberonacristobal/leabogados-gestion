@@ -13490,7 +13490,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
           const buf=await file.arrayBuffer()
           const wb=XLSX.read(buf,{type:'array'})
           const sheet=wb.Sheets[wb.SheetNames[0]]
-          const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false})
+          const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true})
           const res=parseCartola(aoa,{filename:file.name})
           const rows=res.movimientos.map(m=>({ ...m, cliente_id: m.es_interno?null:resolver(m.rut_contraparte), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
           // dedup: cuántos son nuevos vs ya cargados

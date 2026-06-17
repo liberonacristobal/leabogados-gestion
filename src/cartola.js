@@ -26,11 +26,10 @@ const _norm = s => _flat(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''
 export function parseMonto(v){
   if(v==null) return 0
   if(typeof v==='number') return Math.round(Math.abs(v))
-  let s = String(v).trim()
+  let s = String(v).trim().replace(/\s/g,'')
   if(!s || s==='-') return 0
-  s = s.replace(/\s/g,'')
-  if(s.includes(',')) s = s.split(',')[0]      // parte entera si trae decimales
-  s = s.replace(/\./g,'').replace(/[^\d]/g,'')
+  s = s.replace(/[.,]\d{1,2}$/,'')   // descarta decimales chilenos al final (",00" / ".00"); CLP es entero
+  s = s.replace(/[^\d]/g,'')         // el resto: solo dígitos (los separadores de miles, sea . o ,, se eliminan)
   const n = parseInt(s,10)
   return isNaN(n) ? 0 : n
 }
