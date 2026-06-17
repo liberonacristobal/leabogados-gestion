@@ -6659,7 +6659,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false}) {
+function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
@@ -7133,6 +7133,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Triage en el preview: marcar una fila como personal de un miembro (sale del cliente). El cliente «oficina» o sin cliente muestra "¿De quién es?".
   const esOficinaCli = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')) }
   const asignarPersonal = (rowId,persona)=>setRows(p=>p.map(r=>r.id===rowId?{...r,personal_de:persona||null,client_id:null,clientName:null,entity_id:null,suggestion:null,candidates:null,isInternal:false,matchMethod:persona?'personal':'none',confidence:persona?100:0}:r))
+  // Crea un cliente ocasional con el nombre de la fila (columna Cliente) y le asigna el gasto en el preview.
+  const crearOcasional = async(r)=>{ const nm=(r.nombre||'').trim(); if(!nm||!onCreateOccasional) return; const c=await onCreateOccasional(nm); if(c) setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:c.id,clientName:c.name,entity_id:null,personal_de:null,suggestion:null,candidates:null,isInternal:false,matchMethod:'manual'}:x)) }
   // Alertas de duplicado por fila: OT ya cargada (se omite) y posible duplicado de un gasto cargado a mano (mismo cliente + glosa parecida).
   const _normOt = s => String(s||'').replace(/\D/g,'')
   const _STOPDUP = new Set(['para','por','con','los','las','del','sociedad','servicios','contrato','publica','especial','acciones','copia','legalizada','prestacion','mandato','reduccion','protocolizacion','autorizacion','pacto','junta','escritura'])
@@ -7365,7 +7367,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                       </select>
                     )}
                     {bucket==='man'&&(
-                      <AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Buscar cliente por nombre o RUT…'/>
+                      <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                        <div style={{flex:'1 1 160px',minWidth:0}}><AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Buscar cliente por nombre o RUT…'/></div>
+                        {r.nombre&&onCreateOccasional&&<button onClick={()=>crearOcasional(r)} title={`Crear cliente ocasional "${r.nombre}"`} style={{flexShrink:0,fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional</button>}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -7379,7 +7384,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   )
 }
 
-function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus}) {
+function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional}) {
   const [selectedClient,setSelectedClient] = useState(null)
   const [notaMenuOpen,setNotaMenuOpen] = useState(false)   // pill "Gastos notariales" desplegada
   const [verArchivadosG,setVerArchivadosG] = useState(false)  // mostrar clientes Terminados en la lista de Gastos
@@ -8081,7 +8086,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
                 <span style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
               </div>
-              <div style={{display:'flex',justifyContent:'flex-end'}}>
+              <div style={{display:'flex',justifyContent:'flex-end',gap:6,alignItems:'center'}}>
+                {onCreateOccasional&&<button onClick={async()=>{ const nm=prompt('Nombre del cliente ocasional:', e.concept||''); if(nm&&nm.trim()){ const c=await onCreateOccasional(nm.trim()); if(c) onAssignClientToExpense(e.id,c.id) } }} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional</button>}
                 <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
               </div>
             </div>
@@ -14027,6 +14033,18 @@ export default function App() {
     setSaving(false)
   },[])
 
+  // Crear (o reusar) un cliente ocasional liviano. Devuelve el cliente. Reusa si ya existe uno con el mismo nombre.
+  const handleCreateOccasional=useCallback(async(name)=>{
+    const nm=(name||'').trim(); if(!nm) return null
+    const ex=clients.find(c=>(c.name||'').trim().toLowerCase()===nm.toLowerCase())
+    if(ex) return ex
+    try{
+      const saved=await upsertClient({name:nm,is_occasional:true,status:'Activo',updated_at:new Date().toISOString()})
+      setClients(p=>[...p,saved].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')))
+      return saved
+    }catch(e){ alert('Error al crear cliente ocasional: '+e.message); return null }
+  },[clients])
+
   // Actualiza solo algunos campos del cliente (edición inline desde la ficha, sin abrir el modal)
   const handleUpdateClientFields=useCallback(async(id,patch)=>{
     const { data, error } = await supabase.from('clients').update({...patch,updated_at:new Date().toISOString()}).eq('id',id).select().single()
@@ -14588,7 +14606,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:{notaria:true}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:{notaria:true}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)}/>}
@@ -14613,7 +14631,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}

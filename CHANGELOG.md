@@ -12,6 +12,9 @@
 ## 2026-06-17 — Carga masiva: "¿De quién es?" en el preview
 - En el preview de la carga, las filas sin cliente externo (sin cliente u oficina) muestran "¿De quién es?" con chips de los 5 miembros: marcar una la deja como personal de ese miembro (sale del cliente) en el momento de cargar, sin triagear después. "Quitar" revierte.
 
+## 2026-06-17 — Clientes ocasionales: crear al vuelo (paso 2)
+- "+ Ocasional" en el preview de carga masiva (filas sin cliente, usa el nombre de la columna Cliente) y en "Sin cliente" (huérfanos, pide el nombre). Crea un cliente liviano `is_occasional=true` y le asigna el gasto. `handleCreateOccasional` reusa el cliente si ya existe con ese nombre.
+
 ## 2026-06-17 — Clientes ocasionales: base (paso 1)
 - Cada ocasional será su propio cliente liviano (no un cajón compartido). Paso 1: columna `is_occasional` en clients (SQL aparte), chip "ocasional" en la ficha y en la lista de Gastos, y se ocultan de la lista formal de Clientes (viven en Gastos/cobranza con su saldo y responsable). Pendiente: "crear como ocasional" en carga masiva/huérfanos + migrar el cajón actual.
 
