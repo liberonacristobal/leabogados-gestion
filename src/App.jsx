@@ -7775,9 +7775,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 )
               })}
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+            <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
               <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…'/></div>
-              <button onClick={()=>{setSaldoFilter('todos');setQ('')}} style={{fontSize:12,fontWeight:600,color:(saldoFilter==='todos'&&!q.trim())?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 6px'}}>Todos</button>
+              <button onClick={()=>{setSaldoFilter('todos');setQ('');setVerArchivadosG(false)}} style={{fontSize:12,fontWeight:600,color:(saldoFilter==='todos'&&!q.trim()&&!verArchivadosG)?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
+              {archivadosG>0&&<><span style={{color:C.border,fontSize:12}}>·</span><button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,color:verArchivadosG?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Archivados · {archivadosG}</button></>}
             </div>
           </>)
         })()}
@@ -7955,7 +7956,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     <span style={{fontSize:12,fontWeight:700,color:C.soon}}>{fmt(orphans.reduce((a,e)=>a+(e.amount||0),0))}</span>
                   </div>
                 )}
-                {archivadosG>0&&<button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,padding:'10px 12px',borderRadius:10,border:`1px ${verArchivadosG?'solid':'dashed'} ${verArchivadosG?C.accent:'#99ABB4'}`,background:verArchivadosG?'#E6EEF1':'#fff',color:verArchivadosG?C.accent:'#537281',cursor:'pointer',whiteSpace:'nowrap'}}>{verArchivadosG?'← Activos':`Archivados · ${archivadosG}`}</button>}
               </div>
             </>)
           })()}
