@@ -7392,6 +7392,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
   const [saldoFilter,setSaldoFilter] = useState('neg')   // landing: filtro por tarjeta (neg | pos | todos), default Saldo negativo
+  const [showPersonales,setShowPersonales] = useState(false)   // tarjeta de gastos personales por pagar a la oficina
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
@@ -7495,7 +7496,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     return expenses.filter(e=>e.client_id===selectedClient.id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
   },[expenses,selectedClient])
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
-  const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
+  const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id&&!e.personal_de).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
 
   // ── Liquidación de NOTARÍA (sección dentro de Gastos): gastos categoría Notaria que la oficina paga a la notaría ──
   // Marca propia notaria_render_id (independiente de caja chica y de la rendición al cliente). La preparan los limited; visible para admin.
@@ -7876,6 +7877,45 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 )
               })}
             </div>
+            {(()=>{
+              const persGastos=(expenses||[]).filter(e=>e.type!=='fondo'&&e.personal_de&&!e.deleted_at&&!e.client_id)
+              const mine = isAdmin ? persGastos : persGastos.filter(e=>e.personal_de===currentUserName)
+              if(mine.length===0) return null
+              const total=mine.reduce((a,e)=>a+(e.amount||0),0)
+              const byP={}; mine.forEach(e=>{(byP[e.personal_de]=byP[e.personal_de]||[]).push(e)})
+              return (
+                <div style={{marginBottom:8,border:'1px solid #F5E2CC',background:'#FEF9F0',borderRadius:12,overflow:'hidden'}}>
+                  <div onClick={()=>setShowPersonales(s=>!s)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:9,color:'#854F0B',textTransform:'uppercase',letterSpacing:'0.03em',fontWeight:700}}>{isAdmin?'Personales por pagar a la oficina':'Tus gastos personales · debes a la oficina'}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:'#854F0B',marginTop:3}}>{fmt(total)}</div>
+                    </div>
+                    <span style={{fontSize:11,color:'#854F0B',fontWeight:600,flexShrink:0}}>{isAdmin?`${Object.keys(byP).length} ${Object.keys(byP).length===1?'persona':'personas'}`:`${mine.length} ${mine.length===1?'gasto':'gastos'}`} {showPersonales?'▴':'▾'}</span>
+                  </div>
+                  {showPersonales&&(
+                    <div style={{borderTop:'1px solid #F5E2CC',padding:'8px 12px',display:'flex',flexDirection:'column',gap:10}}>
+                      {Object.entries(byP).map(([persona,gs])=>{
+                        const pc=personChip(persona); const t=gs.reduce((a,e)=>a+(e.amount||0),0)
+                        return (
+                          <div key={persona}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                              <span style={{fontSize:11,background:pc.bg,color:pc.color,borderRadius:20,padding:'2px 10px',fontWeight:700}}>{persona}</span>
+                              <span style={{fontSize:13,fontWeight:700,color:'#A32D2D'}}>{fmt(t)}</span>
+                            </div>
+                            {gs.map(e=>(
+                              <div key={e.id} onClick={()=>onEdit(e)} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'4px 0 4px 8px',cursor:'pointer'}}>
+                                <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:9,color:'#185FA5',fontWeight:700,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</span>
+                                <span style={{fontSize:12,fontWeight:600,color:'#A32D2D',flexShrink:0}}>{fmt(e.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
             <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
               <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…'/></div>
               <button onClick={()=>{setSaldoFilter('todos');setQ('');setVerArchivadosG(false)}} style={{fontSize:12,fontWeight:600,color:(saldoFilter==='todos'&&!q.trim()&&!verArchivadosG)?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
@@ -13753,7 +13793,7 @@ export default function App() {
       const k = keyOf(row)
       if(vistos.has(k)){ dupOmit++; continue }
       vistos.add(k); if(ot) otVistos.add(ot)
-      if(!row.client_id) sinCliente++
+      if(!row.client_id && !row.personal_de) sinCliente++
       if(!row.date) sinFecha++
       payloads.push(row)
     }
