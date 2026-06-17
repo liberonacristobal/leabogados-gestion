@@ -93,25 +93,26 @@ export function parseCartola(aoa, { filename='' } = {}){
       if(r && t.replace(/\D/g,'').length>=5){ cuenta = r.etiqueta; rol = r.rol; break }
     }
   }
-  // --- Período (para inferir año) ---
-  let periodoDesde=null, periodoHasta=null
+  // --- Año (fallback cuando la fila no trae la fecha completa en la glosa). El banco escribe
+  //     el período como "... de 2026"; tomo el último año 20xx visto en el encabezado (= "Hasta"). ---
+  let anioFallback=null
   for(let i=0;i<Math.min(25,rows.length);i++){
-    const line = rows[i].map(_flat).join(' ')
-    const ld = _norm(line)
-    if(ld.includes('desde')){ const f=parseDDMM(line); if(f&&f.y) periodoDesde=f }
-    if(ld.includes('hasta')){ const f=parseDDMM(line); if(f&&f.y) periodoHasta=f }
+    const ym = rows[i].map(_flat).join(' ').match(/\b(20\d{2})\b/g)
+    if(ym) anioFallback = ym[ym.length-1]
   }
-  const anioFallback = (periodoHasta?.y) || (periodoDesde?.y) || String(new Date().getFullYear())
-  // --- Totales del "Resumen del Período" (verificación) ---
+  anioFallback = anioFallback || String(new Date().getFullYear())
+  // --- Totales del "Resumen del Período": los labels (Total Cargos / Total Abonos) están en una
+  //     fila y los valores en la fila siguiente, en la MISMA columna. ---
   let totalAbonos=null, totalCargos=null
   for(let i=0;i<rows.length;i++){
-    const cells = rows[i].map(_flat)
-    const join = _norm(cells.join(' '))
-    if(totalAbonos==null && join.includes('total') && join.includes('abono')){
-      const nums = cells.map(parseMonto).filter(n=>n>0); if(nums.length) totalAbonos = Math.max(...nums)
-    }
-    if(totalCargos==null && join.includes('total') && join.includes('cargo')){
-      const nums = cells.map(parseMonto).filter(n=>n>0); if(nums.length) totalCargos = Math.max(...nums)
+    const cells = rows[i].map(_norm)
+    const ci = cells.findIndex(c=>c.includes('total') && c.includes('cargo'))
+    const ai = cells.findIndex(c=>c.includes('total') && c.includes('abono'))
+    if(ci>=0 && ai>=0){
+      const val = rows[i+1] || []
+      let vc=parseMonto(val[ci]), va=parseMonto(val[ai])
+      if(!vc && !va){ vc=parseMonto(rows[i][ci]); va=parseMonto(rows[i][ai]) } // por si vinieran juntos
+      totalCargos=vc; totalAbonos=va; break
     }
   }
   // --- Fila de encabezado (contiene "Descripción" y "Abonos") ---
