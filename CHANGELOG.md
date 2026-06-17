@@ -12,6 +12,9 @@
 ## 2026-06-17 — Carga masiva: "¿De quién es?" en el preview
 - En el preview de la carga, las filas sin cliente externo (sin cliente u oficina) muestran "¿De quién es?" con chips de los 5 miembros: marcar una la deja como personal de ese miembro (sale del cliente) en el momento de cargar, sin triagear después. "Quitar" revierte.
 
+## 2026-06-17 — Asignar responsable desde la vista de Gastos del cliente
+- En el detalle de Gastos de un cliente (donde se ven los ocasionales, ocultos de la lista formal), el encabezado trae el chip "Asignar responsable ▾" / "Responsable: X ▾" para asignar/cambiar el abogado que gestiona el cobro (usa handleUpdateClientFields). Antes solo estaba en la ficha de la pestaña Clientes, inaccesible para ocasionales.
+
 ## 2026-06-17 — Clientes ocasionales: crear al vuelo (paso 2)
 - "+ Ocasional" en el preview de carga masiva (filas sin cliente, usa el nombre de la columna Cliente) y en "Sin cliente" (huérfanos, pide el nombre). Crea un cliente liviano `is_occasional=true` y le asigna el gasto. `handleCreateOccasional` reusa el cliente si ya existe con ese nombre.
 
