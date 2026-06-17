@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-17 — Carga masiva: dedupe por OT + aviso de duplicado manual
+- **Dedupe por OT**: como la OT es única por trámite, una fila cuya OT ya existe (gasto no borrado) se omite al importar aunque cambien monto o texto. El preview lo marca ("OT ya cargada") y el resumen cuenta cuántas se omitieron.
+- **Aviso de duplicado manual**: el preview avisa cuando una fila se parece a un gasto cargado a mano del mismo cliente (glosa similar) aunque difiera el monto — el caso CAVOR. No bloquea: lo revisas tú antes de importar.
+
 ## 2026-06-17 — Carga masiva desde Notaría: modal solo-notaría
 - El botón Carga masiva de Notaría ahora abre un modal enfocado ("Carga masiva · Notaría"): sin toggle Gastos/Fondos, sin plantilla genérica, solo el modelo de notaría, dropzone grande e importaciones recientes plegadas tras un link. Si no hay columna Categoría, las filas caen como Notaría por defecto. El modal general (con toggle/plantilla) sigue disponible si se invoca sin el flag notaría.
 
