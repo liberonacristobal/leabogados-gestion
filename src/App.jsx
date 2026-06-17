@@ -7391,9 +7391,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const cajaPersons = useMemo(()=>[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))],[pettyCash])
   const [showOrphans,setShowOrphans] = useState(false)   // bucket "Sin cliente · por asignar"
   const [q,setQ] = useState('')
-  const [saldoFilter,setSaldoFilter] = useState('neg')   // landing: filtro por tarjeta (neg | pos | todos), default Saldo negativo
+  const [saldoFilter,setSaldoFilter] = useState('todos')   // landing: filtro por tarjeta (neg | pos | todos); 'todos' = resumen sin lista
   const [showPersonales,setShowPersonales] = useState(false)   // tarjeta de gastos personales por pagar a la oficina
   const [respFilter,setRespFilter] = useState(null)            // filtro por abogado responsable del cliente (null = todos, '__sin__' = sin responsable)
+  const [verTodos,setVerTodos] = useState(false)               // "Todos": mostrar la lista completa de clientes (por defecto la lista está oculta = solo resumen)
   const [attachExpense,setAttachExpense] = useState(null)   // gasto cuyo uploader está abierto
   const [rendEntityIds,setRendEntityIds] = useState([])     // ids de RS pre-seleccionadas al rendir
   const [selRS,setSelRS] = useState(()=>new Set())          // RS seleccionadas (vista 2+ RS)
@@ -7870,7 +7871,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {cards.map(([k,lbl,tot,n,col,tint,brd])=>{
                 const active=saldoFilter===k
                 return (
-                  <div key={k} onClick={()=>setSaldoFilter(active?'todos':k)} className='lf-kpi' style={{flex:1,minWidth:0,display:'flex',alignItems:'stretch',background:active?tint:'#fff',border:`${active?2:1}px solid ${active?brd:C.border}`,borderRadius:12,overflow:'hidden',cursor:'pointer'}}>
+                  <div key={k} onClick={()=>{setSaldoFilter(active?'todos':k);setVerTodos(false)}} className='lf-kpi' style={{flex:1,minWidth:0,display:'flex',alignItems:'stretch',background:active?tint:'#fff',border:`${active?2:1}px solid ${active?brd:C.border}`,borderRadius:12,overflow:'hidden',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0,padding:'8px 10px'}}>
                       <div style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:'0.03em',fontWeight:600}}>{lbl}</div>
                       <div style={{fontSize:14,fontWeight:700,color:col,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(tot)}</div>
@@ -7892,7 +7893,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:7}}>
                   {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=verPos?C.greenText:'#A32D2D'; return (
-                    <div key={k} onClick={()=>setRespFilter(on?null:k)} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderLeft:`3px solid ${pc.color}`,borderRadius:10,padding:'8px 10px',cursor:'pointer',background:on?pc.bg:'#fff'}}>
+                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderLeft:`3px solid ${pc.color}`,borderRadius:10,padding:'8px 10px',cursor:'pointer',background:on?pc.bg:'#fff'}}>
                       <div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'0.05em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'Sin responsable':k}</div>
                       <div style={{fontSize:15,fontWeight:700,color:col,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(amt)}</div>
                       <div style={{fontSize:9,color:'#99ABB4',marginTop:2}}>{n} {n===1?'cliente':'clientes'}</div>
@@ -7942,7 +7943,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             })()}
             <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
               <div style={{flex:1,minWidth:0}}><ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar nombre, RUT o razón social…'/></div>
-              <button onClick={()=>{setSaldoFilter('todos');setQ('');setVerArchivadosG(false);setRespFilter(null)}} style={{fontSize:12,fontWeight:600,color:(saldoFilter==='todos'&&!q.trim()&&!verArchivadosG&&!respFilter)?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
+              <button onClick={()=>{setVerTodos(v=>!v);setSaldoFilter('todos');setQ('');setVerArchivadosG(false);setRespFilter(null)}} style={{fontSize:12,fontWeight:600,color:verTodos?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
               {archivadosG>0&&<><span style={{color:C.border,fontSize:12}}>·</span><button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,color:verArchivadosG?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Archivados · {archivadosG}</button></>}
             </div>
           </>)
@@ -8110,10 +8111,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             let list = filteredClients
             if(!searchingNow && saldoFilter!=='todos') list = list.filter(c=> saldoFilter==='neg'?saldoDe(c)<0:saldoDe(c)>=0)
             list = [...list].sort(alpha)
+            const mostrarLista = verTodos || verArchivadosG || !!respFilter || searchingNow || saldoFilter!=='todos'
             return (<>
-              {list.length===0&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
-              {list.length===0&&orphans.length>0&&<div style={{color:C.muted,textAlign:'center',padding:'18px 0',fontSize:12}}>{verArchivadosG?'Sin clientes archivados en esta vista':`Sin clientes en ${saldoFilter==='neg'?'saldo negativo':saldoFilter==='pos'?'saldo a favor':'esta vista'}`}</div>}
-              {list.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>{list.map(row)}</div>}
+              {!mostrarLista
+                ? <div style={{color:C.muted,textAlign:'center',padding:'24px 16px',fontSize:12,lineHeight:1.55,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,marginBottom:10}}>Toca un <b style={{color:C.text}}>saldo</b> o un <b style={{color:C.text}}>responsable</b> para ver los clientes — o busca por nombre / toca <b style={{color:C.text}}>Todos</b>.</div>
+                : <>
+                    {list.length===0&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
+                    {list.length===0&&orphans.length>0&&<div style={{color:C.muted,textAlign:'center',padding:'18px 0',fontSize:12}}>{verArchivadosG?'Sin clientes archivados en esta vista':'Sin clientes en esta vista'}</div>}
+                    {list.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>{list.map(row)}</div>}
+                  </>
+              }
               <div style={{display:'flex',gap:8}}>
                 {orphans.length>0&&(
                   <div onClick={()=>setShowOrphans(true)} className='lf-row' style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8,background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — Gastos: landing como resumen (lista de clientes oculta por defecto)
+- El landing de Gastos parte como resumen (tarjetas de saldo + cobranza por responsable + personales); la lista de clientes ya NO se muestra por defecto. Aparece al tocar un saldo, un responsable, "Todos", "Archivados", o al buscar. Mensaje guía cuando está oculta. saldoFilter por defecto pasa a 'todos'.
+
 ## 2026-06-17 — Cobranza por responsable (mini-tarjetas) en Gastos
 - Debajo de los saldos globales, mini-tarjetas por abogado responsable con la **deuda por cobrar** de cada uno = suma de los saldos negativos de SUS clientes (NO se compensa con los clientes que están a favor). Ordenadas por mayor deuda. Tocar una filtra las tarjetas globales y la lista a ese responsable; el saldo (negativo/a favor) decide qué muestran las mini (por cobrar vs a favor). "Todos" limpia.
 
