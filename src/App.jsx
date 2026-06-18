@@ -9341,15 +9341,15 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     </div>}
     {sec==='fondos'&&(()=>{ const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; return (
-        <div key={e.id}>
-          <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':'1px solid #F1F1F1'}}>
-            <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(e.concept||e.category||(signo>0?'Fondo':'Gasto')).slice(0,28)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span>
-            <b style={{color:col,whiteSpace:'nowrap'}}>{signo>0?'+':'−'}{fmt(e.amount)}</b>
-            <span style={{color:'#185FA5',fontSize:11,flexShrink:0}}>{open?'▴':'ver ▾'}</span>
+        <div key={e.id} style={{borderBottom:`1px solid ${C.border}`}}>
+          <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'baseline',gap:8,fontSize:11,padding:'6px 0',cursor:'pointer'}}>
+            <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?'Fondo':'Gasto')} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span>
+            <b style={{color:col,whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{signo>0?'+':'−'}{fmt(e.amount)}</b>
+            <span style={{color:'#185FA5',fontSize:11,flexShrink:0,width:30,textAlign:'right'}}>{open?'▴':'ver ▾'}</span>
           </div>
-          {open&&<div style={{padding:'7px 9px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
-            <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?'Fondo recibido':'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:C.text}}>{fmt(e.amount)}</b></span></div>
-            {e.category&&<div>Categoría: <b style={{color:C.text}}>{e.category}</b></div>}
+          {open&&<div style={{padding:'8px 10px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
+            <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:3}}>{e.concept||e.category||(signo>0?'Fondo recibido':'Gasto')}</div>
+            <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?'Fondo recibido':'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:col}}>{fmt(e.amount)}</b></span>{e.category&&<span>Categoría: <b style={{color:C.text}}>{e.category}</b></span>}</div>
             <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><span style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase'}}>Venta / proyecto</span>
               <div style={{color:C.text}}>{v?<><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}</b>:<span style={{color:'#99ABB4'}}>Sin proyecto asociado</span>)}</div></div>
             {(e.created_by||e.notas)&&<div style={{marginTop:3}}>{e.created_by?`Registrado por ${e.created_by}`:''}{e.notas?` · ${e.notas}`:''}</div>}
