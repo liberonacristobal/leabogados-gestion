@@ -198,7 +198,7 @@ const saldoCajaChica = (pettyCash, expenses, userName) => {
 // Fuente única para "fondos − gastos" de un cliente. Siempre con guarda ||0 (nunca NaN).
 function fgCliente(expenses, clientId){
   let fondos=0, gastos=0
-  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId) return; if(e.type==='fondo') fondos+=(e.amount||0); else gastos+=(e.amount||0) })
+  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId) return; if(e.type==='fondo') fondos+=(e.amount||0); else if(!e.excluye_saldo) gastos+=(e.amount||0) })
   return {fondos, gastos, saldo:fondos-gastos}
 }
 const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
@@ -241,7 +241,7 @@ function rsBalances(clientId, expenses, entities){
     if(e.entity_id&&byId[e.entity_id]) b=byId[e.entity_id]
     else if(single&&buckets.length) b=buckets[0]
     else { b=sinRS; sinRS.n++ }
-    if(e.type==='fondo') b.fondos+=(e.amount||0); else b.gastos+=(e.amount||0)
+    if(e.type==='fondo') b.fondos+=(e.amount||0); else if(!e.excluye_saldo) b.gastos+=(e.amount||0)
   })
   const ws = b=>({...b,saldo:b.fondos-b.gastos})
   const porRS = buckets.map(ws)
@@ -7681,6 +7681,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
+              {!isFondo&&e.excluye_saldo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F1EFE8',color:'#5F5E5A',fontWeight:700}}>Solo registro · no descuenta</span>}
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {!isFondo&&e.ot_number&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600}}>Fondo</span>}
@@ -7760,7 +7761,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
             {!isFondo&&<AdjuntoIcon e={e}/>}
-            <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
+            <div style={{fontSize:14,fontWeight:700,color:e.excluye_saldo?'#99ABB4':(isFondo?C.normal:C.overdue),textDecoration:e.excluye_saldo?'line-through':'none'}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
           </div>
         </div>
       </div>
@@ -8030,7 +8031,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             // Disponible = fondo − lo YA pagado materialmente (liquidado caja chica o ya pagado a notaría). La notaría
             // pendiente que vas a pagar NO descuenta todavía. Post-pago = disponible − lo que pagas ahora.
             const fondosC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-            const pagadoC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
+            const pagadoC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
             const disp=fondosC-pagadoC; const aPagar=gs.reduce((a,e)=>a+(e.amount||0),0); const post=disp-aPagar
             const conF=disp>=0; if(notaFondos&&!conF) return null; const cn=clients.find(c=>String(c.id)===String(cid))?.name||'Cliente'; return (
             <div key={cid} style={{border:`1px solid ${conF?C.border:'#F0997B'}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
@@ -8639,6 +8640,12 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
           {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
         </Fld>
+      )}
+      {!isFondo&&(
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 12px',background:'#F5F7F9',borderRadius:10,marginTop:2}}>
+          <div><div style={{fontSize:12,fontWeight:600,color:C.text}}>Solo registro · no descuenta saldo</div><div style={{fontSize:10,color:C.muted,marginTop:2}}>Histórico / pagado con fondos que no entran a la app</div></div>
+          <Switch on={!!f.excluye_saldo} onToggle={()=>up('excluye_saldo',!f.excluye_saldo)}/>
+        </div>
       )}
       {!isFondo&&expense?.id&&(
         <Attachments table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos'
@@ -9443,10 +9450,10 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
             <div style={{flex:1,minWidth:0}}>
               {(()=>{ const ot=e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):null
                 const ep = signo<0 ? (e.notaria_liquidado_at?{l:'Notaría',bg:'#FAECE7',c:'#993C1D'}:e.rendered_at?{l:'Caja chica',bg:'#E6EEF1',c:'#003C50'}:conc.find(x=>String(x.gasto_id)===String(e.id)&&x.tipo_destino==='gasto')?{l:'Pagado',bg:'#E1F5EE',c:'#0F6E56'}:null) : null
-                return (signo>0||e.category||ot||ep)?<div style={{display:'flex',gap:5,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:'#0F6E56',fontWeight:600}}>Fondo</span>:(e.category&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#F1EFE8',color:'#537281',fontWeight:600}}>{e.category}</span>)}{ot&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{ot}</span>}{ep&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:ep.bg,color:ep.c,fontWeight:700}}>✓ {ep.l}</span>}</div>:null })()}
+                return (signo>0||e.category||ot||ep||e.excluye_saldo)?<div style={{display:'flex',gap:5,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:'#0F6E56',fontWeight:600}}>Fondo</span>:(e.category&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#F1EFE8',color:'#537281',fontWeight:600}}>{e.category}</span>)}{ot&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{ot}</span>}{!e.excluye_saldo&&ep&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:ep.bg,color:ep.c,fontWeight:700}}>✓ {ep.l}</span>}{e.excluye_saldo&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:'#F1EFE8',color:'#5F5E5A',fontWeight:700}}>Solo registro · no descuenta</span>}</div>:null })()}
               <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?'Fondo':'Gasto')}</div>
             </div>
-            <div style={{fontSize:13.5,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:col,flexShrink:0}}>{signo>0?'+':'−'}{fmt(e.amount)}</div>
+            <div style={{fontSize:13.5,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:e.excluye_saldo?'#99ABB4':col,flexShrink:0,textDecoration:e.excluye_saldo?'line-through':'none'}}>{signo>0?'+':'−'}{fmt(e.amount)}</div>
             <span style={{color:'#99ABB4',fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </div>
           {open&&<div style={{padding:'8px 10px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
