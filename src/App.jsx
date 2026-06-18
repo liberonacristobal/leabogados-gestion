@@ -13472,7 +13472,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
   const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
-  const TOL = 2000                               // tolerancia AUTO (±$) por comisión/redondeo
+  const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
   const mesAbbr = iso => { if(!iso) return ''; const [y,mo]=String(iso).slice(0,7).split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${M[+mo-1]||mo} ${(y||'').slice(2)}` }
 
@@ -13679,7 +13679,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let xs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
       .map(b=>({b,saldo:saldoFactura(b),d:mesDiff((b.issued_at||'').slice(0,7),pm)}))
       .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.d===null||x.d<=0))
-    // Si hay calce EXACTO en pesos, NO ofrecer las de valor distinto (la tolerancia ±TOL es solo para cuando no hay exacto).
+    // Calce EXACTO en pesos (no hay comisiones bancarias → TOL=0): solo facturas con el monto idéntico.
     const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
     return xs.sort((a,b)=>   // 1) RS del pagador, 2) mes del pago, 3) cercanía, 4) monto
         ((pr&&crNormRut(b.b.receptor_rut)===pr?1:0)-(pr&&crNormRut(a.b.receptor_rut)===pr?1:0))
@@ -13707,7 +13707,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(factura.status==='Pagado'){
       patch = { reconciled_at:now, updated_at:now }   // ya estaba pagada: SOLO enlaza, no toca estado/monto
     } else {
-      const cubierta = aplicadoTotal >= (factura.amount||0)-TOL   // tolerancia ±TOL: diferencia chica (comisión/redondeo) = pagada
+      const cubierta = aplicadoTotal >= (factura.amount||0)-TOL   // cubierta = aplicado cubre el monto (TOL=0: calce exacto, no hay comisiones)
       patch = cubierta
         ? { status:'Pagado', paid:true, paid_at:fechaPago, payment_date:fechaPago, payment_method:'Transferencia', payment_ref:ref||null, paid_amount:(factura.amount||0), reconciled_at:now, updated_at:now }
         : { paid_amount:aplicadoTotal, payment_method:'Transferencia', payment_ref:ref||null, reconciled_at:now, updated_at:now }
