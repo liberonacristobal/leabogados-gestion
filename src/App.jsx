@@ -7551,6 +7551,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const eliminarGastoNota = async(e)=>{ if(!confirm('¿Eliminar este gasto anulado? Va a la papelera (reversible).')) return; try{ await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',e.id); setExpenses(p=>p.filter(x=>x.id!==e.id)) }catch(err){alert('Error: '+err.message)} }
   const notaSel = notariaPend.filter(e=>selNota.has(e.id))
   const notaTotal = notaSel.reduce((a,e)=>a+(e.amount||0),0)
+  // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (caja chica + notaría pagada) − reservado para
+  // OTROS gastos pendientes del cliente (no la notaría que estás liquidando). Así el fondo se reparte entre todo lo que debe.
+  const dispCliente = cid => {
+    const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.excluye_saldo)
+    const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+    const pagado=g.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
+    const esNotaPend=e=>e.category==='Notaria'&&!e.notaria_render_id   // lo que se liquida ahora a la notaría (no se reserva)
+    const resItems=g.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at&&!esNotaPend(e))
+    const reservado=resItems.reduce((a,e)=>a+(e.amount||0),0)
+    return { fondo, pagado, reservado, resItems, disp: Math.max(0, fondo-pagado-reservado) }
+  }
   const notaPendTotal = notariaPend.reduce((a,e)=>a+(e.amount||0),0)
   const notaLiquidaciones = useMemo(()=>(rendiciones||[]).filter(r=>r.tipo==='notaria').sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1),[rendiciones])
   const toggleNota = id => setSelNota(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n})
@@ -8088,7 +8099,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             // Cuánto de lo seleccionado se paga con el fondo de cada cliente vs cuánto adelantas (no alcanza el fondo).
             const selByCli={}; notaSel.forEach(e=>{ const k=e.client_id||'__none__'; selByCli[k]=(selByCli[k]||0)+(e.amount||0) })
             let conFondo=0, adelanto=0
-            Object.entries(selByCli).forEach(([cid,sel])=>{ const fc=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0); const pc=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0); const d=Math.max(0,fc-pc); conFondo+=Math.min(sel,d); adelanto+=Math.max(0,sel-d) })
+            Object.entries(selByCli).forEach(([cid,sel])=>{ const d=dispCliente(cid).disp; conFondo+=Math.min(sel,d); adelanto+=Math.max(0,sel-d) })
             return (
             <div style={{background:adelanto>0?'#FCEBEB':'#E6EEF1',border:`1px solid ${adelanto>0?'#F0997B':C.accent}`,borderRadius:10,padding:'10px 13px',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
               <div style={{minWidth:0}}>
@@ -8102,22 +8113,21 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>) })()}
           {/* Clientes (con su saldo de fondos) */}
           {Object.entries(notaGroups.byClient).map(([cid,gs])=>{
-            // Disponible = fondo − lo YA pagado materialmente (liquidado caja chica o ya pagado a notaría). La notaría
-            // pendiente que vas a pagar NO descuenta todavía. Post-pago = disponible − lo que pagas ahora.
-            const fondosC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-            const pagadoC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
-            const disp=fondosC-pagadoC; const aPagar=gs.reduce((a,e)=>a+(e.amount||0),0); const post=disp-aPagar
-            // Cobertura: el cliente paga con SU fondo solo si el disponible alcanza. $0 = sin fondos (no pasa el filtro "con fondos").
+            const {fondo:fondosC, pagado:pagadoC, reservado:reservadoC, resItems, disp}=dispCliente(cid)
+            const aPagar=gs.reduce((a,e)=>a+(e.amount||0),0)
+            // Cobertura: el cliente paga con SU fondo solo si el disponible (ya reservando otros pendientes) alcanza.
             const conF=disp>0; if(notaFondos&&!conF) return null; const cn=clients.find(c=>String(c.id)===String(cid))?.name||'Cliente'
             const cubre=disp>=aPagar, sinF=disp<=0
             const est = sinF?{l:'Sin fondos',bg:'#FCEBEB',c:'#A32D2D'}:cubre?{l:'Cubre con su fondo',bg:'#E1F5EE',c:'#0F6E56'}:{l:'Cubre parcial',bg:'#FAEEDA',c:'#854F0B'}
             const detalle = sinF?`Disponible $0 · adelantarías ${fmt(aPagar)} completos`:cubre?`Disponible ${fmt(disp)} · paga ${fmt(aPagar)} con fondo · queda ${fmt(disp-aPagar)}`:`Disponible ${fmt(disp)} · paga ${fmt(disp)} con fondo · adelantas ${fmt(aPagar-disp)}`
+            const resCats=[...new Set(resItems.map(e=>e.category||'Otro'))]
             return (
             <div key={cid} style={{border:`1px solid ${sinF?'#F0997B':C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,padding:'8px 13px',background:sinF?'#FCEBEB':'#F5F7F9',borderBottom:`1px solid ${sinF?'#F0997B':C.border}`}}>
-                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:sinF?'#A32D2D':C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div><div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{detalle}</div></div>
+                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:sinF?'#A32D2D':C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div><div style={{fontSize:9.5,color:C.muted,marginTop:1}}>Fondo {fmt(fondosC)} · pagado {fmt(pagadoC)}{reservadoC>0?` · reservado ${fmt(reservadoC)}`:''} → {detalle}</div></div>
                 <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
               </div>
+              {reservadoC>0&&<div style={{fontSize:10,color:'#185FA5',background:'#E6F1FB',padding:'5px 13px',borderBottom:`1px solid ${C.border}`}}>ℹ Reservé {fmt(reservadoC)} para {resItems.length} gasto{resItems.length!==1?'s':''} pendiente{resItems.length!==1?'s':''} del cliente{resCats.length?` (${resCats.join(', ')})`:''}.</div>}
               {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gs.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const bloq=!on && (usadoOtros+(e.amount||0) > disp); return notaRow(e,bloq) })}
             </div>
           )})}
