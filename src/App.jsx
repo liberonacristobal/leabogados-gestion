@@ -13663,17 +13663,25 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // cercanía de fecha (la del mes del pago primero) → así el pago de mayo calza la factura de mayo, no la de junio.
   const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
     if(!esConciliable(mov)) return []
-    const pm=(mov.fecha||'').slice(0,7)
-    return facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
+    const pm=(mov.fecha||'').slice(0,7), pr=crNormRut(mov.rut_contraparte)
+    let xs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
       .map(b=>({b,saldo:saldoFactura(b),d:mesDiff((b.issued_at||'').slice(0,7),pm)}))
       .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.d===null||x.d<=0))
-      .sort((a,b)=> (Math.abs(a.d==null?99:a.d)-Math.abs(b.d==null?99:b.d)) || (Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)))
+    // Si hay calce EXACTO en pesos, NO ofrecer las de valor distinto (la tolerancia ±TOL es solo para cuando no hay exacto).
+    const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
+    return xs.sort((a,b)=>   // 1) RS del pagador, 2) mes del pago, 3) cercanía, 4) monto
+        ((pr&&crNormRut(b.b.receptor_rut)===pr?1:0)-(pr&&crNormRut(a.b.receptor_rut)===pr?1:0))
+        || (Math.abs(a.d==null?99:a.d)-Math.abs(b.d==null?99:b.d))
+        || (Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)))
       .map(x=>x.b) }
-  // Mejor candidato para el AUTO: único (no demasiado viejo) o, si hay varios del mismo monto, el del MES del pago.
+  // Mejor candidato para el AUTO: exacto+único; si hay varios del mismo monto, desempata por RS del pagador y luego mes del pago.
   const mejorCandidato = (mov, exclude) => { const cs=candidatos(mov,exclude); if(!cs.length) return null
-    const pm=(mov.fecha||'').slice(0,7)
+    const pm=(mov.fecha||'').slice(0,7), pr=crNormRut(mov.rut_contraparte)
     if(cs.length===1){ const d=mesDiff((cs[0].issued_at||'').slice(0,7),pm); return (d==null||d>=-2)?cs[0]:null }
-    const sm=cs.filter(f=>(f.issued_at||'').slice(0,7)===pm); return sm.length===1?sm[0]:null }
+    let pool=cs
+    if(pr){ const r=pool.filter(f=>crNormRut(f.receptor_rut)===pr); if(r.length) pool=r }
+    if(pool.length===1) return pool[0]
+    const sm=pool.filter(f=>(f.issued_at||'').slice(0,7)===pm); return sm.length===1?sm[0]:null }
   const tieneCand = m => esConciliable(m) && candidatos(m).length>0
   // Descalce = abono no interno, no conciliado, sin clasificar como no-honorario, y que NO tiene factura candidata
   // (sin cliente asociado, o con cliente pero sin factura que calce → fondo/anticipo/monto partido).
@@ -14123,7 +14131,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       </div>}
                       {showPick&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                         <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
-                        {cands.slice(0,3).map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}{f.issued_at?` · ${mesAbbr(f.issued_at)}`:''}{f.status==='Pagado'?' · ya pagada':''}</button>))}
+                        {cands.slice(0,3).map(f=>{ const rs=f.receptor_name&&f.receptor_name!==cmap[m.cliente_id]?String(f.receptor_name).slice(0,16):null; return (<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}{f.issued_at?` · ${mesAbbr(f.issued_at)}`:''}{rs?` · ${rs}`:''}{f.status==='Pagado'?' · ✓':''}</button>)})}
                         {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga dos facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?'#003C50':'#E6EEF1',color:comboFor===m.id?'#fff':'#003C50',border:'none'}}>Paga 2 facturas{comboFor===m.id?' ▴':' ▾'}</button>}
                         {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>F°{fmg.factura.invoice_no||'—'} + {fmtM(fmg.excess)} gastos</button>}
                         <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a Favor / Adelanto</button>
