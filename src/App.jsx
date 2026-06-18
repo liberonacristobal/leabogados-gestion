@@ -7941,6 +7941,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 {selectedClient&&onSaveClientFields&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; const pc=cur?personChip(cur):null; return (
                   <button onClick={()=>setRespPickG(v=>!v)} style={{fontSize:10,background:pc?pc.bg:'#F1EFE8',color:pc?pc.color:'#5F5E5A',borderRadius:10,padding:'2px 9px',fontWeight:600,border:'none',cursor:'pointer'}}>{cur?`${cur} ▾`:'+ responsable ▾'}</button>
                 )})()}
+                {selectedClient&&(()=>{
+                  // Deuda efectiva: plata que la oficina YA desembolsó (caja chica + notaría liquidada) por sobre el fondo del cliente.
+                  const f=expenses.filter(e=>e.client_id===selectedClient.id)
+                  const fondos=f.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+                  const pagados=f.filter(e=>e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
+                  const porCobrar=Math.max(0,pagados-fondos); if(porCobrar<=0) return null
+                  return <span title='La oficina ya pagó esto por sobre el fondo del cliente — deuda efectiva por cobrar' style={{fontSize:10,fontWeight:700,color:'#854F0B',background:'#FFF3DC',border:'1px solid #FAC775',borderRadius:10,padding:'2px 9px',whiteSpace:'nowrap'}}>Adelanto {fmt(porCobrar)} por cobrar</span>
+                })()}
               </div>
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{titleCaseRS(selEnts[0].name)}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
               {selectedClient&&onSaveClientFields&&respPickG&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; return (
@@ -7979,16 +7987,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
         {/* Vista cliente seleccionado: KPIs (totales de todas las RS) */}
         {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
-        {selectedClient&&(()=>{
-          // Adelanto de oficina por cobrar = lo REALMENTE pagado (caja chica + notaría liquidada) por sobre el fondo del cliente.
-          const f=expenses.filter(e=>e.client_id===selectedClient.id)
-          const fondos=f.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-          const pagados=f.filter(e=>e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
-          const porCobrar=Math.max(0,pagados-fondos)
-          if(porCobrar<=0) return null
-          return (<div style={{display:'flex',alignItems:'center',gap:8,background:'#FFF3DC',border:'1px solid #FAC775',borderRadius:8,padding:'7px 11px',margin:'0 20px 8px'}}>
-            <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:'#854F0B'}}>Adelanto de oficina por cobrar: {fmt(porCobrar)}</div><div style={{fontSize:9.5,color:'#854F0B'}}>ya pagado por la oficina (sobre el fondo del cliente)</div></div>
-          </div>) })()}
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
         {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&(()=>{
