@@ -13970,8 +13970,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')
   // Pool de calce = facturas PENDIENTE del cliente + las YA PAGADAS sin conciliar (estas solo se ENLAZAN: dejan
   // la evidencia bancaria sin cambiar su estado). La mayoría de los pagos reales son de facturas ya marcadas Pagado.
-  const facturasCliente = cid => billing.filter(b=> b.client_id===cid && !b.deleted_at && (b.amount||0)>0 && (b.status==='Pendiente' || (b.status==='Pagado' && !b.reconciled_at)))
   const saldoFactura = b => Math.max(0,(b.amount||0) - (aplicadoByFactura[b.id]||0))
+  // Pool consciente del SALDO: una factura (Pendiente o Pagada) es candidata mientras le quede saldo por aplicar
+  // (amount − Σ conciliado > TOL). Así un pago en 2+ transferencias se imputa a la MISMA factura (BM Soluciones:
+  // F°239 $8,34M = $7M + $1,34M), y una factura ya cubierta SALE del pool (no se re-ofrece ni se aplica de más).
+  const facturasCliente = cid => billing.filter(b=> b.client_id===cid && !b.deleted_at && (b.amount||0)>0 && (b.status==='Pendiente'||b.status==='Pagado') && saldoFactura(b) > TOL)
   // Diferencia en meses entre el mes de la factura (emisión) y el del pago (factura − pago). null si falta dato.
   const mesDiff = (fm,pm) => { if(!fm||!pm) return null; const [ya,ma]=fm.split('-').map(Number),[yb,mb]=pm.split('-').map(Number); return (ya*12+ma)-(yb*12+mb) }
   // Candidatas dentro de ±TOL del monto. Refuerzo para asesorías recurrentes (mismo monto cada mes): se EXCLUYE
