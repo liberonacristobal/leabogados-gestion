@@ -13444,7 +13444,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 }
 
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
-function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,proveedores=[],user,onClose}){
+function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],proveedores=[],user,onClose}){
   // Capa 2 — RUT conocidos para el tag "quién es"
   const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina' }   // Rodrigo (rd@): falta su RUT real; 9.619.443-9 era del CLIENTE Rodrigo Macho
   const SOCIO_RUT  = { '156213209':'Cristóbal', '153717338':'Erasmo' }
@@ -13704,6 +13704,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let best=null, bestD=TOL+1
     for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ const d=Math.abs(fs[i].saldo+fs[j].saldo-(mov.monto||0)); if(d<=TOL&&d<bestD){ bestD=d; best=[fs[i].f,fs[j].f] } }
     return best }
+  // Gasto ya reembolsado vía conciliación (filas tipo_destino='gasto'), por cliente — para no re-sugerir lo ya cubierto.
+  const cidByMov = useMemo(()=>{ const m={}; movs.forEach(x=>m[x.id]=x.cliente_id); return m },[movs])
+  const reembGastoByCliente = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.tipo_destino==='gasto'){ const cid=cidByMov[c.movimiento_id]; if(cid) m[cid]=(m[cid]||0)+(c.monto_aplicado||0) } }); return m },[conc,cidByMov])
+  // Gastos pendientes de reembolso del cliente = (gastos − fondos del ledger) − lo ya reembolsado por conciliación.
+  const gastoPend = cid => Math.max(0, -saldoCliente(expenses, cid) - (reembGastoByCliente[cid]||0))
+  // Caso "factura + gastos": el abono excede una factura y el exceso ≈ los gastos pendientes del cliente (reembolso junto a honorarios).
+  const facturaMasGastos = (mov) => { if(!esConciliable(mov)) return null
+    const pend = gastoPend(mov.cliente_id); if(pend<=0) return null
+    const fs = facturasCliente(mov.cliente_id).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0)
+    let best=null, bestD=TOL+1
+    for(const {f,saldo} of fs){ const excess=(mov.monto||0)-saldo; if(excess<=0) continue; const d=Math.abs(excess-pend); if(d<=TOL&&d<bestD){ bestD=d; best={factura:f,saldo,excess} } }
+    return best }
   // Concilia el abono contra VARIAS facturas en una pasada (lleva el monto_conciliado corrido entre facturas).
   const reconciliarCombo = async(mov, facturas)=>{
     if(busy) return
@@ -13726,6 +13738,28 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(me) throw me
       setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
     }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar combinación: '+e.message) }
+    setBusy(null)
+  }
+  // Concilia "factura + gastos": aplica el saldo a la factura (la marca pagada) y registra el exceso como reembolso de
+  // gastos (fila tipo_destino='gasto'). No toca el ledger de gastos todavía (eso es Fase 3 fina); deja la trazabilidad.
+  const reconciliarFacturaGastos = async(mov, fg)=>{
+    if(busy) return
+    setBusy(mov.id)
+    let crF=null, crG=null
+    try{
+      const aplicF = Math.max(0, Math.min((mov.monto||0)-(mov.monto_conciliado||0), fg.saldo))
+      const insF = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:fg.factura.id, monto_aplicado:aplicF, origen:'manual' }).select().single()
+      if(insF.error) throw insF.error; crF=insF.data
+      await persistPagoFactura(fg.factura, (aplicadoByFactura[fg.factura.id]||0)+aplicF, mov.fecha, mov.n_operacion)
+      let movAplicado=(mov.monto_conciliado||0)+aplicF
+      const excess=(mov.monto||0)-movAplicado
+      if(excess>0){ const insG = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', monto_aplicado:excess, origen:'manual' }).select().single()
+        if(insG.error) throw insG.error; crG=insG.data; movAplicado+=excess }
+      const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
+      if(me) throw me
+      setConc(p=>[...p,crF,...(crG?[crG]:[])]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
+    }catch(e){ if(crG) await supabase.from('conciliacion').delete().eq('id',crG.id); if(crF) await supabase.from('conciliacion').delete().eq('id',crF.id); alert('Error al conciliar factura + gastos: '+e.message) }
     setBusy(null)
   }
   // Deja el resto del abono como saldo a favor del cliente (anticipo disponible, reutiliza la feature Anticipos).
@@ -14020,11 +14054,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   const myConc=concByMov[m.id]||[]; const resto=(m.monto||0)-(m.monto_conciliado||0)
                   const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=facturasCliente(m.cliente_id)
                   const combo=(myConc.length===0&&cands.length===0)?combos(m):null
+                  const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
                   const showPick=myConc.length===0||resto>TOL
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?5:0}}>
-                        {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=f&&f.reconciled_from==='conciliacion-link';return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
+                        {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=f&&f.reconciled_from==='conciliacion-link';return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
                           return <span key={r.id} style={{fontSize:11,fontWeight:700,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 9px'}}>✓ {lbl}</span> })}
                         <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>deshacer</button>
                       </div>}
@@ -14032,6 +14067,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
                         {cands.slice(0,3).map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}{f.issued_at?` · ${mesAbbr(f.issued_at)}`:''}{f.status==='Pagado'?' · ya pagada':''}</button>))}
                         {combo&&<button disabled={busy===m.id} onClick={()=>reconciliarCombo(m,combo)} title='Una transferencia que paga dos facturas' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6EEF1',color:'#003C50',border:'none'}}>Paga 2: F°{combo[0].invoice_no||'—'} + F°{combo[1].invoice_no||'—'}</button>}
+                        {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>F°{fmg.factura.invoice_no||'—'} + {fmtM(fmg.excess)} gastos</button>}
                         <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a favor</button>
                         {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'cerrar':'otra factura'}</button>}
                       </div>}
@@ -15244,7 +15280,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
-            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} proveedores={proveedores} user={user} onClose={()=>setTab('dashboard')}/>}
+            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} proveedores={proveedores} user={user} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:{notaria:true}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
