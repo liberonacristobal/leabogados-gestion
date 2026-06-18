@@ -14157,7 +14157,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   </div>
                 </div>
                 {abierto&&(<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
-                {/* JERARQUÍA: 1) acción (conciliar) · 2) provisión · 3) cliente · 4) clasificación · 5) contexto+historial */}
+                  <div style={{fontSize:10,color:C.muted,marginBottom:7,lineHeight:1.5}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:'#185FA5',cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
+                {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
+                  return o.exact
+                    ? <div style={{fontSize:11,color:C.accent,marginBottom:4}}>↔ origen: <b>{nom}</b> · abono en {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
+                    : <div style={{fontSize:11,color:C.overdue,marginBottom:4}}>↔ posible origen: <b>{nom}</b> · abono en {cta} — <b>diferencia {fmtM(Math.abs(o.diff))}</b>, revisar</div>
+                })()}
+                {!m.es_interno&&<div style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Cliente</div>}
                 {!m.es_interno&&(
                   editMov===m.id
                     ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
@@ -14214,68 +14220,64 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=facturasCliente(m.cliente_id)
                   const combo=(myConc.length===0&&cands.length===0)?combos(m):null
                   const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
-                  const showPick=myConc.length===0||resto>TOL
+                  const showPick=myConc.length===0||resto>TOL; const sug=showPick?mejorCandidato(m):null
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
-                      {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?5:0}}>
+                      <div style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
+                      {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?6:0}}>
                         {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a Favor / Adelanto · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=!r.marco_pago&&f&&f.status==='Pagado';return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
                           return <span key={r.id} style={{fontSize:11,fontWeight:700,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 9px'}}>✓ {lbl}</span> })}
                         <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button>
                       </div>}
-                      {showPick&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                        <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
-                        {cands.slice(0,3).map(f=>{ const rs=f.receptor_name&&f.receptor_name!==cmap[m.cliente_id]?String(f.receptor_name).slice(0,16):null; return (<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}{f.issued_at?` · ${mesAbbr(f.issued_at)}`:''}{rs?` · ${rs}`:''}{f.status==='Pagado'?' · ✓':''}</button>)})}
-                        {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga dos facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?'#003C50':'#E6EEF1',color:comboFor===m.id?'#fff':'#003C50',border:'none'}}>Paga 2 facturas{comboFor===m.id?' ▴':' ▾'}</button>}
-                        {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>F°{fmg.factura.invoice_no||'—'} + {fmtM(fmg.excess)} gastos</button>}
-                        <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a Favor / Adelanto</button>
-                        <button disabled={busy===m.id} onClick={()=>setCategoria(m,'Provisión de gastos')} title='No es honorario: es una provisión de gastos del cliente' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Provisión</button>
-                        {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'Cerrar':'Otra factura'}</button>}
-                      </div>}
-                      {showPick&&combo&&comboFor===m.id&&(()=>{ const tot=combo.reduce((s,f)=>s+saldoFactura(f),0); return (
-                        <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid #99ABB4`,paddingLeft:8}}>
-                          {combo.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliar(m,f,'manual')}} title='Conciliar solo esta factura' style={{textAlign:'left',fontSize:11,color:C.text,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer'}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,28)} · <b>{fmtM(saldoFactura(f))}</b></button>))}
-                          <div style={{fontSize:10,color:C.muted}}>Suma: {fmtM(tot)} {Math.abs(tot-(m.monto||0))<=TOL?'≈':'≠'} abono {fmtM(m.monto)} · toca una para conciliar solo esa</div>
-                          <div style={{display:'flex',gap:8,marginTop:2}}>
-                            <button disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliarCombo(m,combo)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:'pointer'}}>Confirmar las 2</button>
-                            <button onClick={()=>setComboFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
-                          </div>
-                        </div>) })()}
-                      {showPick&&pickFor===m.id&&(()=>{
-                        // Estilo "estado de cuenta": agrupado por razón social, montos alineados a la derecha, fila → detalle.
-                        const grupos={}; facsAll.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
-                        return (<div style={{marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
-                          {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas de este cliente.</span>}
-                          {Object.entries(grupos).map(([rs,fs])=>(
-                            <div key={rs} style={{marginBottom:5}}>
-                              <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
-                              {fs.map(f=>{ const open=detFor===f.id; const estCol=f.status==='Pagado'?'#0F6E56':'#C77F18'; return (
-                                <div key={f.id}>
-                                  <div onClick={()=>setDetFor(open?null:f.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
-                                    <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{f.invoice_no||'—'}</b> · {(f.concept||'sin concepto').slice(0,26)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(f.issued_at)}</span></span>
-                                    <span style={{textAlign:'right',whiteSpace:'nowrap'}}><b>{fmtM(f.amount)}</b><br/><span style={{fontSize:9,color:estCol}}>{f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</span></span>
-                                  </div>
-                                  {open&&<div style={{padding:'6px 8px 7px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 4px'}}>
-                                    <div>Razón social: <b style={{color:C.text}}>{f.receptor_name||'—'}</b>{f.receptor_rut?` · ${f.receptor_rut}`:''}</div>
-                                    <div>Emisión: {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
-                                    <div>Monto: {fmtM(f.amount)} · Saldo: {fmtM(saldoFactura(f))} · {f.status}</div>
-                                    <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{marginTop:5,fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
-                                  </div>}
-                                </div>) })}
+                      {showPick&&<>
+                        {sug&&<div style={{background:'#E6EEF1',borderRadius:8,padding:'6px 9px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
+                          <span style={{fontSize:11,color:'#003C50',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sugerida: <b>F°{sug.invoice_no||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}{sug.receptor_name&&sug.receptor_name!==cmap[m.cliente_id]?` · ${String(sug.receptor_name).slice(0,16)}`:''}{saldoFactura(sug)===resto?' (exacto)':''}</span>
+                          <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:'#003C50',color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
+                        </div>}
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
+                          {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
+                          {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga dos facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?'#003C50':'#E6EEF1',color:comboFor===m.id?'#fff':'#003C50',border:'none'}}>Paga 2 facturas{comboFor===m.id?' ▴':' ▾'}</button>}
+                          {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>F°{fmg.factura.invoice_no||'—'} + {fmtM(fmg.excess)} gastos</button>}
+                          <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a Favor / Adelanto</button>
+                          <button disabled={busy===m.id} onClick={()=>setCategoria(m,'Provisión de gastos')} title='No es honorario: es una provisión de gastos del cliente' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Provisión</button>
+                        </div>
+                        {combo&&comboFor===m.id&&(()=>{ const tot=combo.reduce((s,f)=>s+saldoFactura(f),0); return (
+                          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:6,borderLeft:`2px solid #99ABB4`,paddingLeft:8}}>
+                            {combo.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliar(m,f,'manual')}} title='Conciliar solo esta factura' style={{textAlign:'left',fontSize:11,color:C.text,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer'}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,28)} · <b>{fmtM(saldoFactura(f))}</b></button>))}
+                            <div style={{fontSize:10,color:C.muted}}>Suma: {fmtM(tot)} {tot===(m.monto||0)?'=':'≠'} abono {fmtM(m.monto)} · toca una para conciliar solo esa</div>
+                            <div style={{display:'flex',gap:8,marginTop:2}}>
+                              <button disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliarCombo(m,combo)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:'pointer'}}>Confirmar las 2</button>
+                              <button onClick={()=>setComboFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                             </div>
-                          ))}
-                        </div>) })()}
+                          </div>) })()}
+                        {(()=>{
+                          // Estado de cuenta del cliente (siempre visible): agrupado por razón social, montos a la derecha, fila → detalle.
+                          const grupos={}; facsAll.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
+                          return (<div style={{borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
+                            {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas de este cliente.</span>}
+                            {Object.entries(grupos).map(([rs,fs])=>(
+                              <div key={rs} style={{marginBottom:5}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
+                                {fs.map(f=>{ const open=detFor===f.id; const estCol=f.status==='Pagado'?'#0F6E56':'#C77F18'; return (
+                                  <div key={f.id}>
+                                    <div onClick={()=>setDetFor(open?null:f.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
+                                      <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{f.invoice_no||'—'}</b> · {(f.concept||'sin concepto').slice(0,26)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(f.issued_at)}</span></span>
+                                      <span style={{textAlign:'right',whiteSpace:'nowrap'}}><b>{fmtM(f.amount)}</b><br/><span style={{fontSize:9,color:estCol}}>{f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</span></span>
+                                    </div>
+                                    {open&&<div style={{padding:'6px 8px 7px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 4px'}}>
+                                      <div>Razón social: <b style={{color:C.text}}>{f.receptor_name||'—'}</b>{f.receptor_rut?` · ${f.receptor_rut}`:''}</div>
+                                      <div>Emisión: {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
+                                      <div>Monto: {fmtM(f.amount)} · Saldo: {fmtM(saldoFactura(f))} · {f.status}</div>
+                                      <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{marginTop:5,fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
+                                    </div>}
+                                  </div>) })}
+                              </div>
+                            ))}
+                          </div>) })()}
+                      </>}
                     </div>
                   )
                 })()}
-                {/* Contexto (al fondo): glosa cruda + N° op. + cruce interno */}
-                <div style={{marginTop:9,borderTop:`1px solid #F1F1F1`,paddingTop:7}}>
-                  <div style={{fontSize:10,color:C.muted,lineHeight:1.5}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:'#185FA5',cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
-                  {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
-                    return o.exact
-                      ? <div style={{fontSize:11,color:C.accent,marginTop:3}}>↔ origen: <b>{nom}</b> · abono en {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
-                      : <div style={{fontSize:11,color:C.overdue,marginTop:3}}>↔ posible origen: <b>{nom}</b> · abono en {cta} — <b>diferencia {fmtM(Math.abs(o.diff))}</b>, revisar</div>
-                  })()}
-                </div>
                 {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9.5,color:'#99ABB4',marginTop:8,borderTop:`1px solid #F1F1F1`,paddingTop:6,lineHeight:1.6}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo acreditado':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
                 </div>)}
               </div>
