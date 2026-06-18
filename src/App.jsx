@@ -13666,6 +13666,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [anioF,setAnioF] = useState('todos')       // filtro por año
   const [mesF,setMesF] = useState('todos')         // filtro por mes (01-12)
+  const [respF,setRespF] = useState('todos')       // filtro por abogado responsable del cliente
+  const respByCid = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); return m },[clients])
+  const respDisp = useMemo(()=>[...new Set((clients||[]).map(c=>c.abogado_responsable).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')),[clients])
   const [q,setQ] = useState('')                    // búsqueda por RUT / nombre / cliente
   const [orden,setOrden] = useState('desc')        // orden por fecha: 'desc' | 'asc'
   const [verCartolas,setVerCartolas] = useState(false)   // panel "Cartolas cargadas" desplegado
@@ -13682,7 +13685,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [modalMov,setModalMov] = useState(null)  // id del movimiento abierto en el modal de detalle
   // Salto desde el Estado de cuenta del cliente: limpia filtros, abre el movimiento y hace scroll. Espera a que carguen los movs.
   useEffect(()=>{ if(!focusMovId) return; const m=movs.find(x=>x.id===focusMovId); if(!m) return
-    setSub(m.tipo==='cargo'?'cargos':'abonos'); setCuentaF('ambas'); setAnioF('todos'); setMesF('todos'); setQ(''); setModalMov(focusMovId)
+    setSub(m.tipo==='cargo'?'cargos':'abonos'); setCuentaF('ambas'); setAnioF('todos'); setMesF('todos'); setRespF('todos'); setQ(''); setModalMov(focusMovId)
     setTimeout(()=>{ try{ document.getElementById('mov-'+focusMovId)?.scrollIntoView({behavior:'smooth',block:'center'}) }catch(_){} },150)
     onFocusConsumed&&onFocusConsumed() },[focusMovId,movs])
   const [verGlosa,setVerGlosa] = useState(false)  // glosa cruda desplegada en el modal
@@ -14195,6 +14198,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
     if(anioF!=='todos') l=l.filter(m=>(m.fecha||'').slice(0,4)===anioF)
     if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
+    if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
     if(sub==='abonos'){
       if(concView==='sinid') l=l.filter(m=>!m.es_interno&&!m.cliente_id)
       else if(concView==='porconciliar') l=l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length))
@@ -14207,7 +14211,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         return nm.includes(qq)||cl.includes(qq)||(qd.length>=3&&rut.includes(qd)) }) }
     l=l.slice().sort((a,b)=> orden==='asc' ? ((a.fecha||'')<(b.fecha||'')?-1:1) : ((a.fecha||'')>(b.fecha||'')?-1:1))
     return l.slice(0,400)
-  },[movs,sub,cuentaF,anioF,mesF,concView,concByMov,billing,q,orden,cmap])
+  },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Cta. Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Cta. Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Chip de estado definitivo para el landing (un solo chip que informa de verdad qué pasó con el movimiento).
@@ -14346,6 +14350,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={selSty}>
             <option value='todos'>Año</option>
             {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+          <select value={respF} onChange={e=>setRespF(e.target.value)} style={selSty} title='Filtrar por abogado responsable del cliente'>
+            <option value='todos'>Responsable</option>
+            {respDisp.map(r=><option key={r} value={r}>{r}</option>)}
+            <option value='__sin__'>Sin responsable</option>
           </select>
           {sub==='abonos'&&<select value={concView} onChange={e=>setConcView(e.target.value)} style={selSty}>
             <option value='todos'>Estado</option>
