@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — Conciliación · sugerir "factura + gastos" (reembolso junto a honorarios)
+- Cuando un abono excede una factura y el exceso coincide con los gastos pendientes de reembolso del cliente (ledger fondos−gastos, descontando lo ya reembolsado por conciliación), ofrece "F°X + $Y gastos": aplica el saldo a la factura (la marca pagada) y registra el exceso como reembolso de gastos (fila conciliacion tipo_destino='gasto'). Solo sugiere si el cliente realmente debe gastos ≈ el exceso (no en cualquier abono grande). Reversible. Primer pedazo de Fase 3; el marcado fino del ledger de gastos vendrá después.
+
 ## 2026-06-17 — Conciliación · match combinación + auditoría (3 revisores) y fixes
 - Match de combinación: 1 transferencia que paga 2 facturas se ofrece como botón "Paga 2: F°A + F°B" (elige el mejor par dentro de ±$2.000); todo reversible.
 - Auditoría con 3 revisores (lógica/estado, cifras, integridad). Corregido: deshacer con acumulador local (varias filas sobre la misma factura ya no descuentan mal); bloqueo de deshacer si el saldo a favor ya se consumió (evita doble conteo); atomicidad (si una conciliación/saldo-a-favor falla a mitad, se borra la fila/anticipo huérfano); facturas con monto ≤0 fuera del pool; chequeo de `.error` en propagación de aprendizaje; sugerencia por nombre endurecida (stoplist de nombres de pila comunes + token distintivo, menos falsos); deps de memos completadas.
