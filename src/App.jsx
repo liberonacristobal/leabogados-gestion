@@ -13492,10 +13492,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Subarriendo':{bg:'#FAECE7',color:'#993C1D'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
-  // Categorías distintas por sentido: cargos = a quién le pagas; abonos = qué tipo de ingreso (Cliente es el default auto).
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Comisión':{bg:'#FBEAF0',color:'#993556'},'Subarriendo':{bg:'#FAECE7',color:'#993C1D'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
+  // Categorías distintas por sentido: cargos = a quién le pagas; abonos = qué tipo de ingreso (Cliente=honorarios
+  // facturados es el default auto; Comisión y Subarriendo NO son honorarios → no calzan contra factura).
   const CATS_CARGO = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Impuestos']
-  const CATS_ABONO = ['Subarriendo','Otro ingreso']
+  const CATS_ABONO = ['Comisión','Subarriendo','Otro ingreso']
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
   const setCategoria = async(mov,cat)=>{
@@ -13797,7 +13798,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
                           {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
                           <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>cerrar</button>
                         </div>
-                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#99ABB4':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿subarriendo u otro?':'+ clasificar')}</button>}
+                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#99ABB4':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿comisión, subarriendo u otro?':'+ clasificar')}</button>}
                   </div>
                 )})()}
               </div>
