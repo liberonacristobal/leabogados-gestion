@@ -13446,7 +13446,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
 function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[],user,onClose}){
   // Capa 2 — RUT conocidos para el tag "quién es"
-  const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina', '96194439':'Rodrigo' }
+  const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina' }   // Rodrigo (rd@): falta su RUT real; 9.619.443-9 era del CLIENTE Rodrigo Macho
   const SOCIO_RUT  = { '156213209':'Cristóbal', '153717338':'Erasmo' }
   const CONTADORA_RUT = { '124631432':'Claudia (contadora)' }
   const [movs,setMovs] = useState([])
