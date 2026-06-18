@@ -8084,15 +8084,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           )}
           {notariaPend.length===0&&notariaAnulados.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30,fontSize:13}}>No hay gastos de notaría pendientes de liquidar.</div>}
           {/* Acción sobre lo seleccionado: se despliega sobre el primer cliente (no barra inferior) */}
-          {selNota.size>0&&(
-            <div style={{background:'#E6EEF1',border:`1px solid ${C.accent}`,borderRadius:10,padding:'10px 13px',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-              <div style={{fontSize:12,color:C.accent,fontWeight:600}}>{selNota.size} seleccionado{selNota.size!==1?'s':''} · {fmt(notaTotal)}</div>
+          {selNota.size>0&&(()=>{
+            // Cuánto de lo seleccionado se paga con el fondo de cada cliente vs cuánto adelantas (no alcanza el fondo).
+            const selByCli={}; notaSel.forEach(e=>{ const k=e.client_id||'__none__'; selByCli[k]=(selByCli[k]||0)+(e.amount||0) })
+            let conFondo=0, adelanto=0
+            Object.entries(selByCli).forEach(([cid,sel])=>{ const fc=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0); const pc=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0); const d=Math.max(0,fc-pc); conFondo+=Math.min(sel,d); adelanto+=Math.max(0,sel-d) })
+            return (
+            <div style={{background:adelanto>0?'#FCEBEB':'#E6EEF1',border:`1px solid ${adelanto>0?'#F0997B':C.accent}`,borderRadius:10,padding:'10px 13px',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12,color:adelanto>0?'#A32D2D':C.accent,fontWeight:600}}>{selNota.size} seleccionado{selNota.size!==1?'s':''} · {fmt(notaTotal)}</div>
+                <div style={{fontSize:10.5,marginTop:2}}><span style={{color:'#0F6E56',fontWeight:600}}>con fondo {fmt(conFondo)}</span>{adelanto>0&&<span style={{color:'#A32D2D',fontWeight:700}}> · adelantarías {fmt(adelanto)}</span>}</div>
+              </div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                <button onClick={()=>setNotaConfirm(true)} style={{height:30,padding:'0 13px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Liquidar a notaría</button>
+                <button onClick={()=>{ if(adelanto>0&&!confirm(`Estás liquidando ${fmt(notaTotal)} pero solo ${fmt(conFondo)} está cubierto por fondos del cliente.\nAdelantarías ${fmt(adelanto)} que el cliente no tiene en fondo.\n\n¿Continuar igual?`)) return; setNotaConfirm(true) }} style={{height:30,padding:'0 13px',borderRadius:8,border:'none',background:adelanto>0?'#A32D2D':C.accent,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>Liquidar a notaría</button>
                 <button onClick={marcarPagadoNotaria} style={{height:30,padding:'0 13px',borderRadius:8,border:`1px solid ${C.muted}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Marcar pagado</button>
               </div>
-            </div>
-          )}
+            </div>) })()}
           {/* Clientes (con su saldo de fondos) */}
           {Object.entries(notaGroups.byClient).map(([cid,gs])=>{
             // Disponible = fondo − lo YA pagado materialmente (liquidado caja chica o ya pagado a notaría). La notaría
