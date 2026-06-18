@@ -14073,9 +14073,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'Editar':'Identificar'}</button>
                       </div>
                 )}
-                {/* Capa 2 — tag manual. Cargos: a quién le pagas. Abonos provisión (ocasional): en cuenta Gastos si no
-                    calza factura; en Honorarios solo si está identificado y no calza (provisión que cayó en honorarios). */}
-                {!m.es_interno&&(m.tipo==='cargo'||(m.rol_cuenta==='gastos'?(m.categoria||!tieneCand(m)):(m.categoria||(m.cliente_id&&!tieneCand(m)))))&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
+                {/* Capa 2 — tag manual. Cargos: siempre (a quién le pagas). Abonos: solo si ya tienen tag (para cambiar/
+                    quitar); marcar "Provisión" en abonos se hace desde la fila de conciliación, no con un prompt suelto. */}
+                {!m.es_interno&&(m.tipo==='cargo'||m.categoria)&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
@@ -14111,6 +14111,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         {combo&&<button disabled={busy===m.id} onClick={()=>reconciliarCombo(m,combo)} title='Una transferencia que paga dos facturas' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6EEF1',color:'#003C50',border:'none'}}>Paga 2: F°{combo[0].invoice_no||'—'} + F°{combo[1].invoice_no||'—'}</button>}
                         {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>F°{fmg.factura.invoice_no||'—'} + {fmtM(fmg.excess)} gastos</button>}
                         <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a Favor / Adelanto</button>
+                        <button disabled={busy===m.id} onClick={()=>setCategoria(m,'Provisión de gastos')} title='No es honorario: es una provisión de gastos del cliente' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Provisión</button>
                         {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'Cerrar':'Otra factura'}</button>}
                       </div>}
                       {showPick&&pickFor===m.id&&<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
