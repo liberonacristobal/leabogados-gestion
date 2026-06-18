@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-17 — Conciliación · sugerir cliente por nombre (cruce con facturas emitidas)
+- Para abonos sin RUT registrado, cruza el nombre del banco contra nombres de clientes y razones sociales del receptor de facturas emitidas; si apunta a un cliente único, ofrece un chip "¿Cliente?" que al confirmar asocia y aprende el RUT (compuerta humana, nunca automático). Cubre ~52 de los 143 sin identificar. Auditoría de cruces: por RUT da 0 (el resolver ya los toma), por monto solo es poco confiable (coincidencias de montos redondos), por nombre es el confiable.
+
 ## 2026-06-17 — Conciliación Fase 2 · descalces + fondos en cuenta Gastos
 - Filtro **Descalces**: abonos no conciliados que no calzan (sin cliente asociado, o con cliente pero sin factura) — la cola de excepciones a revisar tras conciliar el histórico. "Por conciliar" ahora solo lista las que tienen factura candidata.
 - **AUTO ya no toca la cuenta de Gastos**: un abono ahí casi siempre es fondo (provisión), no honorario → revisión manual. El link de clasificar en esa cuenta sugiere "¿fondo de gastos?".
