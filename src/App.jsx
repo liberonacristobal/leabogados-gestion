@@ -9353,10 +9353,14 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     {sec==='fondos'&&(()=>{ const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; return (
         <div key={e.id} style={{borderBottom:`1px solid ${C.border}`}}>
-          <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'baseline',gap:8,fontSize:11,padding:'6px 0',cursor:'pointer'}}>
-            <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?'Fondo':'Gasto')} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span>
-            <b style={{color:col,whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{signo>0?'+':'−'}{fmt(e.amount)}</b>
-            <span style={{color:'#185FA5',fontSize:11,flexShrink:0,width:30,textAlign:'right'}}>{open?'▴':'ver ▾'}</span>
+          <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer'}}>
+            {(()=>{ const dp=String(e.date||'').slice(0,10).split('-'); const dia=dp.length>=3?dp[2]:'—'; const sub=dp.length>=3?`${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{dia}</div><div style={{fontSize:9.5,color:'#99ABB4'}}>{sub}</div></div> })()}
+            <div style={{flex:1,minWidth:0}}>
+              {(()=>{ const ot=e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):null; return (signo>0||e.category||ot)?<div style={{display:'flex',gap:5,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:'#0F6E56',fontWeight:600}}>Fondo</span>:(e.category&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#F1EFE8',color:'#537281',fontWeight:600}}>{e.category}</span>)}{ot&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{ot}</span>}</div>:null })()}
+              <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?'Fondo':'Gasto')}</div>
+            </div>
+            <div style={{fontSize:13.5,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:col,flexShrink:0}}>{signo>0?'+':'−'}{fmt(e.amount)}</div>
+            <span style={{color:'#99ABB4',fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </div>
           {open&&<div style={{padding:'8px 10px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
             <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:3}}>{e.concept||e.category||(signo>0?'Fondo recibido':'Gasto')}</div>
