@@ -13493,6 +13493,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // clientes y razones sociales del receptor de facturas EMITIDAS. Solo sugiere; el usuario confirma (y ahí aprende el RUT).
   const _stripNom = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(spa|ltda|limitada|sa|eirl|sociedad|comercial|servicios|inversiones|cia)\b/g,' ').replace(/\s+/g,' ').trim()
   const _toksNom = s => _stripNom(s).split(' ').filter(t=>t.length>=4)
+  // Nombres de pila comunes: no alcanzan para identificar (dos "José Miguel" distintos no son el mismo cliente).
+  const _NOM_COMUN = new Set(['jose','juan','maria','luis','carlos','miguel','francisco','pedro','pablo','jorge','manuel','andres','felipe','cristobal','catalina','daniel','ignacio','antonio','rodrigo','sebastian','alejandro','fernando','gonzalo','ricardo','roberto','eduardo','patricio','claudio','marcelo','rafael','victor','angel','mario','raul','sergio','hernan','ramon'])
   const nombreIdx = useMemo(()=>{ const idx=[]
     clients.forEach(c=>idx.push({cid:c.id,t:_toksNom(c.name)}))
     const seen=new Set(); billing.forEach(f=>{ if(f.receptor_name&&f.client_id){ const k=f.client_id+'|'+f.receptor_name; if(!seen.has(k)){ seen.add(k); idx.push({cid:f.client_id,t:_toksNom(f.receptor_name)}) } } })
@@ -13501,7 +13503,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     movs.forEach(mv=>{ if(mv.tipo==='abono'&&!mv.es_interno&&!mv.cliente_id&&mv.nombre_contraparte){
       const nt=_toksNom(mv.nombre_contraparte); if(!nt.length) return
       const hits=new Set()
-      nombreIdx.forEach(e=>{ const inter=e.t.filter(t=>nt.some(x=> x===t || (x.length>=5&&t.length>=5&&(x.startsWith(t)||t.startsWith(x))))); if(inter.length>=2 || (inter.length>=1 && inter.some(t=>t.length>=6))) hits.add(e.cid) })
+      nombreIdx.forEach(e=>{ const inter=e.t.filter(t=>nt.some(x=> x===t || (x.length>=5&&t.length>=5&&(x.startsWith(t)||t.startsWith(x)))))
+        const fuertes=inter.filter(t=>!_NOM_COMUN.has(t)&&t.length>=5)   // tokens distintivos (no nombres de pila comunes)
+        if(fuertes.length>=1 && (inter.length>=2 || fuertes.some(t=>t.length>=6))) hits.add(e.cid) })
       if(hits.size===1) out[mv.id]=[...hits][0] }})
     return out },[movs,nombreIdx])
   // Capa 2 — categoría "quién es": manual (categoria) manda; si no, auto por RUT conocido / cliente.
@@ -13602,7 +13606,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         const r2 = await supabase.from('cliente_alias').upsert({rut_pagador:rut,nombre_pagador:nombre,cliente_id:clientId},{onConflict:'rut_pagador'})
         if(r2.error) throw r2.error
         learnedK=crNormRut(rut)
-        await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('rut_contraparte',rut)
+        const r3 = await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('rut_contraparte',rut)
+        if(r3.error) throw r3.error
         setAliases(p=>[...p.filter(a=>crNormRut(a.rut_pagador)!==learnedK),{rut_pagador:rut,cliente_id:clientId,nombre_pagador:nombre}])
       }
       setMovs(p=>p.map(m=> m.id===mov.id ? {...m,cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}
@@ -13642,7 +13647,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')
   // Pool de calce = facturas PENDIENTE del cliente + las YA PAGADAS sin conciliar (estas solo se ENLAZAN: dejan
   // la evidencia bancaria sin cambiar su estado). La mayoría de los pagos reales son de facturas ya marcadas Pagado.
-  const facturasCliente = cid => billing.filter(b=> b.client_id===cid && !b.deleted_at && (b.status==='Pendiente' || (b.status==='Pagado' && !b.reconciled_at)))
+  const facturasCliente = cid => billing.filter(b=> b.client_id===cid && !b.deleted_at && (b.amount||0)>0 && (b.status==='Pendiente' || (b.status==='Pagado' && !b.reconciled_at)))
   const saldoFactura = b => Math.max(0,(b.amount||0) - (aplicadoByFactura[b.id]||0))
   // Candidatas dentro de la tolerancia ±TOL del monto buscado (monto del abono, o el resto al repartir).
   const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
@@ -13676,74 +13681,89 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const reconciliar = async(mov, factura, origen='manual')=>{
     if(busy) return
     setBusy(mov.id)
+    let cr=null
     try{
       const saldo = saldoFactura(factura)
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
-      const { data:cr, error:ce } = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen }).select().single()
-      if(ce) throw ce
+      const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen }).select().single()
+      if(ins.error) throw ins.error
+      cr=ins.data
       await persistPagoFactura(factura, (aplicadoByFactura[factura.id]||0)+aplicado, mov.fecha, mov.n_operacion)
       const movAplicado = (mov.monto_conciliado||0)+aplicado
       const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
-    }catch(e){ alert('Error al conciliar: '+e.message) }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar: '+e.message) }
     setBusy(null)
   }
   // Detecta el caso "una transferencia paga 2 facturas": par de facturas del pool cuyos saldos suman el monto (±TOL).
   const combos = (mov) => { if(!esConciliable(mov)) return null
     const fs = facturasCliente(mov.cliente_id).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0)
-    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ if(Math.abs(fs[i].saldo+fs[j].saldo-(mov.monto||0))<=TOL) return [fs[i].f,fs[j].f] }
-    return null }
+    let best=null, bestD=TOL+1
+    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ const d=Math.abs(fs[i].saldo+fs[j].saldo-(mov.monto||0)); if(d<=TOL&&d<bestD){ bestD=d; best=[fs[i].f,fs[j].f] } }
+    return best }
   // Concilia el abono contra VARIAS facturas en una pasada (lleva el monto_conciliado corrido entre facturas).
   const reconciliarCombo = async(mov, facturas)=>{
     if(busy) return
     setBusy(mov.id)
+    const nuevas=[]
     try{
-      let movAplicado = (mov.monto_conciliado||0); const nuevas=[]
+      let movAplicado = (mov.monto_conciliado||0); let aplicLocal={}
       for(const factura of facturas){
-        const saldo = saldoFactura(factura)
+        const saldo = Math.max(0,(factura.amount||0)-((aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)))
         const aplicado = Math.max(0, Math.min((mov.monto||0)-movAplicado, saldo))
         if(aplicado<=0) continue
-        const { data:cr, error:ce } = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'manual' }).select().single()
-        if(ce) throw ce
-        await persistPagoFactura(factura, (aplicadoByFactura[factura.id]||0)+aplicado, mov.fecha, mov.n_operacion)
-        nuevas.push(cr); movAplicado += aplicado
+        const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'manual' }).select().single()
+        if(ins.error) throw ins.error
+        nuevas.push(ins.data)
+        await persistPagoFactura(factura, (aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)+aplicado, mov.fecha, mov.n_operacion)
+        aplicLocal[factura.id]=(aplicLocal[factura.id]||0)+aplicado; movAplicado += aplicado
       }
       const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
-    }catch(e){ alert('Error al conciliar combinación: '+e.message) }
+    }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar combinación: '+e.message) }
     setBusy(null)
   }
   // Deja el resto del abono como saldo a favor del cliente (anticipo disponible, reutiliza la feature Anticipos).
   const saldoAFavor = async(mov)=>{
     if(busy) return
     setBusy(mov.id)
+    let ant=null, cr=null
     try{
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
-      const { data:ant, error:ae } = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, monto:resto, fecha:mov.fecha, nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
-      if(ae) throw ae
-      const { data:cr, error:ce } = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:resto, origen:'manual' }).select().single()
-      if(ce) throw ce
+      const ia = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, monto:resto, fecha:mov.fecha, nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
+      if(ia.error) throw ia.error
+      ant=ia.data
+      const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:resto, origen:'manual' }).select().single()
+      if(ic.error) throw ic.error
+      cr=ic.data
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:(mov.monto||0) }).eq('id',mov.id)
       if(me) throw me
       setAnticipos&&setAnticipos(p=>[ant,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setPickFor(null)
-    }catch(e){ alert('Error al crear saldo a favor: '+e.message) }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); alert('Error al crear saldo a favor: '+e.message) }
     setBusy(null)
   }
   // Deshace TODA la conciliación de un movimiento: revierte facturas/anticipos y deja el movimiento pendiente.
   const deshacer = async(mov)=>{
     if(busy) return
     const rows = conc.filter(c=>c.movimiento_id===mov.id); if(!rows.length) return
+    // Si un saldo a favor ya se consumió (anticipo aplicado a una cuota), no se puede deshacer: borrar el vínculo
+    // dejaría el movimiento "por conciliar" otra vez y podría generar un segundo anticipo por la misma plata.
+    const antConsumido = rows.some(r=>{ if(r.tipo_destino!=='anticipo'||!r.anticipo_id) return false; const a=(anticipos||[]).find(x=>String(x.id)===String(r.anticipo_id)); return a && a.estado!=='disponible' })
+    if(antConsumido){ alert('No se puede deshacer: el saldo a favor ya se aplicó a una cuota. Revierte primero esa aplicación.'); return }
     setBusy(mov.id)
     try{
+      const restantes={}   // aplicado restante por factura, descontando fila a fila (varias filas a la misma factura)
       for(const r of rows){
         if(r.tipo_destino==='factura' && r.factura_id){
           const fac = billing.find(b=>b.id===r.factura_id)
-          const nuevoAplic = Math.max(0,(aplicadoByFactura[r.factura_id]||0)-(r.monto_aplicado||0))
+          if(!(r.factura_id in restantes)) restantes[r.factura_id]=(aplicadoByFactura[r.factura_id]||0)
+          restantes[r.factura_id]=Math.max(0,restantes[r.factura_id]-(r.monto_aplicado||0))
+          const nuevoAplic=restantes[r.factura_id]
           if(fac){ const now=new Date().toISOString()
             let patch
             if(fac.reconciled_from==='conciliacion-link'){
@@ -13757,9 +13777,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const { error } = await supabase.from('billing').update(patch).eq('id',fac.id); if(error) throw error
             setBilling&&setBilling(p=>p.map(b=>b.id===fac.id?{...b,...patch}:b)) }
         } else if(r.tipo_destino==='anticipo' && r.anticipo_id){
-          const ant=(anticipos||[]).find(a=>String(a.id)===String(r.anticipo_id))
-          if(!ant || ant.estado==='disponible'){ await supabase.from('anticipos').delete().eq('id',r.anticipo_id)
-            setAnticipos&&setAnticipos(p=>p.filter(a=>String(a.id)!==String(r.anticipo_id))) }
+          const { error:ae } = await supabase.from('anticipos').delete().eq('id',r.anticipo_id); if(ae) throw ae
+          setAnticipos&&setAnticipos(p=>p.filter(a=>String(a.id)!==String(r.anticipo_id)))
         }
         const { error:de } = await supabase.from('conciliacion').delete().eq('id',r.id); if(de) throw de
       }
@@ -13784,7 +13803,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
     return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0),
-      descalces:desc.length, fondos:fondos.length, fondosMonto:fondos.reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov])
+      descalces:desc.length, fondos:fondos.length, fondosMonto:fondos.reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov,billing])
 
   // KPIs globales
   const G = useMemo(()=>{
@@ -13813,7 +13832,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       else if(concView==='descalces') l=l.filter(esDescalce)
     }
     return l.slice(0,400)
-  },[movs,sub,soloSinId,cuentaF,concView,concByMov])
+  },[movs,sub,soloSinId,cuentaF,concView,concByMov,billing])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-17 — Conciliación · match combinación + auditoría (3 revisores) y fixes
+- Match de combinación: 1 transferencia que paga 2 facturas se ofrece como botón "Paga 2: F°A + F°B" (elige el mejor par dentro de ±$2.000); todo reversible.
+- Auditoría con 3 revisores (lógica/estado, cifras, integridad). Corregido: deshacer con acumulador local (varias filas sobre la misma factura ya no descuentan mal); bloqueo de deshacer si el saldo a favor ya se consumió (evita doble conteo); atomicidad (si una conciliación/saldo-a-favor falla a mitad, se borra la fila/anticipo huérfano); facturas con monto ≤0 fuera del pool; chequeo de `.error` en propagación de aprendizaje; sugerencia por nombre endurecida (stoplist de nombres de pila comunes + token distintivo, menos falsos); deps de memos completadas.
+
 ## 2026-06-17 — Conciliación · sugerir cliente por nombre (cruce con facturas emitidas)
 - Para abonos sin RUT registrado, cruza el nombre del banco contra nombres de clientes y razones sociales del receptor de facturas emitidas; si apunta a un cliente único, ofrece un chip "¿Cliente?" que al confirmar asocia y aprende el RUT (compuerta humana, nunca automático). Cubre ~52 de los 143 sin identificar. Auditoría de cruces: por RUT da 0 (el resolver ya los toma), por monto solo es poco confiable (coincidencias de montos redondos), por nombre es el confiable.
 
