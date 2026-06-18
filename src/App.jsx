@@ -7402,6 +7402,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
   const [rsPickFor,setRsPickFor] = useState(null)        // gasto con el selector de razón social abierto (>3 RS o "cambiar")
   const [rendOpen,setRendOpen] = useState(new Set())     // secciones "Rendidos" desplegadas (key '__single__' o entity_id)
+  const [notaLiqOpen,setNotaLiqOpen] = useState(null)    // liquidación a notaría con el detalle desplegado
+  const [notaLiqAdd,setNotaLiqAdd] = useState(null)      // liquidación en modo "añadir gastos"
+  const [addSel,setAddSel] = useState(new Set())         // gastos pendientes seleccionados para añadir a la liquidación
   const [liqDetail,setLiqDetail] = useState(null)        // liquidación de caja chica abierta desde la pill "Liquidado"
   const isAdmin = currentUser?.role==='admin'
   // Personas con caja chica activa = quienes tienen fondos entregados en petty_cash.
@@ -7621,6 +7624,28 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       setExpenses(p=>p.map(e=>e.notaria_render_id===r.id?{...e,notaria_render_id:null,notaria_liquidado_at:null}:e))
       if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
     }catch(e){alert('Error: '+e.message)}
+  }
+  const fmtOt = ot => ot?(String(ot).toUpperCase().startsWith('OT')?ot:'OT-'+ot):'—'
+  // Excel de una liquidación: OT · descripción · costo (lo que pidió el usuario, en ese orden).
+  const descargarExcelNota = (r) => {
+    const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)).sort((a,b)=>(a.ot_number||'')>(b.ot_number||'')?1:-1)
+    const rows=gs.map(e=>[fmtOt(e.ot_number), e.concept||'—', clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente', e.amount||0])
+    const ws=XLSX.utils.aoa_to_sheet([['OT','Descripción','Cliente','Costo'],...rows,['','','TOTAL',gs.reduce((a,e)=>a+(e.amount||0),0)]])
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
+    XLSX.writeFile(wb,`Liquidacion_notaria_${String(r.periodo||'').replace(/[^\w-]/g,'_')}.xlsx`)
+  }
+  // Añadir gastos pendientes a una liquidación ya creada (corrección): los enlaza y suma al total/n_gastos/OT.
+  const anadirGastosNota = async(r, ids) => {
+    if(!ids.length) return
+    const now=new Date().toISOString(); const adds=notariaPend.filter(e=>ids.includes(e.id)); const addTot=adds.reduce((a,e)=>a+(e.amount||0),0)
+    const newOts=[...new Set([...(r.ot_numbers?String(r.ot_numbers).split(', '):[]), ...adds.map(e=>e.ot_number).filter(Boolean)])].join(', ')
+    try{
+      await supabase.from('expenses').update({notaria_render_id:r.id,notaria_liquidado_at:now}).in('id',ids)
+      await supabase.from('rendiciones').update({total:(r.total||0)+addTot, n_gastos:(r.n_gastos||0)+ids.length, ot_numbers:newOts||null}).eq('id',r.id)
+      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:r.id,notaria_liquidado_at:now}:e))
+      if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,total:(x.total||0)+addTot,n_gastos:(x.n_gastos||0)+ids.length,ot_numbers:newOts||null}:x))
+      setNotaLiqAdd(null); setAddSel(new Set())
+    }catch(e){alert('Error al añadir: '+e.message)}
   }
 
   const CATS = {'Notaria':'#E6EEF1','CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':'#E1F5EE','Otro':'#F5F7F9'}
@@ -8089,16 +8114,38 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
           {notaLiquidaciones.length>0&&<div style={{marginTop:18}}>
             <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Liquidaciones a notaría</div>
-            {notaLiquidaciones.map(r=>(
+            {notaLiquidaciones.map(r=>{ const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; return (
               <div key={r.id} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:6}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-                  <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:'#99ABB4'}}>{r.created_at?new Date(r.created_at).toLocaleDateString('es-CL'):''}{r.user_name?` · ${r.user_name}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div>
-                  <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{fmt(r.total)}</div><span style={{fontSize:9,fontWeight:600,borderRadius:4,padding:'1px 6px',background:r.sent_at?'#E1F5EE':'#F1EFE8',color:r.sent_at?C.greenText:'#5F5E5A'}}>{r.sent_at?'Enviada a notaría':'Pagado histórico'}</span></div>
+                <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
+                  <div style={{minWidth:0,display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:13,color:'#99ABB4',transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span><div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:'#99ABB4'}}>{r.created_at?new Date(r.created_at).toLocaleDateString('es-CL'):''}{r.user_name?` · ${r.user_name}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div></div>
+                  <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.total)}</div><span style={{fontSize:9,fontWeight:600,borderRadius:4,padding:'1px 6px',background:r.sent_at?'#E1F5EE':'#F1EFE8',color:r.sent_at?C.greenText:'#5F5E5A'}}>{r.sent_at?'Enviada a notaría':'Pagado histórico'}</span></div>
                 </div>
-                {r.ot_numbers&&<div style={{fontSize:10,color:'#185FA5',fontWeight:600,marginTop:4}}>OT: {r.ot_numbers}</div>}
-                <div style={{marginTop:6}}><button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Deshacer</button></div>
+                {r.ot_numbers&&!open&&<div style={{fontSize:10,color:'#185FA5',fontWeight:600,marginTop:4}}>OT: {r.ot_numbers}</div>}
+                {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+                  {gs.map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
+                    <div key={e.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',fontSize:11}}>
+                      <span style={{fontSize:9,color:'#185FA5',fontWeight:700,width:62,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
+                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'} <span style={{color:'#99ABB4'}}>· {cn}</span></span>
+                      <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
+                    </div>) })}
+                  <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
+                    <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:'#0F6E56',background:'#E1F5EE',border:'none',borderRadius:6,padding:'4px 11px',cursor:'pointer'}}>↓ Excel (OT · detalle · costo)</button>
+                    {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:6,padding:'4px 11px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir gastos'}</button>}
+                    <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 11px',cursor:'pointer'}}>Deshacer</button>
+                  </div>
+                  {adding&&<div style={{marginTop:8,background:'#F5F7F9',borderRadius:8,padding:'8px 10px'}}>
+                    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:6,textTransform:'uppercase',letterSpacing:.3}}>Pendientes de notaría — toca para añadir</div>
+                    {notariaPend.map(e=>{ const on=addSel.has(e.id); const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
+                      <div key={e.id} onClick={()=>setAddSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',cursor:'pointer',fontSize:11}}>
+                        <span style={{width:16,height:16,borderRadius:4,border:`2px solid ${on?'#003C50':C.border}`,background:on?'#003C50':'#fff',flexShrink:0}}/>
+                        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:'#185FA5',fontWeight:700}}>{fmtOt(e.ot_number)}</span> · {e.concept||'—'} <span style={{color:'#99ABB4'}}>· {cn}</span></span>
+                        <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
+                      </div>) })}
+                    <button disabled={addSel.size===0} onClick={()=>anadirGastosNota(r,[...addSel])} style={{marginTop:6,fontSize:11,fontWeight:700,background:addSel.size?'#003C50':'#99ABB4',color:'#fff',border:'none',borderRadius:7,padding:'5px 13px',cursor:addSel.size?'pointer':'default'}}>Añadir {addSel.size||''}</button>
+                  </div>}
+                </div>}
               </div>
-            ))}
+            )})}
           </div>}
 
           {notaConfirm&&(
