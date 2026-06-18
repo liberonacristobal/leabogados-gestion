@@ -13468,6 +13468,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [concView,setConcView] = useState('todos') // abonos: 'todos' | 'porconciliar' | 'conciliados'
   const [autoRun,setAutoRun] = useState(false)   // corriendo conciliación automática
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
+  const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
   const TOL = 2000                               // tolerancia AUTO (±$) por comisión/redondeo
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
@@ -13655,12 +13656,24 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // la evidencia bancaria sin cambiar su estado). La mayoría de los pagos reales son de facturas ya marcadas Pagado.
   const facturasCliente = cid => billing.filter(b=> b.client_id===cid && !b.deleted_at && (b.amount||0)>0 && (b.status==='Pendiente' || (b.status==='Pagado' && !b.reconciled_at)))
   const saldoFactura = b => Math.max(0,(b.amount||0) - (aplicadoByFactura[b.id]||0))
-  // Candidatas dentro de la tolerancia ±TOL del monto buscado (monto del abono, o el resto al repartir).
+  // Diferencia en meses entre el mes de la factura (emisión) y el del pago (factura − pago). null si falta dato.
+  const mesDiff = (fm,pm) => { if(!fm||!pm) return null; const [ya,ma]=fm.split('-').map(Number),[yb,mb]=pm.split('-').map(Number); return (ya*12+ma)-(yb*12+mb) }
+  // Candidatas dentro de ±TOL del monto. Refuerzo para asesorías recurrentes (mismo monto cada mes): se EXCLUYE
+  // toda factura emitida en un mes POSTERIOR al pago (no se paga hoy una factura del próximo mes) y se ordena por
+  // cercanía de fecha (la del mes del pago primero) → así el pago de mayo calza la factura de mayo, no la de junio.
   const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
     if(!esConciliable(mov)) return []
+    const pm=(mov.fecha||'').slice(0,7)
     return facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
-      .map(b=>({b,saldo:saldoFactura(b)})).filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL)
-      .sort((a,b)=> Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)).map(x=>x.b) }
+      .map(b=>({b,saldo:saldoFactura(b),d:mesDiff((b.issued_at||'').slice(0,7),pm)}))
+      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.d===null||x.d<=0))
+      .sort((a,b)=> (Math.abs(a.d==null?99:a.d)-Math.abs(b.d==null?99:b.d)) || (Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)))
+      .map(x=>x.b) }
+  // Mejor candidato para el AUTO: único (no demasiado viejo) o, si hay varios del mismo monto, el del MES del pago.
+  const mejorCandidato = (mov, exclude) => { const cs=candidatos(mov,exclude); if(!cs.length) return null
+    const pm=(mov.fecha||'').slice(0,7)
+    if(cs.length===1){ const d=mesDiff((cs[0].issued_at||'').slice(0,7),pm); return (d==null||d>=-2)?cs[0]:null }
+    const sm=cs.filter(f=>(f.issued_at||'').slice(0,7)===pm); return sm.length===1?sm[0]:null }
   const tieneCand = m => esConciliable(m) && candidatos(m).length>0
   // Descalce = abono no interno, no conciliado, sin clasificar como no-honorario, y que NO tiene factura candidata
   // (sin cliente asociado, o con cliente pero sin factura que calce → fondo/anticipo/monto partido).
@@ -13843,11 +13856,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     setAutoRun(true); let ok=0, monto=0, marc=0, enl=0; const used=new Set()
     try{
       // AUTO no toca la cuenta de Gastos: un abono ahí casi siempre es fondo, no honorario → revisión manual.
-      const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length))
-      // Condición de no-ambigüedad: una factura calzada por 2+ abonos pendientes NO se auto-aplica (¿cuál la paga?) → bandeja.
-      const facMatch={}; pend.forEach(m=>candidatos(m).forEach(f=>{ facMatch[f.id]=(facMatch[f.id]||0)+1 }))
-      for(const mov of pend){ const cands = candidatos(mov, used)
-        if(cands.length===1 && (facMatch[cands[0].id]||0)<=1){ used.add(cands[0].id); if(cands[0].status==='Pagado') enl++; else marc++; await reconciliar(mov, cands[0], 'auto'); ok++; monto+=mov.monto } }
+      // Orden FIFO (más antiguo primero) para que en recurrentes el pago de cada mes calce su factura del mes.
+      const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
+      // Mejor candidato por abono (único o el del mes del pago). Si 2+ abonos apuntan a la MISMA factura → ambiguo, a bandeja.
+      const best={}, facCnt={}
+      pend.forEach(m=>{ const f=mejorCandidato(m); if(f){ best[m.id]=f.id; facCnt[f.id]=(facCnt[f.id]||0)+1 } })
+      for(const mov of pend){ const fid=best[mov.id]; if(!fid||used.has(fid)||(facCnt[fid]||0)>1) continue
+        const f=facturasCliente(mov.cliente_id).find(x=>x.id===fid); if(!f) continue
+        used.add(fid); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
     alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
@@ -14108,12 +14124,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       {showPick&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                         <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
                         {cands.slice(0,3).map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}{f.issued_at?` · ${mesAbbr(f.issued_at)}`:''}{f.status==='Pagado'?' · ya pagada':''}</button>))}
-                        {combo&&<button disabled={busy===m.id} onClick={()=>reconciliarCombo(m,combo)} title='Una transferencia que paga dos facturas' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6EEF1',color:'#003C50',border:'none'}}>Paga 2: F°{combo[0].invoice_no||'—'} + F°{combo[1].invoice_no||'—'}</button>}
+                        {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga dos facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?'#003C50':'#E6EEF1',color:comboFor===m.id?'#fff':'#003C50',border:'none'}}>Paga 2 facturas{comboFor===m.id?' ▴':' ▾'}</button>}
                         {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>F°{fmg.factura.invoice_no||'—'} + {fmtM(fmg.excess)} gastos</button>}
                         <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a Favor / Adelanto</button>
                         <button disabled={busy===m.id} onClick={()=>setCategoria(m,'Provisión de gastos')} title='No es honorario: es una provisión de gastos del cliente' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Provisión</button>
                         {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'Cerrar':'Otra factura'}</button>}
                       </div>}
+                      {showPick&&combo&&comboFor===m.id&&(()=>{ const tot=combo.reduce((s,f)=>s+saldoFactura(f),0); return (
+                        <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid #99ABB4`,paddingLeft:8}}>
+                          {combo.map(f=>(<div key={f.id} style={{fontSize:11,color:C.text}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,30)} · <b>{fmtM(saldoFactura(f))}</b></div>))}
+                          <div style={{fontSize:10,color:C.muted}}>Suma: {fmtM(tot)} {Math.abs(tot-(m.monto||0))<=TOL?'≈':'≠'} abono {fmtM(m.monto)}</div>
+                          <div style={{display:'flex',gap:8,marginTop:2}}>
+                            <button disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliarCombo(m,combo)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:'pointer'}}>Confirmar las 2</button>
+                            <button onClick={()=>setComboFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+                          </div>
+                        </div>) })()}
                       {showPick&&pickFor===m.id&&<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
                         {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas pendientes de este cliente.</span>}
                         {facsAll.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{textAlign:'left',fontSize:11,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer',color:C.text}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,26)} · {f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</button>))}
