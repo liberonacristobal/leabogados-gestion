@@ -13458,6 +13458,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
   const [soloSinId,setSoloSinId] = useState(false)
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
+  const [anioF,setAnioF] = useState('todos')       // filtro por año
+  const [mesF,setMesF] = useState('todos')         // filtro por mes (01-12)
   const [verCartolas,setVerCartolas] = useState(false)   // panel "Cartolas cargadas" desplegado
   const [verCarga,setVerCarga] = useState(false)         // caja de carga de cartolas colapsada (solo se usa al inicio)
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
@@ -13873,9 +13875,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     return Object.values(g).sort((a,b)=> a.rol!==b.rol ? (a.rol==='honorarios'?-1:1) : (a.mes<b.mes?1:-1))
   },[movs])
 
+  const aniosDisp = useMemo(()=>{ const s=new Set(); movs.forEach(m=>{ const y=(m.fecha||'').slice(0,4); if(y) s.add(y) }); return [...s].sort().reverse() },[movs])
   const lista = useMemo(()=>{
     let l=movs.filter(m=> sub==='abonos' ? m.tipo==='abono' : m.tipo==='cargo')
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
+    if(anioF!=='todos') l=l.filter(m=>(m.fecha||'').slice(0,4)===anioF)
+    if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
     if(sub==='abonos'){
       if(soloSinId) l=l.filter(m=>!m.es_interno&&!m.cliente_id)
       if(concView==='porconciliar') l=l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length))
@@ -13883,7 +13888,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       else if(concView==='descalces') l=l.filter(esDescalce)
     }
     return l.slice(0,400)
-  },[movs,sub,soloSinId,cuentaF,concView,concByMov,billing])
+  },[movs,sub,soloSinId,cuentaF,anioF,mesF,concView,concByMov,billing])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Cta. Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Cta. Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
@@ -13985,8 +13990,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           ))}
         </div>
 
-        {/* Subvista + filtros */}
-        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
+        {/* Filtros — línea 1: tipo de movimiento + cuenta */}
+        <div style={{display:'flex',gap:6,marginBottom:7,flexWrap:'wrap',alignItems:'center'}}>
           {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
             <button key={v} onClick={()=>setSub(v)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:8,border:`1px solid ${sub===v?C.accent:C.border}`,background:sub===v?'#E6EEF1':'#fff',color:sub===v?C.accent:C.muted,cursor:'pointer'}}>{l}</button>
           ))}
@@ -13994,6 +13999,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           {[['ambas','Ambas',C.muted],['honorarios','Cta. Honorarios | 1403834','#003C50'],['gastos','Cta. Gastos | 1383922','#854F0B']].map(([v,l,col])=>{const on=cuentaF===v;return(
             <button key={v} onClick={()=>setCuentaF(v)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:`1px solid ${on?col:'transparent'}`,background:on?(v==='gastos'?'#FAEEDA':v==='honorarios'?'#E6EEF1':'#F5F7F9'):'#F5F7F9',color:col,cursor:'pointer'}}>{l}</button>
           )})}
+        </div>
+        {/* Filtros — línea 2: período (mes/año) como cuenta bancaria + contador */}
+        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Período</span>
+          {(()=>{ const selSty={fontSize:11,fontWeight:600,padding:'5px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',outline:'none'}; return <>
+            <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selSty}>
+              <option value='todos'>Mes: todos</option>
+              {MESES_ABR.map((nm,i)=>{const mm=String(i+1).padStart(2,'0');return <option key={mm} value={mm}>{nm}</option>})}
+            </select>
+            <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={selSty}>
+              <option value='todos'>Año: todos</option>
+              {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+          </> })()}
+          {(mesF!=='todos'||anioF!=='todos')&&<button onClick={()=>{setMesF('todos');setAnioF('todos')}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>limpiar</button>}
           {sub==='abonos'&&
             <button onClick={()=>setSoloSinId(s=>!s)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloSinId?'#FFF8E1':'#F5F7F9',color:soloSinId?'#C77F18':C.muted,cursor:'pointer'}}>Sin identificar</button>}
           <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length>lista.length?'+ (top 400)':''}</span>
@@ -14025,7 +14045,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color}}>{rc.t}</span>
                   {cat&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:ts.bg,color:ts.color}}>{cat}</span>}
                   {m.es_interno&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A'}}>Interno</span>}
-                  <span style={{fontSize:11,color:C.muted}}>{m.fecha}</span>
+                  <span style={{fontSize:11,color:C.muted}}>{fmtFechaDMY(m.fecha)}</span>
                   <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                 </div>
                 <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#A32D2D',background:'#FCEBEB',borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</div>
