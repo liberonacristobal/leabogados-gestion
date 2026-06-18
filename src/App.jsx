@@ -13454,6 +13454,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
   const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
   const [soloGastos,setSoloGastos] = useState(false)
   const [soloSinId,setSoloSinId] = useState(false)
+  const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
@@ -13578,12 +13579,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
 
   const lista = useMemo(()=>{
     let l=movs.filter(m=> sub==='abonos' ? m.tipo==='abono' : m.tipo==='cargo')
+    if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
     if(sub==='abonos'){
       if(soloGastos) l=l.filter(m=>m.rol_cuenta==='gastos'&&!m.es_interno&&m.cliente_id)
       if(soloSinId)  l=l.filter(m=>!m.es_interno&&!m.cliente_id)
     }
     return l.slice(0,400)
-  },[movs,sub,soloGastos,soloSinId])
+  },[movs,sub,soloGastos,soloSinId,cuentaF])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
@@ -13667,6 +13669,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
           {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
             <button key={v} onClick={()=>setSub(v)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:8,border:`1px solid ${sub===v?C.accent:C.border}`,background:sub===v?'#E6EEF1':'#fff',color:sub===v?C.accent:C.muted,cursor:'pointer'}}>{l}</button>
           ))}
+          <span style={{width:1,height:18,background:C.border,margin:'0 2px'}}></span>
+          {[['ambas','Ambas',C.muted],['honorarios','Honorarios','#003C50'],['gastos','Gastos','#854F0B']].map(([v,l,col])=>{const on=cuentaF===v;return(
+            <button key={v} onClick={()=>setCuentaF(v)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:`1px solid ${on?col:'transparent'}`,background:on?(v==='gastos'?'#FAEEDA':v==='honorarios'?'#E6EEF1':'#F5F7F9'):'#F5F7F9',color:col,cursor:'pointer'}}>{l}</button>
+          )})}
           {sub==='abonos'&&<>
             <button onClick={()=>{setSoloSinId(s=>!s);setSoloGastos(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloSinId?'#FFF8E1':'#F5F7F9',color:soloSinId?'#C77F18':C.muted,cursor:'pointer'}}>Sin identificar</button>
             <button onClick={()=>{setSoloGastos(s=>!s);setSoloSinId(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloGastos?'#FAEEDA':'#F5F7F9',color:soloGastos?'#854F0B':C.muted,cursor:'pointer'}}>Abonos en cuenta Gastos</button>
@@ -13681,7 +13687,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
             const rc=rolChip(m.rol_cuenta)
             const cliName=m.cliente_id?cmap[m.cliente_id]:null
             return (
-              <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #EEF1F3`,borderLeft:`3px solid ${m.es_interno?C.border:m.tipo==='abono'?C.normal:C.overdue}`}}>
+              <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #EEF1F3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#854F0B':C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2,flexWrap:'wrap'}}>
                   <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color}}>{rc.t}</span>
                   {m.es_interno&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A'}}>Interno</span>}
