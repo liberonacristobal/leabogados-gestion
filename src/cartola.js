@@ -84,13 +84,14 @@ function detectarInterno(desc, rut){
   if(rut && esRutPropio(rut)) return true
   return false
 }
-// Etiqueta del traspaso interno según la cuenta contraparte detectada en la glosa.
-function etiquetaInterno(desc, tipo){
+// Etiqueta del traspaso interno con el número COMPLETO de la cuenta contraparte (la otra cuenta, distinta a la propia).
+function etiquetaInterno(desc, tipo, cuentaPropia){
   // "...desde cuenta N 01-38392-2 hacia cuenta N 01-40383-4..."
-  const cuentas = (String(desc).match(/\d{2}-?\d{4,5}-?[\dkK]/g)||[]).map(rolDeCuenta).filter(Boolean)
-  const contra = cuentas.find(Boolean)
-  const cod = contra ? contra.codigo : ''
-  return tipo==='abono' ? `Traspaso interno abono cta. ${cod}` : `Traspaso interno cargo cta. ${cod}`
+  const found = (String(desc).match(/\d{2}-?\d{4,5}-?[\dkK]/g)||[]).map(rolDeCuenta).filter(Boolean)
+  const propiaRol = rolDeCuenta(cuentaPropia)?.rol
+  const contra = found.find(c=>c.rol!==propiaRol) || found.find(Boolean)
+  const et = contra ? contra.etiqueta : ''
+  return tipo==='abono' ? `Traspaso interno · abono desde cuenta ${et}` : `Traspaso interno · cargo hacia cuenta ${et}`
 }
 
 // Parsea el AOA de una hoja de cartola BICE. Devuelve metadatos + movimientos.
@@ -161,7 +162,7 @@ export function parseCartola(aoa, { filename='' } = {}){
     const cp = extraerContraparte(desc)
     let rut = cp.rut, nombre = cp.nombre
     const interno = detectarInterno(desc, rut)
-    if(interno){ rut=null; nombre=etiquetaInterno(desc, tipo) }
+    if(interno){ rut=null; nombre=etiquetaInterno(desc, tipo, cuenta) }
     const n_operacion = _flat(iDoc>=0?row[iDoc]:'') || null
     const mov = { cuenta, rol_cuenta:rol, fecha, tipo, rut_contraparte:rut, nombre_contraparte:nombre, monto, n_operacion, descripcion:desc, es_interno:interno }
     mov.hash = hashMovimiento(mov)
