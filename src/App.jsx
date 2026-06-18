@@ -13999,8 +13999,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </span>
           <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
             <option value='ambas'>Cuenta</option>
-            <option value='honorarios'>Cta. Honorarios · 1403834</option>
-            <option value='gastos'>Cta. Gastos · 1383922</option>
+            <option value='honorarios'>Cta. Honorarios</option>
+            <option value='gastos'>Cta. Gastos</option>
           </select>
           <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selSty}>
             <option value='todos'>Mes</option>
