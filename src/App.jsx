@@ -9279,6 +9279,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
   const [det,setDet]=useState(null); const [detG,setDetG]=useState(null)
   const [ord,setOrd]=useState('fecha')
+  const [openRS,setOpenRS]=useState({})   // razones sociales desplegadas (por defecto plegadas)
   const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   useEffect(()=>{ let ok=true; setLoading(true); (async()=>{
     const [a,b]=await Promise.all([
@@ -9316,20 +9317,24 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     </div>
     {loading&&<div style={{fontSize:11,color:C.muted}}>Cargando…</div>}
     {sec==='honorarios'&&<div>
+      {porProy.length>0&&<div style={{background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:10}}>
+        <div style={{display:'flex',gap:8,fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',paddingBottom:5,borderBottom:`1px solid ${C.border}`}}><span style={{flex:1}}>Por proyecto</span><span style={{width:78,textAlign:'right'}}>Facturado</span><span style={{width:78,textAlign:'right'}}>Pagado</span></div>
+        {porProy.map((p,i)=>{ const falta=(p.fact||0)-(p.pag||0); return (<div key={i} style={{display:'flex',gap:8,fontSize:11.5,padding:'5px 0',borderBottom:i<porProy.length-1?`1px solid #F1F1F1`:'none'}}><span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}</span><span style={{width:78,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(p.fact)}</span><span style={{width:78,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:falta>0?'#E24B4A':'#1D9E75'}}>{fmt(p.pag)}</span></div>) })}
+      </div>}
       <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:9,fontSize:11,color:C.muted}}>
         <span>Ordenar</span>
         {[['fecha','Fecha'],['proyecto','Proyecto'],['monto','Monto']].map(([v,l])=>(
           <span key={v} onClick={()=>setOrd(v)} style={{padding:'3px 9px',borderRadius:7,border:`1px solid ${ord===v?C.accent:C.border}`,color:ord===v?C.accent:C.muted,fontWeight:ord===v?600:400,cursor:'pointer'}}>{l}</span>
         ))}
       </div>
-      {porProy.length>0&&<div style={{background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:10}}>
-        <div style={{display:'flex',gap:8,fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',paddingBottom:5,borderBottom:`1px solid ${C.border}`}}><span style={{flex:1}}>Por proyecto</span><span style={{width:78,textAlign:'right'}}>Facturado</span><span style={{width:78,textAlign:'right'}}>Pagado</span></div>
-        {porProy.map((p,i)=>{ const falta=(p.fact||0)-(p.pag||0); return (<div key={i} style={{display:'flex',gap:8,fontSize:11.5,padding:'5px 0',borderBottom:i<porProy.length-1?`1px solid #F1F1F1`:'none'}}><span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}</span><span style={{width:78,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(p.fact)}</span><span style={{width:78,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:falta>0?'#E24B4A':'#1D9E75'}}>{fmt(p.pag)}</span></div>) })}
-      </div>}
       {Object.keys(grupos).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin facturas.</div>}
-      {Object.entries(grupos).map(([rs,fs])=>(<div key={rs} style={{marginBottom:8}}>
-        <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
-        {fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]
+      {Object.entries(grupos).map(([rs,fs])=>{ const abierta=!!openRS[rs]; const rut=(fs.find(b=>b.receptor_rut)||{}).receptor_rut||(clientEntities.find(en=>en.name===rs)||{}).rut||''; const pend=fs.reduce((s,b)=>s+(b.status==='Pagado'?0:((b.amount||0)-(b.paid_amount||0))),0); return (<div key={rs} style={{marginBottom:8}}>
+        <div onClick={()=>setOpenRS(p=>({...p,[rs]:!p[rs]}))} style={{display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${C.border}`,paddingBottom:4,marginBottom:1,cursor:'pointer'}}>
+          <span style={{fontSize:14,color:'#99ABB4',lineHeight:1,transform:abierta?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:9.5,fontWeight:700,color:C.accent,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{rut?<span style={{color:'#99ABB4',fontWeight:600}}> · {rut}</span>:''}</div></div>
+          <span style={{fontSize:10,color:'#99ABB4',whiteSpace:'nowrap'}}>{fs.length} fact.{pend>0?<span style={{color:'#E24B4A'}}> · por cobrar {fmt(pend)}</span>:''}</span>
+        </div>
+        {abierta&&fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]
           const dp=String(b.issued_at||'').slice(0,10).split('-'); const dia=dp.length>=3?dp[2]:'—'; const sub=dp.length>=3?`${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''
           const eCol=pagada?'#0F6E56':(ag?ag.c:'#C77F18'); const eBg=eCol==='#0F6E56'?'#E1F5EE':eCol==='#A32D2D'?'#FCEBEB':eCol==='#C77F18'?'#FAEEDA':'#E6F1FB'; return (
           <div key={b.id}>
@@ -9348,7 +9353,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
               </div>}
             </div>}
           </div>) })}
-      </div>))}
+      </div>) })}
     </div>}
     {sec==='fondos'&&(()=>{ const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; return (
