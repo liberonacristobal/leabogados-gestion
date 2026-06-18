@@ -21,6 +21,21 @@ En total, las dos cargas ingresaron **128 gastos** (notaría, CBR, Diario Oficia
 - **Los gastos son reales** (trámites concretos de notaría/CBR/etc.), no basura → no corresponde borrarlos.
 - Hoy cada gasto **descuenta el saldo de su cliente** (el cliente debe ese trámite). Eso es correcto salvo que un trámite ya esté saldado.
 
+## Contenido completo del import (todas las categorías)
+
+El archivo cargado el 15-06 (las dos importaciones) tenía **128 gastos por $6.792.280**:
+
+| Categoría | N° | Total |
+|---|---|---|
+| Notaría | 47 | $3.879.000 |
+| CBR (Conservador) | 59 | $1.924.262 |
+| Diario Oficial | 9 | $464.777 |
+| Registro Civil | 3 | $328.641 |
+| Otro | 10 | $195.600 |
+| **TOTAL** | **128** | **$6.792.280** |
+
+Fuera de Notaría hay **81 gastos por $2.913.280** (la mayoría CBR). Casi todos los no-notaría figuran `liq_caja=true` (pagados desde caja chica). **Todos descuentan el saldo del cliente** → el criterio "Saldado" debe decidirse para el conjunto, no solo los 47 de notaría.
+
 ## Cruce con archivos de notaría (18-06) — ¿están pagados?
 
 Se cruzaron los **47 gastos de Notaría** del import contra dos archivos en Downloads:
@@ -51,6 +66,44 @@ Se cruzaron los **47 gastos de Notaría** del import contra dos archivos en Down
 - Si están vigentes → se dejan contando.
 - Los 47 de Notaría pendientes → liquidar a la notaría desde Gastos → "Liquidar notaría".
 - **Prevención:** agregar aviso en el preview de la carga masiva cuando una fila venga **sin fecha** (hoy entra en silencio).
+
+## SQL para marcar "Saldado" (no descuenta saldo · reversible)
+
+> Marca `excluye_saldo=true` → el gasto deja de descontar el saldo del cliente, queda a la vista en la sección "Saldados" y se puede **reponer** (botón Reponer en la app, o el UPDATE de "Reponer" de abajo). Elige UNA de las opciones según lo que confirmes con Martina.
+
+```sql
+-- 0) PREVIEW antes de marcar: cuántos y cuánto por categoría
+select category, count(*) n, sum(amount) total
+from expenses
+where bulk_import_id in ('23ef40ba-4484-442b-bbba-7371e0ee2ea5','5970d04b-dce0-4f4f-824a-028e18bc0b31')
+group by category order by total desc;
+
+-- A) SOLO Notaría (47 · $3.879.000)
+update expenses set excluye_saldo=true
+where bulk_import_id in ('23ef40ba-4484-442b-bbba-7371e0ee2ea5','5970d04b-dce0-4f4f-824a-028e18bc0b31')
+  and category='Notaria';
+
+-- B) Notaría + CBR
+update expenses set excluye_saldo=true
+where bulk_import_id in ('23ef40ba-4484-442b-bbba-7371e0ee2ea5','5970d04b-dce0-4f4f-824a-028e18bc0b31')
+  and category in ('Notaria','CBR');
+
+-- C) TODO el import (128 · $6.792.280)
+update expenses set excluye_saldo=true
+where bulk_import_id in ('23ef40ba-4484-442b-bbba-7371e0ee2ea5','5970d04b-dce0-4f4f-824a-028e18bc0b31');
+
+-- D) Categorías específicas (edita la lista)
+update expenses set excluye_saldo=true
+where bulk_import_id in ('23ef40ba-4484-442b-bbba-7371e0ee2ea5','5970d04b-dce0-4f4f-824a-028e18bc0b31')
+  and category in ('Notaria','CBR','Diario Oficial','Registro Civil','Otro');
+
+-- REPONER (deshacer): vuelve a contar todo lo marcado de estas cargas
+update expenses set excluye_saldo=false
+where bulk_import_id in ('23ef40ba-4484-442b-bbba-7371e0ee2ea5','5970d04b-dce0-4f4f-824a-028e18bc0b31');
+
+-- (correr al final de cualquier UPDATE)
+notify pgrst, 'reload schema';
+```
 
 ## SQL de referencia (correr en Supabase)
 
