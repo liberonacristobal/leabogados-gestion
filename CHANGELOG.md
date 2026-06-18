@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-18 — Facturas: nomenclatura unificada "Factura N° XX"
+- Toda mención a una factura en la app dice "Factura N° XX" (antes "F°XX" / "F°Factura XX"). El folio se limpia con `folioN` para no duplicar la palabra "Factura". Aplica a tareas/cobro, conciliación bancaria (sugeridas, combos, conciliadas) y estado de cuenta.
+
 ## 2026-06-18 — Conciliación · Fase 3.D · cargo por cuenta de un cliente
 - En un cargo (oficina paga a Notaría/CBR/proveedor) por un asunto de un cliente: acción "Por cuenta de un cliente…" → elige cliente + razón social → crea un gasto (expenses type='gasto') que DESCUENTA el fondo del cliente, enlazado a la conciliación (tipo_destino='gasto', gasto_id) y reversible. Aprende glosa→cliente (chip "sugerido" la próxima vez). Deshacer borra el gasto creado. Movimientos del Estado de cuenta lo rotula "Gasto por cuenta del cliente". No requiere SQL.
 
