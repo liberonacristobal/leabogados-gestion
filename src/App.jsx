@@ -7402,7 +7402,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
   const [rsPickFor,setRsPickFor] = useState(null)        // gasto con el selector de razón social abierto (>3 RS o "cambiar")
   const [rendOpen,setRendOpen] = useState(new Set())     // secciones "Rendidos" desplegadas (key '__single__' o entity_id)
-  const [histCatOpen,setHistCatOpen] = useState(new Set())  // categorías desplegadas en el panel "Gastos históricos saldados"
   const [notaBtnOpen,setNotaBtnOpen] = useState(false)   // menú del botón Notaría (visible, al costado de Cargar)
   const [gastoOrd,setGastoOrd] = useState('desc')        // orden por fecha de la lista de gastos del cliente
   const [gastoCatF,setGastoCatF] = useState('')          // filtro por categoría de gasto ('' = todas)
@@ -7736,8 +7735,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
-              {!isFondo&&e.excluye_saldo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F1EFE8',color:'#5F5E5A',fontWeight:700}}>Solo registro · no descuenta</span>}
-              {!isFondo&&e.excluye_saldo&&<button onClick={ev=>reponerGasto(e,ev)} title='Volver a contar este gasto en el saldo' style={{fontSize:10,fontWeight:700,color:'#185FA5',background:'#E6F1FB',border:'none',borderRadius:10,padding:'1px 8px',cursor:'pointer'}}>Reponer</button>}
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {!isFondo&&e.ot_number&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600}}>Fondo</span>}
@@ -7817,7 +7814,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
             {!isFondo&&<AdjuntoIcon e={e}/>}
-            <div style={{fontSize:14,fontWeight:700,color:e.excluye_saldo?'#99ABB4':(isFondo?C.normal:C.overdue),textDecoration:e.excluye_saldo?'line-through':'none'}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
+            <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
           </div>
         </div>
       </div>
@@ -7909,22 +7906,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       </div>
       {open&&rend.map(renderMov)}
     </div>) }
-  // Saldados/históricos: gastos marcados "Solo registro · no descuenta" (excluye_saldo). Salen de activos, no cuentan al saldo,
-  // pero quedan a la vista en su propia sección y se pueden REPONER (vuelven a contar).
-  const esSaldado = e => e.type!=='fondo' && !!e.excluye_saldo
-  const reponerGasto = async(e,ev) => { ev&&ev.stopPropagation(); try{ await supabase.from('expenses').update({excluye_saldo:false}).eq('id',e.id); setExpenses(p=>p.map(x=>String(x.id)===String(e.id)?{...x,excluye_saldo:false}:x)) }catch(err){ alert('Error al reponer: '+err.message) } }
-  // Marca/repone en masa (lista de ids) el flag excluye_saldo. Usado por el panel "Gastos históricos saldados".
-  const setSaldadoBulk = async(ids,on) => { ids=[...new Set(ids)]; if(!ids.length) return; try{ for(let i=0;i<ids.length;i+=100){ const {error}=await supabase.from('expenses').update({excluye_saldo:on}).in('id',ids.slice(i,i+100)); if(error) throw error } const s=new Set(ids.map(String)); setExpenses(p=>p.map(x=>s.has(String(x.id))?{...x,excluye_saldo:on}:x)) }catch(err){ alert('Error: '+err.message) } }
-  const saldadosBlock = (key,list) => { if(!list.length) return null; const k='sal:'+key; const open=rendOpen.has(k); const tot=list.reduce((a,e)=>a+(e.amount||0),0); return (
-    <div style={{marginTop:6}}>
-      <div onClick={()=>setRendOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 4px',cursor:'pointer',borderTop:`1px solid ${C.border}`}}>
-        <span style={{fontSize:9,fontWeight:700,color:'#5F5E5A',textTransform:'uppercase',letterSpacing:.3}}>{open?'▾':'▸'} Saldados / históricos · {list.length}</span>
-        <span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(tot)}</span>
-      </div>
-      {open&&<div style={{fontSize:10,color:'#99ABB4',padding:'2px 4px 6px'}}>No descuentan el saldo del cliente. "Reponer" los vuelve a contar.</div>}
-      {open&&list.map(renderMov)}
-    </div>) }
-
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -8312,35 +8293,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           })()}
           {showHistorial&&(
             <div style={{padding:'2px 0 0'}}>
-              {(()=>{
-                // Históricos = gastos de carga masiva ya SALDADOS, o legacy incompletos (sin fecha y sin OT) candidatos a saldar.
-                const hist=(expenses||[]).filter(e=>e.bulk_import_id && !e.deleted_at && e.type!=='fondo' && (e.excluye_saldo || (!e.date && !e.ot_number)))
-                if(!hist.length) return null
-                const cats={}; hist.forEach(e=>{ const c=e.category||'Otro'; (cats[c]=cats[c]||{n:0,tot:0,sal:0,items:[]}); cats[c].n++; cats[c].tot+=(e.amount||0); if(e.excluye_saldo)cats[c].sal++; cats[c].items.push(e) })
-                const orden=Object.entries(cats).sort((a,b)=>b[1].tot-a[1].tot)
-                const allIds=hist.map(e=>e.id); const allSal=hist.every(e=>e.excluye_saldo)
-                const totSal=hist.filter(e=>e.excluye_saldo).reduce((a,e)=>a+(e.amount||0),0)
-                return (<div style={{border:`1px solid ${C.border}`,borderRadius:12,marginBottom:14,overflow:'hidden'}}>
-                  <div style={{padding:'10px 13px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                    <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Gastos históricos saldados</div><div style={{fontSize:10,color:C.muted}}>{hist.length} de carga masiva · saldado {fmt(totSal)} (no descuenta saldo)</div></div>
-                    <button onClick={()=>setSaldadoBulk(allIds,!allSal)} style={{fontSize:10,fontWeight:700,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer',whiteSpace:'nowrap',background:allSal?'#F1EFE8':'#003C50',color:allSal?'#5F5E5A':'#fff'}}>{allSal?'Reponer todo':'Saldar todo'}</button>
-                  </div>
-                  {orden.map(([cat,d])=>{ const on=d.n>0&&d.sal===d.n; const open=histCatOpen.has(cat); const toggle=()=>setHistCatOpen(p=>{const n=new Set(p);n.has(cat)?n.delete(cat):n.add(cat);return n}); return (
-                    <div key={cat} style={{borderBottom:`1px solid #F1F1F1`}}>
-                      <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px'}}>
-                        <span onClick={toggle} style={{fontSize:13,color:'#99ABB4',cursor:'pointer',transform:open?'rotate(90deg)':'none',display:'inline-block',flexShrink:0}}>▸</span>
-                        <div onClick={toggle} style={{flex:1,minWidth:0,cursor:'pointer'}}><div style={{fontSize:13,fontWeight:500}}>{cat}</div><div style={{fontSize:10,color:'#99ABB4'}}>{d.n} gastos · {fmt(d.tot)}{d.sal>0&&d.sal<d.n?` · ${d.sal} saldados`:''}</div></div>
-                        <span style={{fontSize:10,fontWeight:600,color:on?'#5F5E5A':'#185FA5'}}>{on?'Saldado':'Cuenta'}</span>
-                        <Switch on={on} onToggle={()=>setSaldadoBulk(d.items.map(x=>x.id),!on)}/>
-                      </div>
-                      {open&&<div style={{padding:'0 13px 8px 36px'}}>{d.items.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
-                        <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',fontSize:11,borderBottom:'1px solid #F4F4F4'}}>
-                          <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{fontWeight:500}}>{cn}</b> · {e.concept||'—'}</span>
-                          <span style={{whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:e.excluye_saldo?'#99ABB4':C.text,textDecoration:e.excluye_saldo?'line-through':'none'}}>{fmt(e.amount)}</span>
-                          <button onClick={()=>setSaldadoBulk([e.id],!e.excluye_saldo)} style={{fontSize:9,fontWeight:700,border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',background:e.excluye_saldo?'#E6F1FB':'#F1EFE8',color:e.excluye_saldo?'#185FA5':'#5F5E5A'}}>{e.excluye_saldo?'Reponer':'Saldar'}</button>
-                        </div>) })}</div>}
-                    </div>) })}
-                </div>) })()}
               <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
                 <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
                   <option value=''>Todos los clientes</option>
@@ -8369,9 +8321,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <div style={{padding:'4px 20px 130px'}}>
           {gastoToolbar}
           {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
-          {filtered.filter(e=>!esRendido(e)&&!esSaldado(e)).map(renderMov)}
-          {rendidosBlock('__single__',filtered.filter(e=>esRendido(e)&&!esSaldado(e)))}
-          {saldadosBlock('__single__',filtered.filter(esSaldado))}
+          {filtered.filter(e=>!esRendido(e)).map(renderMov)}
+          {rendidosBlock('__single__',filtered.filter(esRendido))}
           {fichaHistorial}
         </div>
       )}
@@ -8403,9 +8354,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <div style={{fontSize:13,fontWeight:700,color:r.saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(r.saldo)}</div>
                 </div>
                 {open&&<div style={{padding:'2px 12px 12px'}}>
-                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.filter(e=>!esRendido(e)&&!esSaldado(e)).map(renderMov)}
-                  {rendidosBlock(eid,movs.filter(e=>esRendido(e)&&!esSaldado(e)))}
-                  {saldadosBlock(eid,movs.filter(esSaldado))}
+                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.filter(e=>!esRendido(e)).map(renderMov)}
+                  {rendidosBlock(eid,movs.filter(esRendido))}
                 </div>}
               </div>
             )
@@ -8716,6 +8666,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 // ── EXPENSE EDIT FORM (editar/eliminar registro individual) ───────────────────
 function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSave,onClose,onDelete,saving,user,onAttachChange}) {
   const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro'})
+  const [showPersonal,setShowPersonal] = useState(!!expense.personal_de)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const client=clients.find(c=>c.id===f.client_id)
   const isFondo=f.type==='fondo'
@@ -8763,14 +8714,15 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       {!isFondo&&f.category==='Notaria'&&(
         <Fld label='OT (notaría)'><Inp value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206'/></Fld>
       )}
-      {!isFondo&&(
-        <Fld label='Gasto personal de'>
-          <select value={f.personal_de||''} onChange={e=>up('personal_de',e.target.value||null)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}>
-            <option value=''>No — es del cliente</option>
-            {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=><option key={m} value={m}>{m}</option>)}
-          </select>
-          {f.personal_de&&<div style={{fontSize:11,color:C.muted,marginTop:5}}>Se guarda como gasto personal de {f.personal_de} (sale del cliente).</div>}
-        </Fld>
+      {!isFondo&&!showPersonal&&!f.personal_de&&(
+        <button type='button' onClick={()=>setShowPersonal(true)} style={{fontSize:11,fontWeight:600,color:'#185FA5',background:'none',border:'none',cursor:'pointer',padding:0,alignSelf:'flex-start'}}>+ Marcar como gasto personal</button>
+      )}
+      {!isFondo&&(showPersonal||f.personal_de)&&(
+        <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
+          <span style={{fontSize:11,color:C.muted,fontWeight:600,marginRight:2}}>Personal de:</span>
+          {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const on=f.personal_de===m;const pc=personChip(m);return <button key={m} type='button' onClick={()=>up('personal_de',on?null:m)} style={{fontSize:11,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:'none'}}>{m}</button>})}
+          <button type='button' onClick={()=>{up('personal_de',null);setShowPersonal(false)}} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>✕</button>
+        </div>
       )}
       <Fld label='Cliente'>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
@@ -8795,12 +8747,6 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
           {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
         </Fld>
-      )}
-      {!isFondo&&(
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 12px',background:'#F5F7F9',borderRadius:10,marginTop:2}}>
-          <div><div style={{fontSize:12,fontWeight:600,color:C.text}}>Solo registro · no descuenta saldo</div><div style={{fontSize:10,color:C.muted,marginTop:2}}>Histórico / pagado con fondos que no entran a la app</div></div>
-          <Switch on={!!f.excluye_saldo} onToggle={()=>up('excluye_saldo',!f.excluye_saldo)}/>
-        </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
@@ -9613,10 +9559,10 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
             <div style={{flex:1,minWidth:0}}>
               {(()=>{ const ot=e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):null
                 const ep = signo<0 ? (e.notaria_liquidado_at?{l:'Notaría',bg:'#FAECE7',c:'#993C1D'}:e.rendered_at?{l:'Caja chica',bg:'#E6EEF1',c:'#003C50'}:conc.find(x=>String(x.gasto_id)===String(e.id)&&x.tipo_destino==='gasto')?{l:'Pagado',bg:'#E1F5EE',c:'#0F6E56'}:null) : null
-                return (signo>0||e.category||ot||ep||e.excluye_saldo)?<div style={{display:'flex',gap:5,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:'#0F6E56',fontWeight:600}}>Fondo</span>:(e.category&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#F1EFE8',color:'#537281',fontWeight:600}}>{e.category}</span>)}{ot&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{ot}</span>}{!e.excluye_saldo&&ep&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:ep.bg,color:ep.c,fontWeight:700}}>✓ {ep.l}</span>}{e.excluye_saldo&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:'#F1EFE8',color:'#5F5E5A',fontWeight:700}}>Solo registro · no descuenta</span>}</div>:null })()}
+                return (signo>0||e.category||ot||ep)?<div style={{display:'flex',gap:5,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:'#0F6E56',fontWeight:600}}>Fondo</span>:(e.category&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:'#F1EFE8',color:'#537281',fontWeight:600}}>{e.category}</span>)}{ot&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{ot}</span>}{ep&&<span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:ep.bg,color:ep.c,fontWeight:700}}>✓ {ep.l}</span>}</div>:null })()}
               <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?'Fondo':'Gasto')}</div>
             </div>
-            <div style={{fontSize:13.5,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:e.excluye_saldo?'#99ABB4':col,flexShrink:0,textDecoration:e.excluye_saldo?'line-through':'none'}}>{signo>0?'+':'−'}{fmt(e.amount)}</div>
+            <div style={{fontSize:13.5,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:col,flexShrink:0}}>{signo>0?'+':'−'}{fmt(e.amount)}</div>
             <span style={{color:'#99ABB4',fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </div>
           {open&&<div style={{padding:'8px 10px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
