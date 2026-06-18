@@ -7707,6 +7707,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
               {!isFondo&&e.excluye_saldo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F1EFE8',color:'#5F5E5A',fontWeight:700}}>Solo registro · no descuenta</span>}
+              {!isFondo&&e.excluye_saldo&&<button onClick={ev=>reponerGasto(e,ev)} title='Volver a contar este gasto en el saldo' style={{fontSize:10,fontWeight:700,color:'#185FA5',background:'#E6F1FB',border:'none',borderRadius:10,padding:'1px 8px',cursor:'pointer'}}>Reponer</button>}
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:'#537281',fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {!isFondo&&e.ot_number&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#E6F1FB',color:'#185FA5',fontWeight:700}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#E1F5EE',color:C.normal,fontWeight:600}}>Fondo</span>}
@@ -7877,6 +7878,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(tot)}</span>
       </div>
       {open&&rend.map(renderMov)}
+    </div>) }
+  // Saldados/históricos: gastos marcados "Solo registro · no descuenta" (excluye_saldo). Salen de activos, no cuentan al saldo,
+  // pero quedan a la vista en su propia sección y se pueden REPONER (vuelven a contar).
+  const esSaldado = e => e.type!=='fondo' && !!e.excluye_saldo
+  const reponerGasto = async(e,ev) => { ev&&ev.stopPropagation(); try{ await supabase.from('expenses').update({excluye_saldo:false}).eq('id',e.id); setExpenses(p=>p.map(x=>String(x.id)===String(e.id)?{...x,excluye_saldo:false}:x)) }catch(err){ alert('Error al reponer: '+err.message) } }
+  const saldadosBlock = (key,list) => { if(!list.length) return null; const k='sal:'+key; const open=rendOpen.has(k); const tot=list.reduce((a,e)=>a+(e.amount||0),0); return (
+    <div style={{marginTop:6}}>
+      <div onClick={()=>setRendOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 4px',cursor:'pointer',borderTop:`1px solid ${C.border}`}}>
+        <span style={{fontSize:9,fontWeight:700,color:'#5F5E5A',textTransform:'uppercase',letterSpacing:.3}}>{open?'▾':'▸'} Saldados / históricos · {list.length}</span>
+        <span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(tot)}</span>
+      </div>
+      {open&&<div style={{fontSize:10,color:'#99ABB4',padding:'2px 4px 6px'}}>No descuentan el saldo del cliente. "Reponer" los vuelve a contar.</div>}
+      {open&&list.map(renderMov)}
     </div>) }
 
   return (
@@ -8268,8 +8282,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {selectedClient&&!multiRS&&(
         <div style={{padding:'4px 20px 130px'}}>
           {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
-          {filtered.filter(e=>!esRendido(e)).map(renderMov)}
-          {rendidosBlock('__single__',filtered.filter(esRendido))}
+          {filtered.filter(e=>!esRendido(e)&&!esSaldado(e)).map(renderMov)}
+          {rendidosBlock('__single__',filtered.filter(e=>esRendido(e)&&!esSaldado(e)))}
+          {saldadosBlock('__single__',filtered.filter(esSaldado))}
           {fichaHistorial}
         </div>
       )}
@@ -8300,8 +8315,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <div style={{fontSize:13,fontWeight:700,color:r.saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(r.saldo)}</div>
                 </div>
                 {open&&<div style={{padding:'2px 12px 12px'}}>
-                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.filter(e=>!esRendido(e)).map(renderMov)}
-                  {rendidosBlock(eid,movs.filter(esRendido))}
+                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.filter(e=>!esRendido(e)&&!esSaldado(e)).map(renderMov)}
+                  {rendidosBlock(eid,movs.filter(e=>esRendido(e)&&!esSaldado(e)))}
+                  {saldadosBlock(eid,movs.filter(esSaldado))}
                 </div>}
               </div>
             )
