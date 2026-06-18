@@ -7877,8 +7877,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {/* Sub-pills de Gastos notariales (se despliegan bajo la fila de acciones) */}
         {!selectedClient&&!showOrphans&&!showNotaria&&notaMenuOpen&&(
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
-            <button onClick={()=>{setNotaMenuOpen(false);onAdd()}} style={chipBtn('soft')}>Un gasto</button>
-            <button onClick={()=>{setNotaMenuOpen(false);onAddFondo()}} style={chipBtn('soft')}>Un fondo</button>
+            <button onClick={()=>{setNotaMenuOpen(false);onAdd()}} style={chipBtn('primary')}>+ Gastos</button>
+            <button onClick={()=>{setNotaMenuOpen(false);onAddFondo()}} style={chipBtn('green')}>+ Fondo</button>
             <button onClick={()=>{setNotaMenuOpen(false);onBulk(false)}} style={chipBtn('soft')}>Varios · Excel</button>
             <button onClick={()=>{setNotaMenuOpen(false);onBulk(true)}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Notaría · Excel</button>
             <button onClick={()=>{setNotaMenuOpen(false);setShowNotaria(true)}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Liquidar notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
