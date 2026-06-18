@@ -13500,11 +13500,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Comisión':{bg:'#FBEAF0',color:'#993556'},'Subarriendo':{bg:'#FAECE7',color:'#993C1D'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Fondo':{bg:'#DFF1F2',color:'#155E6B'},'Comisión':{bg:'#FBEAF0',color:'#993556'},'Subarriendo':{bg:'#FAECE7',color:'#993C1D'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
   // Categorías distintas por sentido: cargos = a quién le pagas; abonos = qué tipo de ingreso (Cliente=honorarios
-  // facturados es el default auto; Comisión y Subarriendo NO son honorarios → no calzan contra factura).
+  // facturados es el default auto; Fondo/Comisión/Subarriendo NO son honorarios → no calzan contra factura).
   const CATS_CARGO = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Impuestos']
-  const CATS_ABONO = ['Comisión','Subarriendo','Otro ingreso']
+  const CATS_ABONO = ['Fondo','Comisión','Subarriendo','Otro ingreso']
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
   const setCategoria = async(mov,cat)=>{
@@ -13634,6 +13634,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     return facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
       .map(b=>({b,saldo:saldoFactura(b)})).filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL)
       .sort((a,b)=> Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)).map(x=>x.b) }
+  const tieneCand = m => esConciliable(m) && candidatos(m).length>0
+  // Descalce = abono no interno, no conciliado, sin clasificar como no-honorario, y que NO tiene factura candidata
+  // (sin cliente asociado, o con cliente pero sin factura que calce → fondo/anticipo/monto partido).
+  const esDescalce = m => m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !tieneCand(m) && (!m.categoria||m.categoria==='Cliente')
 
   // Escribe el pago en billing (fuente de verdad única para "Pagado"). Cubierta → Pagado; si no, queda Pendiente con paid_amount.
   const persistPagoFactura = async(factura, aplicadoTotal, fechaPago, ref)=>{
@@ -13726,7 +13730,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(autoRun||busy) return
     setAutoRun(true); let ok=0, monto=0, marc=0, enl=0; const used=new Set()
     try{
-      const pend = movs.filter(m=>esConciliable(m) && !(concByMov[m.id]?.length))
+      // AUTO no toca la cuenta de Gastos: un abono ahí casi siempre es fondo, no honorario → revisión manual.
+      const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length))
       for(const mov of pend){ const cands = candidatos(mov, used)
         if(cands.length===1){ used.add(cands[0].id); if(cands[0].status==='Pagado') enl++; else marc++; await reconciliar(mov, cands[0], 'auto'); ok++; monto+=mov.monto } }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
@@ -13734,7 +13739,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
-    return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov])
+    const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente'))
+    return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0),
+      descalces:desc.length, fondos:fondos.length, fondosMonto:fondos.reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov])
 
   // KPIs globales
   const G = useMemo(()=>{
@@ -13758,8 +13765,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
     if(sub==='abonos'){
       if(soloSinId) l=l.filter(m=>!m.es_interno&&!m.cliente_id)
-      if(concView==='porconciliar') l=l.filter(m=>esConciliable(m)&&!(concByMov[m.id]?.length))
+      if(concView==='porconciliar') l=l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length))
       else if(concView==='conciliados') l=l.filter(m=>concByMov[m.id]?.length)
+      else if(concView==='descalces') l=l.filter(esDescalce)
     }
     return l.slice(0,400)
   },[movs,sub,soloSinId,cuentaF,concView,concByMov])
@@ -13879,10 +13887,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {sub==='abonos'&&(
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
             <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:12,fontWeight:700,padding:'6px 14px',borderRadius:8,border:'none',background:(autoRun||resumenConc.pend===0)?'#99ABB4':'#003C50',color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer'}}>{autoRun?'Conciliando…':'Conciliar automático'}</button>
-            <span style={{fontSize:11,color:C.muted}}>{resumenConc.done}/{resumenConc.total} conciliadas{resumenConc.pend>0?` · faltan ${resumenConc.pend} (${fmtM(resumenConc.montoPend)})`:''}</span>
-            <div style={{marginLeft:'auto',display:'flex',gap:5}}>
-              {[['todos','Todos'],['porconciliar','Por conciliar'],['conciliados','Conciliadas']].map(([v,l])=>(
-                <button key={v} onClick={()=>setConcView(v)} style={{fontSize:10,fontWeight:600,padding:'4px 9px',borderRadius:20,border:'none',background:concView===v?'#E6EEF1':'#F5F7F9',color:concView===v?'#003C50':C.muted,cursor:'pointer'}}>{l}</button>
+            <span style={{fontSize:11,color:C.muted}}>{resumenConc.done}/{resumenConc.total} conciliadas{resumenConc.fondos>0?` · ${resumenConc.fondos} en cuenta Gastos (fondos)`:''}</span>
+            <div style={{marginLeft:'auto',display:'flex',gap:5,flexWrap:'wrap'}}>
+              {[['todos','Todos'],['porconciliar','Por conciliar'],['conciliados','Conciliadas'],['descalces',`Descalces${resumenConc.descalces?` ${resumenConc.descalces}`:''}`]].map(([v,l])=>(
+                <button key={v} onClick={()=>setConcView(v)} style={{fontSize:10,fontWeight:600,padding:'4px 9px',borderRadius:20,border:'none',background:concView===v?(v==='descalces'?'#FFF8E1':'#E6EEF1'):'#F5F7F9',color:concView===v?(v==='descalces'?'#C77F18':'#003C50'):C.muted,cursor:'pointer'}}>{l}</button>
               ))}
             </div>
           </div>
@@ -13941,7 +13949,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
                           <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>cerrar</button>
                         </div>
-                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#99ABB4':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿comisión, subarriendo u otro?':'+ clasificar')}</button>}
+                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?(m.rol_cuenta==='gastos'?'#155E6B':'#99ABB4'):'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?(m.rol_cuenta==='gastos'?'¿fondo de gastos?':'¿comisión, subarriendo u otro?'):'+ clasificar')}</button>}
                   </div>
                 )})()}
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}

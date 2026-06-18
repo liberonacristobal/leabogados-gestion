@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-17 — Conciliación Fase 2 · descalces + fondos en cuenta Gastos
+- Filtro **Descalces**: abonos no conciliados que no calzan (sin cliente asociado, o con cliente pero sin factura) — la cola de excepciones a revisar tras conciliar el histórico. "Por conciliar" ahora solo lista las que tienen factura candidata.
+- **AUTO ya no toca la cuenta de Gastos**: un abono ahí casi siempre es fondo (provisión), no honorario → revisión manual. El link de clasificar en esa cuenta sugiere "¿fondo de gastos?".
+- Nueva categoría de abono **Fondo** (provisión para gastos): identifica los fondos y los excluye del calce de honorarios (el cruce contra el ledger de gastos llega en Fase 3). Resumen muestra N abonos en cuenta Gastos (fondos).
+
 ## 2026-06-17 — Conciliación Fase 2 · pool ampliado (enlazar facturas ya pagadas)
 - El pool de calce ahora incluye facturas Pendiente **+ Pagada-sin-conciliar**. La mayoría de los pagos reales son de facturas ya marcadas Pagado (131 de 230 abonos): esas solo se **enlazan** (dejan la evidencia bancaria + reconciled_at='conciliacion-link', sin cambiar estado/monto). Sube el calce automático de 9 a ~88.
 - Deshacer un enlace a factura ya pagada solo quita el enlace (no la des-paga). Etiquetas "ya pagada" en chips y mes de emisión en el selector para distinguir facturas recurrentes del mismo monto.
