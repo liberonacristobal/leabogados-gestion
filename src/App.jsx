@@ -13489,6 +13489,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     clientEntities.forEach(e=>{ const k=crNormRut(e.rut); if(k) m[k]=e.name })   // la RS pisa al nombre del cliente
     return m },[clients,clientEntities])
   const provByRut = useMemo(()=>{ const m={}; (proveedores||[]).forEach(p=>{ const k=crNormRut(p.rut); if(k) m[k]=p.nombre||p.name }); return m },[proveedores])
+  // Sugerencia de cliente por NOMBRE (para abonos sin RUT registrado): cruza el nombre del banco contra nombres de
+  // clientes y razones sociales del receptor de facturas EMITIDAS. Solo sugiere; el usuario confirma (y ahí aprende el RUT).
+  const _stripNom = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(spa|ltda|limitada|sa|eirl|sociedad|comercial|servicios|inversiones|cia)\b/g,' ').replace(/\s+/g,' ').trim()
+  const _toksNom = s => _stripNom(s).split(' ').filter(t=>t.length>=4)
+  const nombreIdx = useMemo(()=>{ const idx=[]
+    clients.forEach(c=>idx.push({cid:c.id,t:_toksNom(c.name)}))
+    const seen=new Set(); billing.forEach(f=>{ if(f.receptor_name&&f.client_id){ const k=f.client_id+'|'+f.receptor_name; if(!seen.has(k)){ seen.add(k); idx.push({cid:f.client_id,t:_toksNom(f.receptor_name)}) } } })
+    return idx },[clients,billing])
+  const sugerencias = useMemo(()=>{ const out={}
+    movs.forEach(mv=>{ if(mv.tipo==='abono'&&!mv.es_interno&&!mv.cliente_id&&mv.nombre_contraparte){
+      const nt=_toksNom(mv.nombre_contraparte); if(!nt.length) return
+      const hits=new Set()
+      nombreIdx.forEach(e=>{ const inter=e.t.filter(t=>nt.some(x=> x===t || (x.length>=5&&t.length>=5&&(x.startsWith(t)||t.startsWith(x))))); if(inter.length>=2 || (inter.length>=1 && inter.some(t=>t.length>=6))) hits.add(e.cid) })
+      if(hits.size===1) out[mv.id]=[...hits][0] }})
+    return out },[movs,nombreIdx])
   // Capa 2 — categoría "quién es": manual (categoria) manda; si no, auto por RUT conocido / cliente.
   const tipoContraparte = m => {
     if(m.es_interno) return null
@@ -13574,10 +13589,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
   // Identificar un movimiento: opcionalmente fija RUT/nombre editados, asigna el cliente y APRENDE el alias
   // (RUT pagador → cliente) para identificar ese y los futuros con el mismo RUT.
-  const identificar = async(mov,clientId)=>{
+  const identificar = async(mov,clientId,override)=>{
     if(!clientId) return
-    const rut = (editForm.rut||'').trim() || mov.rut_contraparte || null
-    const nombre = (editForm.nombre||'').trim() || mov.nombre_contraparte || null
+    // override (sugerencia aceptada sin abrir el editor) usa el RUT/nombre del propio movimiento, no el formulario.
+    const rut = override ? (mov.rut_contraparte||null) : ((editForm.rut||'').trim() || mov.rut_contraparte || null)
+    const nombre = override ? (mov.nombre_contraparte||null) : ((editForm.nombre||'').trim() || mov.nombre_contraparte || null)
     try{
       const r1 = await supabase.from('cartola_movimientos').update({cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}).eq('id',mov.id)
       if(r1.error) throw r1.error
@@ -13932,10 +13948,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           <button onClick={()=>{setEditMov(null);setEditForm({rut:'',nombre:''})}} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                         </div>
                       </div>
-                    : <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2}} onClick={e=>e.stopPropagation()}>
+                    : <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
                         {cliName
                           ? <span style={{fontSize:11,color:C.greenText,fontWeight:600}}>{cliName}</span>
                           : <span style={{fontSize:11,color:'#C77F18',fontWeight:600}}>Sin identificar</span>}
+                        {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
                 )}
