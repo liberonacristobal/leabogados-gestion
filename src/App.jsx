@@ -7401,6 +7401,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [verArchivadosG,setVerArchivadosG] = useState(false)  // mostrar clientes Terminados en la lista de Gastos
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
   const [rsPickFor,setRsPickFor] = useState(null)        // gasto con el selector de razón social abierto (>3 RS o "cambiar")
+  const [rendOpen,setRendOpen] = useState(new Set())     // secciones "Rendidos" desplegadas (key '__single__' o entity_id)
   const [liqDetail,setLiqDetail] = useState(null)        // liquidación de caja chica abierta desde la pill "Liquidado"
   const isAdmin = currentUser?.role==='admin'
   // Personas con caja chica activa = quienes tienen fondos entregados en petty_cash.
@@ -7841,6 +7842,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       })()}
     </div>
   ) : null
+  // Separa gastos rendidos al cliente (client_rendered_at) y los muestra en una sección "Rendidos" colapsada (fuera de activos).
+  const esRendido = e => e.type!=='fondo' && !!e.client_rendered_at
+  const rendidosBlock = (key,rend) => { if(!rend.length) return null; const open=rendOpen.has(key); const tot=rend.reduce((a,e)=>a+(e.amount||0),0); return (
+    <div style={{marginTop:6}}>
+      <div onClick={()=>setRendOpen(p=>{const n=new Set(p);n.has(key)?n.delete(key):n.add(key);return n})} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 4px',cursor:'pointer',borderTop:`1px solid ${C.border}`}}>
+        <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{open?'▾':'▸'} Rendidos · {rend.length}</span>
+        <span style={{fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(tot)}</span>
+      </div>
+      {open&&rend.map(renderMov)}
+    </div>) }
 
   return (
     <div>
@@ -8209,7 +8220,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {selectedClient&&!multiRS&&(
         <div style={{padding:'4px 20px 130px'}}>
           {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
-          {filtered.map(renderMov)}
+          {filtered.filter(e=>!esRendido(e)).map(renderMov)}
+          {rendidosBlock('__single__',filtered.filter(esRendido))}
           {fichaHistorial}
         </div>
       )}
@@ -8240,7 +8252,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <div style={{fontSize:13,fontWeight:700,color:r.saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(r.saldo)}</div>
                 </div>
                 {open&&<div style={{padding:'2px 12px 12px'}}>
-                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.map(renderMov)}
+                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.filter(e=>!esRendido(e)).map(renderMov)}
+                  {rendidosBlock(eid,movs.filter(esRendido))}
                 </div>}
               </div>
             )
