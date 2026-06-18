@@ -13998,20 +13998,20 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             ))}
           </span>
           <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
-            <option value='ambas'>Ambas cuentas</option>
+            <option value='ambas'>Cuenta</option>
             <option value='honorarios'>Cta. Honorarios · 1403834</option>
             <option value='gastos'>Cta. Gastos · 1383922</option>
           </select>
           <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selSty}>
-            <option value='todos'>Mes: todos</option>
+            <option value='todos'>Mes</option>
             {MESES_ABR.map((nm,i)=>{const mm=String(i+1).padStart(2,'0');return <option key={mm} value={mm}>{nm}</option>})}
           </select>
           <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={selSty}>
-            <option value='todos'>Año: todos</option>
+            <option value='todos'>Año</option>
             {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
           {sub==='abonos'&&<select value={concView} onChange={e=>setConcView(e.target.value)} style={selSty}>
-            <option value='todos'>Estado: todos</option>
+            <option value='todos'>Estado</option>
             <option value='porconciliar'>Por conciliar</option>
             <option value='conciliados'>Conciliadas</option>
             <option value='descalces'>Descalces{resumenConc.descalces?` (${resumenConc.descalces})`:''}</option>
