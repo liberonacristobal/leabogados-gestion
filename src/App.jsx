@@ -9274,7 +9274,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
 
 // Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
-function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[]}){
+function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense}){
   const [sec,setSec]=useState('honorarios')
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
   const [det,setDet]=useState(null); const [detG,setDetG]=useState(null)
@@ -9350,8 +9350,9 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           {open&&<div style={{padding:'8px 10px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
             <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:3}}>{e.concept||e.category||(signo>0?'Fondo recibido':'Gasto')}</div>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?'Fondo recibido':'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:col}}>{fmt(e.amount)}</b></span>{e.category&&<span>Categoría: <b style={{color:C.text}}>{e.category}</b></span>}</div>
-            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><span style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase'}}>Venta / proyecto</span>
-              <div style={{color:C.text}}>{v?<><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}</b>:<span style={{color:'#99ABB4'}}>Sin proyecto asociado</span>)}</div></div>
+            <div onClick={onEditExpense?(ev)=>{ev.stopPropagation();onEditExpense(e)}:undefined} style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`,cursor:onEditExpense?'pointer':'default'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase'}}>Venta / proyecto · razón social</span>{onEditExpense&&<span style={{fontSize:10,color:'#185FA5',fontWeight:600}}>{(v||e.project)?'editar':'asignar'} ↗</span>}</div>
+              <div style={{color:C.text}}>{v?<><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}</b>:<span style={{color:'#E24B4A'}}>Sin proyecto asignado</span>)}</div>
+              <div style={{color:e.entity_id?C.muted:'#E24B4A',marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div></div>
             {(e.created_by||e.notas)&&<div style={{marginTop:3}}>{e.created_by?`Registrado por ${e.created_by}`:''}{e.notas?` · ${e.notas}`:''}</div>}
           </div>}
         </div>) }
@@ -10223,7 +10224,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange}/>}
-      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses}/>}
+      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense}/>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
