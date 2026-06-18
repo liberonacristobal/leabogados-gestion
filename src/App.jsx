@@ -9200,21 +9200,33 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
 
   // (3) Programada ↔ real: programada con venta, busca real del mismo cliente, mismo mes (±1) y monto con tolerancia ±15%.
   const progMatches = useMemo(()=>{
-    const progs = act.filter(b=>b.status==='Programada')
+    // Cada programada se cruza con UNA emitida y cada emitida se usa UNA sola vez (1:1). Así una misma factura real
+    // (ej. F°373) no se ofrece para dos cuotas distintas — evita aplicar la misma factura a varias programadas.
+    const progs = act.filter(b=>b.status==='Programada').slice().sort((a,b)=>(a.due||'')<(b.due||'')?-1:1)
     const reals = act.filter(b=>b.issued_at && b.status!=='Programada')
-    const out=[]
+    const usados=new Set(); const out=[]
+    const mIdx = s => parseInt(s.slice(0,4))*12+parseInt(s.slice(5,7))
     progs.forEach(p=>{
-      const pm=mes(p.due||p.issued_at); const a=p.amount||0; if(!a) return
+      const pm=mes(p.due||p.issued_at); const a=p.amount||0; if(!a||!pm) return
+      let best=null, bestKey=null
       for(const x of reals){
+        if(usados.has(x.id)) continue
         if(String(x.client_id)!==String(p.client_id)) continue
         const dMonto=Math.abs((x.amount||0)-a)/a; if(dMonto>0.15) continue
-        const rm=mes(x.due||x.issued_at); if(!pm||!rm) continue
-        const dMes=Math.abs((parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7)))); if(dMes>1) continue
+        const rm=mes(x.due||x.issued_at); if(!rm) continue
+        const dMes=Math.abs(mIdx(pm)-mIdx(rm)); if(dMes>1) continue
+        const sameSale=(p.sale_id&&x.sale_id&&String(p.sale_id)===String(x.sale_id))?0:1
+        const key=[sameSale,dMes,dMonto]   // preferir: misma venta › mismo mes › monto más cercano
+        if(!best||key[0]<bestKey[0]||(key[0]===bestKey[0]&&(key[1]<bestKey[1]||(key[1]===bestKey[1]&&key[2]<bestKey[2])))){ best=x; bestKey=key }
+      }
+      if(best){
+        usados.add(best.id)
+        const dMonto=Math.abs((best.amount||0)-a)/a; const rm=mes(best.due||best.issued_at); const dMes=Math.abs(mIdx(pm)-mIdx(rm))
         const raz=[]
-        if(p.sale_id&&x.sale_id&&String(p.sale_id)===String(x.sale_id)) raz.push('misma venta')
+        if(p.sale_id&&best.sale_id&&String(p.sale_id)===String(best.sale_id)) raz.push('misma venta')
         raz.push(dMes===0?`mismo mes (${pm.slice(5,7)}/${pm.slice(0,4)})`:'mes adyacente')
         raz.push(dMonto<0.01?'mismo monto':`monto a ${(dMonto*100).toFixed(1).replace(/\.0$/,'')}%`)
-        out.push({prog:p, real:x, razones:raz}); break
+        out.push({prog:p, real:best, razones:raz})
       }
     })
     return out
