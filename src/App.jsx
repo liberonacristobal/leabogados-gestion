@@ -14222,20 +14222,20 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           </div>
                         </div>) })()}
                       {showPick&&pickFor===m.id&&(()=>{
-                        // Agrupar las facturas del cliente por razón social (clave en clientes con varias RS).
+                        // Estilo "estado de cuenta": agrupado por razón social, montos alineados a la derecha, fila → detalle.
                         const grupos={}; facsAll.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
-                        const variasRS = Object.keys(grupos).length>1
-                        return (<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
+                        return (<div style={{marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
                           {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas de este cliente.</span>}
                           {Object.entries(grupos).map(([rs,fs])=>(
-                            <div key={rs} style={{display:'flex',flexDirection:'column',gap:3}}>
-                              {variasRS&&<div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:2}}>{rs}</div>}
-                              {fs.map(f=>{ const open=detFor===f.id; return (
-                                <div key={f.id} style={{border:`1px solid ${open?C.accent:C.border}`,borderRadius:6,overflow:'hidden'}}>
-                                  <button onClick={()=>setDetFor(open?null:f.id)} style={{width:'100%',textAlign:'left',fontSize:11,background:open?'#F5F7F9':'none',border:'none',padding:'5px 8px',cursor:'pointer',color:C.text}}>
-                                    F°{f.invoice_no||'—'} · {(f.concept||'sin concepto').slice(0,30)} · {mesAbbr(f.issued_at)} · <b>{fmtM(f.amount)}</b> · {f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`} {open?'▴':'▾'}
-                                  </button>
-                                  {open&&<div style={{padding:'6px 8px',borderTop:`1px solid ${C.border}`,fontSize:10.5,color:C.muted,lineHeight:1.6}}>
+                            <div key={rs} style={{marginBottom:5}}>
+                              <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
+                              {fs.map(f=>{ const open=detFor===f.id; const estCol=f.status==='Pagado'?'#0F6E56':'#C77F18'; return (
+                                <div key={f.id}>
+                                  <div onClick={()=>setDetFor(open?null:f.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
+                                    <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{f.invoice_no||'—'}</b> · {(f.concept||'sin concepto').slice(0,26)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(f.issued_at)}</span></span>
+                                    <span style={{textAlign:'right',whiteSpace:'nowrap'}}><b>{fmtM(f.amount)}</b><br/><span style={{fontSize:9,color:estCol}}>{f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</span></span>
+                                  </div>
+                                  {open&&<div style={{padding:'6px 8px 7px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 4px'}}>
                                     <div>Razón social: <b style={{color:C.text}}>{f.receptor_name||'—'}</b>{f.receptor_rut?` · ${f.receptor_rut}`:''}</div>
                                     <div>Emisión: {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
                                     <div>Monto: {fmtM(f.amount)} · Saldo: {fmtM(saldoFactura(f))} · {f.status}</div>
