@@ -13691,6 +13691,33 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ alert('Error al conciliar: '+e.message) }
     setBusy(null)
   }
+  // Detecta el caso "una transferencia paga 2 facturas": par de facturas del pool cuyos saldos suman el monto (±TOL).
+  const combos = (mov) => { if(!esConciliable(mov)) return null
+    const fs = facturasCliente(mov.cliente_id).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0)
+    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ if(Math.abs(fs[i].saldo+fs[j].saldo-(mov.monto||0))<=TOL) return [fs[i].f,fs[j].f] }
+    return null }
+  // Concilia el abono contra VARIAS facturas en una pasada (lleva el monto_conciliado corrido entre facturas).
+  const reconciliarCombo = async(mov, facturas)=>{
+    if(busy) return
+    setBusy(mov.id)
+    try{
+      let movAplicado = (mov.monto_conciliado||0); const nuevas=[]
+      for(const factura of facturas){
+        const saldo = saldoFactura(factura)
+        const aplicado = Math.max(0, Math.min((mov.monto||0)-movAplicado, saldo))
+        if(aplicado<=0) continue
+        const { data:cr, error:ce } = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'manual' }).select().single()
+        if(ce) throw ce
+        await persistPagoFactura(factura, (aplicadoByFactura[factura.id]||0)+aplicado, mov.fecha, mov.n_operacion)
+        nuevas.push(cr); movAplicado += aplicado
+      }
+      const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
+      if(me) throw me
+      setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
+    }catch(e){ alert('Error al conciliar combinación: '+e.message) }
+    setBusy(null)
+  }
   // Deja el resto del abono como saldo a favor del cliente (anticipo disponible, reutiliza la feature Anticipos).
   const saldoAFavor = async(mov)=>{
     if(busy) return
@@ -13973,6 +14000,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {sub==='abonos'&&esConciliable(m)&&(()=>{
                   const myConc=concByMov[m.id]||[]; const resto=(m.monto||0)-(m.monto_conciliado||0)
                   const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=facturasCliente(m.cliente_id)
+                  const combo=(myConc.length===0&&cands.length===0)?combos(m):null
                   const showPick=myConc.length===0||resto>TOL
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
@@ -13984,6 +14012,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       {showPick&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                         <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
                         {cands.slice(0,3).map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}{f.issued_at?` · ${mesAbbr(f.issued_at)}`:''}{f.status==='Pagado'?' · ya pagada':''}</button>))}
+                        {combo&&<button disabled={busy===m.id} onClick={()=>reconciliarCombo(m,combo)} title='Una transferencia que paga dos facturas' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6EEF1',color:'#003C50',border:'none'}}>Paga 2: F°{combo[0].invoice_no||'—'} + F°{combo[1].invoice_no||'—'}</button>}
                         <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a favor</button>
                         {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'cerrar':'otra factura'}</button>}
                       </div>}
