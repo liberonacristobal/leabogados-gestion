@@ -14037,7 +14037,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const cliName=m.cliente_id?cmap[m.cliente_id]:null
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:'#5F5E5A'}):null
             return (
-              <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #EEF1F3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#EF9F27':C.border}`}}>
+              <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#EF9F27':C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2,flexWrap:'wrap'}}>
                   <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color}}>{rc.t}</span>
                   {cat&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:ts.bg,color:ts.color}}>{cat}</span>}
