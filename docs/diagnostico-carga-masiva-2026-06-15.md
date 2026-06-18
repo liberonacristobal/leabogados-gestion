@@ -67,6 +67,60 @@ Se cruzaron los **47 gastos de Notaría** del import contra dos archivos en Down
 - Los 47 de Notaría pendientes → liquidar a la notaría desde Gastos → "Liquidar notaría".
 - **Prevención:** agregar aviso en el preview de la carga masiva cuando una fila venga **sin fecha** (hoy entra en silencio).
 
+## Gastos SIN FECHA a completar (46 · $1.258.963)
+
+Todos de "Planilla Rendición Gastos 2" (cargas 15-06), sin OT, liquidados de caja chica. **Pendiente: conseguir la fecha de cada uno (Excel original) y completarla.**
+
+| Cliente | Categoría | Concepto | Monto |
+|---|---|---|---|
+| Andro Sekul | Diario Oficial | Publicación D.O Registro Marca Inapi | $18.036 |
+| Andro Sekul | CBR | Inscripción Modificación Longhorn en CBRS | $12.200 |
+| Andro Sekul | CBR | Inscripción Long Horn en CBRS | $10.400 |
+| BM Soluciones | Notaría | Escritura modificación BM Inversiones | $90.000 |
+| BM Soluciones | CBR | Vigencias oficinas x3 Complementaria División | $18.400 |
+| BM Soluciones | Diario Oficial | Publicación D.O Inapi registro marca BM Software | $14.213 |
+| Catherine Cordomi | Registro Civil | Transferencias Autos PE | $108.090 |
+| Catherine Cordomi | Diario Oficial | Publicación Modificación Hotelera | $68.647 |
+| Catherine Cordomi | Registro Civil | Ampliación PE | $44.081 |
+| Catherine Cordomi | CBR | Inscripción Modificación Hotelera | $12.500 |
+| Catherine Cordomi | CBR | CCV Riviera SpA | $7.900 |
+| Daniel Abragan | Diario Oficial | Publicación D.O DAH | $68.647 |
+| Daniel Abragan | CBR | Inscripción Modificación DAH | $12.200 |
+| Daniel Abragan | CBR | CCV Misión S.A. | $4.600 |
+| Daniel Abragan | CBR | CCV PAV | $4.600 |
+| Daniel Abragan | CBR | CCV DAH | $4.600 |
+| Daniel Abragan | CBR | Certificado Capital DAH | $2.300 |
+| David Midgley | CBR | Inscripción constitución | $10.400 |
+| Eugenia Perry | CBR | Certificado de Vigencia | $4.600 |
+| Eugenia Perry | CBR | Certificado de Capital para Publicación D.O | $2.300 |
+| Familia Schroder | CBR | Inscripción donación — Licantén | $143.332 |
+| Familia Schroder | CBR | Inscripción donación — Licantén | $138.795 |
+| Geslog | Otro | Actuación migración Gesmaq | $15.000 |
+| Geslog | CBR | Inscripción Migración | $10.400 |
+| Javiera Diaz | Otro | Copias y certificados de Propiedad — Coquimbo | $17.000 |
+| Javiera Diaz | CBR | Copia con vigencia fs. 1767 n°1868 2004 — Ovalle | $8.100 |
+| Javiera Diaz | CBR | Copia con vigencia fs. 2230 v n°906 2016 — Ovalle | $7.400 |
+| Javiera Diaz | CBR | Envío chilexpress — Ovalle | $7.000 |
+| Javiera Diaz | CBR | Copia con vigencia fs. 2485 v n°1207 2016 — Ovalle | $6.700 |
+| Javiera Diaz | CBR | Certificado dominio vigente fs. 1767 n°1868 — Ovalle | $6.500 |
+| José Miguel Delgado | CBR | Inscripción de extracto de Constitución | $13.000 |
+| Juan Pablo Martinez | CBR | Inscripción de modificación ECVC en CBRS | $10.400 |
+| Juan Pablo Merello | Diario Oficial | Publicación modificación WOW Auto SpA | $69.611 |
+| Juan Pablo Merello | Diario Oficial | Publicación modificación Rocketcar SpA | $69.611 |
+| Juan Pablo Merello | CBR | Inscripción Modificación WOW Auto SpA CBRS | $12.200 |
+| Juan Pablo Merello | CBR | Inscripción Extracto Rectificatorio CMP SpA | $12.200 |
+| Juan Pablo Merello | CBR | Inscripción Modificación CMP SpA CBRS | $12.200 |
+| Juan Pablo Merello | CBR | Inscripción Modificación Rocketcar SpA CBRS | $12.200 |
+| Juan Pablo Merello | CBR | Inscripción de extracto de Constitución | $10.400 |
+| Juan Pablo Merello | CBR | Acreditación Capital Publicaciones D.O x3 | $6.900 |
+| Karla Itaim | CBR | CDV Departamento Santos Dumont | $4.600 |
+| Pablo Liberona | Otro | Archivo judicial escritura | $79.500 |
+| Pablo Liberona | CBR | Inscripción de extracto de Constitución | $10.400 |
+| Pablo Liberona | CBR | Copia con Vigencia | $4.600 |
+| SSIAL | CBR | Dominios y GP Compra inmuebles PUQ — Punta Arenas | $40.000 |
+| TryCloud | CBR | Inscripción transformación en CBRS | $12.200 |
+| **TOTAL** | | **46 gastos** | **$1.258.963** |
+
 ## SQL para marcar "Saldado" (no descuenta saldo · reversible)
 
 > Marca `excluye_saldo=true` → el gasto deja de descontar el saldo del cliente, queda a la vista en la sección "Saldados" y se puede **reponer** (botón Reponer en la app, o el UPDATE de "Reponer" de abajo). Elige UNA de las opciones según lo que confirmes con Martina.
