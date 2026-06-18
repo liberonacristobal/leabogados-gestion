@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-17 — Conciliación: contraste de cuentas + robustez
+- Borde de cuenta con más contraste: Gastos pasa de café oscuro #854F0B a ámbar vivo #EF9F27 (Honorarios sigue navy #003C50); a 3px se distinguen al instante. Aplica al borde de cada movimiento y al panel "Cartolas cargadas".
+- Robustez de escritura: `setCategoria`, `identificar`, `guardarRut` y el upsert de importación ahora revisan el `error` de Supabase y avisan/abortan en vez de fallar en silencio (la UI ya no muestra "éxito" si el write no persistió).
+- Quitado el filtro redundante "Abonos en cuenta Gastos" (chocaba con el nuevo filtro por cuenta corriente y dejaba la lista vacía).
+
 ## 2026-06-17 — Conciliación bancaria · Fase 1 (importación + identificación)
 - Nuevo módulo (read-only). Parser BICE en `src/cartola.js` (cuentas honorarios/gastos, RUT/nombre desde glosa, año desde glosa/período, traspasos internos = es_interno, dedup por hash). `ConciliacionView` en App.jsx, entrada en el menú ☰ "Conciliación bancaria" (admin), pantalla completa.
 - Carga multi-archivo .xlsx (upsert por hash, re-subir no duplica), resuelve cliente por alias → razón social → cliente → receptor de factura; KPIs (abonos/cargos/internos/sin identificar), reporte por archivo con verificación vs Total del banco (✓ si diferencia 0), subvistas Abonos/Cargos, filtro "abonos en cuenta Gastos", crear alias. NO concilia (Fase 2). SQL corrido a mano. Prompt en docs/.

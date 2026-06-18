@@ -13456,7 +13456,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
   const [reportes,setReportes] = useState(null)  // resultado por archivo del último lote
   const [aliases,setAliases] = useState([])
   const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
-  const [soloGastos,setSoloGastos] = useState(false)
   const [soloSinId,setSoloSinId] = useState(false)
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [verCartolas,setVerCartolas] = useState(false)   // panel "Cartolas cargadas" desplegado
@@ -13497,10 +13496,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
   const setCategoria = async(mov,cat)=>{
     const k=crNormRut(mov.rut_contraparte)
     try{
-      if(k){ await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte)
-             setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k?{...x,categoria:cat}:x)) }
-      else { await supabase.from('cartola_movimientos').update({categoria:cat}).eq('id',mov.id)
-             setMovs(p=>p.map(x=>x.id===mov.id?{...x,categoria:cat}:x)) }
+      const { error } = k
+        ? await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte)
+        : await supabase.from('cartola_movimientos').update({categoria:cat}).eq('id',mov.id)
+      if(error) throw error
+      if(k) setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k?{...x,categoria:cat}:x))
+      else  setMovs(p=>p.map(x=>x.id===mov.id?{...x,categoria:cat}:x))
       setTagFor(null)
     }catch(e){ alert('Error al clasificar: '+e.message) }
   }
@@ -13537,7 +13538,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
             // upsert en tandas (idempotente por hash)
             // Re-importar REPROCESA (sobrescribe el parseo de los ya cargados). La identificación por alias se
             // re-aplica sola (resolver). Mientras afinamos el parser, esto evita tener que borrar la tabla.
-            for(let i=0;i<rows.length;i+=200){ await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash'}) }
+            for(let i=0;i<rows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash'}); if(error) throw error }
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
@@ -13563,10 +13564,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
     const rut = (editForm.rut||'').trim() || mov.rut_contraparte || null
     const nombre = (editForm.nombre||'').trim() || mov.nombre_contraparte || null
     try{
-      await supabase.from('cartola_movimientos').update({cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}).eq('id',mov.id)
+      const r1 = await supabase.from('cartola_movimientos').update({cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}).eq('id',mov.id)
+      if(r1.error) throw r1.error
       let learnedK=null
       if(rut){
-        await supabase.from('cliente_alias').upsert({rut_pagador:rut,nombre_pagador:nombre,cliente_id:clientId},{onConflict:'rut_pagador'})
+        const r2 = await supabase.from('cliente_alias').upsert({rut_pagador:rut,nombre_pagador:nombre,cliente_id:clientId},{onConflict:'rut_pagador'})
+        if(r2.error) throw r2.error
         learnedK=crNormRut(rut)
         await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('rut_contraparte',rut)
         setAliases(p=>[...p.filter(a=>crNormRut(a.rut_pagador)!==learnedK),{rut_pagador:rut,cliente_id:clientId,nombre_pagador:nombre}])
@@ -13581,7 +13584,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
     const rut=(editForm.rut||'').trim()||null, nombre=(editForm.nombre||'').trim()||mov.nombre_contraparte||null
     const cid = rut?resolver(rut):mov.cliente_id||null
     try{
-      await supabase.from('cartola_movimientos').update({rut_contraparte:rut,nombre_contraparte:nombre,cliente_id:cid}).eq('id',mov.id)
+      const { error } = await supabase.from('cartola_movimientos').update({rut_contraparte:rut,nombre_contraparte:nombre,cliente_id:cid}).eq('id',mov.id)
+      if(error) throw error
       setMovs(p=>p.map(m=>m.id===mov.id?{...m,rut_contraparte:rut,nombre_contraparte:nombre,cliente_id:cid}:m))
       setEditMov(null); setEditForm({rut:'',nombre:''})
     }catch(e){ alert('Error: '+e.message) }
@@ -13619,12 +13623,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
   const lista = useMemo(()=>{
     let l=movs.filter(m=> sub==='abonos' ? m.tipo==='abono' : m.tipo==='cargo')
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
-    if(sub==='abonos'){
-      if(soloGastos) l=l.filter(m=>m.rol_cuenta==='gastos'&&!m.es_interno&&m.cliente_id)
-      if(soloSinId)  l=l.filter(m=>!m.es_interno&&!m.cliente_id)
-    }
+    if(sub==='abonos'&&soloSinId) l=l.filter(m=>!m.es_interno&&!m.cliente_id)
     return l.slice(0,400)
-  },[movs,sub,soloGastos,soloSinId,cuentaF])
+  },[movs,sub,soloSinId,cuentaF])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
@@ -13700,7 +13701,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
               <span style={{fontSize:11,color:C.muted}}>{cartolas.length} · {movs.length} mov.</span>
               <span style={{marginLeft:'auto',fontSize:13,color:C.muted}}>{verCartolas?'▴':'▾'}</span>
             </div>
-            {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?'#003C50':'#854F0B'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
+            {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?'#003C50':'#EF9F27'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
               <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,borderLeft:`3px solid ${pc}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
                   <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Honorarios':'Gastos'} · {mesLbl}</span>
@@ -13732,10 +13733,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
           {[['ambas','Ambas',C.muted],['honorarios','Honorarios | 1403834','#003C50'],['gastos','Gastos | 1383922','#854F0B']].map(([v,l,col])=>{const on=cuentaF===v;return(
             <button key={v} onClick={()=>setCuentaF(v)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:`1px solid ${on?col:'transparent'}`,background:on?(v==='gastos'?'#FAEEDA':v==='honorarios'?'#E6EEF1':'#F5F7F9'):'#F5F7F9',color:col,cursor:'pointer'}}>{l}</button>
           )})}
-          {sub==='abonos'&&<>
-            <button onClick={()=>{setSoloSinId(s=>!s);setSoloGastos(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloSinId?'#FFF8E1':'#F5F7F9',color:soloSinId?'#C77F18':C.muted,cursor:'pointer'}}>Sin identificar</button>
-            <button onClick={()=>{setSoloGastos(s=>!s);setSoloSinId(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloGastos?'#FAEEDA':'#F5F7F9',color:soloGastos?'#854F0B':C.muted,cursor:'pointer'}}>Abonos en cuenta Gastos</button>
-          </>}
+          {sub==='abonos'&&
+            <button onClick={()=>setSoloSinId(s=>!s)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:'none',background:soloSinId?'#FFF8E1':'#F5F7F9',color:soloSinId?'#C77F18':C.muted,cursor:'pointer'}}>Sin identificar</button>}
           <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length>lista.length?'+ (top 400)':''}</span>
         </div>
 
@@ -13747,7 +13746,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
             const cliName=m.cliente_id?cmap[m.cliente_id]:null
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:'#5F5E5A'}):null
             return (
-              <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #EEF1F3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#854F0B':C.border}`}}>
+              <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #EEF1F3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#EF9F27':C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2,flexWrap:'wrap'}}>
                   <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color}}>{rc.t}</span>
                   {cat&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:ts.bg,color:ts.color}}>{cat}</span>}
