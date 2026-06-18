@@ -9284,6 +9284,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [porProyOpen,setPorProyOpen]=useState(false)   // el bloque "Por proyecto" arranca oculto
   const [openGrp,setOpenGrp]=useState({Activas:true})  // grupos de estado: Activas visible, Terminadas/Otras plegadas
   const [movOrd,setMovOrd]=useState('desc')    // orden por fecha en Movimientos: 'desc' | 'asc'
+  const [fgOrd,setFgOrd]=useState('desc')      // orden por fecha en Fondos y gastos: 'desc' | 'asc'
   const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   const _MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const mesAA=iso=>{const dp=String(iso||'').slice(0,10).split('-');return dp.length>=3?`${_MES[parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''}
@@ -9400,7 +9401,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           </div>) })}
       </div>) })}
     </div>}
-    {sec==='fondos'&&(()=>{ const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
+    {sec==='fondos'&&(()=>{ const _sf=(a,b)=>{ const r=(a.date||'')<(b.date||'')?1:-1; return fgOrd==='desc'?r:-r }; const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort(_sf); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort(_sf)
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; return (
         <div key={e.id} style={{borderBottom:`1px solid ${C.border}`}}>
           <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer'}}>
@@ -9422,7 +9423,10 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           </div>}
         </div>) }
       return (<div>
-      <div style={{fontSize:11,marginBottom:8,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?'#A32D2D':'#0F6E56'}}>{fmt(fg.saldo)}</b></div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:8}}>
+        <div style={{fontSize:11,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?'#A32D2D':'#0F6E56'}}>{fmt(fg.saldo)}</b></div>
+        <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
+      </div>
       <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
       {fondos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {fondos.map(e=>fila(e,1,'#0F6E56'))}
