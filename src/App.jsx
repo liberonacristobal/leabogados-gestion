@@ -13670,7 +13670,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
             <button key={v} onClick={()=>setSub(v)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:8,border:`1px solid ${sub===v?C.accent:C.border}`,background:sub===v?'#E6EEF1':'#fff',color:sub===v?C.accent:C.muted,cursor:'pointer'}}>{l}</button>
           ))}
           <span style={{width:1,height:18,background:C.border,margin:'0 2px'}}></span>
-          {[['ambas','Ambas',C.muted],['honorarios','Honorarios','#003C50'],['gastos','Gastos','#854F0B']].map(([v,l,col])=>{const on=cuentaF===v;return(
+          {[['ambas','Ambas',C.muted],['honorarios','Honorarios | 1403834','#003C50'],['gastos','Gastos | 1383922','#854F0B']].map(([v,l,col])=>{const on=cuentaF===v;return(
             <button key={v} onClick={()=>setCuentaF(v)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:`1px solid ${on?col:'transparent'}`,background:on?(v==='gastos'?'#FAEEDA':v==='honorarios'?'#E6EEF1':'#F5F7F9'):'#F5F7F9',color:col,cursor:'pointer'}}>{l}</button>
           )})}
           {sub==='abonos'&&<>
