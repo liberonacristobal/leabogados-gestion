@@ -14070,7 +14070,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           ? <span style={{fontSize:11,color:C.greenText,fontWeight:600}}>{cliName}</span>
                           : <span style={{fontSize:11,color:'#C77F18',fontWeight:600}}>Sin identificar</span>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
-                        <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
+                        <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'Editar':'Identificar'}</button>
                       </div>
                 )}
                 {/* Capa 2 — tag manual. Cargos: a quién le pagas. Abonos provisión (ocasional): en cuenta Gastos si no
@@ -14081,14 +14081,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
                           {cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{c}</button>})}
                           {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
-                          <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>cerrar</button>
+                          <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button>
                         </div>
                       : (m.tipo==='cargo' && !cat
                           ? <div style={{display:'flex',gap:7,alignItems:'center'}}>
                               <button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Gastos Oficina</button>
-                              <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>otra…</button>
+                              <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button>
                             </div>
-                          : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿provisión de gastos?':'+ clasificar')}</button>)}
+                          : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'Cambiar tag':(m.tipo==='abono'?'¿Provisión de gastos?':'+ Clasificar')}</button>)}
                   </div>
                 )})()}
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
@@ -14103,7 +14103,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?5:0}}>
                         {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=!r.marco_pago&&f&&f.status==='Pagado';return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
                           return <span key={r.id} style={{fontSize:11,fontWeight:700,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 9px'}}>✓ {lbl}</span> })}
-                        <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>deshacer</button>
+                        <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button>
                       </div>}
                       {showPick&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                         <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
@@ -14111,7 +14111,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         {combo&&<button disabled={busy===m.id} onClick={()=>reconciliarCombo(m,combo)} title='Una transferencia que paga dos facturas' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6EEF1',color:'#003C50',border:'none'}}>Paga 2: F°{combo[0].invoice_no||'—'} + F°{combo[1].invoice_no||'—'}</button>}
                         {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>F°{fmg.factura.invoice_no||'—'} + {fmtM(fmg.excess)} gastos</button>}
                         <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a favor</button>
-                        {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'cerrar':'otra factura'}</button>}
+                        {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'Cerrar':'Otra factura'}</button>}
                       </div>}
                       {showPick&&pickFor===m.id&&<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
                         {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas pendientes de este cliente.</span>}
