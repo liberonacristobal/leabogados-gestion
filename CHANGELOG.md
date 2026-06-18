@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-18 — Estado de cuenta · navegación bidireccional
+- Desde el detalle de una factura: "ver venta ↗" salta a la ficha de la venta/proyecto (modal Sale). Desde el detalle de un gasto/fondo con venta enlazada: ídem.
+- Desde el pago "verificado en banco" de una factura: "ver movimiento ↗" cambia al tab Conciliación, limpia filtros, abre y resalta ese movimiento (con scroll). Estado `concFocus` en App + prop `focusMovId`/`onFocusConsumed` en ConciliacionView (espera a que carguen los movs antes de enfocar).
+
 ## 2026-06-17 — Conciliación · sugerir "factura + gastos" (reembolso junto a honorarios)
 - Cuando un abono excede una factura y el exceso coincide con los gastos pendientes de reembolso del cliente (ledger fondos−gastos, descontando lo ya reembolsado por conciliación), ofrece "F°X + $Y gastos": aplica el saldo a la factura (la marca pagada) y registra el exceso como reembolso de gastos (fila conciliacion tipo_destino='gasto'). Solo sugiere si el cliente realmente debe gastos ≈ el exceso (no en cualquier abono grande). Reversible. Primer pedazo de Fase 3; el marcado fino del ledger de gastos vendrá después.
 
