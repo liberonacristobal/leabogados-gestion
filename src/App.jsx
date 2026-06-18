@@ -9285,6 +9285,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [openGrp,setOpenGrp]=useState({Activas:true})  // grupos de estado: Activas visible, Terminadas/Otras plegadas
   const [movOrd,setMovOrd]=useState('desc')    // orden por fecha en Movimientos: 'desc' | 'asc'
   const [fgOrd,setFgOrd]=useState('desc')      // orden por fecha en Fondos y gastos: 'desc' | 'asc'
+  const [detMov,setDetMov]=useState(null)      // movimiento con detalle expandido en Movimientos
+  const [movF,setMovF]=useState('todos')       // filtro Movimientos: todos|abonos|cargos|sin
   const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   const _MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const mesAA=iso=>{const dp=String(iso||'').slice(0,10).split('-');return dp.length>=3?`${_MES[parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''}
@@ -9292,7 +9294,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   useEffect(()=>{ let ok=true; setLoading(true); (async()=>{
     const [a,b]=await Promise.all([
       supabase.from('conciliacion').select('*'),
-      supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,rol_cuenta,tipo,es_interno,categoria').eq('cliente_id',client.id),
+      supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,rol_cuenta,tipo,es_interno,categoria,descripcion').eq('cliente_id',client.id),
     ])
     if(ok){ setConc(a.data||[]); setMovs(b.data||[]); setLoading(false) }
   })(); return ()=>{ok=false} },[client.id])
@@ -9441,16 +9443,32 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
       {gastos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {gastos.map(e=>fila(e,-1,'#A32D2D'))}
     </div>) })()}
-    {sec==='movs'&&(()=>{ const lista=movs.filter(m=>!m.es_interno).sort((a,b)=>{ const r=(a.fecha||'')<(b.fecha||'')?1:-1; return movOrd==='desc'?r:-r }); return (<div>
-      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
-        <button onClick={()=>setMovOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>Fecha {movOrd==='desc'?'↓':'↑'}</button>
+    {sec==='movs'&&(()=>{ const base=movs.filter(m=>!m.es_interno)
+      const totAb=base.filter(m=>m.tipo==='abono').reduce((s,m)=>s+(m.monto||0),0); const totCa=base.filter(m=>m.tipo==='cargo').reduce((s,m)=>s+(m.monto||0),0)
+      const sinN=base.filter(m=>!conc.find(x=>x.movimiento_id===m.id)).length
+      let lista=base; if(movF==='abonos')lista=lista.filter(m=>m.tipo==='abono'); else if(movF==='cargos')lista=lista.filter(m=>m.tipo==='cargo'); else if(movF==='sin')lista=lista.filter(m=>!conc.find(x=>x.movimiento_id===m.id))
+      lista=lista.slice().sort((a,b)=>{ const r=(a.fecha||'')<(b.fecha||'')?1:-1; return movOrd==='desc'?r:-r })
+      const chip=(v,l,n,dgr)=>(<span key={v} onClick={()=>setMovF(v)} style={{fontSize:10,padding:'3px 9px',borderRadius:20,cursor:'pointer',whiteSpace:'nowrap',...(movF===v?{background:dgr?'#A32D2D':'#003C50',color:'#fff',fontWeight:600,border:'1px solid transparent'}:{border:`1px solid ${dgr?'#F7C1C1':C.border}`,color:dgr?'#A32D2D':C.muted})}}>{l}{n!=null?` ${n}`:''}</span>)
+      return (<div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:8}}>
+        <div><div style={{fontSize:13,fontWeight:600,color:C.accent}}>Movimientos bancarios</div><div style={{fontSize:10,color:'#99ABB4'}}>{base.length} mov · <span style={{color:'#0F6E56'}}>+{fmt(totAb)}</span>{totCa>0?<> · <span style={{color:'#A32D2D'}}>−{fmt(totCa)}</span></>:''}</div></div>
+        <button onClick={()=>setMovOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {movOrd==='desc'?'↓':'↑'}</button>
       </div>
-      {lista.length===0&&<div style={{fontSize:11,color:C.muted}}>Sin movimientos bancarios de este cliente.</div>}
-      {lista.map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?(m.tipo==='cargo'?'→ Gasto por cuenta del cliente':'→ Reembolso gastos'):(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ Factura N° ${folioN(f?.invoice_no)||'—'}`})()):'sin conciliar'; const d=dCol(m.fecha); return (
-        <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid #F1F1F1'}}>
-          <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{d.dia}</div><div style={{fontSize:9.5,color:'#99ABB4'}}>{d.sub}</div></div>
-          <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:8.5,fontWeight:700,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'1px 5px'}}>{m.rol_cuenta==='gastos'?'Gastos':'Hon.'}</span></div><div style={{fontSize:11,color:c?C.muted:'#C77F18',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest}</div></div>
-          <b style={{color:m.tipo==='abono'?'#0F6E56':'#A32D2D',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
+      <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>{chip('todos','Todos',base.length)}{chip('abonos','Abonos')}{chip('cargos','Cargos')}{sinN>0&&chip('sin','Sin conciliar',sinN,true)}</div>
+      {lista.length===0&&<div style={{fontSize:11,color:C.muted}}>Sin movimientos.</div>}
+      {lista.map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const open=detMov===m.id; const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?(m.tipo==='cargo'?'→ Gasto por cuenta del cliente':'→ Reembolso gastos'):(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ Factura N° ${folioN(f?.invoice_no)||'—'}`})()):'sin conciliar'; const d=dCol(m.fecha); const cta=m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'; return (
+        <div key={m.id}>
+          <div onClick={()=>setDetMov(open?null:m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:open?'none':'1px solid #F1F1F1',cursor:'pointer'}}>
+            <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{d.dia}</div><div style={{fontSize:9.5,color:'#99ABB4'}}>{d.sub}</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:8.5,fontWeight:700,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'1px 5px'}}>{m.rol_cuenta==='gastos'?'Gastos':'Hon.'}</span></div><div style={{fontSize:11,color:c?C.muted:'#C77F18',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest}</div></div>
+            <b style={{color:m.tipo==='abono'?'#0F6E56':'#A32D2D',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
+            <span style={{color:'#99ABB4',fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+          </div>
+          {open&&<div style={{padding:'8px 10px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.7,margin:'0 0 6px'}}>
+            <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Cuenta: <b style={{color:C.text}}>{cta}</b></span><span>Tipo: <b style={{color:C.text}}>{m.tipo==='abono'?'Abono':'Cargo'}</b></span>{m.n_operacion&&<span>N° op.: <b style={{color:C.text}}>{m.n_operacion}</b></span>}</div>
+            {m.descripcion&&<div>Glosa: <b style={{color:C.text}}>{m.descripcion}</b></div>}
+            <div style={{marginTop:4,paddingTop:4,borderTop:`1px solid #E4E8EB`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{color:c?C.text:'#C77F18'}}>{c?<>{dest} <span style={{color:'#0F6E56',fontWeight:600}}>✓ conciliado</span></>:'sin conciliar'}</span>{onOpenConciliacion&&<span onClick={(ev)=>{ev.stopPropagation();onOpenConciliacion(m.id)}} style={{fontSize:10,color:'#185FA5',fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>ver en Conciliación ↗</span>}</div>
+          </div>}
         </div>) })}
     </div>) })()}
     {sec==='adelantos'&&<div>
