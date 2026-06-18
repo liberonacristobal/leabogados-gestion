@@ -13522,10 +13522,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Provisión de gastos':{bg:'#DFF1F2',color:'#155E6B'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Notaría':{bg:'#FAECE7',color:'#993C1D'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Provisión de gastos':{bg:'#DFF1F2',color:'#155E6B'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
   // Categorías distintas por sentido: cargos = a quién le pagas; abonos = solo se clasifican los de la cuenta de
   // Gastos que NO calzan factura (provisión de gastos = ocasional); un abono de honorarios es el pago del cliente.
-  const CATS_CARGO = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Impuestos']
+  const CATS_CARGO = ['Gastos Oficina','Notaría','Proveedor','Equipo','Contadora','Socio','Impuestos']
   const CATS_ABONO = ['Provisión de gastos','Otro ingreso']
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
@@ -13735,6 +13735,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let best=null, bestD=TOL+1
     for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ const d=Math.abs(fs[i].saldo+fs[j].saldo-(mov.monto||0)); if(d<=TOL&&d<bestD){ bestD=d; best=[fs[i].f,fs[j].f] } }
     return best }
+  // Combo EXACTO para el AUTO: par ÚNICO de facturas (no futuras) cuyos saldos suman EXACTO el monto del abono.
+  const comboExacto = (mov, exclude) => { if(!esConciliable(mov)) return null
+    const pm=(mov.fecha||'').slice(0,7)
+    const fs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
+      .map(f=>({f,saldo:saldoFactura(f),d:mesDiff((f.issued_at||'').slice(0,7),pm)})).filter(x=>x.saldo>0&&(x.d==null||x.d<=0))
+    const pares=[]
+    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ if(fs[i].saldo+fs[j].saldo===(mov.monto||0)) pares.push([fs[i].f,fs[j].f]) }
+    return pares.length===1 ? pares[0] : null }
   // Gasto ya reembolsado vía conciliación (filas tipo_destino='gasto'), por cliente — para no re-sugerir lo ya cubierto.
   const cidByMov = useMemo(()=>{ const m={}; movs.forEach(x=>m[x.id]=x.cliente_id); return m },[movs])
   const reembGastoByCliente = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.tipo_destino==='gasto'){ const cid=cidByMov[c.movimiento_id]; if(cid) m[cid]=(m[cid]||0)+(c.monto_aplicado||0) } }); return m },[conc,cidByMov])
@@ -13861,7 +13869,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
-    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0; const used=new Set()
+    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0; const used=new Set()
     try{
       // AUTO no toca la cuenta de Gastos: un abono ahí casi siempre es fondo, no honorario → revisión manual.
       // Orden FIFO (más antiguo primero) para que en recurrentes el pago de cada mes calce su factura del mes.
@@ -13869,12 +13877,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       // Mejor candidato por abono (único o el del mes del pago). Si 2+ abonos apuntan a la MISMA factura → ambiguo, a bandeja.
       const best={}, facCnt={}
       pend.forEach(m=>{ const f=mejorCandidato(m); if(f){ best[m.id]=f.id; facCnt[f.id]=(facCnt[f.id]||0)+1 } })
-      for(const mov of pend){ const fid=best[mov.id]; if(!fid||used.has(fid)||(facCnt[fid]||0)>1) continue
-        const f=facturasCliente(mov.cliente_id).find(x=>x.id===fid); if(!f) continue
-        used.add(fid); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto }
+      for(const mov of pend){ const fid=best[mov.id]
+        if(fid && !used.has(fid) && (facCnt[fid]||0)<=1){
+          const f=facturasCliente(mov.cliente_id).find(x=>x.id===fid); if(!f) continue
+          used.add(fid); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
+        // Combo EXACTO único (1 transferencia = 2 facturas, suma exacta) → también automático.
+        const cb=comboExacto(mov, used)
+        if(cb){ cb.forEach(f=>used.add(f.id)); await reconciliarCombo(mov, cb); cmb++; ok++; monto+=mov.monto } }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
-    alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
+    alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas${cmb?` · ${cmb} pagaron 2 facturas`:''}.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
