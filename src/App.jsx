@@ -13444,7 +13444,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 }
 
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
-function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[],user,onClose}){
+function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,proveedores=[],user,onClose}){
   // Capa 2 — RUT conocidos para el tag "quién es"
   const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina' }   // Rodrigo (rd@): falta su RUT real; 9.619.443-9 era del CLIENTE Rodrigo Macho
   const SOCIO_RUT  = { '156213209':'Cristóbal', '153717338':'Erasmo' }
@@ -13462,15 +13462,22 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
   const [tagFor,setTagFor] = useState(null)      // id del movimiento con el picker de categoría abierto
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
+  const [conc,setConc] = useState([])           // filas de conciliacion (factura/anticipo aplicados)
+  const [concView,setConcView] = useState('todos') // abonos: 'todos' | 'porconciliar' | 'conciliados'
+  const [autoRun,setAutoRun] = useState(false)   // corriendo conciliación automática
+  const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
+  const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
+  const TOL = 2000                               // tolerancia AUTO (±$) por comisión/redondeo
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
 
   const cargar = useCallback(async()=>{
     setLoading(true)
-    const [{data:m},{data:a}] = await Promise.all([
+    const [{data:m},{data:a},{data:cc}] = await Promise.all([
       supabase.from('cartola_movimientos').select('*').order('fecha',{ascending:false}).limit(8000),
       supabase.from('cliente_alias').select('*'),
+      supabase.from('conciliacion').select('*'),
     ])
-    setMovs(m||[]); setAliases(a||[]); setLoading(false)
+    setMovs(m||[]); setAliases(a||[]); setConc(cc||[]); setLoading(false)
   },[])
   useEffect(()=>{ cargar() },[cargar])
 
@@ -13542,11 +13549,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
           let nuevos=rows.length
           if(rows.length){
             const {data:ex}=await supabase.from('cartola_movimientos').select('hash').in('hash',rows.map(r=>r.hash))
-            const set=new Set((ex||[]).map(x=>x.hash)); nuevos=rows.filter(r=>!set.has(r.hash)).length
-            // upsert en tandas (idempotente por hash)
-            // Re-importar REPROCESA (sobrescribe el parseo de los ya cargados). La identificación por alias se
-            // re-aplica sola (resolver). Mientras afinamos el parser, esto evita tener que borrar la tabla.
-            for(let i=0;i<rows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash'}); if(error) throw error }
+            const set=new Set((ex||[]).map(x=>x.hash)); const nuevosRows=rows.filter(r=>!set.has(r.hash)); nuevos=nuevosRows.length
+            // Solo inserta los GENUINAMENTE nuevos (ignoreDuplicates). Recargar NO pisa estado/cliente_id/categoría/
+            // monto_conciliado de los ya cargados → nunca deshace una conciliación ni una identificación manual.
+            for(let i=0;i<nuevosRows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(nuevosRows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}); if(error) throw error }
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
@@ -13611,6 +13617,111 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
     return { cand:c, exact:c.monto===mov.monto, diff:c.monto-mov.monto }
   }
 
+  // ─── Motor de conciliación (Fase 2) ───────────────────────────────────────
+  // Σ aplicado por factura (de la tabla conciliacion) y conciliaciones por movimiento.
+  const aplicadoByFactura = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) }); return m },[conc])
+  const concByMov = useMemo(()=>{ const m={}; conc.forEach(c=>{ (m[c.movimiento_id]=m[c.movimiento_id]||[]).push(c) }); return m },[conc])
+  // Abono conciliable contra facturas: identificado a cliente, no interno, y de honorarios (Comisión/Subarriendo/Otro NO calzan).
+  const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')
+  // Pool de calce = facturas PENDIENTE del cliente (decisión del usuario). Saldo = monto − Σ aplicado (billing no tiene saldo).
+  const facturasCliente = cid => billing.filter(b=> b.client_id===cid && b.status==='Pendiente' && !b.deleted_at)
+  const saldoFactura = b => Math.max(0,(b.amount||0) - (aplicadoByFactura[b.id]||0))
+  // Candidatas dentro de la tolerancia ±TOL del monto buscado (monto del abono, o el resto al repartir).
+  const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
+    if(!esConciliable(mov)) return []
+    return facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
+      .map(b=>({b,saldo:saldoFactura(b)})).filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL)
+      .sort((a,b)=> Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)).map(x=>x.b) }
+
+  // Escribe el pago en billing (fuente de verdad única para "Pagado"). Cubierta → Pagado; si no, queda Pendiente con paid_amount.
+  const persistPagoFactura = async(factura, aplicadoTotal, fechaPago, ref)=>{
+    const cubierta = aplicadoTotal >= (factura.amount||0)-TOL   // tolerancia ±TOL: diferencia chica (comisión/redondeo) = pagada
+    const now=new Date().toISOString()
+    const patch = cubierta
+      ? { status:'Pagado', paid:true, paid_at:fechaPago, payment_date:fechaPago, payment_method:'Transferencia', payment_ref:ref||null, paid_amount:(factura.amount||0), reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
+      : { paid_amount:aplicadoTotal, payment_method:'Transferencia', payment_ref:ref||null, reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
+    const { error } = await supabase.from('billing').update(patch).eq('id',factura.id)
+    if(error) throw error
+    setBilling&&setBilling(p=>p.map(b=>b.id===factura.id?{...b,...patch}:b))
+  }
+  // Aplica un abono (o su resto) a una factura: crea fila conciliacion, marca la factura y avanza el estado del movimiento.
+  const reconciliar = async(mov, factura, origen='manual')=>{
+    if(busy) return
+    setBusy(mov.id)
+    try{
+      const saldo = saldoFactura(factura)
+      const resto = (mov.monto||0) - (mov.monto_conciliado||0)
+      const aplicado = Math.max(0, Math.min(resto, saldo))
+      const { data:cr, error:ce } = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen }).select().single()
+      if(ce) throw ce
+      await persistPagoFactura(factura, (aplicadoByFactura[factura.id]||0)+aplicado, mov.fecha, mov.n_operacion)
+      const movAplicado = (mov.monto_conciliado||0)+aplicado
+      const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
+      if(me) throw me
+      setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
+    }catch(e){ alert('Error al conciliar: '+e.message) }
+    setBusy(null)
+  }
+  // Deja el resto del abono como saldo a favor del cliente (anticipo disponible, reutiliza la feature Anticipos).
+  const saldoAFavor = async(mov)=>{
+    if(busy) return
+    setBusy(mov.id)
+    try{
+      const resto = (mov.monto||0) - (mov.monto_conciliado||0)
+      const { data:ant, error:ae } = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, monto:resto, fecha:mov.fecha, nota:'Pago sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
+      if(ae) throw ae
+      const { data:cr, error:ce } = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:resto, origen:'manual' }).select().single()
+      if(ce) throw ce
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:(mov.monto||0) }).eq('id',mov.id)
+      if(me) throw me
+      setAnticipos&&setAnticipos(p=>[ant,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setPickFor(null)
+    }catch(e){ alert('Error al crear saldo a favor: '+e.message) }
+    setBusy(null)
+  }
+  // Deshace TODA la conciliación de un movimiento: revierte facturas/anticipos y deja el movimiento pendiente.
+  const deshacer = async(mov)=>{
+    if(busy) return
+    const rows = conc.filter(c=>c.movimiento_id===mov.id); if(!rows.length) return
+    setBusy(mov.id)
+    try{
+      for(const r of rows){
+        if(r.tipo_destino==='factura' && r.factura_id){
+          const fac = billing.find(b=>b.id===r.factura_id)
+          const nuevoAplic = Math.max(0,(aplicadoByFactura[r.factura_id]||0)-(r.monto_aplicado||0))
+          if(fac){ const now=new Date().toISOString()
+            const patch = nuevoAplic<=0
+              ? { status: fac.status==='Anulada'?'Anulada':'Pendiente', paid:false, paid_at:null, payment_method:null, payment_ref:null, paid_amount:null, reconciled_at:null, reconciled_from:null, updated_at:now }
+              : { paid_amount:nuevoAplic, updated_at:now }
+            const { error } = await supabase.from('billing').update(patch).eq('id',fac.id); if(error) throw error
+            setBilling&&setBilling(p=>p.map(b=>b.id===fac.id?{...b,...patch}:b)) }
+        } else if(r.tipo_destino==='anticipo' && r.anticipo_id){
+          const ant=(anticipos||[]).find(a=>String(a.id)===String(r.anticipo_id))
+          if(!ant || ant.estado==='disponible'){ await supabase.from('anticipos').delete().eq('id',r.anticipo_id)
+            setAnticipos&&setAnticipos(p=>p.filter(a=>String(a.id)!==String(r.anticipo_id))) }
+        }
+        const { error:de } = await supabase.from('conciliacion').delete().eq('id',r.id); if(de) throw de
+      }
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0 }).eq('id',mov.id); if(me) throw me
+      setConc(p=>p.filter(c=>c.movimiento_id!==mov.id)); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'pendiente',monto_conciliado:0}:x))
+    }catch(e){ alert('Error al deshacer: '+e.message) }
+    setBusy(null)
+  }
+  // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
+  const conciliarAuto = async()=>{
+    if(autoRun||busy) return
+    setAutoRun(true); let ok=0, monto=0; const used=new Set()
+    try{
+      const pend = movs.filter(m=>esConciliable(m) && !(concByMov[m.id]?.length))
+      for(const mov of pend){ const cands = candidatos(mov, used)
+        if(cands.length===1){ used.add(cands[0].id); await reconciliar(mov, cands[0], 'auto'); ok++; monto+=mov.monto } }
+    }catch(e){ alert('Error en conciliación automática: '+e.message) }
+    setAutoRun(false)
+    alert(ok? `Conciliadas ${ok} factura${ok!==1?'s':''} automáticamente · ${fmtM(monto)}.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
+  }
+  const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
+    return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov])
+
   // KPIs globales
   const G = useMemo(()=>{
     const abo=movs.filter(m=>m.tipo==='abono'&&!m.es_interno), car=movs.filter(m=>m.tipo==='cargo'&&!m.es_interno)
@@ -13631,9 +13742,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
   const lista = useMemo(()=>{
     let l=movs.filter(m=> sub==='abonos' ? m.tipo==='abono' : m.tipo==='cargo')
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
-    if(sub==='abonos'&&soloSinId) l=l.filter(m=>!m.es_interno&&!m.cliente_id)
+    if(sub==='abonos'){
+      if(soloSinId) l=l.filter(m=>!m.es_interno&&!m.cliente_id)
+      if(concView==='porconciliar') l=l.filter(m=>esConciliable(m)&&!(concByMov[m.id]?.length))
+      else if(concView==='conciliados') l=l.filter(m=>concByMov[m.id]?.length)
+    }
     return l.slice(0,400)
-  },[movs,sub,soloSinId,cuentaF])
+  },[movs,sub,soloSinId,cuentaF,concView,concByMov])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
@@ -13746,6 +13861,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
           <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length>lista.length?'+ (top 400)':''}</span>
         </div>
 
+        {/* Conciliación (Fase 2) — solo abonos */}
+        {sub==='abonos'&&(
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+            <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:12,fontWeight:700,padding:'6px 14px',borderRadius:8,border:'none',background:(autoRun||resumenConc.pend===0)?'#99ABB4':'#003C50',color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer'}}>{autoRun?'Conciliando…':'Conciliar automático'}</button>
+            <span style={{fontSize:11,color:C.muted}}>{resumenConc.done}/{resumenConc.total} conciliadas{resumenConc.pend>0?` · faltan ${resumenConc.pend} (${fmtM(resumenConc.montoPend)})`:''}</span>
+            <div style={{marginLeft:'auto',display:'flex',gap:5}}>
+              {[['todos','Todos'],['porconciliar','Por conciliar'],['conciliados','Conciliadas']].map(([v,l])=>(
+                <button key={v} onClick={()=>setConcView(v)} style={{fontSize:10,fontWeight:600,padding:'4px 9px',borderRadius:20,border:'none',background:concView===v?'#E6EEF1':'#F5F7F9',color:concView===v?'#003C50':C.muted,cursor:'pointer'}}>{l}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Lista */}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
           {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>Sin movimientos. Sube una cartola para empezar.</div>}
@@ -13802,11 +13930,36 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
                       : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#99ABB4':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿comisión, subarriendo u otro?':'+ clasificar')}</button>}
                   </div>
                 )})()}
+                {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
+                {sub==='abonos'&&esConciliable(m)&&(()=>{
+                  const myConc=concByMov[m.id]||[]; const resto=(m.monto||0)-(m.monto_conciliado||0)
+                  const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=facturasCliente(m.cliente_id)
+                  const showPick=myConc.length===0||resto>TOL
+                  return (
+                    <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
+                      {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?5:0}}>
+                        {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}`})()
+                          return <span key={r.id} style={{fontSize:11,fontWeight:700,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 9px'}}>✓ {lbl}</span> })}
+                        <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>deshacer</button>
+                      </div>}
+                      {showPick&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                        <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
+                        {cands.slice(0,3).map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}</button>))}
+                        <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a favor</button>
+                        {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'cerrar':'otra factura'}</button>}
+                      </div>}
+                      {showPick&&pickFor===m.id&&<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
+                        {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas pendientes de este cliente.</span>}
+                        {facsAll.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{textAlign:'left',fontSize:11,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer',color:C.text}}>F°{f.invoice_no||'—'} · {(f.concept||'').slice(0,30)} · saldo {fmtM(saldoFactura(f))}</button>))}
+                      </div>}
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
         </div>
-        <div style={{fontSize:10,color:C.muted,marginTop:10,lineHeight:1.5}}>Fase 1: solo importa e identifica. No marca facturas ni concilia (eso viene en la Fase 2).</div>
+        <div style={{fontSize:10,color:C.muted,marginTop:10,lineHeight:1.5}}>Fase 2: concilia abonos de cliente contra facturas pendientes (AUTO calce único ±$2.000 + bandeja manual). Todo reversible.</div>
       </div>
     </div>
   )
@@ -15004,7 +15157,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
-            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} user={user} onClose={()=>setTab('dashboard')}/>}
+            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} proveedores={proveedores} user={user} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:{notaria:true}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
