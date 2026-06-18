@@ -9278,6 +9278,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [sec,setSec]=useState('honorarios')
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
   const [det,setDet]=useState(null); const [detG,setDetG]=useState(null)
+  const [ord,setOrd]=useState('fecha')
   const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   useEffect(()=>{ let ok=true; setLoading(true); (async()=>{
     const [a,b]=await Promise.all([
@@ -9297,7 +9298,9 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const aFavor=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
   const hoy=new Date();hoy.setHours(0,0,0,0)
   const aging=due=>{if(!due)return null;const d=Math.round((new Date(due+'T12:00')-hoy)/86400000);if(d<0)return{t:`vencida ${-d}d`,c:'#A32D2D'};if(d<=7)return{t:`vence ${d}d`,c:'#C77F18'};return{t:'al día',c:'#0F6E56'}}
-  const grupos=useMemo(()=>{const g={};facturas.forEach(b=>{const rs=b.receptor_name||client.name||'—';(g[rs]=g[rs]||[]).push(b)});Object.values(g).forEach(a=>a.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return g},[facturas])
+  const grupos=useMemo(()=>{const g={};facturas.forEach(b=>{const rs=b.receptor_name||client.name||'—';(g[rs]=g[rs]||[]).push(b)})
+    const cmp=ord==='monto'?(x,y)=>(y.amount||0)-(x.amount||0):ord==='proyecto'?(x,y)=>((ventaById[x.sale_id]?.title||x.concept||'zzz')).localeCompare(ventaById[y.sale_id]?.title||y.concept||'zzz')||((x.issued_at||'')<(y.issued_at||'')?1:-1):(x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1
+    Object.values(g).forEach(a=>a.sort(cmp));return g},[facturas,ord,ventaById])
   const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={titulo:v?.title||'Sin proyecto',area:v?.area||'',fact:0,pag:0});o.fact+=(b.amount||0);o.pag+=(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0))});return Object.values(p)},[facturas,ventaById])
   const kpi=(label,val,sub,col)=>(<div style={{background:'#F5F7F9',borderRadius:8,padding:'8px 9px'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:15,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:8.5,color:'#99ABB4',lineHeight:1.3}}>{sub}</div></div>)
   return (<div style={{padding:'14px 20px 40px'}}>
@@ -9313,6 +9316,12 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     </div>
     {loading&&<div style={{fontSize:11,color:C.muted}}>Cargando…</div>}
     {sec==='honorarios'&&<div>
+      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:9,fontSize:11,color:C.muted}}>
+        <span>Ordenar</span>
+        {[['fecha','Fecha'],['proyecto','Proyecto'],['monto','Monto']].map(([v,l])=>(
+          <span key={v} onClick={()=>setOrd(v)} style={{padding:'3px 9px',borderRadius:7,border:`1px solid ${ord===v?C.accent:C.border}`,color:ord===v?C.accent:C.muted,fontWeight:ord===v?600:400,cursor:'pointer'}}>{l}</span>
+        ))}
+      </div>
       {porProy.length>0&&<div style={{background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',marginBottom:10}}>
         <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',marginBottom:4}}>Por proyecto</div>
         {porProy.map((p,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'2px 0'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}{p.area?<span style={{color:'#99ABB4'}}> · {p.area}</span>:''}</span><span style={{whiteSpace:'nowrap'}}>{fmt(p.pag)}/{fmt(p.fact)} {p.fact-p.pag>0?<span style={{color:'#C77F18',fontSize:9}}>falta {fmt(p.fact-p.pag)}</span>:<span style={{color:'#0F6E56',fontSize:9}}>ok</span>}</span></div>))}
@@ -9320,12 +9329,14 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
       {Object.keys(grupos).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin facturas.</div>}
       {Object.entries(grupos).map(([rs,fs])=>(<div key={rs} style={{marginBottom:8}}>
         <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
-        {fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]; return (
+        {fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]
+          const dp=String(b.issued_at||'').slice(0,10).split('-'); const dia=dp.length>=3?dp[2]:'—'; const sub=dp.length>=3?`${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''
+          const eCol=pagada?'#0F6E56':(ag?ag.c:'#C77F18'); const eBg=eCol==='#0F6E56'?'#E1F5EE':eCol==='#A32D2D'?'#FCEBEB':eCol==='#C77F18'?'#FAEEDA':'#E6F1FB'; return (
           <div key={b.id}>
-            <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'5px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
-              <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{folioN(b.invoice_no)||'—'}</b> · {(b.concept||'—').slice(0,26)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(b.issued_at)}</span></span>
-              <span style={{textAlign:'right',whiteSpace:'nowrap'}}><b>{fmt(b.amount)}</b><br/><span style={{fontSize:9,color:pagada?'#0F6E56':(ag?ag.c:'#C77F18')}}>{pagada?'pagada':(ag?ag.t:'pendiente')}</span></span>
-              <span style={{color:'#185FA5',fontSize:11,marginLeft:2,flexShrink:0}}>{open?'▴':'ver ▾'}</span>
+            <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer',borderBottom:open?'none':`1px solid ${C.border}`}}>
+              <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{dia}</div><div style={{fontSize:9.5,color:'#99ABB4'}}>{sub}</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:eBg,color:eCol}}>{pagada?'pagada':(ag?ag.t:'pendiente')}</span></div></div>
+              <div style={{fontSize:13.5,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</div>
             </div>
             {open&&<div style={{padding:'7px 9px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
               <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{b.billing_type||'honorarios'}</b></span><span>Emisión: <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b></span>{b.due&&<span>Vence: <b style={{color:C.text}}>{fmtFechaDMY(b.due)}</b></span>}</div>
