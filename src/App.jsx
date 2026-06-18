@@ -13469,6 +13469,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
   useEffect(()=>{ cargar() },[cargar])
 
   const cmap = useMemo(()=>{ const m={}; clients.forEach(c=>m[c.id]=c.name); return m },[clients])
+  // RUT → nombre "oficial" (razón social del SII o nombre del cliente) para reemplazar el nombre truncado/corrupto del banco.
+  const nameByRut = useMemo(()=>{ const m={}
+    clients.forEach(c=>{ const k=crNormRut(c.rut); if(k&&!m[k]) m[k]=c.name })
+    clientEntities.forEach(e=>{ const k=crNormRut(e.rut); if(k) m[k]=e.name })   // la RS pisa al nombre del cliente
+    return m },[clients,clientEntities])
   // Resolución de cliente por RUT: alias → razón social → cliente → receptor de factura.
   const resolver = useMemo(()=>{
     const alias={},ent={},cli={},rec={}
@@ -13680,7 +13685,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
                   <span style={{fontSize:11,color:C.muted}}>{m.fecha}</span>
                   <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                 </div>
-                <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}</div>
+                <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}</div>
                 {!m.nombre_contraparte&&!m.es_interno&&m.descripcion&&<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{m.descripcion}</div>}
                 {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Gastos':'Honorarios'
                   return o.exact
