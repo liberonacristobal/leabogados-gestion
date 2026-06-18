@@ -9277,7 +9277,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
 function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[]}){
   const [sec,setSec]=useState('honorarios')
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
-  const [det,setDet]=useState(null)
+  const [det,setDet]=useState(null); const [detG,setDetG]=useState(null)
   const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   useEffect(()=>{ let ok=true; setLoading(true); (async()=>{
     const [a,b]=await Promise.all([
@@ -9323,8 +9323,9 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
         {fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]; return (
           <div key={b.id}>
             <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'5px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
-              <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{b.invoice_no||'—'}</b> · {(b.concept||'—').slice(0,28)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(b.issued_at)}</span></span>
+              <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{folioN(b.invoice_no)||'—'}</b> · {(b.concept||'—').slice(0,26)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(b.issued_at)}</span></span>
               <span style={{textAlign:'right',whiteSpace:'nowrap'}}><b>{fmt(b.amount)}</b><br/><span style={{fontSize:9,color:pagada?'#0F6E56':(ag?ag.c:'#C77F18')}}>{pagada?'pagada':(ag?ag.t:'pendiente')}</span></span>
+              <span style={{color:'#185FA5',fontSize:11,marginLeft:2,flexShrink:0}}>{open?'▴':'ver ▾'}</span>
             </div>
             {open&&<div style={{padding:'7px 9px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
               <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{b.billing_type||'honorarios'}</b></span><span>Emisión: <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b></span>{b.due&&<span>Vence: <b style={{color:C.text}}>{fmtFechaDMY(b.due)}</b></span>}</div>
@@ -9338,18 +9339,34 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           </div>) })}
       </div>))}
     </div>}
-    {sec==='fondos'&&(()=>{ const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); return (<div>
+    {sec==='fondos'&&(()=>{ const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)
+      const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; return (
+        <div key={e.id}>
+          <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':'1px solid #F1F1F1'}}>
+            <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(e.concept||e.category||(signo>0?'Fondo':'Gasto')).slice(0,28)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span>
+            <b style={{color:col,whiteSpace:'nowrap'}}>{signo>0?'+':'−'}{fmt(e.amount)}</b>
+            <span style={{color:'#185FA5',fontSize:11,flexShrink:0}}>{open?'▴':'ver ▾'}</span>
+          </div>
+          {open&&<div style={{padding:'7px 9px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
+            <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?'Fondo recibido':'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:C.text}}>{fmt(e.amount)}</b></span></div>
+            {e.category&&<div>Categoría: <b style={{color:C.text}}>{e.category}</b></div>}
+            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><span style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase'}}>Venta / proyecto</span>
+              <div style={{color:C.text}}>{v?<><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}</b>:<span style={{color:'#99ABB4'}}>Sin proyecto asociado</span>)}</div></div>
+            {(e.created_by||e.notas)&&<div style={{marginTop:3}}>{e.created_by?`Registrado por ${e.created_by}`:''}{e.notas?` · ${e.notas}`:''}</div>}
+          </div>}
+        </div>) }
+      return (<div>
       <div style={{fontSize:11,marginBottom:8,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?'#A32D2D':'#0F6E56'}}>{fmt(fg.saldo)}</b></div>
       <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
       {fondos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
-      {fondos.map(e=>(<div key={e.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:'1px solid #F1F1F1'}}><span>{(e.concept||'Fondo').slice(0,30)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span><b style={{color:'#0F6E56'}}>+{fmt(e.amount)}</b></div>))}
+      {fondos.map(e=>fila(e,1,'#0F6E56'))}
       <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',margin:'8px 0 2px'}}>Gastos</div>
       {gastos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
-      {gastos.map(e=>(<div key={e.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:'1px solid #F1F1F1'}}><span>{(e.concept||e.category||'Gasto').slice(0,30)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span><b style={{color:'#A32D2D'}}>−{fmt(e.amount)}</b></div>))}
+      {gastos.map(e=>fila(e,-1,'#A32D2D'))}
     </div>) })()}
     {sec==='movs'&&<div>
       {movs.filter(m=>!m.es_interno).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin movimientos bancarios de este cliente.</div>}
-      {movs.filter(m=>!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?'→ Reembolso gastos':(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ F°${f?.invoice_no||'—'}`})()):'sin conciliar'; return (
+      {movs.filter(m=>!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?'→ Reembolso gastos':(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ F°${folioN(f?.invoice_no)||'—'}`})()):'sin conciliar'; return (
         <div key={m.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1'}}>
           <span style={{minWidth:0}}><span style={{fontSize:8.5,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'0 5px'}}>{m.rol_cuenta==='gastos'?'Gastos':'Hon.'}</span> {fmtFechaDMY(m.fecha)} <span style={{color:'#99ABB4'}}>{dest}</span></span>
           <b style={{color:m.tipo==='abono'?'#0F6E56':'#A32D2D'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
