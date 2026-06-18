@@ -7979,6 +7979,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
         {/* Vista cliente seleccionado: KPIs (totales de todas las RS) */}
         {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
+        {selectedClient&&(()=>{
+          // Adelanto de oficina por cobrar = lo REALMENTE pagado (caja chica + notaría liquidada) por sobre el fondo del cliente.
+          const f=expenses.filter(e=>e.client_id===selectedClient.id)
+          const fondos=f.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+          const pagados=f.filter(e=>e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
+          const porCobrar=Math.max(0,pagados-fondos)
+          if(porCobrar<=0) return null
+          return (<div style={{display:'flex',alignItems:'center',gap:8,background:'#FFF3DC',border:'1px solid #FAC775',borderRadius:8,padding:'7px 11px',margin:'0 20px 8px'}}>
+            <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:'#854F0B'}}>Adelanto de oficina por cobrar: {fmt(porCobrar)}</div><div style={{fontSize:9.5,color:'#854F0B'}}>ya pagado por la oficina (sobre el fondo del cliente)</div></div>
+          </div>) })()}
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
         {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&(()=>{
