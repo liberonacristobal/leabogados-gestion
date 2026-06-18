@@ -14052,9 +14052,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
                 )}
-                {/* Capa 2 — tag manual. Cargos: a quién le pagas. Abonos: solo los de la cuenta de Gastos que NO
-                    calzan factura (provisión = ocasional); si calza factura es honorario mal depositado → se concilia. */}
-                {!m.es_interno&&(m.tipo==='cargo'||(m.rol_cuenta==='gastos'&&(m.categoria||!tieneCand(m))))&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
+                {/* Capa 2 — tag manual. Cargos: a quién le pagas. Abonos provisión (ocasional): en cuenta Gastos si no
+                    calza factura; en Honorarios solo si está identificado y no calza (provisión que cayó en honorarios). */}
+                {!m.es_interno&&(m.tipo==='cargo'||(m.rol_cuenta==='gastos'?(m.categoria||!tieneCand(m)):(m.categoria||(m.cliente_id&&!tieneCand(m)))))&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
