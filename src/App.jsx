@@ -13459,6 +13459,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [soloSinId,setSoloSinId] = useState(false)
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [verCartolas,setVerCartolas] = useState(false)   // panel "Cartolas cargadas" desplegado
+  const [verCarga,setVerCarga] = useState(false)         // caja de carga de cartolas colapsada (solo se usa al inicio)
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
   const [tagFor,setTagFor] = useState(null)      // id del movimiento con el picker de categoría abierto
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
@@ -13910,23 +13911,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       </div>
 
       <div style={{padding:'14px 20px 0'}}>
-        {/* Carga multi-archivo */}
-        <div style={{padding:'16px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',background:'#F5F7F9',marginBottom:12}}>
-          <div style={{fontSize:14,color:C.accent,fontWeight:600,marginBottom:8}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Cargar cartolas BICE (.xlsx)'}</div>
-          {!importing&&(
-            <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
-              <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
-                Elegir archivos
-              </label>
-              <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                <input type='file' webkitdirectory='' directory='' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
-                Seleccionar carpeta
-              </label>
+        {/* Carga de cartolas — colapsada por defecto (solo se usa para cargar; ocupa mucho espacio en el día a día) */}
+        {(verCarga||importing)
+          ? <div style={{padding:'16px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',background:'#F5F7F9',marginBottom:12,position:'relative'}}>
+              {!importing&&<button onClick={()=>setVerCarga(false)} style={{position:'absolute',top:8,right:10,background:'none',border:'none',color:C.muted,fontSize:16,lineHeight:1,cursor:'pointer'}}>×</button>}
+              <div style={{fontSize:14,color:C.accent,fontWeight:600,marginBottom:8}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Cargar cartolas BICE (.xlsx)'}</div>
+              {!importing&&(
+                <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+                  <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                    <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
+                    Elegir archivos
+                  </label>
+                  <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                    <input type='file' webkitdirectory='' directory='' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
+                    Seleccionar carpeta
+                  </label>
+                </div>
+              )}
+              <div style={{fontSize:11,color:C.muted,marginTop:8}}>Varios a la vez o una carpeta entera (ambas cuentas). Re-subir no duplica.</div>
             </div>
-          )}
-          <div style={{fontSize:11,color:C.muted,marginTop:8}}>Varios a la vez o una carpeta entera (ambas cuentas). Re-subir no duplica.</div>
-        </div>
+          : <div style={{textAlign:'right',marginBottom:8}}><button onClick={()=>setVerCarga(true)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>+ Cargar cartolas</button></div>}
 
         {/* Reporte del último lote */}
         {reportes&&(
