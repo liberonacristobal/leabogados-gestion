@@ -8259,7 +8259,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           {showHistorial&&(
             <div style={{padding:'2px 0 0'}}>
               {(()=>{
-                const hist=(expenses||[]).filter(e=>e.bulk_import_id && !e.deleted_at && e.type!=='fondo')
+                // Históricos = gastos de carga masiva cargados SIN fecha y SIN OT (los legacy que no venían en el archivo formal de notaría).
+                const hist=(expenses||[]).filter(e=>e.bulk_import_id && !e.deleted_at && e.type!=='fondo' && !e.date && !e.ot_number)
                 if(!hist.length) return null
                 const cats={}; hist.forEach(e=>{ const c=e.category||'Otro'; (cats[c]=cats[c]||{n:0,tot:0,sal:0,items:[]}); cats[c].n++; cats[c].tot+=(e.amount||0); if(e.excluye_saldo)cats[c].sal++; cats[c].items.push(e) })
                 const orden=Object.entries(cats).sort((a,b)=>b[1].tot-a[1].tot)
