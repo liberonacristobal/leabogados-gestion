@@ -13444,7 +13444,11 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
 }
 
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
-function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}){
+function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[],user,onClose}){
+  // Capa 2 — RUT conocidos para el tag "quién es"
+  const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina', '96194439':'Rodrigo' }
+  const SOCIO_RUT  = { '156213209':'Cristóbal', '153717338':'Erasmo' }
+  const CONTADORA_RUT = { '124631432':'Claudia (contadora)' }
   const [movs,setMovs] = useState([])
   const [loading,setLoading] = useState(true)
   const [importing,setImporting] = useState(false)
@@ -13455,7 +13459,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
   const [soloGastos,setSoloGastos] = useState(false)
   const [soloSinId,setSoloSinId] = useState(false)
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
+  const [verCartolas,setVerCartolas] = useState(false)   // panel "Cartolas cargadas" desplegado
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
+  const [tagFor,setTagFor] = useState(null)      // id del movimiento con el picker de categoría abierto
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
 
@@ -13475,6 +13481,29 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
     clients.forEach(c=>{ const k=crNormRut(c.rut); if(k&&!m[k]) m[k]=c.name })
     clientEntities.forEach(e=>{ const k=crNormRut(e.rut); if(k) m[k]=e.name })   // la RS pisa al nombre del cliente
     return m },[clients,clientEntities])
+  const provByRut = useMemo(()=>{ const m={}; (proveedores||[]).forEach(p=>{ const k=crNormRut(p.rut); if(k) m[k]=p.nombre||p.name }); return m },[proveedores])
+  // Capa 2 — categoría "quién es": manual (categoria) manda; si no, auto por RUT conocido / cliente.
+  const tipoContraparte = m => {
+    if(m.es_interno) return null
+    if(m.categoria) return m.categoria
+    const k=crNormRut(m.rut_contraparte)
+    if(k){ if(CONTADORA_RUT[k]) return 'Contadora'; if(SOCIO_RUT[k]) return 'Socio'; if(EQUIPO_RUT[k]) return 'Equipo'; if(provByRut[k]) return 'Proveedor' }
+    if(m.cliente_id) return 'Cliente'
+    return null
+  }
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'} }
+  const CATS_MANUAL = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Cliente','Impuestos']
+  // Tag manual: setea categoria en este y en todos los del mismo RUT (aprende). RUT vacío → solo este.
+  const setCategoria = async(mov,cat)=>{
+    const k=crNormRut(mov.rut_contraparte)
+    try{
+      if(k){ await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte)
+             setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k?{...x,categoria:cat}:x)) }
+      else { await supabase.from('cartola_movimientos').update({categoria:cat}).eq('id',mov.id)
+             setMovs(p=>p.map(x=>x.id===mov.id?{...x,categoria:cat}:x)) }
+      setTagFor(null)
+    }catch(e){ alert('Error al clasificar: '+e.message) }
+  }
   // Resolución de cliente por RUT: alias → razón social → cliente → receptor de factura.
   const resolver = useMemo(()=>{
     const alias={},ent={},cli={},rec={}
@@ -13577,6 +13606,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
       internos:movs.filter(m=>m.es_interno).length, sinId:abo.filter(m=>!m.cliente_id).length }
   },[movs])
 
+  // Cartolas cargadas (derivado): agrupa por cuenta + mes con período, conteo y totales.
+  const cartolas = useMemo(()=>{
+    const g={}
+    movs.forEach(m=>{ const mes=(m.fecha||'').slice(0,7); if(!mes) return; const k=`${m.rol_cuenta}|${mes}`
+      const o=g[k]||(g[k]={rol:m.rol_cuenta,mes,fMin:m.fecha,fMax:m.fecha,n:0,abo:0,car:0})
+      o.n++; if(m.fecha<o.fMin)o.fMin=m.fecha; if(m.fecha>o.fMax)o.fMax=m.fecha
+      if(m.tipo==='abono')o.abo+=m.monto; else o.car+=m.monto })
+    return Object.values(g).sort((a,b)=> a.rol!==b.rol ? (a.rol==='honorarios'?-1:1) : (a.mes<b.mes?1:-1))
+  },[movs])
+
   const lista = useMemo(()=>{
     let l=movs.filter(m=> sub==='abonos' ? m.tipo==='abono' : m.tipo==='cargo')
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
@@ -13653,6 +13692,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
           </div>
         )}
 
+        {/* Cartolas cargadas (colapsado; se despliega por cuenta y mes) */}
+        {cartolas.length>0&&(
+          <div style={{marginBottom:12,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            <div onClick={()=>setVerCartolas(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer',background:'#F5F7F9'}}>
+              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Cartolas cargadas</span>
+              <span style={{fontSize:11,color:C.muted}}>{cartolas.length} · {movs.length} mov.</span>
+              <span style={{marginLeft:'auto',fontSize:13,color:C.muted}}>{verCartolas?'▴':'▾'}</span>
+            </div>
+            {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?'#003C50':'#854F0B'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
+              <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,borderLeft:`3px solid ${pc}`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Honorarios':'Gastos'} · {mesLbl}</span>
+                  <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmtFechaDMY?fmtFechaDMY(c.fMin):c.fMin} → {fmtFechaDMY?fmtFechaDMY(c.fMax):c.fMax} · {c.n} mov.</span>
+                </div>
+                <div style={{fontSize:11,marginTop:2}}><span style={{color:C.greenText,fontWeight:600}}>+{fmtM(c.abo)}</span> <span style={{color:C.muted}}>abonos</span> · <span style={{color:C.overdue,fontWeight:600}}>−{fmtM(c.car)}</span> <span style={{color:C.muted}}>cargos</span></div>
+              </div>
+            )})}
+          </div>
+        )}
+
         {/* KPIs globales */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:12}}>
           {[['Abonos',`${G.nAbo}`,fmtM(G.sumAbo),'#0F6E56'],['Cargos',`${G.nCar}`,fmtM(G.sumCar),'#A32D2D'],['Internos',`${G.internos}`,'',C.muted],['Sin identificar',`${G.sinId}`,'',G.sinId?'#C77F18':C.muted]].map(([l,n,sub2,col])=>(
@@ -13686,10 +13745,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
           {lista.map(m=>{
             const rc=rolChip(m.rol_cuenta)
             const cliName=m.cliente_id?cmap[m.cliente_id]:null
+            const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:'#5F5E5A'}):null
             return (
               <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #EEF1F3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#854F0B':C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2,flexWrap:'wrap'}}>
                   <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color}}>{rc.t}</span>
+                  {cat&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:ts.bg,color:ts.color}}>{cat}</span>}
                   {m.es_interno&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A'}}>Interno</span>}
                   <span style={{fontSize:11,color:C.muted}}>{m.fecha}</span>
                   <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
@@ -13720,6 +13781,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
                           : <span style={{fontSize:11,color:'#C77F18',fontWeight:600}}>Sin identificar</span>}
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
+                )}
+                {/* Capa 2 — tag manual (clasificar / cambiar) */}
+                {!m.es_interno&&(
+                  <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
+                    {tagFor===m.id
+                      ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
+                          {CATS_MANUAL.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{c}</button>})}
+                          {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
+                          <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>cerrar</button>
+                        </div>
+                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:cat?C.muted:'#185FA5',background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{cat?'cambiar tag':'+ clasificar'}</button>}
+                  </div>
                 )}
               </div>
             )
@@ -14923,7 +14996,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
-            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} user={user} onClose={()=>setTab('dashboard')}/>}
+            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} user={user} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={()=>setModal({type:'cargaMasiva',data:{notaria:true}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
