@@ -13500,11 +13500,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Fondo':{bg:'#DFF1F2',color:'#155E6B'},'Comisión':{bg:'#FBEAF0',color:'#993556'},'Subarriendo':{bg:'#FAECE7',color:'#993C1D'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
-  // Categorías distintas por sentido: cargos = a quién le pagas; abonos = qué tipo de ingreso (Cliente=honorarios
-  // facturados es el default auto; Fondo/Comisión/Subarriendo NO son honorarios → no calzan contra factura).
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Fondo':{bg:'#DFF1F2',color:'#155E6B'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
+  // Categorías distintas por sentido: cargos = a quién le pagas; abonos = solo se clasifican los de la cuenta de
+  // Gastos (Fondo/Otro); un abono de honorarios es el pago del cliente (Cliente), no necesita clasificación.
   const CATS_CARGO = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Impuestos']
-  const CATS_ABONO = ['Fondo','Comisión','Subarriendo','Otro ingreso']
+  const CATS_ABONO = ['Fondo','Otro ingreso']
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
   const setCategoria = async(mov,cat)=>{
@@ -13939,9 +13939,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
                 )}
-                {/* Capa 2 — tag manual. Categorías según sentido: abonos = tipo de ingreso (Cliente es el default
-                    auto; el selector queda para marcar Subarriendo/Otro); cargos = a quién le pagas. */}
-                {!m.es_interno&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
+                {/* Capa 2 — tag manual. Cargos: a quién le pagas. Abonos: SOLO los de la cuenta de Gastos se
+                    clasifican (posibles fondos); un abono de honorarios es el pago del cliente, sin prompt. */}
+                {!m.es_interno&&(m.tipo==='cargo'||m.rol_cuenta==='gastos')&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
@@ -13949,7 +13949,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
                           <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>cerrar</button>
                         </div>
-                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?(m.rol_cuenta==='gastos'?'#155E6B':'#99ABB4'):'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?(m.rol_cuenta==='gastos'?'¿fondo de gastos?':'¿comisión, subarriendo u otro?'):'+ clasificar')}</button>}
+                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿fondo de gastos?':'+ clasificar')}</button>}
                   </div>
                 )})()}
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
