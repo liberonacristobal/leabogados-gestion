@@ -13885,7 +13885,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     return l.slice(0,400)
   },[movs,sub,soloSinId,cuentaF,concView,concByMov,billing])
 
-  const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
+  const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Cta. Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Cta. Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
   const tipoMov = d => { const s=(d||'').toLowerCase()
     if(s.includes('tarjeta')) return 'Pago tarjeta de crédito'
@@ -13965,7 +13965,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?'#003C50':'#EF9F27'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
               <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,borderLeft:`3px solid ${pc}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Honorarios':'Gastos'} · {mesLbl}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Cta. Honorarios':'Cta. Gastos'} · {mesLbl}</span>
                   <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmtFechaDMY?fmtFechaDMY(c.fMin):c.fMin} → {fmtFechaDMY?fmtFechaDMY(c.fMax):c.fMax} · {c.n} mov.</span>
                 </div>
                 <div style={{fontSize:11,marginTop:2}}><span style={{color:C.greenText,fontWeight:600}}>+{fmtM(c.abo)}</span> <span style={{color:C.muted}}>abonos</span> · <span style={{color:C.overdue,fontWeight:600}}>−{fmtM(c.car)}</span> <span style={{color:C.muted}}>cargos</span></div>
@@ -13991,7 +13991,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             <button key={v} onClick={()=>setSub(v)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:8,border:`1px solid ${sub===v?C.accent:C.border}`,background:sub===v?'#E6EEF1':'#fff',color:sub===v?C.accent:C.muted,cursor:'pointer'}}>{l}</button>
           ))}
           <span style={{width:1,height:18,background:C.border,margin:'0 2px'}}></span>
-          {[['ambas','Ambas',C.muted],['honorarios','Honorarios | 1403834','#003C50'],['gastos','Gastos | 1383922','#854F0B']].map(([v,l,col])=>{const on=cuentaF===v;return(
+          {[['ambas','Ambas',C.muted],['honorarios','Cta. Honorarios | 1403834','#003C50'],['gastos','Cta. Gastos | 1383922','#854F0B']].map(([v,l,col])=>{const on=cuentaF===v;return(
             <button key={v} onClick={()=>setCuentaF(v)} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:20,border:`1px solid ${on?col:'transparent'}`,background:on?(v==='gastos'?'#FAEEDA':v==='honorarios'?'#E6EEF1':'#F5F7F9'):'#F5F7F9',color:col,cursor:'pointer'}}>{l}</button>
           )})}
           {sub==='abonos'&&
@@ -14030,7 +14030,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 </div>
                 <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#A32D2D',background:'#FCEBEB',borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</div>
                 {!m.nombre_contraparte&&!m.es_interno&&m.descripcion&&<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{m.descripcion}</div>}
-                {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Gastos':'Honorarios'
+                {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
                   return o.exact
                     ? <div style={{fontSize:11,color:C.accent,marginTop:2}}>↔ origen: <b>{nom}</b> · abono en cuenta {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
                     : <div style={{fontSize:11,color:C.overdue,marginTop:2}}>↔ posible origen: <b>{nom}</b> · abono en cuenta {cta} — <b>diferencia {fmtM(Math.abs(o.diff))}</b>, revisar (los traspasos propios no deberían tener diferencia)</div>
