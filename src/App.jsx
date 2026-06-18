@@ -8906,7 +8906,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
 // Barra de tabs de la ficha de cliente (reutilizada por admin y limited; bloquea según rol)
 function FichaTabs({tab,setTab,role}){
-  const all=[['resumen','Resumen'],['contacto','Contacto'],['financiero','Financiero'],['documentos','Documentos']]
+  const all=[['resumen','Resumen'],['contacto','Contacto'],['financiero','Financiero'],['documentos','Estado de cuenta']]
   // El limited solo ve Resumen y Contacto (Financiero/Documentos no se renderizan)
   const tabs = role==='admin' ? all : all.filter(([id])=>id==='resumen'||id==='contacto')
   return (
@@ -9270,6 +9270,96 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
       </div>
     </>
   )
+}
+
+// Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
+// cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
+function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[]}){
+  const [sec,setSec]=useState('honorarios')
+  const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
+  const [det,setDet]=useState(null)
+  const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
+  useEffect(()=>{ let ok=true; setLoading(true); (async()=>{
+    const [a,b]=await Promise.all([
+      supabase.from('conciliacion').select('*'),
+      supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,rol_cuenta,tipo,es_interno,categoria').eq('cliente_id',client.id),
+    ])
+    if(ok){ setConc(a.data||[]); setMovs(b.data||[]); setLoading(false) }
+  })(); return ()=>{ok=false} },[client.id])
+  const ventaById=useMemo(()=>{const m={};sales.forEach(s=>m[s.id]=s);return m},[sales])
+  const concByFac=useMemo(()=>{const m={};conc.forEach(c=>{if(c.factura_id)m[c.factura_id]=c});return m},[conc])
+  const movById=useMemo(()=>{const m={};movs.forEach(x=>m[x.id]=x);return m},[movs])
+  const facturas=useMemo(()=>clientBilling.filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&b.status!=='Programada'),[clientBilling])
+  const facturado=facturas.reduce((s,b)=>s+(b.amount||0),0)
+  const pagadoTot=facturas.reduce((s,b)=>s+(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0)),0)
+  const porCobrar=facturado-pagadoTot
+  const fg=fgCliente(expenses,client.id)
+  const aFavor=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
+  const hoy=new Date();hoy.setHours(0,0,0,0)
+  const aging=due=>{if(!due)return null;const d=Math.round((new Date(due+'T12:00')-hoy)/86400000);if(d<0)return{t:`vencida ${-d}d`,c:'#A32D2D'};if(d<=7)return{t:`vence ${d}d`,c:'#C77F18'};return{t:'al día',c:'#0F6E56'}}
+  const grupos=useMemo(()=>{const g={};facturas.forEach(b=>{const rs=b.receptor_name||client.name||'—';(g[rs]=g[rs]||[]).push(b)});Object.values(g).forEach(a=>a.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return g},[facturas])
+  const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={titulo:v?.title||'Sin proyecto',area:v?.area||'',fact:0,pag:0});o.fact+=(b.amount||0);o.pag+=(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0))});return Object.values(p)},[facturas,ventaById])
+  const kpi=(label,val,sub,col)=>(<div style={{background:'#F5F7F9',borderRadius:8,padding:'8px 9px'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:15,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:8.5,color:'#99ABB4',lineHeight:1.3}}>{sub}</div></div>)
+  return (<div style={{padding:'14px 20px 40px'}}>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:12}}>
+      {kpi('Por cobrar',porCobrar,`facturado ${fmt(facturado)} − pagado ${fmt(pagadoTot)}`,porCobrar>0?'#A32D2D':'#0F6E56')}
+      {kpi('Saldo fondos',fg.saldo,`fondos ${fmt(fg.fondos)} − gastos ${fmt(fg.gastos)}`,fg.saldo<0?'#A32D2D':'#0F6E56')}
+      {kpi('A favor',aFavor,'anticipos disponibles',aFavor>0?'#0F6E56':C.muted)}
+    </div>
+    <div style={{display:'flex',gap:14,borderBottom:`1px solid ${C.border}`,marginBottom:10,flexWrap:'wrap'}}>
+      {[['honorarios','Honorarios'],['fondos','Fondos y gastos'],['movs','Movimientos'],['adelantos','Adelantos']].map(([v,l])=>(
+        <span key={v} onClick={()=>setSec(v)} style={{fontSize:12,fontWeight:sec===v?600:400,color:sec===v?C.accent:C.muted,borderBottom:sec===v?`2px solid ${C.accent}`:'none',paddingBottom:6,marginBottom:-1,cursor:'pointer'}}>{l}</span>
+      ))}
+    </div>
+    {loading&&<div style={{fontSize:11,color:C.muted}}>Cargando…</div>}
+    {sec==='honorarios'&&<div>
+      {porProy.length>0&&<div style={{background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',marginBottom:10}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',marginBottom:4}}>Por proyecto</div>
+        {porProy.map((p,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'2px 0'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}{p.area?<span style={{color:'#99ABB4'}}> · {p.area}</span>:''}</span><span style={{whiteSpace:'nowrap'}}>{fmt(p.pag)}/{fmt(p.fact)} {p.fact-p.pag>0?<span style={{color:'#C77F18',fontSize:9}}>falta {fmt(p.fact-p.pag)}</span>:<span style={{color:'#0F6E56',fontSize:9}}>ok</span>}</span></div>))}
+      </div>}
+      {Object.keys(grupos).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin facturas.</div>}
+      {Object.entries(grupos).map(([rs,fs])=>(<div key={rs} style={{marginBottom:8}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
+        {fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]; return (
+          <div key={b.id}>
+            <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'5px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
+              <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{b.invoice_no||'—'}</b> · {(b.concept||'—').slice(0,28)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(b.issued_at)}</span></span>
+              <span style={{textAlign:'right',whiteSpace:'nowrap'}}><b>{fmt(b.amount)}</b><br/><span style={{fontSize:9,color:pagada?'#0F6E56':(ag?ag.c:'#C77F18')}}>{pagada?'pagada':(ag?ag.t:'pendiente')}</span></span>
+            </div>
+            {open&&<div style={{padding:'7px 9px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
+              <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{b.billing_type||'honorarios'}</b></span><span>Emisión: <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b></span>{b.due&&<span>Vence: <b style={{color:C.text}}>{fmtFechaDMY(b.due)}</b></span>}</div>
+              <div>Monto: <b style={{color:C.text}}>{fmt(b.amount)}</b> · {pagada?'Pagada':`Saldo ${fmt((b.amount||0)-(b.paid_amount||0))}`}</div>
+              {v&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><span style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase'}}>Venta / proyecto</span><div style={{color:C.text}}><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</div></div>}
+              {pagada&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><span style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase'}}>Pago</span>
+                {c?<div style={{color:C.text}}>Transferencia <b>{fmt(c.monto_aplicado)}</b>{mv?` · ${fmtFechaDMY(mv.fecha)} · ${mv.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}${mv.n_operacion?` · N° op. ${mv.n_operacion}`:''}`:''} <span style={{color:'#0F6E56',fontWeight:600}}>✓ verificado en banco</span></div>
+                  :<div style={{color:'#C77F18'}}>Marcada pagada a mano — sin movimiento bancario enlazado</div>}
+              </div>}
+            </div>}
+          </div>) })}
+      </div>))}
+    </div>}
+    {sec==='fondos'&&(()=>{ const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); return (<div>
+      <div style={{fontSize:11,marginBottom:8,color:C.muted}}>Fondos {fmt(fg.fondos)} − Gastos {fmt(fg.gastos)} = <b style={{color:fg.saldo<0?'#A32D2D':'#0F6E56'}}>{fmt(fg.saldo)}</b></div>
+      <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
+      {fondos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
+      {fondos.map(e=>(<div key={e.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:'1px solid #F1F1F1'}}><span>{(e.concept||'Fondo').slice(0,30)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span><b style={{color:'#0F6E56'}}>+{fmt(e.amount)}</b></div>))}
+      <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',margin:'8px 0 2px'}}>Gastos</div>
+      {gastos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
+      {gastos.map(e=>(<div key={e.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:'1px solid #F1F1F1'}}><span>{(e.concept||e.category||'Gasto').slice(0,30)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(e.date)}</span></span><b style={{color:'#A32D2D'}}>−{fmt(e.amount)}</b></div>))}
+    </div>) })()}
+    {sec==='movs'&&<div>
+      {movs.filter(m=>!m.es_interno).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin movimientos bancarios de este cliente.</div>}
+      {movs.filter(m=>!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?'→ Reembolso gastos':(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ F°${f?.invoice_no||'—'}`})()):'sin conciliar'; return (
+        <div key={m.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1'}}>
+          <span style={{minWidth:0}}><span style={{fontSize:8.5,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'0 5px'}}>{m.rol_cuenta==='gastos'?'Gastos':'Hon.'}</span> {fmtFechaDMY(m.fecha)} <span style={{color:'#99ABB4'}}>{dest}</span></span>
+          <b style={{color:m.tipo==='abono'?'#0F6E56':'#A32D2D'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
+        </div>) })}
+    </div>}
+    {sec==='adelantos'&&<div>
+      {(anticipos||[]).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin adelantos.</div>}
+      {(anticipos||[]).slice().sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(a=>(<div key={a.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1'}}><span>{(a.nota||'Adelanto').slice(0,30)} <span style={{color:'#99ABB4'}}>· {fmtFechaDMY(a.fecha)}</span></span><span style={{textAlign:'right'}}><b style={{color:'#0F6E56'}}>{fmt(a.monto)}</b> <span style={{fontSize:9,color:a.estado==='disponible'?'#0F6E56':'#99ABB4'}}>{a.estado}</span></span></div>))}
+    </div>}
+  </div>)
 }
 
 function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar, onAssignSeries, onStatusChange}) {
@@ -10116,7 +10206,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange}/>}
-      {ftab==='documentos'&&<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:13,color:C.muted}}>Documentos — segunda etapa</div></div>}
+      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses}/>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
