@@ -13523,7 +13523,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
   },[aliases,clientEntities,clients,billing])
 
   const onFiles = async(fileList)=>{
-    const files=[...(fileList||[])].filter(f=>/\.xlsx?$/i.test(f.name)); if(!files.length) return
+    // Solo .xlsx reales: descarta los temporales de Excel "~$..." (archivos de bloqueo, sin datos) y ocultos.
+    const files=[...(fileList||[])].filter(f=>{ const n=(f.name||'').split(/[/\\]/).pop(); return /\.xlsx?$/i.test(n) && !n.startsWith('~$') && !n.startsWith('.') }); if(!files.length) return
     setImporting(true); setReportes(null); setProg({done:0,total:files.length})
     const reps=[]
     try{
