@@ -12,6 +12,23 @@ export const CUENTAS = [
 export const normRut = r => String(r||'').toUpperCase().replace(/[^0-9K]/g,'')
 export const esRutPropio = r => normRut(r) === normRut(RUT_PROPIO)
 
+// Formatea un RUT a "XX.XXX.XXX-X" (consistencia visual y de almacenamiento).
+export function formatRut(rut){
+  const n = normRut(rut); if(n.length<2) return rut||null
+  const dv = n.slice(-1), body = n.slice(0,-1)
+  return `${body.replace(/\B(?=(\d{3})+(?!\d))/g,'.')}-${dv}`
+}
+// Valida el dígito verificador (módulo 11). Detecta RUT mal parseados.
+export function rutValido(rut){
+  const n = normRut(rut); if(n.length<2) return false
+  const dv = n.slice(-1), body = n.slice(0,-1)
+  if(!/^\d+$/.test(body)) return false
+  let sum=0, mul=2
+  for(let i=body.length-1;i>=0;i--){ sum+=parseInt(body[i],10)*mul; mul=mul===7?2:mul+1 }
+  const r=11-(sum%11); const dvc = r===11?'0':r===10?'K':String(r)
+  return dvc===dv
+}
+
 // Rol de la cuenta a partir de cualquier texto que la contenga (con/sin prefijo 01, guiones).
 export function rolDeCuenta(raw){
   const d = String(raw||'').replace(/\D/g,'')
@@ -160,7 +177,7 @@ export function parseCartola(aoa, { filename='' } = {}){
     const fecha = fp ? `${anio}-${fp.mm}-${fp.d}` : `${anio}-01-01`
     // RUT / nombre (mismos formatos para abono y cargo) + detección de interno (incluye auto-transferencia con RUT propio)
     const cp = extraerContraparte(desc)
-    let rut = cp.rut, nombre = cp.nombre
+    let rut = cp.rut ? formatRut(cp.rut) : null, nombre = cp.nombre
     const interno = detectarInterno(desc, rut)
     if(interno){ rut=null; nombre=etiquetaInterno(desc, tipo, cuenta) }
     const n_operacion = _flat(iDoc>=0?row[iDoc]:'') || null
