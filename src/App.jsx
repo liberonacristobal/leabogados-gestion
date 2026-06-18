@@ -14157,12 +14157,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   </div>
                 </div>
                 {abierto&&(<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:7,lineHeight:1.5}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:'#185FA5',cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
-                {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
-                  return o.exact
-                    ? <div style={{fontSize:11,color:C.accent,marginTop:2}}>↔ origen: <b>{nom}</b> · abono en cuenta {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
-                    : <div style={{fontSize:11,color:C.overdue,marginTop:2}}>↔ posible origen: <b>{nom}</b> · abono en cuenta {cta} — <b>diferencia {fmtM(Math.abs(o.diff))}</b>, revisar (los traspasos propios no deberían tener diferencia)</div>
-                })()}
+                {/* JERARQUÍA: 1) acción (conciliar) · 2) provisión · 3) cliente · 4) clasificación · 5) contexto+historial */}
                 {!m.es_interno&&(
                   editMov===m.id
                     ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
@@ -14272,6 +14267,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     </div>
                   )
                 })()}
+                {/* Contexto (al fondo): glosa cruda + N° op. + cruce interno */}
+                <div style={{marginTop:9,borderTop:`1px solid #F1F1F1`,paddingTop:7}}>
+                  <div style={{fontSize:10,color:C.muted,lineHeight:1.5}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:'#185FA5',cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
+                  {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
+                    return o.exact
+                      ? <div style={{fontSize:11,color:C.accent,marginTop:3}}>↔ origen: <b>{nom}</b> · abono en {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
+                      : <div style={{fontSize:11,color:C.overdue,marginTop:3}}>↔ posible origen: <b>{nom}</b> · abono en {cta} — <b>diferencia {fmtM(Math.abs(o.diff))}</b>, revisar</div>
+                  })()}
+                </div>
                 {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9.5,color:'#99ABB4',marginTop:8,borderTop:`1px solid #F1F1F1`,paddingTop:6,lineHeight:1.6}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo acreditado':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
                 </div>)}
               </div>
