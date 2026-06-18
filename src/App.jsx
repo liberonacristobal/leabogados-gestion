@@ -13500,7 +13500,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
             const {data:ex}=await supabase.from('cartola_movimientos').select('hash').in('hash',rows.map(r=>r.hash))
             const set=new Set((ex||[]).map(x=>x.hash)); nuevos=rows.filter(r=>!set.has(r.hash)).length
             // upsert en tandas (idempotente por hash)
-            for(let i=0;i<rows.length;i+=200){ await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}) }
+            // Re-importar REPROCESA (sobrescribe el parseo de los ya cargados). La identificación por alias se
+            // re-aplica sola (resolver). Mientras afinamos el parser, esto evita tener que borrar la tabla.
+            for(let i=0;i<rows.length;i+=200){ await supabase.from('cartola_movimientos').upsert(rows.slice(i,i+200),{onConflict:'hash'}) }
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
