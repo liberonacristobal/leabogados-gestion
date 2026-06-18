@@ -9335,7 +9335,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           <div key={b.id}>
             <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer',borderBottom:open?'none':`1px solid ${C.border}`}}>
               <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{dia}</div><div style={{fontSize:9.5,color:'#99ABB4'}}>{sub}</div></div>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>F°{folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:eBg,color:eCol}}>{pagada?'pagada':(ag?ag.t:'pendiente')}</span></div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N° {folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:eBg,color:eCol}}>{pagada?'pagada':(ag?ag.t:'pendiente')}</span></div></div>
               <div style={{fontSize:13.5,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</div>
             </div>
             {open&&<div style={{padding:'7px 9px',background:'#F5F7F9',borderRadius:6,fontSize:10.5,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
@@ -9378,7 +9378,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     </div>) })()}
     {sec==='movs'&&<div>
       {movs.filter(m=>!m.es_interno).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin movimientos bancarios de este cliente.</div>}
-      {movs.filter(m=>!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?'→ Reembolso gastos':(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ F°${folioN(f?.invoice_no)||'—'}`})()):'sin conciliar'; return (
+      {movs.filter(m=>!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?'→ Reembolso gastos':(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ Factura N° ${folioN(f?.invoice_no)||'—'}`})()):'sin conciliar'; return (
         <div key={m.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1'}}>
           <span style={{minWidth:0}}><span style={{fontSize:8.5,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'0 5px'}}>{m.rol_cuenta==='gastos'?'Gastos':'Hon.'}</span> {fmtFechaDMY(m.fecha)} <span style={{color:'#99ABB4'}}>{dest}</span></span>
           <b style={{color:m.tipo==='abono'?'#0F6E56':'#A32D2D'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
