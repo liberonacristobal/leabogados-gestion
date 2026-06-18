@@ -13472,6 +13472,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
   const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
   const [detFor,setDetFor] = useState(null)      // id de la factura con el detalle expandido en el selector "Otra factura"
+  const [modalMov,setModalMov] = useState(null)  // id del movimiento abierto en el modal de detalle
+  const [verGlosa,setVerGlosa] = useState(false)  // glosa cruda desplegada en el modal
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
@@ -13967,6 +13969,23 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   },[movs,sub,cuentaF,anioF,mesF,concView,concByMov,billing,q,orden,cmap])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Cta. Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Cta. Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
+  // Chip de estado definitivo para el landing (un solo chip que informa de verdad qué pasó con el movimiento).
+  const estadoChip = m => {
+    if(m.es_interno) return {t:'Interno', c:'#5F5E5A', bg:'#F1EFE8'}
+    const cc=concByMov[m.id]||[]
+    if(cc.length){
+      const fon=cc.find(c=>c.tipo_destino==='fondo'), ant=cc.find(c=>c.tipo_destino==='anticipo'), facs=cc.filter(c=>c.tipo_destino==='factura')
+      if(fon) return {t:'✓ Fondo acreditado', c:'#0F6E56', bg:'#E1F5EE'}
+      if(ant&&!facs.length) return {t:'✓ Adelanto', c:'#0F6E56', bg:'#E1F5EE'}
+      if(facs.length>1) return {t:`✓ ${facs.length} facturas`, c:'#0F6E56', bg:'#E1F5EE'}
+      if(facs.length===1){ const f=billing.find(b=>b.id===facs[0].factura_id); return {t:`✓ F°${f?.invoice_no||'—'}`, c:'#0F6E56', bg:'#E1F5EE'} }
+      return {t:'✓ Conciliado', c:'#0F6E56', bg:'#E1F5EE'}
+    }
+    if(m.estado==='parcial') return {t:`Parcial · resta ${fmtM((m.monto||0)-(m.monto_conciliado||0))}`, c:'#C77F18', bg:'#FFF8E1'}
+    if(m.categoria){ const s=TAG_STY[m.categoria]||{bg:'#F1EFE8',color:'#5F5E5A'}; return {t:m.categoria, c:s.color, bg:s.bg} }
+    if(m.tipo==='abono') return m.cliente_id ? {t:'Por conciliar', c:'#C77F18', bg:'#FFF8E1'} : {t:'Sin identificar', c:'#A35200', bg:'#FCEBEB'}
+    return {t:'Sin clasificar', c:'#537281', bg:'#F1EFE8'}
+  }
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
   const tipoMov = d => { const s=(d||'').toLowerCase()
     if(s.includes('tarjeta')) return 'Pago tarjeta de crédito'
@@ -14120,20 +14139,25 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
           {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>Sin movimientos. Sube una cartola para empezar.</div>}
           {lista.map(m=>{
-            const rc=rolChip(m.rol_cuenta)
+            const rc=rolChip(m.rol_cuenta); const ec=estadoChip(m); const abierto=modalMov===m.id
             const cliName=m.cliente_id?cmap[m.cliente_id]:null
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:'#5F5E5A'}):null
             return (
               <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#EF9F27':C.border}`}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2,flexWrap:'wrap'}}>
-                  <span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF===m.rol_cuenta?'ambas':m.rol_cuenta)}} title='Filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color,cursor:'pointer'}}>{rc.t}</span>
-                  {cat&&!m.es_interno&&<span onClick={(e)=>{e.stopPropagation();setTagFor(tagFor===m.id?null:m.id)}} title='Cambiar clasificación' style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:ts.bg,color:ts.color,cursor:'pointer'}}>{cat}</span>}
-                  {m.es_interno&&<span onClick={(e)=>{e.stopPropagation();desmarcarInterno(m)}} title='No es interno — marcar como movimiento normal' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A',cursor:'pointer'}}>Interno ✕</span>}
-                  <span style={{fontSize:11,color:C.muted}}>{fmtFechaDMY(m.fecha)}</span>
-                  <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
+                <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
+                    <span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF===m.rol_cuenta?'ambas':m.rol_cuenta)}} title='Filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color,cursor:'pointer'}}>{rc.t}</span>
+                    <span style={{fontSize:11,color:C.muted}}>{fmtFechaDMY(m.fecha)}</span>
+                    <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
+                  </div>
+                  <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#A32D2D',background:'#FCEBEB',borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</div>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:3}}>
+                    <span style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:ec.bg,color:ec.c}}>{ec.t}</span>
+                    <span style={{fontSize:11,color:'#185FA5',fontWeight:500}}>{abierto?'Cerrar ▴':'Editar ▾'}</span>
+                  </div>
                 </div>
-                <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#A32D2D',background:'#FCEBEB',borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</div>
-                {!m.nombre_contraparte&&!m.es_interno&&m.descripcion&&<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{m.descripcion}</div>}
+                {abierto&&(<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:7,lineHeight:1.5}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:'#185FA5',cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
                 {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
                   return o.exact
                     ? <div style={{fontSize:11,color:C.accent,marginTop:2}}>↔ origen: <b>{nom}</b> · abono en cuenta {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
@@ -14248,11 +14272,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     </div>
                   )
                 })()}
+                {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9.5,color:'#99ABB4',marginTop:8,borderTop:`1px solid #F1F1F1`,paddingTop:6,lineHeight:1.6}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo acreditado':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
+                </div>)}
               </div>
             )
           })}
         </div>
-        <div style={{fontSize:10,color:C.muted,marginTop:10,lineHeight:1.5}}>Fase 2: concilia abonos de cliente contra facturas pendientes (AUTO calce único ±$2.000 + bandeja manual). Todo reversible.</div>
+        <div style={{fontSize:10,color:C.muted,marginTop:10,lineHeight:1.5}}>Toca un movimiento para ver el detalle y conciliar. Calce exacto en pesos · todo reversible y trazable.</div>
       </div>
     </div>
   )
