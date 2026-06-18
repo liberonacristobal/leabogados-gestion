@@ -13665,22 +13665,24 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const esDescalce = m => m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !tieneCand(m) && (!m.categoria||m.categoria==='Cliente')
 
   // Escribe el pago en billing (fuente de verdad única para "Pagado"). Cubierta → Pagado; si no, queda Pendiente con paid_amount.
+  // reconciled_at (timestamp) marca "ya enlazada"; la distinción enlace-vs-marcó-pago va en conciliacion.marco_pago.
   const persistPagoFactura = async(factura, aplicadoTotal, fechaPago, ref)=>{
     const now=new Date().toISOString()
     let patch
     if(factura.status==='Pagado'){
-      // Ya estaba pagada (por fuera): SOLO enlaza, no toca estado/monto. reconciled_from='conciliacion-link' lo marca como enlace.
-      patch = { reconciled_at:now, reconciled_from:'conciliacion-link', updated_at:now }
+      patch = { reconciled_at:now, updated_at:now }   // ya estaba pagada: SOLO enlaza, no toca estado/monto
     } else {
       const cubierta = aplicadoTotal >= (factura.amount||0)-TOL   // tolerancia ±TOL: diferencia chica (comisión/redondeo) = pagada
       patch = cubierta
-        ? { status:'Pagado', paid:true, paid_at:fechaPago, payment_date:fechaPago, payment_method:'Transferencia', payment_ref:ref||null, paid_amount:(factura.amount||0), reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
-        : { paid_amount:aplicadoTotal, payment_method:'Transferencia', payment_ref:ref||null, reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
+        ? { status:'Pagado', paid:true, paid_at:fechaPago, payment_date:fechaPago, payment_method:'Transferencia', payment_ref:ref||null, paid_amount:(factura.amount||0), reconciled_at:now, updated_at:now }
+        : { paid_amount:aplicadoTotal, payment_method:'Transferencia', payment_ref:ref||null, reconciled_at:now, updated_at:now }
     }
     const { error } = await supabase.from('billing').update(patch).eq('id',factura.id)
     if(error) throw error
     setBilling&&setBilling(p=>p.map(b=>b.id===factura.id?{...b,...patch}:b))
   }
+  // ¿Esta aplicación TRANSICIONA la factura a Pagada? (para guardar marco_pago en la fila y revertir bien al deshacer)
+  const marcaPago = (factura, aplicadoTotal) => factura.status!=='Pagado' && aplicadoTotal >= (factura.amount||0)-TOL
   // Aplica un abono (o su resto) a una factura: crea fila conciliacion, marca la factura y avanza el estado del movimiento.
   const reconciliar = async(mov, factura, origen='manual')=>{
     if(busy) return
@@ -13691,10 +13693,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
       if(aplicado<=0){ setBusy(null); return }   // INV-7: monto_aplicado siempre > 0
-      const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen }).select().single()
+      const aplTot = (aplicadoByFactura[factura.id]||0)+aplicado
+      const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen, marco_pago:marcaPago(factura,aplTot) }).select().single()
       if(ins.error) throw ins.error
       cr=ins.data
-      await persistPagoFactura(factura, (aplicadoByFactura[factura.id]||0)+aplicado, mov.fecha, mov.n_operacion)
+      await persistPagoFactura(factura, aplTot, mov.fecha, mov.n_operacion)
       const movAplicado = (mov.monto_conciliado||0)+aplicado
       const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
@@ -13732,10 +13735,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         const saldo = Math.max(0,(factura.amount||0)-((aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)))
         const aplicado = Math.max(0, Math.min((mov.monto||0)-movAplicado, saldo))
         if(aplicado<=0) continue
-        const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'manual' }).select().single()
+        const aplTot = (aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)+aplicado
+        const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'manual', marco_pago:marcaPago(factura,aplTot) }).select().single()
         if(ins.error) throw ins.error
         nuevas.push(ins.data)
-        await persistPagoFactura(factura, (aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)+aplicado, mov.fecha, mov.n_operacion)
+        await persistPagoFactura(factura, aplTot, mov.fecha, mov.n_operacion)
         aplicLocal[factura.id]=(aplicLocal[factura.id]||0)+aplicado; movAplicado += aplicado
       }
       const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
@@ -13753,9 +13757,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let crF=null, crG=null
     try{
       const aplicF = Math.max(0, Math.min((mov.monto||0)-(mov.monto_conciliado||0), fg.saldo))
-      const insF = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:fg.factura.id, monto_aplicado:aplicF, origen:'manual' }).select().single()
+      const aplTotF = (aplicadoByFactura[fg.factura.id]||0)+aplicF
+      const insF = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:fg.factura.id, monto_aplicado:aplicF, origen:'manual', marco_pago:marcaPago(fg.factura,aplTotF) }).select().single()
       if(insF.error) throw insF.error; crF=insF.data
-      await persistPagoFactura(fg.factura, (aplicadoByFactura[fg.factura.id]||0)+aplicF, mov.fecha, mov.n_operacion)
+      await persistPagoFactura(fg.factura, aplTotF, mov.fecha, mov.n_operacion)
       let movAplicado=(mov.monto_conciliado||0)+aplicF
       const excess=(mov.monto||0)-movAplicado
       if(excess>0){ const insG = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', monto_aplicado:excess, origen:'manual' }).select().single()
@@ -13805,13 +13810,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const nuevoAplic=restantes[r.factura_id]
           if(fac){ const now=new Date().toISOString()
             let patch
-            if(fac.reconciled_from==='conciliacion-link'){
+            if(r.marco_pago){
+              // esta fila fue la que marcó la factura como pagada → revertir a Pendiente
+              patch = nuevoAplic<=0
+                ? { status: fac.status==='Anulada'?'Anulada':'Pendiente', paid:false, paid_at:null, payment_method:null, payment_ref:null, paid_amount:null, reconciled_at:null, updated_at:now }
+                : { paid_amount:nuevoAplic, updated_at:now }
+            } else if(fac.status==='Pagado'){
               // era una factura ya pagada que solo enlazamos: quita el enlace, NO la des-pagues
-              patch = { reconciled_at:null, reconciled_from:null, updated_at:now }
-            } else if(nuevoAplic<=0){
-              patch = { status: fac.status==='Anulada'?'Anulada':'Pendiente', paid:false, paid_at:null, payment_method:null, payment_ref:null, paid_amount:null, reconciled_at:null, reconciled_from:null, updated_at:now }
+              patch = { reconciled_at:null, updated_at:now }
             } else {
-              patch = { paid_amount:nuevoAplic, updated_at:now }
+              // pago parcial que no marcó pagada: ajusta lo aplicado (o limpia si ya no queda)
+              patch = nuevoAplic<=0 ? { paid_amount:null, payment_method:null, payment_ref:null, reconciled_at:null, updated_at:now } : { paid_amount:nuevoAplic, updated_at:now }
             }
             const { error } = await supabase.from('billing').update(patch).eq('id',fac.id); if(error) throw error
             setBilling&&setBilling(p=>p.map(b=>b.id===fac.id?{...b,...patch}:b)) }
@@ -14066,7 +14075,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?5:0}}>
-                        {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=f&&f.reconciled_from==='conciliacion-link';return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
+                        {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=!r.marco_pago&&f&&f.status==='Pagado';return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
                           return <span key={r.id} style={{fontSize:11,fontWeight:700,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 9px'}}>✓ {lbl}</span> })}
                         <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>deshacer</button>
                       </div>}

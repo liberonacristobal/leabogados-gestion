@@ -2,6 +2,15 @@
 
 Basado en `prompt_fase2_completo.md` (secciones 7 y 9). Correr en el SQL Editor.
 
+## 0. Columna requerida (correr SÍ o SÍ antes de conciliar)
+
+`marco_pago` distingue, por fila, si esa conciliación fue la que marcó la factura como pagada (para revertir bien al deshacer). Sin ella, conciliar falla.
+
+```sql
+alter table conciliacion add column if not exists marco_pago boolean default false;
+notify pgrst,'reload schema';
+```
+
 ## A. Constraints (blindaje en la base)
 
 ```sql
