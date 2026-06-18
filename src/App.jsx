@@ -13471,6 +13471,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [autoRun,setAutoRun] = useState(false)   // corriendo conciliación automática
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
   const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
+  const [detFor,setDetFor] = useState(null)      // id de la factura con el detalle expandido en el selector "Otra factura"
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
@@ -14220,10 +14221,30 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <button onClick={()=>setComboFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                           </div>
                         </div>) })()}
-                      {showPick&&pickFor===m.id&&<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
-                        {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas pendientes de este cliente.</span>}
-                        {facsAll.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{textAlign:'left',fontSize:11,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer',color:C.text}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · <b>{fmtM(f.amount)}</b> · {f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</button>))}
-                      </div>}
+                      {showPick&&pickFor===m.id&&(()=>{
+                        // Agrupar las facturas del cliente por razón social (clave en clientes con varias RS).
+                        const grupos={}; facsAll.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
+                        const variasRS = Object.keys(grupos).length>1
+                        return (<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
+                          {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas de este cliente.</span>}
+                          {Object.entries(grupos).map(([rs,fs])=>(
+                            <div key={rs} style={{display:'flex',flexDirection:'column',gap:3}}>
+                              {variasRS&&<div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:2}}>{rs}</div>}
+                              {fs.map(f=>{ const open=detFor===f.id; return (
+                                <div key={f.id} style={{border:`1px solid ${open?C.accent:C.border}`,borderRadius:6,overflow:'hidden'}}>
+                                  <button onClick={()=>setDetFor(open?null:f.id)} style={{width:'100%',textAlign:'left',fontSize:11,background:open?'#F5F7F9':'none',border:'none',padding:'5px 8px',cursor:'pointer',color:C.text}}>
+                                    F°{f.invoice_no||'—'} · {(f.concept||'sin concepto').slice(0,30)} · {mesAbbr(f.issued_at)} · <b>{fmtM(f.amount)}</b> · {f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`} {open?'▴':'▾'}
+                                  </button>
+                                  {open&&<div style={{padding:'6px 8px',borderTop:`1px solid ${C.border}`,fontSize:10.5,color:C.muted,lineHeight:1.6}}>
+                                    <div>Razón social: <b style={{color:C.text}}>{f.receptor_name||'—'}</b>{f.receptor_rut?` · ${f.receptor_rut}`:''}</div>
+                                    <div>Emisión: {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
+                                    <div>Monto: {fmtM(f.amount)} · Saldo: {fmtM(saldoFactura(f))} · {f.status}</div>
+                                    <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{marginTop:5,fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
+                                  </div>}
+                                </div>) })}
+                            </div>
+                          ))}
+                        </div>) })()}
                     </div>
                   )
                 })()}
