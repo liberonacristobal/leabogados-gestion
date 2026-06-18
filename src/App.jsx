@@ -13549,13 +13549,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
       setEditMov(null); setEditForm({rut:'',nombre:''})
     }catch(e){ alert('Error: '+e.message) }
   }
-  // Cruce: para un traspaso interno, busca el abono de cliente del MISMO monto en la otra cuenta (≈ misma fecha).
+  // Cruce: para el abono interno (plata que llega), busca el abono real (cliente/proveedor) en la OTRA cuenta.
+  // Match exacto = confiado. Casi-calce dentro de la ventana = discrepancia a revisar (no hay comisiones en traspasos propios).
   const origenInterno = mov => {
-    if(!mov.es_interno) return null
-    const cand = movs.filter(x=>x.tipo==='abono'&&!x.es_interno&&x.cliente_id&&x.monto===mov.monto&&x.rol_cuenta!==mov.rol_cuenta)
+    if(!mov.es_interno || mov.tipo!=='abono') return null
+    const W=5*86400000, TOL=10000
+    const cand = movs.filter(x=>x.tipo==='abono'&&!x.es_interno&&x.rol_cuenta!==mov.rol_cuenta
+      && Math.abs(new Date(x.fecha)-new Date(mov.fecha))<=W && Math.abs((x.monto||0)-(mov.monto||0))<=TOL)
     if(!cand.length) return null
-    cand.sort((a,b)=>Math.abs(new Date(a.fecha)-new Date(mov.fecha))-Math.abs(new Date(b.fecha)-new Date(mov.fecha)))
-    return cand[0]
+    cand.sort((a,b)=>(Math.abs(a.monto-mov.monto)-Math.abs(b.monto-mov.monto))||(Math.abs(new Date(a.fecha)-new Date(mov.fecha))-Math.abs(new Date(b.fecha)-new Date(mov.fecha))))
+    const c=cand[0]
+    return { cand:c, exact:c.monto===mov.monto, diff:c.monto-mov.monto }
   }
 
   // KPIs globales
@@ -13676,7 +13680,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],user,onClose}
                 </div>
                 <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}</div>
                 {!m.nombre_contraparte&&!m.es_interno&&m.descripcion&&<div style={{fontSize:10,color:'#99ABB4',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{m.descripcion}</div>}
-                {m.es_interno&&(()=>{ const o=origenInterno(m); return o?<div style={{fontSize:11,color:C.accent,marginTop:2}}>↔ posible origen: <b>{o.cliente_id?cmap[o.cliente_id]:o.nombre_contraparte}</b> · abono en cuenta {o.rol_cuenta==='gastos'?'Gastos':'Honorarios'}</div>:null })()}
+                {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Gastos':'Honorarios'
+                  return o.exact
+                    ? <div style={{fontSize:11,color:C.accent,marginTop:2}}>↔ origen: <b>{nom}</b> · abono en cuenta {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
+                    : <div style={{fontSize:11,color:C.overdue,marginTop:2}}>↔ posible origen: <b>{nom}</b> · abono en cuenta {cta} — <b>diferencia {fmtM(Math.abs(o.diff))}</b>, revisar (los traspasos propios no deberían tener diferencia)</div>
+                })()}
                 {!m.es_interno&&(
                   editMov===m.id
                     ? <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
