@@ -13492,19 +13492,22 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'} }
-  const CATS_MANUAL = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Cliente','Impuestos']
-  // Tag manual: setea categoria en este y en todos los del mismo RUT Y MISMO SENTIDO (aprende). El sentido
-  // importa porque un RUT puede ser cliente en abonos y proveedor en cargos (BDA). RUT vacío → solo este.
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Subarriendo':{bg:'#FAECE7',color:'#993C1D'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
+  // Categorías distintas por sentido: cargos = a quién le pagas; abonos = qué tipo de ingreso (Cliente es el default auto).
+  const CATS_CARGO = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Impuestos']
+  const CATS_ABONO = ['Subarriendo','Otro ingreso']
+  // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
+  // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
   const setCategoria = async(mov,cat)=>{
     const k=crNormRut(mov.rut_contraparte)
+    const learn = !!k && mov.tipo==='cargo'
     try{
-      const { error } = k
-        ? await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte).eq('tipo',mov.tipo)
+      const { error } = learn
+        ? await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte).eq('tipo','cargo')
         : await supabase.from('cartola_movimientos').update({categoria:cat}).eq('id',mov.id)
       if(error) throw error
-      if(k) setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k&&x.tipo===mov.tipo?{...x,categoria:cat}:x))
-      else  setMovs(p=>p.map(x=>x.id===mov.id?{...x,categoria:cat}:x))
+      if(learn) setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k&&x.tipo==='cargo'?{...x,categoria:cat}:x))
+      else      setMovs(p=>p.map(x=>x.id===mov.id?{...x,categoria:cat}:x))
       setTagFor(null)
     }catch(e){ alert('Error al clasificar: '+e.message) }
   }
@@ -13784,20 +13787,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
                 )}
-                {/* Capa 2 — tag manual (clasificar / cambiar). En un ABONO de cliente ya identificado, "identificar"
-                    ES la clasificación → no se muestra el selector. Los cargos SIEMPRE lo conservan (un cliente
-                    también puede ser proveedor cuando le pagas, p.ej. BDA). */}
-                {!m.es_interno&&!(m.tipo==='abono'&&m.cliente_id)&&(
+                {/* Capa 2 — tag manual. Categorías según sentido: abonos = tipo de ingreso (Cliente es el default
+                    auto; el selector queda para marcar Subarriendo/Otro); cargos = a quién le pagas. */}
+                {!m.es_interno&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
-                          {CATS_MANUAL.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{c}</button>})}
+                          {cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{c}</button>})}
                           {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
                           <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>cerrar</button>
                         </div>
-                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:cat?C.muted:'#185FA5',background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{cat?'cambiar tag':'+ clasificar'}</button>}
+                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#99ABB4':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿subarriendo u otro?':'+ clasificar')}</button>}
                   </div>
-                )}
+                )})()}
               </div>
             )
           })}
