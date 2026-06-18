@@ -13781,8 +13781,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
                 )}
-                {/* Capa 2 — tag manual (clasificar / cambiar) */}
-                {!m.es_interno&&(
+                {/* Capa 2 — tag manual (clasificar / cambiar). Para un cliente ya identificado, "identificar"
+                    ES la clasificación → no se muestra el selector (solo lo necesitan cargos, proveedores, equipo, etc.). */}
+                {!m.es_interno&&!m.cliente_id&&(
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
