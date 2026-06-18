@@ -9281,6 +9281,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [ord,setOrd]=useState('fecha')
   const [openRS,setOpenRS]=useState({})   // razones sociales desplegadas (por defecto plegadas)
   const [openProy,setOpenProy]=useState(null)  // proyecto/grupo "Por proyecto" desplegado (key o '_')
+  const [porProyOpen,setPorProyOpen]=useState(false)   // el bloque "Por proyecto" arranca oculto
+  const [openGrp,setOpenGrp]=useState({Activas:true})  // grupos de estado: Activas visible, Terminadas/Otras plegadas
   const [movOrd,setMovOrd]=useState('desc')    // orden por fecha en Movimientos: 'desc' | 'asc'
   const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   const _MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -9339,12 +9341,18 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           </div>) }
         const grpA=porProy.filter(p=>p.sale_id&&p.status==='Activo'); const grpT=porProy.filter(p=>p.sale_id&&p.status&&p.status!=='Activo'); const grpO=porProy.filter(p=>p.sale_id&&!p.status); const sinP=porProy.find(p=>!p.sale_id)
         const grupos2=[['Activas',grpA],['Terminadas',grpT],['Otras',grpO]].filter(([_,it])=>it.length)
+        const totFact=porProy.reduce((s,p)=>s+(p.fact||0),0); const totPend=porProy.reduce((s,p)=>s+((p.fact||0)-(p.pag||0)),0)
         return (<div style={{background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 11px 8px',marginBottom:10}}>
-          <div style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,padding:'6px 0 2px'}}>Por proyecto</div>
-          {grupos2.map(([label,items])=>(<div key={label} style={{marginBottom:2}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3}}>{label}</span><span style={{fontSize:10,color:'#99ABB4',fontVariantNumeric:'tabular-nums'}}>{items.length} · {fmt(items.reduce((s,p)=>s+p.fact,0))}</span></div>
-            {items.map(tile)}
-          </div>))}
+          <div onClick={()=>setPorProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',cursor:'pointer'}}>
+            <span style={{fontSize:14,color:'#99ABB4',lineHeight:1,transform:porProyOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
+            <span style={{flex:1,fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3}}>Por proyecto</span>
+            <span style={{fontSize:10,color:'#99ABB4',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(totFact)}{totPend>0?<span style={{color:'#E24B4A'}}> · por cobrar {fmt(totPend)}</span>:''}</span>
+          </div>
+          {porProyOpen&&<>
+          {grupos2.map(([label,items])=>{ const go=!!openGrp[label]; return (<div key={label} style={{marginBottom:2}}>
+            <div onClick={()=>setOpenGrp(p=>({...p,[label]:!p[label]}))} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 0',borderBottom:`1px solid ${C.border}`,cursor:'pointer'}}><span style={{fontSize:12,color:'#99ABB4',lineHeight:1,transform:go?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span><span style={{flex:1,fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3}}>{label}</span><span style={{fontSize:10,color:'#99ABB4',fontVariantNumeric:'tabular-nums'}}>{items.length} · {fmt(items.reduce((s,p)=>s+p.fact,0))}</span></div>
+            {go&&items.map(tile)}
+          </div>) })}
           {sinP&&(()=>{ const open=openProy==='_'; return (<div style={{borderTop:`1px solid ${C.border}`,marginTop:4}}>
             <div onClick={()=>setOpenProy(open?null:'_')} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0 8px',cursor:'pointer'}}>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:500,color:'#A32D2D'}}>Sin proyecto</div><div style={{fontSize:10,color:'#99ABB4',marginTop:2}}>{sinP.facs.length} factura{sinP.facs.length!==1?'s':''} · toca para asignar proyecto</div></div>
@@ -9356,6 +9364,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
                 <span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{fmt(b.amount)}</span>
               </div>))}</div>}
           </div>) })()}
+          </>}
         </div>) })()}
       <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:9,fontSize:11,color:C.muted}}>
         <span>Ordenar</span>
