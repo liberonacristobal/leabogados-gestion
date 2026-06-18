@@ -9322,9 +9322,9 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           <span key={v} onClick={()=>setOrd(v)} style={{padding:'3px 9px',borderRadius:7,border:`1px solid ${ord===v?C.accent:C.border}`,color:ord===v?C.accent:C.muted,fontWeight:ord===v?600:400,cursor:'pointer'}}>{l}</span>
         ))}
       </div>
-      {porProy.length>0&&<div style={{background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',marginBottom:10}}>
-        <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',marginBottom:4}}>Por proyecto</div>
-        {porProy.map((p,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'2px 0'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}{p.area?<span style={{color:'#99ABB4'}}> · {p.area}</span>:''}</span><span style={{whiteSpace:'nowrap'}}>{fmt(p.pag)}/{fmt(p.fact)} {p.fact-p.pag>0?<span style={{color:'#C77F18',fontSize:9}}>falta {fmt(p.fact-p.pag)}</span>:<span style={{color:'#0F6E56',fontSize:9}}>ok</span>}</span></div>))}
+      {porProy.length>0&&<div style={{background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:10}}>
+        <div style={{display:'flex',gap:8,fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',paddingBottom:5,borderBottom:`1px solid ${C.border}`}}><span style={{flex:1}}>Por proyecto</span><span style={{width:78,textAlign:'right'}}>Facturado</span><span style={{width:78,textAlign:'right'}}>Pagado</span></div>
+        {porProy.map((p,i)=>{ const falta=(p.fact||0)-(p.pag||0); return (<div key={i} style={{display:'flex',gap:8,fontSize:11.5,padding:'5px 0',borderBottom:i<porProy.length-1?`1px solid #F1F1F1`:'none'}}><span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}</span><span style={{width:78,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(p.fact)}</span><span style={{width:78,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:falta>0?'#E24B4A':'#1D9E75'}}>{fmt(p.pag)}</span></div>) })}
       </div>}
       {Object.keys(grupos).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin facturas.</div>}
       {Object.entries(grupos).map(([rs,fs])=>(<div key={rs} style={{marginBottom:8}}>
