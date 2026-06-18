@@ -9378,7 +9378,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     </div>) })()}
     {sec==='movs'&&<div>
       {movs.filter(m=>!m.es_interno).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin movimientos bancarios de este cliente.</div>}
-      {movs.filter(m=>!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?'→ Reembolso gastos':(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ Factura N° ${folioN(f?.invoice_no)||'—'}`})()):'sin conciliar'; return (
+      {movs.filter(m=>!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Adelanto':c.tipo_destino==='gasto'?(m.tipo==='cargo'?'→ Gasto por cuenta del cliente':'→ Reembolso gastos'):(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return `→ Factura N° ${folioN(f?.invoice_no)||'—'}`})()):'sin conciliar'; return (
         <div key={m.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1'}}>
           <span style={{minWidth:0}}><span style={{fontSize:8.5,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'0 5px'}}>{m.rol_cuenta==='gastos'?'Gastos':'Hon.'}</span> {fmtFechaDMY(m.fecha)} <span style={{color:'#99ABB4'}}>{dest}</span></span>
           <b style={{color:m.tipo==='abono'?'#0F6E56':'#A32D2D'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
@@ -13600,6 +13600,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     onFocusConsumed&&onFocusConsumed() },[focusMovId,movs])
   const [verGlosa,setVerGlosa] = useState(false)  // glosa cruda desplegada en el modal
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
+  const [gcFor,setGcFor] = useState(null)        // Fase 3.D: cargo en flujo "por cuenta de cliente" (mov id)
+  const [gcCli,setGcCli] = useState(null)        // cliente elegido para el gasto por cuenta de cliente
+  const [gcEnt,setGcEnt] = useState(null)        // razón social elegida para ese gasto
+  const [cargoCliLearn,setCargoCliLearn] = useState({})  // glosaKey → client_id aprendido (cargo por cuenta de cliente)
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
   const mesAbbr = iso => { if(!iso) return ''; const [y,mo]=String(iso).slice(0,7).split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${M[+mo-1]||mo} ${(y||'').slice(2)}` }
@@ -13981,6 +13986,30 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); alert('Error al crear fondo: '+e.message) }
     setBusy(null)
   }
+  // Fase 3.D — Cargo por cuenta de un cliente: la oficina pagó a un tercero (Notaría/CBR/proveedor) por un asunto del
+  // cliente. Crea un gasto (expenses type='gasto', client_id+entity_id) que DESCUENTA su fondo, enlazado y reversible.
+  // Aprende glosa→cliente para no volver a preguntar. NO usa el RUT del beneficiario (un tercero sirve a varios clientes).
+  const gastoPorCuentaCliente = async(mov, clientId, entityId, concept, category)=>{
+    if(busy) return
+    if(!clientId){ alert('Elige el cliente antes de registrar el gasto.'); return }
+    setBusy(mov.id)
+    let gasto=null, cr=null
+    try{
+      const monto=(mov.monto||0)-(mov.monto_conciliado||0)
+      const ins = await supabase.from('expenses').insert({ client_id:clientId, entity_id:entityId||null, type:'gasto', amount:monto, date:mov.fecha, concept:(concept||'Gasto por cuenta del cliente').slice(0,200), category:category||'Notaría', created_by:user?.email||null, paid_by_client:false }).select().single()
+      if(ins.error) throw ins.error; gasto=ins.data
+      const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', gasto_id:gasto.id, monto_aplicado:monto, origen:'manual' }).select().single()
+      if(ic.error) throw ic.error; cr=ic.data
+      const movAplic=(mov.monto_conciliado||0)+monto
+      const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, cliente_id:clientId }).eq('id',mov.id)
+      if(me) throw me
+      setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,cliente_id:clientId}:x))
+      const gk=glosaKey(mov.descripcion); if(gk){ learnPut('cargo_cliente',gk,clientId,{category:category||null}); setCargoCliLearn(p=>({...p,[gk]:String(clientId)})) }
+      setGcFor(null); setGcCli(null); setGcEnt(null)
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); alert('Error al registrar el gasto: '+e.message) }
+    setBusy(null)
+  }
   // Deshace TODA la conciliación de un movimiento: revierte facturas/anticipos/fondos y deja el movimiento pendiente.
   const deshacer = async(mov)=>{
     if(busy) return
@@ -14017,8 +14046,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         } else if(r.tipo_destino==='anticipo' && r.anticipo_id){
           const { error:ae } = await supabase.from('anticipos').delete().eq('id',r.anticipo_id); if(ae) throw ae
           setAnticipos&&setAnticipos(p=>p.filter(a=>String(a.id)!==String(r.anticipo_id)))
-        } else if(r.tipo_destino==='fondo' && r.gasto_id){
-          // Provisión: borra el fondo (expenses) que se había acreditado al cliente.
+        } else if((r.tipo_destino==='fondo'||r.tipo_destino==='gasto') && r.gasto_id){
+          // Provisión (fondo) o gasto por cuenta del cliente (3.D): borra el expenses que se había creado.
           const { error:fe } = await supabase.from('expenses').delete().eq('id',r.gasto_id); if(fe) throw fe
           setExpenses&&setExpenses(p=>p.filter(x=>String(x.id)!==String(r.gasto_id)))
         }
@@ -14328,6 +14357,31 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'Cambiar tag':(m.tipo==='abono'?'¿Provisión de gastos?':'+ Clasificar')}</button>)}
                   </div>
                 )})()}
+                {/* Fase 3.D — Cargo por cuenta de un cliente: registra un gasto que descuenta su fondo (reversible, aprende glosa→cliente) */}
+                {m.tipo==='cargo'&&!m.es_interno&&(()=>{
+                  const gc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='gasto'&&c.gasto_id)
+                  if(gc) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+                    <span style={{fontSize:11,fontWeight:700,color:'#993C1D',background:'#FAECE7',borderRadius:20,padding:'2px 9px'}}>✓ Gasto por cuenta de {cmap[m.cliente_id]||'cliente'} · {fmtM(gc.monto_aplicado)} · descuenta fondo</span>
+                    <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button></div>)
+                  if((concByMov[m.id]||[]).length) return null
+                  const gk=glosaKey(m.descripcion); const sugCid=gk&&cargoCliLearn[gk]?cargoCliLearn[gk]:null
+                  if(gcFor!==m.id) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+                    <button onClick={()=>{setGcFor(m.id);setGcCli(sugCid||m.cliente_id||null);setGcEnt(null)}} title='La oficina pagó a un tercero por cuenta de un cliente; descuenta su fondo' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Por cuenta de un cliente…</button>
+                    {sugCid&&cmap[sugCid]&&<span style={{fontSize:10,color:C.muted}}>sugerido: {cmap[sugCid]}</span>}</div>)
+                  const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(gcCli))
+                  const monto=(m.monto||0)-(m.monto_conciliado||0)
+                  return (<div style={{marginTop:6,padding:'8px 9px',background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8}} onClick={e=>e.stopPropagation()}>
+                    <div style={{fontSize:10,color:'#993C1D',fontWeight:700,marginBottom:6}}>Gasto por cuenta de un cliente · {fmtM(monto)} · {m.categoria||'Notaría'}</div>
+                    <div style={{marginBottom:6}}><AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>{setGcCli(cid);setGcEnt(null)}} label='Cliente' placeholder='Buscar cliente…'/></div>
+                    {gcCli&&<div style={{fontSize:11,color:C.text,marginBottom:6}}>Cliente: <b>{cmap[gcCli]||'—'}</b>
+                      {ents.length>1&&<select value={gcEnt||''} onChange={e=>setGcEnt(e.target.value||null)} style={{marginLeft:8,fontSize:11,padding:'3px 6px',borderRadius:6,border:`1px solid ${C.border}`}}><option value=''>— Razón social —</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}</select>}
+                      {ents.length===1&&<span style={{color:C.muted}}> · {ents[0].name}</span>}</div>}
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <button disabled={busy===m.id||!gcCli} onClick={()=>gastoPorCuentaCliente(m,gcCli,gcEnt||(ents.length===1?ents[0].id:null),m.descripcion,m.categoria||'Notaría')} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:gcCli?'#993C1D':'#99ABB4',color:'#fff',cursor:gcCli&&busy!==m.id?'pointer':'default'}}>Registrar gasto {fmtM(monto)}</button>
+                      <button onClick={()=>{setGcFor(null);setGcCli(null);setGcEnt(null)}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+                    </div>
+                  </div>)
+                })()}
                 {/* Fase 3.A — Provisión de gastos → acreditar al fondo del cliente (proponer + confirmar) */}
                 {m.tipo==='abono'&&!m.es_interno&&m.categoria==='Provisión de gastos'&&(()=>{
                   const fc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='fondo')
