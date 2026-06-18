@@ -8100,14 +8100,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const fondosC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
             const pagadoC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.excluye_saldo&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
             const disp=fondosC-pagadoC; const aPagar=gs.reduce((a,e)=>a+(e.amount||0),0); const post=disp-aPagar
-            const conF=disp>=0; if(notaFondos&&!conF) return null; const cn=clients.find(c=>String(c.id)===String(cid))?.name||'Cliente'; return (
-            <div key={cid} style={{border:`1px solid ${conF?C.border:'#F0997B'}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 13px',background:conF?'#F5F7F9':'#FCEBEB',borderBottom:`1px solid ${conF?C.border:'#F0997B'}`}}>
-                <span style={{fontSize:12,fontWeight:700,color:conF?C.accent:'#A32D2D',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</span>
-                <span style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
-                  <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',background:disp>=0?'#E1F5EE':'#FCEBEB',color:disp>=0?C.greenText:'#A32D2D'}}>Disponible {fmt(disp)}</span>
-                  <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',background:post>=0?'#E1F5EE':'#FCEBEB',color:post>=0?C.greenText:'#A32D2D'}}>Post-pago {fmt(post)}</span>
-                </span>
+            // Cobertura: el cliente paga con SU fondo solo si el disponible alcanza. $0 = sin fondos (no pasa el filtro "con fondos").
+            const conF=disp>0; if(notaFondos&&!conF) return null; const cn=clients.find(c=>String(c.id)===String(cid))?.name||'Cliente'
+            const cubre=disp>=aPagar, sinF=disp<=0
+            const est = sinF?{l:'Sin fondos',bg:'#FCEBEB',c:'#A32D2D'}:cubre?{l:'Cubre con su fondo',bg:'#E1F5EE',c:'#0F6E56'}:{l:'Cubre parcial',bg:'#FAEEDA',c:'#854F0B'}
+            const detalle = sinF?`Disponible $0 · adelantarías ${fmt(aPagar)} completos`:cubre?`Disponible ${fmt(disp)} · paga ${fmt(aPagar)} con fondo · queda ${fmt(disp-aPagar)}`:`Disponible ${fmt(disp)} · paga ${fmt(disp)} con fondo · adelantas ${fmt(aPagar-disp)}`
+            return (
+            <div key={cid} style={{border:`1px solid ${sinF?'#F0997B':C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,padding:'8px 13px',background:sinF?'#FCEBEB':'#F5F7F9',borderBottom:`1px solid ${sinF?'#F0997B':C.border}`}}>
+                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:sinF?'#A32D2D':C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div><div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{detalle}</div></div>
+                <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
               </div>
               {gs.map(notaRow)}
             </div>
