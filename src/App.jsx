@@ -12,7 +12,7 @@ import {
   upsertBilling, updateBillingStatus, DEMO
 } from './supabase'
 import { demoData } from './demoData'
-import { parseCartola, normRut as crNormRut, rutValido } from './cartola'
+import { parseCartola, normRut as crNormRut, rutValido, esRutPropio } from './cartola'
 import logoBlanco from './le-logo-blanco.png'
 
 const FONT = "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
@@ -13598,6 +13598,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     // override (sugerencia aceptada sin abrir el editor) usa el RUT/nombre del propio movimiento, no el formulario.
     const rut = override ? (mov.rut_contraparte||null) : ((editForm.rut||'').trim() || mov.rut_contraparte || null)
     const nombre = override ? (mov.nombre_contraparte||null) : ((editForm.nombre||'').trim() || mov.nombre_contraparte || null)
+    if(rut && esRutPropio(rut)){ alert('Ese es el RUT propio del estudio: es un movimiento interno, no se asocia a un cliente.'); return }
+    // Seguridad del alias: si este RUT ya está mapeado a OTRO cliente, avisar y pedir confirmación (nunca cambiar en silencio).
+    if(rut){ const prev=aliases.find(a=>crNormRut(a.rut_pagador)===crNormRut(rut))
+      if(prev && String(prev.cliente_id)!==String(clientId) && !window.confirm(`Este RUT ya está asociado a "${cmap[prev.cliente_id]||'otro cliente'}". ¿Reasignarlo a "${cmap[clientId]||'este cliente'}"? Afectará todos sus movimientos.`)) return }
     try{
       const r1 = await supabase.from('cartola_movimientos').update({cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}).eq('id',mov.id)
       if(r1.error) throw r1.error
@@ -13686,6 +13690,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const saldo = saldoFactura(factura)
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
+      if(aplicado<=0){ setBusy(null); return }   // INV-7: monto_aplicado siempre > 0
       const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen }).select().single()
       if(ins.error) throw ins.error
       cr=ins.data
@@ -13828,8 +13833,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     try{
       // AUTO no toca la cuenta de Gastos: un abono ahí casi siempre es fondo, no honorario → revisión manual.
       const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length))
+      // Condición de no-ambigüedad: una factura calzada por 2+ abonos pendientes NO se auto-aplica (¿cuál la paga?) → bandeja.
+      const facMatch={}; pend.forEach(m=>candidatos(m).forEach(f=>{ facMatch[f.id]=(facMatch[f.id]||0)+1 }))
       for(const mov of pend){ const cands = candidatos(mov, used)
-        if(cands.length===1){ used.add(cands[0].id); if(cands[0].status==='Pagado') enl++; else marc++; await reconciliar(mov, cands[0], 'auto'); ok++; monto+=mov.monto } }
+        if(cands.length===1 && (facMatch[cands[0].id]||0)<=1){ used.add(cands[0].id); if(cands[0].status==='Pagado') enl++; else marc++; await reconciliar(mov, cands[0], 'auto'); ok++; monto+=mov.monto } }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
     alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
