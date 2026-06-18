@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-18 — Modal de gastos · rediseño compacto (canon)
+- Layout alineado a "Editar cliente": Categoría (desplegable) · Monto · Fecha en una sola fila. Fecha ahora es un botón-calendario con formato breve ("15 jun"; muestra el año solo si no es el actual) → libera ancho. Descripción a doble alto (textarea). Proyecto a fila completa. Cliente · Razón social en pareja.
+- Slot condicional bajo la fila 1: OT cuando la categoría es Notaría, Subcategoría cuando es Otro.
+- Fecha obligatoria: se precarga con hoy y Guardar queda deshabilitado sin monto ni fecha.
+- "Gasto personal" y "Adjuntar" pasan a una barra al pie. Al marcar gasto personal se atenúan Cliente/Razón social (el gasto no se le carga a nadie).
+
 ## 2026-06-18 — Facturas: nomenclatura unificada "Factura N° XX"
 - Toda mención a una factura en la app dice "Factura N° XX" (antes "F°XX" / "F°Factura XX"). El folio se limpia con `folioN` para no duplicar la palabra "Factura". Aplica a tareas/cobro, conciliación bancaria (sugeridas, combos, conciliadas) y estado de cuenta.
 

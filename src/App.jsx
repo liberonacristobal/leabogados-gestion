@@ -38,6 +38,8 @@ const fmtUFk = n => `UF ${Math.round(n||0).toLocaleString('es-CL')}`
 const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c==='Notaría')?'Notaría Lascar':(c||'Otro')
 // Fecha DD-MM-AAAA a partir de un ISO 'AAAA-MM-DD'
 const fmtFechaDMY = d => { if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(d) }
+// Fecha breve '15 jun' (omite el año si es el actual; muestra '15 jun 24' si es otro año). Para botones-calendario compactos.
+const fechaBreve = d => { if(!d) return ''; const p=String(d).slice(0,10).split('-'); if(p.length!==3) return String(d); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const cur=new Date().getFullYear(); return `${+p[2]} ${M[+p[1]-1]||p[1]}${+p[0]!==cur?` ${p[0].slice(2)}`:''}` }
 // Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
 const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-MM-AAAA con guiones) en toda la app
@@ -8665,7 +8667,8 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
 
 // ── EXPENSE EDIT FORM (editar/eliminar registro individual) ───────────────────
 function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSave,onClose,onDelete,saving,user,onAttachChange}) {
-  const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro'})
+  const _hoyISO = (()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+  const [f,setF] = useState({...expense,amount:expense.amount||'',concept:expense.concept||'',category:expense.category||'Otro',date:expense.date||_hoyISO})
   const [showPersonal,setShowPersonal] = useState(!!expense.personal_de)
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const client=clients.find(c=>c.id===f.client_id)
@@ -8689,69 +8692,87 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
     ;(expenses||[]).filter(e=>e.client_id===f.client_id&&e.project).forEach(e=>set.add(e.project))
     return [...set].sort()
   },[sales,expenses,f.client_id])
+  const personalOn = !!f.personal_de
   return (
     <>
-      {!isFondo&&(
-        <Fld label='Tipo'>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {CATS_GASTO.map(c=>(
-              <button key={c} type='button' onClick={()=>up('category',c)} style={{padding:'6px 12px',borderRadius:6,border:`1px solid ${f.category===c?C.accent:C.border}`,background:f.category===c?'#E6EEF1':'transparent',color:f.category===c?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{c}</button>
-            ))}
+      {/* Fila 1: Categoría · Monto · Fecha (categoría no aplica a fondos). Fecha = botón-calendario breve. */}
+      <div style={{display:'grid',gridTemplateColumns:isFondo?'1fr 1fr':'1.05fr 1fr 0.92fr',gap:7}}>
+        {!isFondo&&(
+          <Fld label='Categoría'><Sel value={f.category} onChange={e=>up('category',e.target.value)} options={CATS_GASTO} style={{padding:'0 8px'}}/></Fld>
+        )}
+        <Fld label='Monto'><Inp type='number' value={f.amount} onChange={e=>up('amount',e.target.value)} style={{padding:'0 9px'}}/></Fld>
+        <Fld label='Fecha'>
+          <div style={{position:'relative',height:36}}>
+            <div style={{height:36,border:`1px solid ${C.border}`,background:'#F5F7F9',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',gap:5,fontSize:13,color:f.date?C.text:C.muted,boxSizing:'border-box',whiteSpace:'nowrap'}}>
+              <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='16' y1='2' x2='16' y2='6'/></svg>
+              {f.date?fechaBreve(f.date):'Fecha'}
+            </div>
+            <input type='date' value={f.date||''} onChange={e=>up('date',e.target.value)} onClick={e=>{try{e.currentTarget.showPicker&&e.currentTarget.showPicker()}catch{}}} style={{position:'absolute',inset:0,width:'100%',height:'100%',opacity:0,border:'none',margin:0,padding:0,cursor:'pointer'}}/>
           </div>
         </Fld>
-      )}
-      {!isFondo&&f.category==='Otro'&&(
-        <Fld label='Subcategoría (Otro)'>
-          <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Aseo, Cafetería, Suscripción...' style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
-          <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
-        </Fld>
-      )}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-        <Fld label='Monto (CLP)'><Inp type='number' value={f.amount} onChange={e=>up('amount',e.target.value)}/></Fld>
-        <Fld label='Fecha'><Inp type='date' value={f.date||''} onChange={e=>up('date',e.target.value)}/></Fld>
       </div>
-      <Fld label='Descripción'><Inp value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Descripción...'/></Fld>
+      {/* Slot condicional: OT (Notaría) o Subcategoría (Otro) */}
       {!isFondo&&f.category==='Notaria'&&(
         <Fld label='OT (notaría)'><Inp value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206'/></Fld>
       )}
-      {!isFondo&&!showPersonal&&!f.personal_de&&(
-        <button type='button' onClick={()=>setShowPersonal(true)} style={{fontSize:11,fontWeight:600,color:'#185FA5',background:'none',border:'none',cursor:'pointer',padding:0,alignSelf:'flex-start'}}>+ Marcar como gasto personal</button>
+      {!isFondo&&f.category==='Otro'&&(
+        <Fld label='Subcategoría'>
+          <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Aseo, Cafetería, Suscripción...' style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
+          <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
+        </Fld>
       )}
-      {!isFondo&&(showPersonal||f.personal_de)&&(
+      {/* Descripción a doble alto */}
+      <Fld label='Descripción'><Txt value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Descripción...'/></Fld>
+      {/* Proyecto a fila completa */}
+      {!isFondo&&(
+        <Fld label='Proyecto'>
+          <input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
+          <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
+          {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
+        </Fld>
+      )}
+      {/* Cliente · Razón social (atenuados si es gasto personal: no se le carga a nadie) */}
+      <div style={{display:'grid',gridTemplateColumns:rsList.length>=1?'1fr 1fr':'1fr',gap:8,opacity:personalOn?.45:1,pointerEvents:personalOn?'none':'auto'}}>
+        <Fld label='Cliente'>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:13,fontWeight:600,color:client?C.text:C.overdue,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{personalOn?'— sin cliente —':(client?.name||'Sin cliente')}</span>
+            {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
+            {!personalOn&&<ClientePicker clients={clients} onPick={cid=>setF(p=>({...p,client_id:cid,entity_id:null}))}/>}
+          </div>
+        </Fld>
+        {rsList.length>=1&&(
+          <Fld label='Razón social'>
+            <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
+          </Fld>
+        )}
+      </div>
+      {(f.client_render_id||f.render_id||f.notaria_render_id)&&<div style={{fontSize:10,color:C.overdue,marginTop:-2}}>Este gasto está en una rendición/liquidación: reábrela antes de moverlo a otro cliente.</div>}
+      {/* Personal de: chips cuando se activa */}
+      {!isFondo&&(showPersonal||personalOn)&&(
         <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
           <span style={{fontSize:11,color:C.muted,fontWeight:600,marginRight:2}}>Personal de:</span>
           {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const on=f.personal_de===m;const pc=personChip(m);return <button key={m} type='button' onClick={()=>up('personal_de',on?null:m)} style={{fontSize:11,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:'none'}}>{m}</button>})}
           <button type='button' onClick={()=>{up('personal_de',null);setShowPersonal(false)}} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>✕</button>
         </div>
       )}
-      <Fld label='Cliente'>
-        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-          <span style={{fontSize:13,fontWeight:600,color:client?C.text:C.overdue}}>{client?.name||'Sin cliente'}</span>
-          {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
-          <ClientePicker clients={clients} onPick={cid=>setF(p=>({...p,client_id:cid,entity_id:null}))}/>
-          {!isFondo&&expense?.id&&<div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
-            <span style={{fontSize:11,color:C.muted,fontWeight:600}}>Cargar archivo</span>
-            <Attachments inline table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos' namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/>
-          </div>}
-        </div>
-        {(f.client_render_id||f.render_id||f.notaria_render_id)&&<div style={{fontSize:10,color:C.overdue,marginTop:5}}>Este gasto está en una rendición/liquidación: reábrela antes de moverlo a otro cliente.</div>}
-      </Fld>
-      {rsList.length>=1&&(
-        <Fld label='Razón social'>
-          <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
-        </Fld>
-      )}
+      {/* Barra inferior: Adjuntar · Gasto personal */}
       {!isFondo&&(
-        <Fld label='Proyecto'>
-          <input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
-          <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
-          {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
-        </Fld>
+        <div style={{display:'flex',alignItems:'center',gap:16,borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:2}}>
+          {expense?.id?(
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:12,color:C.muted,fontWeight:600}}>Adjuntar</span>
+              <Attachments inline table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos' namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/>
+            </div>
+          ):<span style={{fontSize:11,color:C.muted}}>Guarda el gasto para adjuntar archivos</span>}
+          {!showPersonal&&!personalOn&&(
+            <button type='button' onClick={()=>setShowPersonal(true)} style={{fontSize:12,fontWeight:600,color:'#185FA5',background:'none',border:'none',cursor:'pointer',padding:0,marginLeft:'auto'}}>Gasto personal</button>
+          )}
+        </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.amount} onClick={()=>onSave({...f,amount:parseInt(f.amount)||0,subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!f.amount||!f.date} onClick={()=>onSave({...f,amount:parseInt(f.amount)||0,subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
