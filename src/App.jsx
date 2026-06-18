@@ -13459,6 +13459,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [anioF,setAnioF] = useState('todos')       // filtro por año
   const [mesF,setMesF] = useState('todos')         // filtro por mes (01-12)
+  const [q,setQ] = useState('')                    // búsqueda por RUT / nombre / cliente
+  const [orden,setOrden] = useState('desc')        // orden por fecha: 'desc' | 'asc'
   const [verCartolas,setVerCartolas] = useState(false)   // panel "Cartolas cargadas" desplegado
   const [verCarga,setVerCarga] = useState(false)         // caja de carga de cartolas colapsada (solo se usa al inicio)
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
@@ -13955,8 +13957,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       else if(concView==='conciliados') l=l.filter(m=>concByMov[m.id]?.length)
       else if(concView==='descalces') l=l.filter(esDescalce)
     }
+    // Búsqueda por RUT / nombre del banco / cliente resuelto.
+    if(q.trim()){ const qq=q.trim().toLowerCase(), qd=q.replace(/[^0-9kK]/g,'').toLowerCase()
+      l=l.filter(m=>{ const nm=(m.nombre_contraparte||'').toLowerCase(), cl=(cmap[m.cliente_id]||'').toLowerCase(), rut=(m.rut_contraparte||'').toLowerCase().replace(/[^0-9kk]/g,'')
+        return nm.includes(qq)||cl.includes(qq)||(qd.length>=3&&rut.includes(qd)) }) }
+    l=l.slice().sort((a,b)=> orden==='asc' ? ((a.fecha||'')<(b.fecha||'')?-1:1) : ((a.fecha||'')>(b.fecha||'')?-1:1))
     return l.slice(0,400)
-  },[movs,sub,cuentaF,anioF,mesF,concView,concByMov,billing])
+  },[movs,sub,cuentaF,anioF,mesF,concView,concByMov,billing,q,orden,cmap])
 
   const rolChip = rol => rol==='honorarios'?{bg:'#E6EEF1',color:'#003C50',t:'Cta. Honorarios'}:rol==='gastos'?{bg:'#FAEEDA',color:'#854F0B',t:'Cta. Gastos'}:{bg:'#F1EFE8',color:'#5F5E5A',t:'—'}
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
@@ -14089,6 +14096,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length>lista.length?'+ (top 400)':''}</span>
         </div>
         )})()}
+
+        {/* Buscar (RUT / nombre / cliente) + ordenar por fecha */}
+        <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 9px'}}>
+            <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar RUT, nombre o cliente…' style={{flex:1,minWidth:0,border:'none',outline:'none',fontSize:12,color:C.text,background:'transparent'}}/>
+            {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>✕</button>}
+          </div>
+          <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {orden==='desc'?'↓':'↑'}</button>
+        </div>
 
         {/* Conciliación (Fase 2) — solo abonos: acción + resumen (el estado se elige en el filtro de arriba) */}
         {sub==='abonos'&&(
