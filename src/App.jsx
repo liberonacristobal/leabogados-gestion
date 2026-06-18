@@ -7402,6 +7402,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
   const [rsPickFor,setRsPickFor] = useState(null)        // gasto con el selector de razón social abierto (>3 RS o "cambiar")
   const [rendOpen,setRendOpen] = useState(new Set())     // secciones "Rendidos" desplegadas (key '__single__' o entity_id)
+  const [histCatOpen,setHistCatOpen] = useState(new Set())  // categorías desplegadas en el panel "Gastos históricos saldados"
   const [notaLiqOpen,setNotaLiqOpen] = useState(null)    // liquidación a notaría con el detalle desplegado
   const [notaLiqAdd,setNotaLiqAdd] = useState(null)      // liquidación en modo "añadir gastos"
   const [addSel,setAddSel] = useState(new Set())         // gastos pendientes seleccionados para añadir a la liquidación
@@ -7883,6 +7884,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // pero quedan a la vista en su propia sección y se pueden REPONER (vuelven a contar).
   const esSaldado = e => e.type!=='fondo' && !!e.excluye_saldo
   const reponerGasto = async(e,ev) => { ev&&ev.stopPropagation(); try{ await supabase.from('expenses').update({excluye_saldo:false}).eq('id',e.id); setExpenses(p=>p.map(x=>String(x.id)===String(e.id)?{...x,excluye_saldo:false}:x)) }catch(err){ alert('Error al reponer: '+err.message) } }
+  // Marca/repone en masa (lista de ids) el flag excluye_saldo. Usado por el panel "Gastos históricos saldados".
+  const setSaldadoBulk = async(ids,on) => { ids=[...new Set(ids)]; if(!ids.length) return; try{ for(let i=0;i<ids.length;i+=100){ const {error}=await supabase.from('expenses').update({excluye_saldo:on}).in('id',ids.slice(i,i+100)); if(error) throw error } const s=new Set(ids.map(String)); setExpenses(p=>p.map(x=>s.has(String(x.id))?{...x,excluye_saldo:on}:x)) }catch(err){ alert('Error: '+err.message) } }
   const saldadosBlock = (key,list) => { if(!list.length) return null; const k='sal:'+key; const open=rendOpen.has(k); const tot=list.reduce((a,e)=>a+(e.amount||0),0); return (
     <div style={{marginTop:6}}>
       <div onClick={()=>setRendOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 4px',cursor:'pointer',borderTop:`1px solid ${C.border}`}}>
@@ -8255,6 +8258,34 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           })()}
           {showHistorial&&(
             <div style={{padding:'2px 0 0'}}>
+              {(()=>{
+                const hist=(expenses||[]).filter(e=>e.bulk_import_id && !e.deleted_at && e.type!=='fondo')
+                if(!hist.length) return null
+                const cats={}; hist.forEach(e=>{ const c=e.category||'Otro'; (cats[c]=cats[c]||{n:0,tot:0,sal:0,items:[]}); cats[c].n++; cats[c].tot+=(e.amount||0); if(e.excluye_saldo)cats[c].sal++; cats[c].items.push(e) })
+                const orden=Object.entries(cats).sort((a,b)=>b[1].tot-a[1].tot)
+                const allIds=hist.map(e=>e.id); const allSal=hist.every(e=>e.excluye_saldo)
+                const totSal=hist.filter(e=>e.excluye_saldo).reduce((a,e)=>a+(e.amount||0),0)
+                return (<div style={{border:`1px solid ${C.border}`,borderRadius:12,marginBottom:14,overflow:'hidden'}}>
+                  <div style={{padding:'10px 13px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                    <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Gastos históricos saldados</div><div style={{fontSize:10,color:C.muted}}>{hist.length} de carga masiva · saldado {fmt(totSal)} (no descuenta saldo)</div></div>
+                    <button onClick={()=>setSaldadoBulk(allIds,!allSal)} style={{fontSize:10,fontWeight:700,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer',whiteSpace:'nowrap',background:allSal?'#F1EFE8':'#003C50',color:allSal?'#5F5E5A':'#fff'}}>{allSal?'Reponer todo':'Saldar todo'}</button>
+                  </div>
+                  {orden.map(([cat,d])=>{ const on=d.n>0&&d.sal===d.n; const open=histCatOpen.has(cat); const toggle=()=>setHistCatOpen(p=>{const n=new Set(p);n.has(cat)?n.delete(cat):n.add(cat);return n}); return (
+                    <div key={cat} style={{borderBottom:`1px solid #F1F1F1`}}>
+                      <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px'}}>
+                        <span onClick={toggle} style={{fontSize:13,color:'#99ABB4',cursor:'pointer',transform:open?'rotate(90deg)':'none',display:'inline-block',flexShrink:0}}>▸</span>
+                        <div onClick={toggle} style={{flex:1,minWidth:0,cursor:'pointer'}}><div style={{fontSize:13,fontWeight:500}}>{cat}</div><div style={{fontSize:10,color:'#99ABB4'}}>{d.n} gastos · {fmt(d.tot)}{d.sal>0&&d.sal<d.n?` · ${d.sal} saldados`:''}</div></div>
+                        <span style={{fontSize:10,fontWeight:600,color:on?'#5F5E5A':'#185FA5'}}>{on?'Saldado':'Cuenta'}</span>
+                        <Switch on={on} onToggle={()=>setSaldadoBulk(d.items.map(x=>x.id),!on)}/>
+                      </div>
+                      {open&&<div style={{padding:'0 13px 8px 36px'}}>{d.items.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
+                        <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',fontSize:11,borderBottom:'1px solid #F4F4F4'}}>
+                          <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{fontWeight:500}}>{cn}</b> · {e.concept||'—'}</span>
+                          <span style={{whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:e.excluye_saldo?'#99ABB4':C.text,textDecoration:e.excluye_saldo?'line-through':'none'}}>{fmt(e.amount)}</span>
+                          <button onClick={()=>setSaldadoBulk([e.id],!e.excluye_saldo)} style={{fontSize:9,fontWeight:700,border:'none',borderRadius:8,padding:'2px 8px',cursor:'pointer',background:e.excluye_saldo?'#E6F1FB':'#F1EFE8',color:e.excluye_saldo?'#185FA5':'#5F5E5A'}}>{e.excluye_saldo?'Reponer':'Saldar'}</button>
+                        </div>) })}</div>}
+                    </div>) })}
+                </div>) })()}
               <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
                 <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
                   <option value=''>Todos los clientes</option>
