@@ -8015,11 +8015,20 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>
           )}
           {/* Clientes (con su saldo de fondos) */}
-          {Object.entries(notaGroups.byClient).map(([cid,gs])=>{ const saldo=saldoCliente(expenses,cid); const conF=saldo>=0; if(notaFondos&&!conF) return null; const cn=clients.find(c=>String(c.id)===String(cid))?.name||'Cliente'; return (
+          {Object.entries(notaGroups.byClient).map(([cid,gs])=>{
+            // Disponible = fondo − lo YA pagado materialmente (liquidado caja chica o ya pagado a notaría). La notaría
+            // pendiente que vas a pagar NO descuenta todavía. Post-pago = disponible − lo que pagas ahora.
+            const fondosC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
+            const pagadoC=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
+            const disp=fondosC-pagadoC; const aPagar=gs.reduce((a,e)=>a+(e.amount||0),0); const post=disp-aPagar
+            const conF=disp>=0; if(notaFondos&&!conF) return null; const cn=clients.find(c=>String(c.id)===String(cid))?.name||'Cliente'; return (
             <div key={cid} style={{border:`1px solid ${conF?C.border:'#F0997B'}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 13px',background:conF?'#F5F7F9':'#FCEBEB',borderBottom:`1px solid ${conF?C.border:'#F0997B'}`}}>
                 <span style={{fontSize:12,fontWeight:700,color:conF?C.accent:'#A32D2D',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</span>
-                <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap',flexShrink:0,background:conF?'#E1F5EE':'#FCEBEB',color:conF?C.greenText:'#A32D2D'}}>{conF?`Con fondos · ${fmt(saldo)}`:`Sin fondos · adelantarías ${fmt(Math.abs(saldo))}`}</span>
+                <span style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
+                  <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',background:disp>=0?'#E1F5EE':'#FCEBEB',color:disp>=0?C.greenText:'#A32D2D'}}>Disponible {fmt(disp)}</span>
+                  <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',background:post>=0?'#E1F5EE':'#FCEBEB',color:post>=0?C.greenText:'#A32D2D'}}>Post-pago {fmt(post)}</span>
+                </span>
               </div>
               {gs.map(notaRow)}
             </div>
