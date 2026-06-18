@@ -13500,11 +13500,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Fondo':{bg:'#DFF1F2',color:'#155E6B'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Provisión de gastos':{bg:'#DFF1F2',color:'#155E6B'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
   // Categorías distintas por sentido: cargos = a quién le pagas; abonos = solo se clasifican los de la cuenta de
-  // Gastos (Fondo/Otro); un abono de honorarios es el pago del cliente (Cliente), no necesita clasificación.
+  // Gastos que NO calzan factura (provisión de gastos = ocasional); un abono de honorarios es el pago del cliente.
   const CATS_CARGO = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Impuestos']
-  const CATS_ABONO = ['Fondo','Otro ingreso']
+  const CATS_ABONO = ['Provisión de gastos','Otro ingreso']
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
   const setCategoria = async(mov,cat)=>{
@@ -13739,7 +13739,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
-    const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente'))
+    const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
     return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0),
       descalces:desc.length, fondos:fondos.length, fondosMonto:fondos.reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov])
 
@@ -13887,7 +13887,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {sub==='abonos'&&(
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
             <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:12,fontWeight:700,padding:'6px 14px',borderRadius:8,border:'none',background:(autoRun||resumenConc.pend===0)?'#99ABB4':'#003C50',color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer'}}>{autoRun?'Conciliando…':'Conciliar automático'}</button>
-            <span style={{fontSize:11,color:C.muted}}>{resumenConc.done}/{resumenConc.total} conciliadas{resumenConc.fondos>0?` · ${resumenConc.fondos} en cuenta Gastos (fondos)`:''}</span>
+            <span style={{fontSize:11,color:C.muted}}>{resumenConc.done}/{resumenConc.total} conciliadas{resumenConc.fondos>0?` · ${resumenConc.fondos} posibles provisiones (cuenta Gastos)`:''}</span>
             <div style={{marginLeft:'auto',display:'flex',gap:5,flexWrap:'wrap'}}>
               {[['todos','Todos'],['porconciliar','Por conciliar'],['conciliados','Conciliadas'],['descalces',`Descalces${resumenConc.descalces?` ${resumenConc.descalces}`:''}`]].map(([v,l])=>(
                 <button key={v} onClick={()=>setConcView(v)} style={{fontSize:10,fontWeight:600,padding:'4px 9px',borderRadius:20,border:'none',background:concView===v?(v==='descalces'?'#FFF8E1':'#E6EEF1'):'#F5F7F9',color:concView===v?(v==='descalces'?'#C77F18':'#003C50'):C.muted,cursor:'pointer'}}>{l}</button>
@@ -13939,9 +13939,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
                 )}
-                {/* Capa 2 — tag manual. Cargos: a quién le pagas. Abonos: SOLO los de la cuenta de Gastos se
-                    clasifican (posibles fondos); un abono de honorarios es el pago del cliente, sin prompt. */}
-                {!m.es_interno&&(m.tipo==='cargo'||m.rol_cuenta==='gastos')&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
+                {/* Capa 2 — tag manual. Cargos: a quién le pagas. Abonos: solo los de la cuenta de Gastos que NO
+                    calzan factura (provisión = ocasional); si calza factura es honorario mal depositado → se concilia. */}
+                {!m.es_interno&&(m.tipo==='cargo'||(m.rol_cuenta==='gastos'&&(m.categoria||!tieneCand(m))))&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
@@ -13949,7 +13949,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
                           <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>cerrar</button>
                         </div>
-                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿fondo de gastos?':'+ clasificar')}</button>}
+                      : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'cambiar tag':(m.tipo==='abono'?'¿provisión de gastos?':'+ clasificar')}</button>}
                   </div>
                 )})()}
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
