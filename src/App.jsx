@@ -13487,20 +13487,23 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
     if(m.categoria) return m.categoria
     const k=crNormRut(m.rut_contraparte)
     if(k){ if(CONTADORA_RUT[k]) return 'Contadora'; if(SOCIO_RUT[k]) return 'Socio'; if(EQUIPO_RUT[k]) return 'Equipo'; if(provByRut[k]) return 'Proveedor' }
-    if(m.cliente_id) return 'Cliente'
+    // 'Cliente' solo aplica a ABONOS (plata que entra). Un mismo RUT puede ser cliente (te paga) y
+    // proveedor (le pagas, p.ej. BDA): el cargo se clasifica a mano, no se auto-rotula Cliente.
+    if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
   const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'} }
   const CATS_MANUAL = ['Gastos Oficina','Proveedor','Equipo','Contadora','Socio','Cliente','Impuestos']
-  // Tag manual: setea categoria en este y en todos los del mismo RUT (aprende). RUT vacío → solo este.
+  // Tag manual: setea categoria en este y en todos los del mismo RUT Y MISMO SENTIDO (aprende). El sentido
+  // importa porque un RUT puede ser cliente en abonos y proveedor en cargos (BDA). RUT vacío → solo este.
   const setCategoria = async(mov,cat)=>{
     const k=crNormRut(mov.rut_contraparte)
     try{
       const { error } = k
-        ? await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte)
+        ? await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte).eq('tipo',mov.tipo)
         : await supabase.from('cartola_movimientos').update({categoria:cat}).eq('id',mov.id)
       if(error) throw error
-      if(k) setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k?{...x,categoria:cat}:x))
+      if(k) setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k&&x.tipo===mov.tipo?{...x,categoria:cat}:x))
       else  setMovs(p=>p.map(x=>x.id===mov.id?{...x,categoria:cat}:x))
       setTagFor(null)
     }catch(e){ alert('Error al clasificar: '+e.message) }
@@ -13781,9 +13784,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],proveedores=[
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'editar':'identificar'}</button>
                       </div>
                 )}
-                {/* Capa 2 — tag manual (clasificar / cambiar). Para un cliente ya identificado, "identificar"
-                    ES la clasificación → no se muestra el selector (solo lo necesitan cargos, proveedores, equipo, etc.). */}
-                {!m.es_interno&&!m.cliente_id&&(
+                {/* Capa 2 — tag manual (clasificar / cambiar). En un ABONO de cliente ya identificado, "identificar"
+                    ES la clasificación → no se muestra el selector. Los cargos SIEMPRE lo conservan (un cliente
+                    también puede ser proveedor cuando le pagas, p.ej. BDA). */}
+                {!m.es_interno&&!(m.tipo==='abono'&&m.cliente_id)&&(
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
