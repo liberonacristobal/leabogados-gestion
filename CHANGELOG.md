@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-17 — Conciliación Fase 2 · pool ampliado (enlazar facturas ya pagadas)
+- El pool de calce ahora incluye facturas Pendiente **+ Pagada-sin-conciliar**. La mayoría de los pagos reales son de facturas ya marcadas Pagado (131 de 230 abonos): esas solo se **enlazan** (dejan la evidencia bancaria + reconciled_at='conciliacion-link', sin cambiar estado/monto). Sube el calce automático de 9 a ~88.
+- Deshacer un enlace a factura ya pagada solo quita el enlace (no la des-paga). Etiquetas "ya pagada" en chips y mes de emisión en el selector para distinguir facturas recurrentes del mismo monto.
+
 ## 2026-06-17 — Conciliación bancaria · Fase 2 (motor de conciliación)
 - Motor que concilia abonos de cliente contra facturas Pendiente. **Conciliar automático**: calza solo cuando hay UNA factura del cliente dentro de ±$2.000 del monto; marca la factura Pagado (paid_at/payment_method='Transferencia'/payment_ref=n° operación, vía helper único `persistPagoFactura` para no divergir de cómo la app ya marca Pagado), crea fila en `conciliacion` y deja el movimiento conciliado.
 - **Bandeja por confirmar** (lo ambiguo): botones de factura candidata, "otra factura" (todas las pendientes del cliente), reparto parcial (un abono cubre varias / queda resto), y **Saldo a favor** (crea anticipo `disponible`, reutiliza Anticipos). Solo abonos de honorarios; Comisión/Subarriendo/Otro quedan fuera del cruce.

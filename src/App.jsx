@@ -13469,6 +13469,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [busy,setBusy] = useState(null)          // id del movimiento con una acción en curso
   const TOL = 2000                               // tolerancia AUTO (±$) por comisión/redondeo
   const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+  const mesAbbr = iso => { if(!iso) return ''; const [y,mo]=String(iso).slice(0,7).split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${M[+mo-1]||mo} ${(y||'').slice(2)}` }
 
   const cargar = useCallback(async()=>{
     setLoading(true)
@@ -13623,8 +13624,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const concByMov = useMemo(()=>{ const m={}; conc.forEach(c=>{ (m[c.movimiento_id]=m[c.movimiento_id]||[]).push(c) }); return m },[conc])
   // Abono conciliable contra facturas: identificado a cliente, no interno, y de honorarios (Comisión/Subarriendo/Otro NO calzan).
   const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')
-  // Pool de calce = facturas PENDIENTE del cliente (decisión del usuario). Saldo = monto − Σ aplicado (billing no tiene saldo).
-  const facturasCliente = cid => billing.filter(b=> b.client_id===cid && b.status==='Pendiente' && !b.deleted_at)
+  // Pool de calce = facturas PENDIENTE del cliente + las YA PAGADAS sin conciliar (estas solo se ENLAZAN: dejan
+  // la evidencia bancaria sin cambiar su estado). La mayoría de los pagos reales son de facturas ya marcadas Pagado.
+  const facturasCliente = cid => billing.filter(b=> b.client_id===cid && !b.deleted_at && (b.status==='Pendiente' || (b.status==='Pagado' && !b.reconciled_at)))
   const saldoFactura = b => Math.max(0,(b.amount||0) - (aplicadoByFactura[b.id]||0))
   // Candidatas dentro de la tolerancia ±TOL del monto buscado (monto del abono, o el resto al repartir).
   const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
@@ -13635,11 +13637,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
   // Escribe el pago en billing (fuente de verdad única para "Pagado"). Cubierta → Pagado; si no, queda Pendiente con paid_amount.
   const persistPagoFactura = async(factura, aplicadoTotal, fechaPago, ref)=>{
-    const cubierta = aplicadoTotal >= (factura.amount||0)-TOL   // tolerancia ±TOL: diferencia chica (comisión/redondeo) = pagada
     const now=new Date().toISOString()
-    const patch = cubierta
-      ? { status:'Pagado', paid:true, paid_at:fechaPago, payment_date:fechaPago, payment_method:'Transferencia', payment_ref:ref||null, paid_amount:(factura.amount||0), reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
-      : { paid_amount:aplicadoTotal, payment_method:'Transferencia', payment_ref:ref||null, reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
+    let patch
+    if(factura.status==='Pagado'){
+      // Ya estaba pagada (por fuera): SOLO enlaza, no toca estado/monto. reconciled_from='conciliacion-link' lo marca como enlace.
+      patch = { reconciled_at:now, reconciled_from:'conciliacion-link', updated_at:now }
+    } else {
+      const cubierta = aplicadoTotal >= (factura.amount||0)-TOL   // tolerancia ±TOL: diferencia chica (comisión/redondeo) = pagada
+      patch = cubierta
+        ? { status:'Pagado', paid:true, paid_at:fechaPago, payment_date:fechaPago, payment_method:'Transferencia', payment_ref:ref||null, paid_amount:(factura.amount||0), reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
+        : { paid_amount:aplicadoTotal, payment_method:'Transferencia', payment_ref:ref||null, reconciled_at:now, reconciled_from:'conciliacion', updated_at:now }
+    }
     const { error } = await supabase.from('billing').update(patch).eq('id',factura.id)
     if(error) throw error
     setBilling&&setBilling(p=>p.map(b=>b.id===factura.id?{...b,...patch}:b))
@@ -13690,9 +13698,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const fac = billing.find(b=>b.id===r.factura_id)
           const nuevoAplic = Math.max(0,(aplicadoByFactura[r.factura_id]||0)-(r.monto_aplicado||0))
           if(fac){ const now=new Date().toISOString()
-            const patch = nuevoAplic<=0
-              ? { status: fac.status==='Anulada'?'Anulada':'Pendiente', paid:false, paid_at:null, payment_method:null, payment_ref:null, paid_amount:null, reconciled_at:null, reconciled_from:null, updated_at:now }
-              : { paid_amount:nuevoAplic, updated_at:now }
+            let patch
+            if(fac.reconciled_from==='conciliacion-link'){
+              // era una factura ya pagada que solo enlazamos: quita el enlace, NO la des-pagues
+              patch = { reconciled_at:null, reconciled_from:null, updated_at:now }
+            } else if(nuevoAplic<=0){
+              patch = { status: fac.status==='Anulada'?'Anulada':'Pendiente', paid:false, paid_at:null, payment_method:null, payment_ref:null, paid_amount:null, reconciled_at:null, reconciled_from:null, updated_at:now }
+            } else {
+              patch = { paid_amount:nuevoAplic, updated_at:now }
+            }
             const { error } = await supabase.from('billing').update(patch).eq('id',fac.id); if(error) throw error
             setBilling&&setBilling(p=>p.map(b=>b.id===fac.id?{...b,...patch}:b)) }
         } else if(r.tipo_destino==='anticipo' && r.anticipo_id){
@@ -13710,14 +13724,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
-    setAutoRun(true); let ok=0, monto=0; const used=new Set()
+    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0; const used=new Set()
     try{
       const pend = movs.filter(m=>esConciliable(m) && !(concByMov[m.id]?.length))
       for(const mov of pend){ const cands = candidatos(mov, used)
-        if(cands.length===1){ used.add(cands[0].id); await reconciliar(mov, cands[0], 'auto'); ok++; monto+=mov.monto } }
+        if(cands.length===1){ used.add(cands[0].id); if(cands[0].status==='Pagado') enl++; else marc++; await reconciliar(mov, cands[0], 'auto'); ok++; monto+=mov.monto } }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
-    alert(ok? `Conciliadas ${ok} factura${ok!==1?'s':''} automáticamente · ${fmtM(monto)}.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
+    alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov])
@@ -13938,19 +13952,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?5:0}}>
-                        {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}`})()
+                        {myConc.map(r=>{ const lbl=r.tipo_destino==='anticipo'?`Saldo a favor · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=f&&f.reconciled_from==='conciliacion-link';return `F°${f?.invoice_no||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
                           return <span key={r.id} style={{fontSize:11,fontWeight:700,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 9px'}}>✓ {lbl}</span> })}
                         <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>deshacer</button>
                       </div>}
                       {showPick&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                         <span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>{myConc.length?`Resta ${fmtM(resto)}`:'Por conciliar'}</span>
-                        {cands.slice(0,3).map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}</button>))}
+                        {cands.slice(0,3).map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E1F5EE',color:'#0F6E56',border:'none'}}>F°{f.invoice_no||'—'} · {fmtM(saldoFactura(f))}{f.issued_at?` · ${mesAbbr(f.issued_at)}`:''}{f.status==='Pagado'?' · ya pagada':''}</button>))}
                         <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Saldo a favor</button>
                         {facsAll.length>0&&<button onClick={()=>setPickFor(pickFor===m.id?null:m.id)} style={{fontSize:10,color:'#185FA5',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{pickFor===m.id?'cerrar':'otra factura'}</button>}
                       </div>}
                       {showPick&&pickFor===m.id&&<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
                         {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas pendientes de este cliente.</span>}
-                        {facsAll.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{textAlign:'left',fontSize:11,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer',color:C.text}}>F°{f.invoice_no||'—'} · {(f.concept||'').slice(0,30)} · saldo {fmtM(saldoFactura(f))}</button>))}
+                        {facsAll.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{textAlign:'left',fontSize:11,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer',color:C.text}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,26)} · {f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</button>))}
                       </div>}
                     </div>
                   )
