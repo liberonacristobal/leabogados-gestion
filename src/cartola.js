@@ -59,10 +59,23 @@ export function hashMovimiento(m){
   return cyrb53(`${m.cuenta}|${m.fecha}|${m.tipo}|${m.monto}|${m.rut_contraparte||''}|${m.n_operacion||''}|${m.descripcion}`)
 }
 
-// Regex de extracción (validados en el prompt).
-const RUT_RE = String.raw`(\d{1,3}(?:\.\d{3})*-[\dkK])`
+// Regex de extracción. RUT flexible: con o sin puntos, con o sin guion, dígito K.
+const RUT_RE = String.raw`(\d{1,3}(?:\.?\d{3})+-?[\dkK])`
+// Formato A — abono recibido: "Abono por transferencia de NOMBRE Rut RUT ..."
 const reAbono  = new RegExp(`Abono por transferencia de (.+?)\\s*Rut\\s*${RUT_RE}`, 'i')
+// Formato CCA — pago de proveedores: "... originador Rut: RUT Nombre: NOMBRE (N.Ref ...)" (Rut antes que Nombre)
+const reCCA    = new RegExp(`originador Rut:?\\s*${RUT_RE}\\s*Nombre:?\\s*(.+?)\\s*(?:\\(N\\.?Ref|$)`, 'i')
+// Formato B — transferencia a/desde tercero: "a cuenta NNN B, NOMBRE, Rut RUT ..."
 const reTransf = new RegExp(`a cuenta \\S+ [^,]+,\\s*(.+?),\\s*Rut\\s*${RUT_RE}`, 'i')
+
+// Extrae {rut, nombre} de la glosa probando los formatos en orden (sirve para abonos y cargos).
+function extraerContraparte(desc){
+  let m
+  if((m=desc.match(reAbono)))  return { nombre:_flat(m[1])||null, rut:_flat(m[2])||null }
+  if((m=desc.match(reCCA)))    return { rut:_flat(m[1])||null, nombre:_flat(m[2])||null }
+  if((m=desc.match(reTransf))) return { nombre:_flat(m[1])||null, rut:_flat(m[2])||null }
+  return { rut:null, nombre:null }
+}
 
 // Detecta traspaso entre cuentas propias: glosa "cuentas propias" o contraparte = RUT propio.
 function detectarInterno(desc, rut){
@@ -144,11 +157,9 @@ export function parseCartola(aoa, { filename='' } = {}){
     // Año: glosa > fecha de fila > período
     const anio = anioDesdeGlosa(desc) || (fp&&fp.y) || anioFallback
     const fecha = fp ? `${anio}-${fp.mm}-${fp.d}` : `${anio}-01-01`
-    // RUT / nombre
-    let rut=null, nombre=null
-    const m = tipo==='abono' ? desc.match(reAbono) : desc.match(reTransf)
-    if(m){ nombre=_flat(m[1])||null; rut=_flat(m[2])||null }
-    // Interno
+    // RUT / nombre (mismos formatos para abono y cargo) + detección de interno (incluye auto-transferencia con RUT propio)
+    const cp = extraerContraparte(desc)
+    let rut = cp.rut, nombre = cp.nombre
     const interno = detectarInterno(desc, rut)
     if(interno){ rut=null; nombre=etiquetaInterno(desc, tipo) }
     const n_operacion = _flat(iDoc>=0?row[iDoc]:'') || null
