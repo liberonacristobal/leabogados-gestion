@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-17 — Conciliación bancaria · Fase 2 (motor de conciliación)
+- Motor que concilia abonos de cliente contra facturas Pendiente. **Conciliar automático**: calza solo cuando hay UNA factura del cliente dentro de ±$2.000 del monto; marca la factura Pagado (paid_at/payment_method='Transferencia'/payment_ref=n° operación, vía helper único `persistPagoFactura` para no divergir de cómo la app ya marca Pagado), crea fila en `conciliacion` y deja el movimiento conciliado.
+- **Bandeja por confirmar** (lo ambiguo): botones de factura candidata, "otra factura" (todas las pendientes del cliente), reparto parcial (un abono cubre varias / queda resto), y **Saldo a favor** (crea anticipo `disponible`, reutiliza Anticipos). Solo abonos de honorarios; Comisión/Subarriendo/Otro quedan fuera del cruce.
+- **Todo reversible**: "deshacer" revierte la factura a Pendiente, borra la conciliación y el anticipo, y deja el movimiento pendiente.
+- Filtros Todos / Por conciliar / Conciliadas + resumen N conciliadas y monto por conciliar.
+- Importador endurecido: al recargar cartolas solo inserta los movimientos nuevos (no pisa estado/cliente_id/categoría de los ya cargados) → recargar nunca deshace una conciliación. Ignora temporales de Excel `~$`.
+
 ## 2026-06-17 — Conciliación: contraste de cuentas + robustez
 - Borde de cuenta con más contraste: Gastos pasa de café oscuro #854F0B a ámbar vivo #EF9F27 (Honorarios sigue navy #003C50); a 3px se distinguen al instante. Aplica al borde de cada movimiento y al panel "Cartolas cargadas".
 - Robustez de escritura: `setCategoria`, `identificar`, `guardarRut` y el upsert de importación ahora revisan el `error` de Supabase y avisan/abortan en vez de fallar en silencio (la UI ya no muestra "éxito" si el write no persistió).
