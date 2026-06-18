@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-18 — Conciliación · Fase 3.D · cargo por cuenta de un cliente
+- En un cargo (oficina paga a Notaría/CBR/proveedor) por un asunto de un cliente: acción "Por cuenta de un cliente…" → elige cliente + razón social → crea un gasto (expenses type='gasto') que DESCUENTA el fondo del cliente, enlazado a la conciliación (tipo_destino='gasto', gasto_id) y reversible. Aprende glosa→cliente (chip "sugerido" la próxima vez). Deshacer borra el gasto creado. Movimientos del Estado de cuenta lo rotula "Gasto por cuenta del cliente". No requiere SQL.
+
 ## 2026-06-18 — Estado de cuenta · navegación bidireccional
 - Desde el detalle de una factura: "ver venta ↗" salta a la ficha de la venta/proyecto (modal Sale). Desde el detalle de un gasto/fondo con venta enlazada: ídem.
 - Desde el pago "verificado en banco" de una factura: "ver movimiento ↗" cambia al tab Conciliación, limpia filtros, abre y resalta ese movimiento (con scroll). Estado `concFocus` en App + prop `focusMovId`/`onFocusConsumed` en ConciliacionView (espera a que carguen los movs antes de enfocar).
