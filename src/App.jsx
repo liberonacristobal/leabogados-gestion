@@ -13542,6 +13542,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       setTagFor(null)
     }catch(e){ alert('Error al clasificar: '+e.message) }
   }
+  // Corrección manual: un movimiento mal marcado interno pasa a normal (queda pendiente para identificar/conciliar).
+  const desmarcarInterno = async(mov)=>{
+    if(!window.confirm('¿Marcarlo como NO interno? Pasará a ser un movimiento normal para identificar y conciliar.')) return
+    try{
+      const cid = mov.rut_contraparte ? resolver(mov.rut_contraparte) : null
+      const { error } = await supabase.from('cartola_movimientos').update({es_interno:false,estado:'pendiente',cliente_id:cid}).eq('id',mov.id)
+      if(error) throw error
+      setMovs(p=>p.map(x=>x.id===mov.id?{...x,es_interno:false,estado:'pendiente',cliente_id:cid}:x))
+    }catch(e){ alert('Error: '+e.message) }
+  }
   // Resolución de cliente por RUT: alias → razón social → cliente → receptor de factura.
   const resolver = useMemo(()=>{
     const alias={},ent={},cli={},rec={}
@@ -14075,9 +14085,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             return (
               <div key={m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#EF9F27':C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2,flexWrap:'wrap'}}>
-                  <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color}}>{rc.t}</span>
-                  {cat&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:ts.bg,color:ts.color}}>{cat}</span>}
-                  {m.es_interno&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A'}}>Interno</span>}
+                  <span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF===m.rol_cuenta?'ambas':m.rol_cuenta)}} title='Filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color,cursor:'pointer'}}>{rc.t}</span>
+                  {cat&&!m.es_interno&&<span onClick={(e)=>{e.stopPropagation();setTagFor(tagFor===m.id?null:m.id)}} title='Cambiar clasificación' style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:20,background:ts.bg,color:ts.color,cursor:'pointer'}}>{cat}</span>}
+                  {m.es_interno&&<span onClick={(e)=>{e.stopPropagation();desmarcarInterno(m)}} title='No es interno — marcar como movimiento normal' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A',cursor:'pointer'}}>Interno ✕</span>}
                   <span style={{fontSize:11,color:C.muted}}>{fmtFechaDMY(m.fecha)}</span>
                   <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                 </div>
@@ -14111,7 +14121,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 )}
                 {/* Capa 2 — tag manual. Cargos: siempre (a quién le pagas). Abonos: solo si ya tienen tag (para cambiar/
                     quitar); marcar "Provisión" en abonos se hace desde la fila de conciliación, no con un prompt suelto. */}
-                {!m.es_interno&&(m.tipo==='cargo'||m.categoria)&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
+                {!m.es_interno&&(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
                   <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
                     {tagFor===m.id
                       ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
