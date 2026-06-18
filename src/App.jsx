@@ -14140,8 +14140,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       </div>}
                       {showPick&&combo&&comboFor===m.id&&(()=>{ const tot=combo.reduce((s,f)=>s+saldoFactura(f),0); return (
                         <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid #99ABB4`,paddingLeft:8}}>
-                          {combo.map(f=>(<div key={f.id} style={{fontSize:11,color:C.text}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,30)} · <b>{fmtM(saldoFactura(f))}</b></div>))}
-                          <div style={{fontSize:10,color:C.muted}}>Suma: {fmtM(tot)} {Math.abs(tot-(m.monto||0))<=TOL?'≈':'≠'} abono {fmtM(m.monto)}</div>
+                          {combo.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliar(m,f,'manual')}} title='Conciliar solo esta factura' style={{textAlign:'left',fontSize:11,color:C.text,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer'}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,28)} · <b>{fmtM(saldoFactura(f))}</b></button>))}
+                          <div style={{fontSize:10,color:C.muted}}>Suma: {fmtM(tot)} {Math.abs(tot-(m.monto||0))<=TOL?'≈':'≠'} abono {fmtM(m.monto)} · toca una para conciliar solo esa</div>
                           <div style={{display:'flex',gap:8,marginTop:2}}>
                             <button disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliarCombo(m,combo)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:'pointer'}}>Confirmar las 2</button>
                             <button onClick={()=>setComboFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
