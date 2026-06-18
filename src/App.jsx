@@ -14171,7 +14171,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         </div>) })()}
                       {showPick&&pickFor===m.id&&<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:5,borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
                         {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas pendientes de este cliente.</span>}
-                        {facsAll.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{textAlign:'left',fontSize:11,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer',color:C.text}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,26)} · {f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</button>))}
+                        {facsAll.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{textAlign:'left',fontSize:11,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer',color:C.text}}>F°{f.invoice_no||'—'} · {mesAbbr(f.issued_at)} · <b>{fmtM(f.amount)}</b> · {f.status==='Pagado'?'pagada':`saldo ${fmtM(saldoFactura(f))}`}</button>))}
                       </div>}
                     </div>
                   )
