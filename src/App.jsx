@@ -7403,6 +7403,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [rsPickFor,setRsPickFor] = useState(null)        // gasto con el selector de razón social abierto (>3 RS o "cambiar")
   const [rendOpen,setRendOpen] = useState(new Set())     // secciones "Rendidos" desplegadas (key '__single__' o entity_id)
   const [histCatOpen,setHistCatOpen] = useState(new Set())  // categorías desplegadas en el panel "Gastos históricos saldados"
+  const [notaBtnOpen,setNotaBtnOpen] = useState(false)   // menú del botón Notaría (visible, al costado de Cargar)
+  const [gastoOrd,setGastoOrd] = useState('desc')        // orden por fecha de la lista de gastos del cliente
+  const [gastoCatF,setGastoCatF] = useState('')          // filtro por categoría de gasto ('' = todas)
   const [notaLiqOpen,setNotaLiqOpen] = useState(null)    // liquidación a notaría con el detalle desplegado
   const [notaLiqAdd,setNotaLiqAdd] = useState(null)      // liquidación en modo "añadir gastos"
   const [addSel,setAddSel] = useState(new Set())         // gastos pendientes seleccionados para añadir a la liquidación
@@ -7520,8 +7523,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
   const filtered = useMemo(()=>{
     if(!selectedClient) return []
-    return expenses.filter(e=>e.client_id===selectedClient.id).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))
-  },[expenses,selectedClient])
+    let l = expenses.filter(e=>e.client_id===selectedClient.id)
+    if(gastoCatF) l = l.filter(e=> gastoCatF==='Fondo' ? e.type==='fondo' : (e.type!=='fondo' && (e.category||'Otro')===gastoCatF))
+    return l.sort((a,b)=> gastoOrd==='asc' ? (new Date(a.date||0)-new Date(b.date||0)) : (new Date(b.date||0)-new Date(a.date||0)))
+  },[expenses,selectedClient,gastoOrd,gastoCatF])
+  const gastoCats = useMemo(()=> selectedClient ? [...new Set(expenses.filter(e=>e.client_id===selectedClient.id).map(e=> e.type==='fondo'?'Fondo':(e.category||'Otro')))].sort() : [],[expenses,selectedClient])
+  const gastoToolbar = (
+    <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
+      <button onClick={()=>setGastoOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'5px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>Fecha {gastoOrd==='desc'?'↓ (nuevas)':'↑ (antiguas)'}</button>
+      {gastoCats.length>1&&<select value={gastoCatF} onChange={e=>setGastoCatF(e.target.value)} style={{fontSize:12,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}><option value=''>Todas las categorías</option>{gastoCats.map(c=><option key={c} value={c}>{c}</option>)}</select>}
+    </div>
+  )
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
   const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id&&!e.personal_de).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
 
@@ -7628,12 +7640,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   }
   const fmtOt = ot => ot?(String(ot).toUpperCase().startsWith('OT')?ot:'OT-'+ot):'—'
   // Excel de una liquidación: OT · descripción · costo (lo que pidió el usuario, en ese orden).
-  const descargarExcelNota = (r) => {
-    const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)).sort((a,b)=>(a.ot_number||'')>(b.ot_number||'')?1:-1)
-    const rows=gs.map(e=>[fmtOt(e.ot_number), e.concept||'—', clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente', e.amount||0])
-    const ws=XLSX.utils.aoa_to_sheet([['OT','Descripción','Cliente','Costo'],...rows,['','','TOTAL',gs.reduce((a,e)=>a+(e.amount||0),0)]])
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
-    XLSX.writeFile(wb,`Liquidacion_notaria_${String(r.periodo||'').replace(/[^\w-]/g,'_')}.xlsx`)
+  const descargarExcelNota = async(r) => {
+    try{
+      const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)).sort((a,b)=>(a.ot_number||'')>(b.ot_number||'')?1:-1)
+      if(!gs.length){ alert('Esta liquidación no tiene gastos vivos para exportar.'); return }
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const rows=gs.map(e=>[fmtOt(e.ot_number), e.concept||'—', clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente', e.amount||0])
+      const ws=XLSX.utils.aoa_to_sheet([['OT','Descripción','Cliente','Costo'],...rows,['','','TOTAL',gs.reduce((a,e)=>a+(e.amount||0),0)]])
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
+      const fecha=fmtFechaDMY(r.created_at)||new Date().toISOString().slice(0,10)
+      XLSX.writeFile(wb,`Liquidacion Notaria Lascar al ${fecha}.xlsx`.replace(/[^\w .-]/g,''))
+    }catch(e){ alert('No se pudo generar el Excel: '+e.message) }
   }
   // Añadir gastos pendientes a una liquidación ya creada (corrección): los enlaza y suma al total/n_gastos/OT.
   const anadirGastosNota = async(r, ids) => {
@@ -7905,38 +7922,46 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               <button onClick={()=>{setSelectedClient(null);setShowOrphans(false);setShowNotaria(false);setShowHistorial(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
             )}
             <div>
-              <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                {showHistorial?'Historial de rendiciones':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
+                  {showHistorial?'Historial de rendiciones':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
+                </span>
+                {selectedClient&&onSaveClientFields&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; const pc=cur?personChip(cur):null; return (
+                  <button onClick={()=>setRespPickG(v=>!v)} style={{fontSize:10,background:pc?pc.bg:'#F1EFE8',color:pc?pc.color:'#5F5E5A',borderRadius:10,padding:'2px 9px',fontWeight:600,border:'none',cursor:'pointer'}}>{cur?`${cur} ▾`:'+ responsable ▾'}</button>
+                )})()}
               </div>
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{titleCaseRS(selEnts[0].name)}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
-              {selectedClient&&onSaveClientFields&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; const pc=cur?personChip(cur):null; return (
+              {selectedClient&&onSaveClientFields&&respPickG&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; return (
                 <div style={{marginTop:5,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                  <button onClick={()=>setRespPickG(v=>!v)} style={{fontSize:10,background:pc?pc.bg:'#F1EFE8',color:pc?pc.color:'#5F5E5A',borderRadius:10,padding:'2px 9px',fontWeight:600,border:'none',cursor:'pointer'}}>{cur?`Responsable: ${cur} ▾`:'Asignar responsable ▾'}</button>
-                  {respPickG&&<>
-                    {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>asignarRespG(m)} style={{fontSize:10,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
-                    {cur&&<button onClick={()=>asignarRespG(null)} style={{fontSize:10,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>}
-                  </>}
+                  {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>asignarRespG(m)} style={{fontSize:10,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
+                  {cur&&<button onClick={()=>asignarRespG(null)} style={{fontSize:10,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>}
                 </div>
               )})()}
             </div>
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial de rendiciones' aria-label='Historial de rendiciones' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
-            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setNotaMenuOpen(o=>!o)} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),background:notaBtnOpen?'#C77F18':'#FAEEDA',color:notaBtnOpen?'#fff':'#854F0B',border:'1px solid #C77F18'}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaMenuOpen(o=>!o);setNotaBtnOpen(false)}} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
             {selectedClient&&!showNotaria&&!showHistorial&&<button onClick={()=>onAddFondo(selectedClient)} style={chipBtn('green')}>+ Fondo</button>}
             {selectedClient&&!showNotaria&&!showHistorial&&<button onClick={()=>onAdd(selectedClient)} style={chipBtn('primary')}>+ Gastos</button>}
             {selectedClient&&<button onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
           </div>
         </div>
 
-        {/* Sub-pills de Gastos notariales (se despliegan bajo la fila de acciones) */}
+        {/* Menú Cargar (sin notaría — la notaría tiene su propio botón) */}
         {!selectedClient&&!showOrphans&&!showNotaria&&notaMenuOpen&&(
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
             <button onClick={()=>{setNotaMenuOpen(false);onAdd()}} style={chipBtn('primary')}>+ Gastos</button>
             <button onClick={()=>{setNotaMenuOpen(false);onAddFondo()}} style={chipBtn('green')}>+ Fondo</button>
             <button onClick={()=>{setNotaMenuOpen(false);onBulk(false)}} style={chipBtn('soft')}>Carga masiva</button>
-            <button onClick={()=>{setNotaMenuOpen(false);onBulk(true)}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Notaría · Excel</button>
-            <button onClick={()=>{setNotaMenuOpen(false);setShowNotaria(true)}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Liquidar notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
+          </div>
+        )}
+        {/* Botón Notaría (visible) — liquidar y carga de notaría */}
+        {!selectedClient&&!showOrphans&&!showNotaria&&notaBtnOpen&&(
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
+            <button onClick={()=>{setNotaBtnOpen(false);setShowNotaria(true)}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Liquidar notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
+            <button onClick={()=>{setNotaBtnOpen(false);onBulk(true)}} style={{...chipBtn('soft'),background:'#FAEEDA',color:'#854F0B',border:'1px solid #C77F18'}}>Cargar Excel notaría</button>
           </div>
         )}
 
@@ -8134,7 +8159,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {notaLiquidaciones.map(r=>{ const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; return (
               <div key={r.id} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:6}}>
                 <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
-                  <div style={{minWidth:0,display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:13,color:'#99ABB4',transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span><div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:'#99ABB4'}}>{r.created_at?new Date(r.created_at).toLocaleDateString('es-CL'):''}{r.user_name?` · ${r.user_name}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div></div>
+                  <div style={{minWidth:0,display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:13,color:'#99ABB4',transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Liquidación Notaría Lascar al {fmtFechaDMY(r.created_at)||'—'}</div><div style={{fontSize:10,color:'#99ABB4'}}>{r.user_name?`${r.user_name} · `:''}{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.periodo?` · período ${r.periodo}`:''}</div></div></div>
                   <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.total)}</div><span style={{fontSize:9,fontWeight:600,borderRadius:4,padding:'1px 6px',background:r.sent_at?'#E1F5EE':'#F1EFE8',color:r.sent_at?C.greenText:'#5F5E5A'}}>{r.sent_at?'Enviada a notaría':'Pagado histórico'}</span></div>
                 </div>
                 {r.ot_numbers&&!open&&<div style={{fontSize:10,color:'#185FA5',fontWeight:600,marginTop:4}}>OT: {r.ot_numbers}</div>}
@@ -8146,7 +8171,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
                     </div>) })}
                   <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
-                    <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:'#0F6E56',background:'#E1F5EE',border:'none',borderRadius:6,padding:'4px 11px',cursor:'pointer'}}>↓ Excel (OT · detalle · costo)</button>
+                    <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:'#0F6E56',background:'#E1F5EE',border:'none',borderRadius:6,padding:'4px 11px',cursor:'pointer'}}>↓ Excel</button>
                     {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:6,padding:'4px 11px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir gastos'}</button>}
                     <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 11px',cursor:'pointer'}}>Deshacer</button>
                   </div>
@@ -8313,6 +8338,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {/* Vista cliente con 1 razón social (o sin RS): lista de movimientos */}
       {selectedClient&&!multiRS&&(
         <div style={{padding:'4px 20px 130px'}}>
+          {gastoToolbar}
           {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
           {filtered.filter(e=>!esRendido(e)&&!esSaldado(e)).map(renderMov)}
           {rendidosBlock('__single__',filtered.filter(e=>esRendido(e)&&!esSaldado(e)))}
@@ -8323,6 +8349,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {/* Vista cliente con 2+ razones sociales: acordeón por RS (checkbox + chevron + saldo) */}
       {selectedClient&&multiRS&&rb&&(
         <div style={{padding:'4px 20px 130px'}}>
+          {gastoToolbar}
           {rb.porRS.concat(rb.sin?[{...rb.sin,entity:{id:'__sin__',name:'Sin razón social',rut:''}}]:[]).map(r=>{
             const eid=r.entity.id, isSin=eid==='__sin__'
             const checked=selRS.has(eid), open=openRS.has(eid)
@@ -8708,11 +8735,11 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
         <Fld label='OT (notaría)'><Inp value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206'/></Fld>
       )}
       {!isFondo&&(
-        <Fld label='Personal de un miembro'>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-            {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const on=f.personal_de===m;const pc=personChip(m);return <button key={m} type='button' onClick={()=>up('personal_de',on?null:m)} style={{fontSize:12,borderRadius:20,padding:'5px 12px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:`1px solid ${on?pc.color:pc.color+'33'}`}}>{m}</button>})}
-            {f.personal_de&&<button type='button' onClick={()=>up('personal_de',null)} style={{fontSize:12,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>}
-          </div>
+        <Fld label='Gasto personal de'>
+          <select value={f.personal_de||''} onChange={e=>up('personal_de',e.target.value||null)} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}>
+            <option value=''>No — es del cliente</option>
+            {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=><option key={m} value={m}>{m}</option>)}
+          </select>
           {f.personal_de&&<div style={{fontSize:11,color:C.muted,marginTop:5}}>Se guarda como gasto personal de {f.personal_de} (sale del cliente).</div>}
         </Fld>
       )}
@@ -8721,6 +8748,10 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           <span style={{fontSize:13,fontWeight:600,color:client?C.text:C.overdue}}>{client?.name||'Sin cliente'}</span>
           {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
           <ClientePicker clients={clients} onPick={cid=>setF(p=>({...p,client_id:cid,entity_id:null}))}/>
+          {!isFondo&&expense?.id&&<div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
+            <span style={{fontSize:11,color:C.muted,fontWeight:600}}>Cargar archivo</span>
+            <Attachments inline table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos' namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/>
+          </div>}
         </div>
         {(f.client_render_id||f.render_id||f.notaria_render_id)&&<div style={{fontSize:10,color:C.overdue,marginTop:5}}>Este gasto está en una rendición/liquidación: reábrela antes de moverlo a otro cliente.</div>}
       </Fld>
@@ -8741,10 +8772,6 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           <div><div style={{fontSize:12,fontWeight:600,color:C.text}}>Solo registro · no descuenta saldo</div><div style={{fontSize:10,color:C.muted,marginTop:2}}>Histórico / pagado con fondos que no entran a la app</div></div>
           <Switch on={!!f.excluye_saldo} onToggle={()=>up('excluye_saldo',!f.excluye_saldo)}/>
         </div>
-      )}
-      {!isFondo&&expense?.id&&(
-        <Attachments table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos'
-          namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
