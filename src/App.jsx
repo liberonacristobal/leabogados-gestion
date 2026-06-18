@@ -9318,10 +9318,17 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
       {kpi('Saldo fondos',fg.saldo,`fondos ${fmt(fg.fondos)} − gastos ${fmt(fg.gastos)}`,fg.saldo<0?'#A32D2D':'#0F6E56')}
       {kpi('A favor',aFavor,'anticipos disponibles',aFavor>0?'#0F6E56':C.muted)}
     </div>
-    <div style={{display:'flex',gap:14,borderBottom:`1px solid ${C.border}`,marginBottom:10,flexWrap:'wrap'}}>
-      {[['honorarios','Honorarios'],['fondos','Fondos y gastos'],['movs','Movimientos'],['adelantos','Adelantos']].map(([v,l])=>(
-        <span key={v} onClick={()=>setSec(v)} style={{fontSize:12,fontWeight:sec===v?600:400,color:sec===v?C.accent:C.muted,borderBottom:sec===v?`2px solid ${C.accent}`:'none',paddingBottom:6,marginBottom:-1,cursor:'pointer'}}>{l}</span>
-      ))}
+    <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:10}}>
+      {(()=>{ const sp={width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
+        const ICN={
+          honorarios:<svg {...sp}><path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/><path d='M14 3v5h5'/><path d='M9 13h6M9 17h4'/></svg>,
+          fondos:<svg {...sp}><path d='M3 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2'/><rect x='3' y='7' width='18' height='13' rx='2'/><circle cx='16' cy='13.5' r='1.3'/></svg>,
+          movs:<svg {...sp}><path d='M4 9h13l-3.5 -3.5'/><path d='M20 15H7l3.5 3.5'/></svg>,
+          adelantos:<svg {...sp}><ellipse cx='12' cy='6' rx='7' ry='3'/><path d='M5 6v6c0 1.6 3.1 3 7 3s7-1.4 7-3V6'/><path d='M5 12v6c0 1.6 3.1 3 7 3s7-1.4 7-3v-6'/></svg>,
+        }
+        return [['honorarios','Honorarios'],['fondos','Fondos'],['movs','Movimientos'],['adelantos','Adelantos']].map(([v,l])=>(
+          <span key={v} onClick={()=>setSec(v)} style={{flex:1,textAlign:'center',padding:'7px 2px',color:sec===v?C.accent:C.muted,borderBottom:sec===v?`2px solid ${C.accent}`:'none',marginBottom:-1,cursor:'pointer'}}>{ICN[v]}<div style={{fontSize:10,marginTop:2,fontWeight:sec===v?600:400}}>{l}</div></span>
+        )) })()}
     </div>
     {loading&&<div style={{fontSize:11,color:C.muted}}>Cargando…</div>}
     {sec==='honorarios'&&<div>
