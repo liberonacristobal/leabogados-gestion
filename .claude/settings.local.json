@@ -232,7 +232,9 @@
       "Bash(xargs -0 du -ch)",
       "Bash(xargs du -ch)",
       "Bash(perl -i -pe 's/titleCaseRS\\\\\\(/rsDisplay\\(/g' src/App.jsx)",
-      "Bash(perl -i -pe 's/\\\\| \\\\$\\\\{rs\\\\.rut\\\\}/· \\\\${rs.rut}/g' src/App.jsx)"
+      "Bash(perl -i -pe 's/\\\\| \\\\$\\\\{rs\\\\.rut\\\\}/· \\\\${rs.rut}/g' src/App.jsx)",
+      "Bash(perl -i -pe 's/fontSize:8\\\\.5/fontSize:9/g; s/fontSize:9\\\\.5/fontSize:9/g; s/fontSize:10\\\\.5/fontSize:11/g; s/fontSize:11\\\\.5/fontSize:11/g; s/fontSize:12\\\\.5/fontSize:13/g; s/fontSize:13\\\\.5/fontSize:13/g' src/App.jsx)",
+      "Bash(perl -i -pe ' *)"
     ]
   }
 }

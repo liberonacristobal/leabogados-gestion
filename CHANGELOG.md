@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · Tanda 3 (fracciones + títulos de modal)
+- Colapsadas 46 tamaños de fuente fraccionarios (8.5/9.5→9, 10.5/11.5→11, 12.5/13.5→13). Sin sistema de medios-puntos.
+- Títulos de modal unificados a 16/600: 5 que estaban a 15 (Dar de baja factura, Emitir por el bloque, Cubrir cuotas, Deshacer importación, Liquidar a notaría) y Registrar gastos (16/700→600). Nombres de proveedor intactos.
+
 ## 2026-06-19 — Fase 3 · Tanda 3 inicio (escala tipográfica: cifras KPI)
 - Escala única aprobada: tamaños 9·11·13·16·17·20, pesos 400/600. Cifra KPI = 17/600 (canon del dashboard).
 - Unificadas a 17/600 las cifras KPI divergentes: caja chica (helper kpiVal, era 15/700), tabs de facturación Pendiente/Vencido (16/700) y Pendiente a notaría (16/700). Mismo color y valor. Las mini-KPI densas de la ficha quedan para una sub-tanda aparte.
