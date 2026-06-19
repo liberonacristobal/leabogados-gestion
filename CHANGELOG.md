@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Modal de gasto minimal (labels flotantes)
+- Modal de gasto rediseñado con labels DENTRO de los boxes (componente FloatFld): Categoría/Monto/Fecha, Descripción, Proyecto, Razón social, OT/Subcategoría. Ahorra alto.
+- Fecha del botón ahora con año (19 jun 26, helper fechaConAnio). Adjuntar movido a la línea de Proyecto (sin la palabra Adjuntar). Eliminado Gasto personal del modal (sin uso).
+
 ## 2026-06-19 — Gasto histórico: textos + fix del fondo en notaría
 - Toggle del modal: "Gasto ya pagado" → "Gasto histórico" (sin la línea de ayuda). Chip de la lista: "Pago histórico" → "Gasto histórico".
 - BUG corregido: el "Disponible" para pagar notaría (dispCliente) no excluía los gastos marcados como históricos, así que el fondo no se recomponía. Ahora los excluye igual que fgCliente → al marcar un gasto histórico, el fondo vuelve a su disponible real para pagar la notaría.
