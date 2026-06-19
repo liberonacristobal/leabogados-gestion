@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Historial: filas rediseñadas (estado como chip, acciones al expandir, sin redirigir)
+- Clientes y Notaría: estado como chip pequeño en color a la derecha (una sola vez; se elimina la duplicación de "Anulada"). N° de gastos/OT en el subtítulo.
+- Las acciones (Ver PDF / Editar / Enviar; en notaría Excel / Comprobante / Reenviar) ahora aparecen SOLO al tocar la fila (se expande en su lugar). Las filas de notaría ya NO redirigen a otra vista: muestran la liquidación ahí mismo.
+
 ## 2026-06-19 — Historial: control de orden solo flecha
 - El control de orden por fecha pasa a ser solo la flecha (↓/↑), sin el texto "Más nuevo/Más antiguo".
 
