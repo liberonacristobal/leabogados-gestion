@@ -31,6 +31,8 @@ Principio rector más importante. La app debe ser muy autónoma y construir memo
 - Si una feature se vuelve compleja o una carga, replantearla o simplificarla.
 - Flujos cortos: el menor número de clics para cualquier acción.
 - Español de Chile con forma "tú" en toda la interfaz. Nunca voseo.
+- **Navegación lógica y user-friendly**: prioriza una estructura de navegación clara. Toda lista larga de ítems debe agruparse por la entidad natural (cliente/razón social, abogado, fecha) con la entidad de protagonista (visible, grande), nunca un muro plano de folios/OT con el dato clave truncado. Si el usuario no puede distinguir un ítem de otro de un vistazo, está mal diseñada.
+- **UX impecable**: claro, accesible, responsivo y visualmente intuitivo. Buscador en toda lista de >~10 ítems; agrupación colapsable; el dato que identifica (nombre de cliente) siempre primero y legible; targets táctiles cómodos en iPhone.
 
 ## Rigor matemático en cálculos, métricas y reportes
 

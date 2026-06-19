@@ -7405,6 +7405,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [notaLiqOpen,setNotaLiqOpen] = useState(null)    // liquidación a notaría con el detalle desplegado
   const [notaLiqAdd,setNotaLiqAdd] = useState(null)      // liquidación en modo "añadir gastos"
   const [addSel,setAddSel] = useState(new Set())         // gastos pendientes seleccionados para añadir a la liquidación
+  const [addSearch,setAddSearch] = useState('')          // buscador del selector "añadir gastos a notaría"
+  const [addOpenCli,setAddOpenCli] = useState(new Set()) // clientes expandidos en el selector "añadir gastos a notaría"
   const [liqDetail,setLiqDetail] = useState(null)        // liquidación de caja chica abierta desde la pill "Liquidado"
   const isAdmin = currentUser?.role==='admin'
   // Personas con caja chica activa = quienes tienen fondos entregados en petty_cash.
@@ -8309,19 +8311,54 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     {est==='por_enviar'&&<button onClick={()=>{setCompFile(null);setNotaSend(r)}} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Enviar a notaría</button>}
                     {est==='enviada'&&<button onClick={()=>reenviarNotaria(r)} disabled={reenviando===r.id} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'3px 9px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'↻ Reenviar'}</button>}
                     {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' style={{fontSize:10,fontWeight:600,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px'}}>Ver comprobante</a>}
-                    {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir gastos'}</button>}
+                    {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set());setAddSearch('');setAddOpenCli(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir gastos'}</button>}
                     <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Deshacer</button>
                   </div>
-                  {adding&&<div style={{marginTop:8,background:'#F5F7F9',borderRadius:8,padding:'8px 10px'}}>
-                    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:6,textTransform:'uppercase',letterSpacing:.3}}>Pendientes de notaría — toca para añadir</div>
-                    {notariaPend.map(e=>{ const on=addSel.has(e.id); const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
-                      <div key={e.id} onClick={()=>setAddSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',cursor:'pointer',fontSize:11}}>
-                        <span style={{width:16,height:16,borderRadius:4,border:`2px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',flexShrink:0}}/>
-                        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)}</span> · {e.concept||'—'} <span style={{color:C.done}}>· {cn}</span></span>
-                        <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
-                      </div>) })}
-                    <button disabled={addSel.size===0} onClick={()=>anadirGastosNota(r,[...addSel])} style={{marginTop:6,fontSize:11,fontWeight:700,background:addSel.size?C.accent:C.done,color:'#fff',border:'none',borderRadius:7,padding:'5px 13px',cursor:addSel.size?'pointer':'default'}}>Añadir {addSel.size||''}</button>
-                  </div>}
+                  {adding&&(()=>{
+                    // Selector agrupado por cliente: solo clientes con fondos disponibles (la oficina se cubre sola), replegados, con buscador.
+                    const byCli={}; notariaPend.forEach(e=>{ if(!e.client_id) return; (byCli[e.client_id]=byCli[e.client_id]||[]).push(e) })
+                    let grupos=Object.entries(byCli).map(([cid,items])=>{ const {disp,oficina:esOf}=dispCliente(cid); const cli=clients.find(c=>String(c.id)===String(cid)); return { cid, cli, items, total:items.reduce((a,e)=>a+(e.amount||0),0), disp, esOf, fecha:items.reduce((m,e)=>(e.date||'')>m?(e.date||''):m,'') } }).filter(g=> g.esOf || g.disp>0)
+                    const q=_normTxt(addSearch)
+                    if(q) grupos=grupos.map(g=>{ const cmatch=_normTxt(g.cli?.name).includes(q)||_normTxt(g.cli?.abogado_responsable).includes(q); const items=cmatch?g.items:g.items.filter(e=>_normTxt(e.concept).includes(q)||_normTxt(fmtOt(e.ot_number)).includes(q)); return {...g,items,_open:!cmatch} }).filter(g=>g.items.length>0)
+                    grupos.sort((a,b)=>a.fecha<b.fecha?1:-1)
+                    const selTot=notariaPend.filter(e=>addSel.has(e.id)).reduce((a,e)=>a+(e.amount||0),0)
+                    return (
+                    <div style={{marginTop:8,background:'#F5F7F9',borderRadius:8,padding:10}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:20,padding:'0 11px',height:31,marginBottom:9}}>
+                        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+                        <input value={addSearch} onChange={ev=>setAddSearch(ev.target.value)} placeholder='Buscar cliente, OT o trámite' style={{flex:1,border:'none',background:'none',outline:'none',fontSize:12,color:C.text}}/>
+                        {addSearch&&<span onClick={()=>setAddSearch('')} style={{color:C.done,fontSize:16,cursor:'pointer',lineHeight:1}}>×</span>}
+                      </div>
+                      {grupos.length===0
+                        ? <div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'14px 0'}}>{addSearch?'Sin resultados.':'No hay clientes con fondos disponibles.'}</div>
+                        : <>
+                          <div style={{fontSize:9,color:C.muted,fontWeight:600,letterSpacing:.3,marginBottom:7}}>{grupos.length} CLIENTE{grupos.length!==1?'S':''} CON FONDOS · TOCA PARA VER SUS GASTOS</div>
+                          {grupos.map(g=>{ const open=g._open||addOpenCli.has(g.cid); const cn=g.cli?.name||'Cliente'; const ab=g.cli?.abogado_responsable; return (
+                            <div key={g.cid} style={{background:'#fff',border:`0.5px solid ${open?C.done:C.border}`,borderRadius:9,padding:'10px 12px',marginBottom:6}}>
+                              <div onClick={()=>setAddOpenCli(p=>{const n=new Set(p);n.has(g.cid)?n.delete(g.cid):n.add(g.cid);return n})} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cn}</div>
+                                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{ab?ab+' · ':''}{g.items.length} OT · {fmt(g.total)}</div>
+                                </div>
+                                {g.esOf
+                                  ? <div style={{fontSize:11,fontWeight:600,color:C.greenText,flexShrink:0}}>se cubre sola</div>
+                                  : <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Disponible</div><div style={{fontSize:13,fontWeight:600,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(g.disp)}</div></div>}
+                                <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .15s'}}><polyline points='6 9 12 15 18 9'/></svg>
+                              </div>
+                              {open&&<div style={{marginTop:9,paddingTop:8,borderTop:`0.5px solid ${C.border}`,display:'flex',flexDirection:'column',gap:9}}>
+                                {g.items.map(e=>{ const on=addSel.has(e.id); return (
+                                  <div key={e.id} onClick={()=>setAddSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
+                                    <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+                                    <span style={{color:C.azulInfo,fontWeight:600,width:58,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
+                                    <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                                    <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
+                                  </div>) })}
+                              </div>}
+                            </div>
+                          )})}
+                        </>}
+                      <button disabled={addSel.size===0} onClick={()=>anadirGastosNota(r,[...addSel])} style={{width:'100%',marginTop:4,fontSize:13,fontWeight:600,background:addSel.size?C.accent:C.done,color:'#fff',border:'none',borderRadius:9,padding:11,cursor:addSel.size?'pointer':'default'}}>{addSel.size?`Añadir ${addSel.size} OT · ${fmt(selTot)}`:'Selecciona gastos'}</button>
+                    </div>) })()}
                 </div>}
               </div>
             )})}

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Notaría: selector "añadir gastos" agrupado por cliente con fondos
+- El selector "Añadir gastos" de una liquidación de notaría dejó de ser un muro plano de ~40 OT con el cliente truncado. Ahora agrupa por cliente y solo muestra clientes con fondos disponibles (la Oficina aparece como "se cubre sola"), replegados.
+- Cada cliente muestra nombre grande + abogado + N° OT + total, y el Disponible en verde a la derecha. Tocas el cliente y se abren sus OT con checkbox para elegir cuáles incluir. Buscador (cliente/OT/trámite) arriba; orden por fecha (nuevo primero). El botón muestra "Añadir N OT · $total". Así no se adelanta plata de la oficina.
+
 ## 2026-06-19 — Oficina: KPIs propios (Gastos / Por pagar / Pagado) y siempre cubre en notaría
 - La Oficina (la firma, is_internal) ya no muestra un saldo negativo confuso. Sus 3 tarjetas ahora son: Gastos de oficina (todo lo gastado, sin personales), Por pagar (lo no liquidado vía caja chica ni notaría = deuda real pendiente) y Pagado (lo ya liquidado).
 - En la Liquidación a notaría la Oficina siempre aparece disponible: dispCliente la trata como fondo infinito, queda como "Cubre · se cubre sola", sin "Sin fondos" ni candado. Nunca adelanta plata porque la plata es propia.
