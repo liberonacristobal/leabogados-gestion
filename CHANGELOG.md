@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Historial: filtros minimalistas (buscador + Mes ▾ + Año ▾) idénticos en ambas pestañas
+- Reemplazados el dropdown de cliente y los dos inputs month por una fila única: buscador + Mes ▾ + Año ▾, idéntica en Clientes y Notaría. El buscador filtra por nombre de cliente (Clientes) o período (Notaría). Quitados los estados de filtro viejos sin uso.
+
 ## 2026-06-19 — Historial: ícono sin recuadro
 - El botón de historial pasa a ser solo el ícono (18px), sin borde ni fondo. Mantiene el área de toque.
 
