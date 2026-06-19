@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Fix: la ventana ya no se cierra sola (recarga por refresco de token)
+- La app se recargaba entera (con spinner) cada vez que Supabase refrescaba el token o al volver el foco a la pestaña, porque el efecto de carga dependía de la identidad del objeto `session`. Eso desmontaba la UI y te sacaba de donde estabas (ej. liquidando notaría → de vuelta a la pantalla de Gastos).
+- Ahora el efecto depende del usuario (`session.user.id`): refresco de token / foco con el mismo usuario ya no recargan nada. Además el spinner de pantalla completa solo aparece en la primera carga (`booted`); recargas posteriores no desmontan la UI.
+
 ## 2026-06-19 — Limited ve la ficha completa de sus clientes (donde es responsable)
 - Un usuario limited (Martín/Martina/Rodrigo) ahora ve la ficha completa —Resumen · Contacto · Financiero · Estado de cuenta— de los clientes de los que es abogado responsable, con las mismas acciones del admin (crear/editar ventas, facturación y anticipos) acotadas a esos clientes.
 - En los demás clientes sigue viendo solo Resumen + Contacto, como antes. Match por nombre normalizado (sin tildes/mayúsculas). Reutiliza FinancieroTab y EstadoCuentaTab del admin; la lista de clientes del limited no cambia.
