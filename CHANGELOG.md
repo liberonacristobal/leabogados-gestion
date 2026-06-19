@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-19 — Seguridad: API key de Anthropic fuera del front (edge function claude-proxy)
+- Auditoría (crítico): la API key de Claude viajaba en el bundle público de Vercel (`import.meta.env.VITE_ANTHROPIC_API_KEY` + `x-api-key` + `anthropic-dangerous-direct-browser-access`) en ~10 llamadas directas a `api.anthropic.com`. Cualquiera con la URL podía extraerla y gastar con cargo a la cuenta.
+- Fix: nueva edge function `claude-proxy` (verify_jwt=true, valida que el email del JWT sea del equipo) que guarda `ANTHROPIC_API_KEY` como secreto de Supabase y reenvía a Anthropic. El front llama a esa función vía un único helper `claudeCall()`; nunca toca la key ni api.anthropic.com. Modelos en allowlist, max_tokens acotado.
+- Requiere (acción manual): rotar la key actual en la consola de Anthropic, fijar el secreto `ANTHROPIC_API_KEY`, deploy de `claude-proxy`, y quitar `VITE_ANTHROPIC_API_KEY` de las env vars de Vercel.
+
 ## 2026-06-19 — Correo servidor: encabezados ASCII (MIME ya no se rompe)
 - Auditoría: los correos del fallback de servidor (denomailer) llegaban como texto crudo, sin adjuntos. Causa: denomailer arma mal el "encoded-word" RFC 2047 del Asunto/From con tildes (token con espacios, sin plegar) → rompe el bloque de encabezados y el cliente muestra todo el MIME literal. Fix: encabezados (Asunto + nombre remitente) solo en ASCII; el cuerpo conserva las tildes. Requiere deploy de `notify-task`.
 

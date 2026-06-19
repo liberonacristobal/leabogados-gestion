@@ -215,7 +215,8 @@
       "Bash(curl -s '__TRACKED_VAR__/cartola_movimientos?select=id,cliente_id,monto,rol_cuenta,nombre_contraparte,fecha&tipo=eq.abono&estado=eq.pendiente&es_interno=eq.false&limit=3000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
       "Bash(curl -s '__TRACKED_VAR__/billing?select=id,client_id,invoice_no,amount,status,deleted_at,issued_at&limit=5000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
       "Bash(curl -s '__TRACKED_VAR__/conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura&limit=5000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
-      "Bash(echo \"abonos pendientes: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/ab.json'\\)\\)\\)\\)\"\\)  facturas: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/bill.json'\\)\\)\\)\\)\"\\)\")"
+      "Bash(echo \"abonos pendientes: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/ab.json'\\)\\)\\)\\)\"\\)  facturas: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/bill.json'\\)\\)\\)\\)\"\\)\")",
+      "Bash(supabase projects *)"
     ]
   }
 }

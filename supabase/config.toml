@@ -15,3 +15,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/sii-sync/deno.json"
 entrypoint = "./functions/sii-sync/index.ts"
+
+[functions.claude-proxy]
+enabled = true
+verify_jwt = true
+import_map = "./functions/claude-proxy/deno.json"
+entrypoint = "./functions/claude-proxy/index.ts"
