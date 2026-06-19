@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · Tanda 4 (paleta → objeto C)
+- Canonizados 6 colores que estaban fuera de C: azulInfo (#185FA5), azulBg (unifica #E6F1FB y #E6EEF1 en uno), tealBg/tealText, ambarBg/coralText, grisText.
+- Reemplazados cientos de hex literales por su token de C (C.accent/C.muted/C.done/etc.) en valores de estilo JSX y ternarios — mismo valor, fuente única. Patrón anclado en : / ? para no tocar atributos SVG ni strings HTML de correo/PDF (esos quedan literales a propósito).
+- Único cambio visual: ~111 usos de #E6EEF1 pasan al celeste unificado #E6F1FB (imperceptible).
+
 ## 2026-06-19 — Fase 3 · Tanda 3 (cifras de fila + etiqueta KPI)
 - Cifras de fila (montos) unificadas a 13/600 en las líneas que renderizan dinero (fmt/fmtN/fmtM/fmtShort/fmtCLP/fmtUF). Antes mezclaban 12/700 y 13/700.
 - Etiqueta KPI (helper kpiLbl) 10→9 (canon). Pendiente: barrido de los 105 labels de sección 10px (riesgo de densidad mobile, requiere confirmación).
