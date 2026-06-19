@@ -209,7 +209,7 @@ const saldoCajaChica = (pettyCash, expenses, userName) => {
 // Fuente única para "fondos − gastos" de un cliente. Siempre con guarda ||0 (nunca NaN).
 function fgCliente(expenses, clientId){
   let fondos=0, gastos=0
-  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId) return; if(e.type==='fondo') fondos+=(e.amount||0); else gastos+=(e.amount||0) })
+  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId) return; if(e.type==='fondo') fondos+=(e.amount||0); else if(!e.no_descuenta_saldo) gastos+=(e.amount||0) })
   return {fondos, gastos, saldo:fondos-gastos}
 }
 const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
@@ -252,7 +252,7 @@ function rsBalances(clientId, expenses, entities){
     if(e.entity_id&&byId[e.entity_id]) b=byId[e.entity_id]
     else if(single&&buckets.length) b=buckets[0]
     else { b=sinRS; sinRS.n++ }
-    if(e.type==='fondo') b.fondos+=(e.amount||0); else b.gastos+=(e.amount||0)
+    if(e.type==='fondo') b.fondos+=(e.amount||0); else if(!e.no_descuenta_saldo) b.gastos+=(e.amount||0)
   })
   const ws = b=>({...b,saldo:b.fondos-b.gastos})
   const porRS = buckets.map(ws)
@@ -478,7 +478,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
   const Ficha = ({cl}) => {
     const clientExpenses = expenses.filter(e=>e.client_id===cl.id).sort((a,b)=>b.date>a.date?1:-1)
     const fondos = clientExpenses.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-    const gastos = clientExpenses.filter(e=>e.type!=='fondo').reduce((a,e)=>a+(e.amount||0),0)
+    const gastos = clientExpenses.filter(e=>e.type!=='fondo'&&!e.no_descuenta_saldo).reduce((a,e)=>a+(e.amount||0),0)
     const saldo = fondos - gastos
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
@@ -7481,7 +7481,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     expenses.forEach(e=>{
       if(!m[e.client_id]) m[e.client_id]={fondos:0,gastos:0,sinAsignar:0}
       if(e.type==='fondo') m[e.client_id].fondos+=(e.amount||0)
-      else m[e.client_id].gastos+=(e.amount||0)
+      else if(!e.no_descuenta_saldo) m[e.client_id].gastos+=(e.amount||0)
       if(!e.entity_id) m[e.client_id].sinAsignar+=1
     })
     return m
@@ -7820,6 +7820,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):alert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>✓ Caja chica</button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
               {isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Carga masiva</span>}
+              {!isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Pago histórico</span>}
               {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10,padding:'1px 8px',borderRadius:20,background:pc.bg,color:pc.color,fontWeight:700}}>Personal · {e.personal_de}</span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -7891,7 +7892,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
             {!isFondo&&<AdjuntoIcon e={e}/>}
-            <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:C.overdue}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
+            <div style={{fontSize:14,fontWeight:700,color:isFondo?C.normal:(e.no_descuenta_saldo?C.done:C.overdue),textDecoration:e.no_descuenta_saldo?'line-through':'none'}}>{isFondo?'+':'-'}{fmt(e.amount)}</div>
           </div>
         </div>
       </div>
@@ -8917,6 +8918,12 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           {!showPersonal&&!personalOn&&(
             <button type='button' onClick={()=>setShowPersonal(true)} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,marginLeft:'auto'}}>Gasto personal</button>
           )}
+        </div>
+      )}
+      {!isFondo&&f.client_id&&!f.personal_de&&(
+        <div style={{display:'flex',alignItems:'center',gap:9,marginTop:10}}>
+          <Switch on={!!f.no_descuenta_saldo} onToggle={()=>up('no_descuenta_saldo',!f.no_descuenta_saldo)}/>
+          <div><div style={{fontSize:12,color:C.text}}>Gasto ya pagado</div><div style={{fontSize:10,color:C.muted,marginTop:1}}>Queda en el historial, no descuenta del saldo del cliente.</div></div>
         </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
