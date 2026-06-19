@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Historial: Clientes en timeline + orden por fecha (clientes y notaría)
+- Pestaña Clientes del historial pasa a timeline (fecha a la izquierda, header = nombre del cliente, monto a la derecha); se mantiene expandible con sus acciones. La ficha del cliente no cambia (modo timeline opt-in en renderRendRow/renderHistorialTable).
+- Control de orden por fecha (↓ Más nuevo / ↑ Más antiguo, default nuevo primero) arriba a la derecha, aplica a ambas pestañas. Inicio de la regla: toda lista con fecha llevará este control, incremental por vista.
+
 ## 2026-06-19 — Notaría: botones teal pill + Historial con pestañas Clientes/Notaría
 - Botones de notaría (toggle Notaría, Liquidar Notaría, Carga masiva) pasan de amarillo a teal en pill, sin negrita (peso 500). "Cargar Excel notaría" → "Carga masiva"; "Liquidar notaría" → "Liquidar Notaría".
 - Historial (ícono reloj) ahora tiene 2 pestañas: Clientes (rendiciones, con filtros) y Notaría (liquidaciones en timeline, fecha a la izquierda y monto a la derecha, fuera de tarjeta). Título de la vista pasa a "Historial".

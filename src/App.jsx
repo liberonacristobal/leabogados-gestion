@@ -7421,6 +7421,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [rendEdit,setRendEdit] = useState(null)   // rendición en edición (abre RendicionModal en modo edición)
   const [showHistorial,setShowHistorial] = useState(false)
   const [histTab,setHistTab] = useState('clientes')   // historial: 'clientes' (rendiciones) | 'notaria' (liquidaciones)
+  const [histOrden,setHistOrden] = useState('nuevo')   // orden por fecha: 'nuevo' (más nuevo primero) | 'antiguo'
   const [emailRend,setEmailRend] = useState(null)
   const [hFiltCliente,setHFiltCliente] = useState('')
   const [hFiltDesde,setHFiltDesde] = useState('')
@@ -7905,11 +7906,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     : <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#FFF8E1',color:C.soon,whiteSpace:'nowrap'}}>Pendiente</span>
   const rsOfRend = r => { const g=expenses.find(e=>e.client_render_id===r.id&&e.entity_id); const ent=g?(clientEntities||[]).find(x=>x.id===g.entity_id):null; return (ent&&ent.name)||'' }
   const verPdfRend = r => { const cl=clients.find(c=>c.id===r.client_id); const w=window.open('','_blank'); if(w){ w.document.write(r.pdf_html||rendicionPdfHtml(r,cl,expenses,clientEntities)); w.document.close() } }
-  const renderRendRow = (r,showClient) => {
+  const renderRendRow = (r,showClient,timeline) => {
     const cl=clients.find(x=>x.id===r.client_id)
     const rs=showClient?'':rsOfRend(r)
     return (
       <div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`,opacity:r.anulada_at?0.6:1}}>
+        {timeline ? (
+          <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'flex',gap:12,alignItems:'flex-start',cursor:'pointer'}}>
+            {(()=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div> })()}
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{r.user_name||''}{rs?` · ${rs}`:''}</div>
+              <div style={{marginTop:3}}>{estadoBadge(r)}</div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>-{fmt(r.total)}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div>
+          </div>
+        ) : (
         <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
@@ -7919,6 +7931,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
           <div style={{textAlign:'right'}}>{estadoBadge(r)}</div>
         </div>
+        )}
         {expandRend===r.id&&(()=>{
           const gastos=expenses.filter(e=>e.client_render_id===r.id)
           return <div style={{marginTop:8,padding:'8px 11px',background:'#F5F7F9',borderRadius:8}}>
@@ -7947,16 +7960,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       </div>
     )
   }
-  const renderHistorialTable = (rends,showClient) => {
+  const renderHistorialTable = (rends,showClient,timeline) => {
     if(!rends.length) return <div style={{color:C.muted,textAlign:'center',padding:24,fontSize:12}}>Sin rendiciones</div>
     return (<>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,padding:'0 0 6px',borderBottom:`1px solid ${C.border}`}}>
+      {!timeline&&<div style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,padding:'0 0 6px',borderBottom:`1px solid ${C.border}`}}>
         <div style={HH}>{showClient?'Cliente / Periodo':'Periodo'}</div>
         <div style={{...HH,textAlign:'right'}}>Monto</div>
         <div style={{...HH,textAlign:'center'}}>Gastos</div>
         <div style={{...HH,textAlign:'right'}}>Estado</div>
-      </div>
-      {rends.map(r=>renderRendRow(r,showClient))}
+      </div>}
+      {rends.map(r=>renderRendRow(r,showClient,timeline))}
     </>)
   }
 
@@ -8407,7 +8420,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div style={{padding:'2px 0 0'}}>
               {/* Pestañas: separa rendiciones a CLIENTES de liquidaciones a NOTARÍA */}
               {(()=>{ const tab=(id,lbl)=>{ const on=histTab===id; return <button onClick={()=>setHistTab(id)} style={{fontSize:13,fontWeight:500,background:on?C.accent:'#fff',color:on?'#fff':C.muted,border:`1px solid ${on?C.accent:C.border}`,borderRadius:20,padding:'6px 16px',cursor:'pointer'}}>{lbl}</button> }
-                return <div style={{display:'flex',gap:6,marginBottom:14}}>{tab('clientes','Clientes')}{tab('notaria',`Notaría${notaLiquidaciones.length?` · ${notaLiquidaciones.length}`:''}`)}</div> })()}
+                return <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'center'}}>{tab('clientes','Clientes')}{tab('notaria',`Notaría${notaLiquidaciones.length?` · ${notaLiquidaciones.length}`:''}`)}<button onClick={()=>setHistOrden(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{marginLeft:'auto',fontSize:12,fontWeight:500,background:'#fff',color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{histOrden==='nuevo'?'↓ Más nuevo':'↑ Más antiguo'}</button></div> })()}
               {histTab==='clientes'&&<>
                 <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
                   <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
@@ -8424,13 +8437,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     if(hFiltDesde&&r.created_at?.slice(0,7)<hFiltDesde) return false
                     if(hFiltHasta&&r.created_at?.slice(0,7)>hFiltHasta) return false
                     return true
-                  }).sort((a,b)=>b.created_at>a.created_at?1:-1)
-                  return renderHistorialTable(rends,true)
+                  }).sort((a,b)=>{ const cmp=(a.created_at||'')<(b.created_at||'')?1:-1; return histOrden==='antiguo'?-cmp:cmp })
+                  return renderHistorialTable(rends,true,true)
                 })()}
               </>}
               {histTab==='notaria'&&(notaLiquidaciones.length===0
                 ? <div style={{fontSize:12,color:C.muted,padding:'24px 0',textAlign:'center'}}>Sin liquidaciones a notaría.</div>
-                : <div>{notaLiquidaciones.map(r=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const est=notaEstado(r); const estLbl=est==='enviada'?'✓ Enviada':est==='por_enviar'?'Por enviar':'Pagado histórico'; const estCol=est==='enviada'?C.greenText:est==='por_enviar'?C.soonText:C.done; return (
+                : <div>{[...notaLiquidaciones].sort((a,b)=>{ const cmp=(a.created_at||'')<(b.created_at||'')?1:-1; return histOrden==='antiguo'?-cmp:cmp }).map(r=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const est=notaEstado(r); const estLbl=est==='enviada'?'✓ Enviada':est==='por_enviar'?'Por enviar':'Pagado histórico'; const estCol=est==='enviada'?C.greenText:est==='por_enviar'?C.soonText:C.done; return (
                     <div key={r.id} onClick={()=>{setShowHistorial(false);setShowNotaria(true)}} style={{display:'flex',gap:12,alignItems:'center',padding:'9px 2px',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer'}}>
                       <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div>
                       <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text}}>{r.n_gastos||0} OT{r.periodo?<span style={{color:C.done}}> · {r.periodo}</span>:''}</div><div style={{fontSize:9,color:estCol}}>{estLbl}</div></div>
