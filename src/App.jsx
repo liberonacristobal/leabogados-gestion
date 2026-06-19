@@ -14183,14 +14183,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
     if(!esConciliable(mov)) return []
     const pm=(mov.fecha||'').slice(0,7), pr=crNormRut(mov.rut_contraparte)
+    const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
+    const diaDist = iso => (payT&&iso) ? Math.abs((new Date(iso.slice(0,10)+'T12:00').getTime()-payT)/86400000) : 999
     let xs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
-      .map(b=>({b,saldo:saldoFactura(b),d:mesDiff((b.issued_at||'').slice(0,7),pm)}))
-      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.d===null||x.d<=0))
+      .map(b=>({b,saldo:saldoFactura(b),d:mesDiff((b.issued_at||'').slice(0,7),pm),dd:diaDist(b.issued_at)}))
+      // Permite factura hasta 1 mes POSTERIOR al pago (transferencia poco antes de emitirla); las anteriores sin límite.
+      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.d===null||x.d<=1))
     // Calce EXACTO en pesos (no hay comisiones bancarias → TOL=0): solo facturas con el monto idéntico.
     const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
-    return xs.sort((a,b)=>   // 1) RS del pagador, 2) mes del pago, 3) cercanía, 4) monto
+    return xs.sort((a,b)=>   // 1) RS del pagador, 2) cercanía por DÍA a la fecha de la factura, 3) monto
         ((pr&&crNormRut(b.b.receptor_rut)===pr?1:0)-(pr&&crNormRut(a.b.receptor_rut)===pr?1:0))
-        || (Math.abs(a.d==null?99:a.d)-Math.abs(b.d==null?99:b.d))
+        || (a.dd-b.dd)
         || (Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)))
       .map(x=>x.b) }
   // Mejor candidato para el AUTO: exacto+único; si hay varios del mismo monto, desempata por RS del pagador y luego mes del pago.
