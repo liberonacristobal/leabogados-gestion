@@ -13947,6 +13947,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [mesF,setMesF] = useState('todos')         // filtro por mes (01-12)
   const [respF,setRespF] = useState('todos')       // filtro por abogado responsable del cliente
   const [facChip,setFacChip] = useState(null)      // movimiento cuyo chip de factura está desplegado (Opción A)
+  const [facMyc,setFacMyc] = useState(null)        // factura del detalle "Conciliar" (multi) desplegada
   const respByCid = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); return m },[clients])
   const respDisp = useMemo(()=>[...new Set((clients||[]).map(c=>c.abogado_responsable).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')),[clients])
   const [q,setQ] = useState('')                    // búsqueda por RUT / nombre / cliente
@@ -14794,7 +14795,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {m.tipo==='cargo'&&!m.es_interno&&(()=>{
                   const gc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='gasto'&&c.gasto_id)
                   if(gc) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                    <span style={{fontSize:11,fontWeight:700,color:'#993C1D',background:'#FAECE7',borderRadius:20,padding:'2px 9px'}}>✓ Gasto por cuenta de {cmap[m.cliente_id]||'cliente'} · {fmtM(gc.monto_aplicado)} · descuenta fondo</span>
+                    <span style={{fontSize:11,fontWeight:700,color:'#993C1D',background:'#FAECE7',borderRadius:20,padding:'2px 9px'}}>→ Gasto por cuenta de {cmap[m.cliente_id]||'cliente'} · {fmtM(gc.monto_aplicado)} · descuenta fondo</span>
                     <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button></div>)
                   if((concByMov[m.id]||[]).length) return null
                   const gk=glosaKey(m.descripcion); const sugCid=gk&&cargoCliLearn[gk]?cargoCliLearn[gk]:null
@@ -14838,9 +14839,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       <div style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
                       {myConc.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:showPick?6:0}}>
                         {myConc.map(r=>{ const fe=r.tipo_destino==='fondo'?(expenses||[]).find(e=>String(e.id)===String(r.gasto_id)):null; const dev=fe&&/^(devoluci|reembolso)/i.test(fe.concept||''); const sty=r.tipo_destino==='fondo'?(dev?{color:'#DFF1F2',background:'#155E6B'}:{color:'#E1F5EE',background:'#0F6E56'}):r.tipo_destino==='anticipo'?{color:'#185FA5',background:'#E6F1FB'}:{color:'#0F6E56',background:'#E1F5EE'}; const lbl=r.tipo_destino==='anticipo'?`Saldo a Favor / Adelanto · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='gasto'?`Reembolso gastos · ${fmtM(r.monto_aplicado)}`:r.tipo_destino==='fondo'?`${dev?'Devolución':'Fondo por Rendir'} · ${fmtM(r.monto_aplicado)}`:(()=>{const f=billing.find(b=>b.id===r.factura_id);const link=!r.marco_pago&&f&&f.status==='Pagado';return `Factura N°${folioN(f?.invoice_no)||'—'} · ${fmtM(r.monto_aplicado)}${link?' · ya pagada':''}`})()
-                          return <span key={r.id} style={{fontSize:11,fontWeight:700,color:sty.color,background:sty.background,borderRadius:20,padding:'2px 9px'}}>→ {lbl}</span> })}
+                          const clickable=r.tipo_destino==='factura'&&r.factura_id
+                          return <span key={r.id} onClick={clickable?(e)=>{e.stopPropagation();setFacMyc(facMyc===r.factura_id?null:r.factura_id)}:undefined} style={{fontSize:11,fontWeight:700,color:sty.color,background:sty.background,borderRadius:20,padding:'2px 9px',cursor:clickable?'pointer':'default'}}>→ {lbl}{clickable?(facMyc===r.factura_id?' ▴':' ▾'):''}</span> })}
                         <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button>
                       </div>}
+                      {myConc.length>0&&facMyc&&myConc.some(r=>String(r.factura_id)===String(facMyc))&&(()=>{ const f=billing.find(b=>String(b.id)===String(facMyc)); if(!f) return null; const paid=f.status==='Pagado'; return (
+                        <div style={{marginBottom:6,background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 11px'}}>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>Factura N°{folioN(f.invoice_no)||'—'}</span>{paid&&<span style={{fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 8px',background:'#E1F5EE',color:'#0F6E56'}}>Pagada</span>}</div>
+                          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:'#99ABB4'}}>Concepto</span><span style={{color:C.text,fontWeight:600,maxWidth:'62%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.concept||'—'}</span></div>
+                          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:'#99ABB4'}}>Emisión</span><span style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</span></div>
+                          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:'#99ABB4'}}>Monto</span><span style={{color:C.text,fontWeight:600}}>{fmtM(f.amount)}</span></div>
+                          {f.receptor_name&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:'#99ABB4'}}>Razón social</span><span style={{color:C.text,fontWeight:600,maxWidth:'62%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.receptor_name}{f.receptor_rut?` · ${f.receptor_rut}`:''}</span></div>}
+                        </div>
+                      )})()}
                       {showPick&&<>
                         {sug&&<div style={{background:'#E6EEF1',borderRadius:8,padding:'6px 9px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
                           <span style={{fontSize:11,color:'#003C50',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sugerida: <b>Factura N°{folioN(sug.invoice_no)||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}{sug.receptor_name&&sug.receptor_name!==cmap[m.cliente_id]?` · ${String(sug.receptor_name).slice(0,16)}`:''}{saldoFactura(sug)===resto?' (exacto)':''}</span>
