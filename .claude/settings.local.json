@@ -204,7 +204,9 @@
       "Bash(python3 *)",
       "Bash(echo \"=== clients \\(1 fila, columnas\\) ===\")",
       "Bash(deno check *)",
-      "Bash(supabase --version)"
+      "Bash(supabase --version)",
+      "Bash(unzip -o -qq \"Liquidacion Notaria Lascar al 19-06-2026.xlsx\" -d _xlsx_peek)",
+      "Bash(sed 's/></>\\\\n</g' _xlsx_peek/xl/worksheets/sheet1.xml)"
     ]
   }
 }

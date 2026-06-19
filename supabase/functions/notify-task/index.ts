@@ -39,6 +39,15 @@ async function sendViaSMTP(to: string, subject: string, html: string) {
 // Envío genérico desde la cuenta de oficina, con adjunto PDF opcional y cc.
 // Lo usa el fallback de rendiciones/liquidaciones cuando el usuario no tiene permiso gmail.send.
 type MailAttachment = { base64: string; name?: string; mime?: string };
+// denomailer arma mal los "encoded-word" RFC 2047 para encabezados con tildes (asunto/From): genera un token
+// con espacios y sin plegar → rompe el bloque de encabezados y el correo entero llega como texto crudo.
+// Solución: encabezados SOLO en ASCII (tildes fuera, guiones largos → "-"). El cuerpo conserva las tildes.
+const toAscii = (s: string) =>
+  String(s || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[–—]/g, "-")
+    .replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/[^\x20-\x7E]/g, "");
 async function sendMail(
   { to, cc, subject, html, text, pdfBase64, pdfName, attachments }:
   { to: string; cc?: string; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string; attachments?: MailAttachment[] },
@@ -47,7 +56,7 @@ async function sendMail(
     connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } },
   });
   try {
-    const msg: Record<string, unknown> = { from: `Gestión LE <${GMAIL_USER}>`, to, subject };
+    const msg: Record<string, unknown> = { from: `Gestion LE <${GMAIL_USER}>`, to, subject: toAscii(subject) };
     if (cc) msg.cc = cc;
     if (html) msg.html = html;
     msg.content = text || (html ? "Ver el contenido en formato HTML." : subject);

@@ -7655,10 +7655,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Junto con saludar, adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${esc(periodo)}, junto con el comprobante de la transferencia por el total.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${total.toLocaleString('es-CL')}</td></tr></table><div style="font-size:13px;color:#666666;margin:16px 0 0">Quedamos atentos a cualquier observación.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">Liberona Escala Abogados</b></div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
       const texto='Estimados,\n\nJunto con saludar, adjuntamos la liquidación de las OT que estamos pagando correspondientes a '+periodo+', junto con el comprobante de la transferencia por el total.\n\n'+gs.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTotal transferido: $'+total.toLocaleString('es-CL')+'\n\nQuedamos atentos a cualquier observación.\nSaludos cordiales,\nLiberona Escala Abogados'
       const subjectNota=`Liquidación de gastos y comprobante de transferencia — Liberona Escala Abogados — ${periodo}`
-      let pdf=null; try{ pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:gs,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){}
+      const fechaLiq=fmtFechaDMY(r.created_at)
+      // Detalle a la notaría = Excel formateado. Si por algo falla, cae a PDF para no quedar sin detalle.
+      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs,clients,titulo:`Liquidación Notaría Lascar al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
+      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:gs,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){} }
       const ext = compMime.includes('pdf')?'pdf':(compMime.includes('png')?'png':(compMime.includes('jpeg')||compMime.includes('jpg')?'jpg':'dat'))
       const adjuntos=[]
-      if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion Notaria Lascar al ${fmtFechaDMY(r.created_at)}.pdf`, mime:'application/pdf'})
+      if(xls) adjuntos.push({base64:xls, name:`Liquidacion Notaria Lascar al ${fechaLiq}.xlsx`, mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+      else if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion Notaria Lascar al ${fechaLiq}.pdf`, mime:'application/pdf'})
       adjuntos.push({base64:compB64, name:`Comprobante transferencia.${ext}`, mime:compMime})
       let sent=false
       try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
@@ -7684,13 +7688,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Excel de una liquidación: OT · descripción · costo (lo que pidió el usuario, en ese orden).
   const descargarExcelNota = async(r) => {
     try{
-      const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)).sort((a,b)=>(a.ot_number||'')>(b.ot_number||'')?1:-1)
+      const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
       if(!gs.length){ alert('Esta liquidación no tiene gastos vivos para exportar.'); return }
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const rows=gs.map(e=>[fmtOt(e.ot_number), e.concept||'—', clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente', e.amount||0])
-      const ws=XLSX.utils.aoa_to_sheet([['OT','Descripción','Cliente','Costo'],...rows,['','','TOTAL',gs.reduce((a,e)=>a+(e.amount||0),0)]])
-      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
       const fecha=fmtFechaDMY(r.created_at)||new Date().toISOString().slice(0,10)
+      const total=gs.reduce((a,e)=>a+(e.amount||0),0)
+      const XLSX=await loadXLSXStyle()
+      const ws=buildLiquidacionExcelWS(XLSX,{gastos:gs,clients,titulo:`Liquidación Notaría Lascar al ${fecha}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`})
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
       XLSX.writeFile(wb,`Liquidacion Notaria Lascar al ${fecha}.xlsx`.replace(/[^\w .-]/g,''))
     }catch(e){ alert('No se pudo generar el Excel: '+e.message) }
   }
@@ -8149,7 +8153,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
               </div>
               {reservadoC>0&&<div style={{fontSize:10,color:'#185FA5',background:'#E6F1FB',padding:'4px 13px',borderBottom:`1px solid ${C.border}`}}>Otros gastos por pagar: {fmt(reservadoC)}</div>}
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'5px 13px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:10.5,color:exc?'#A32D2D':C.muted,fontWeight:exc?600:400}}>Permitir adelanto{exc?' · activado':''}</span><Switch on={exc} onToggle={()=>setExcepNota(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})}/></div>
+              {/* "Permitir adelanto" solo cuando el cliente NO cubre con su saldo (o ya está activado, para poder apagarlo). Si cubre, no aplica. */}
+              {(!cubre||exc)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'5px 13px',borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:10.5,color:exc?'#A32D2D':C.muted,fontWeight:exc?600:400}}>Permitir adelanto{exc?' · activado':''}</span><Switch on={exc} onToggle={()=>setExcepNota(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})}/></div>}
               {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gs.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede) })}
             </div>
           )})}
@@ -11151,6 +11156,43 @@ async function liquidacionPdfBase64({me, periodo, gastos, clients, titulo}){
   doc.setFont('helvetica','bold'); doc.text(me||'', 40, y); y+=14
   doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
   return doc.output('datauristring').split(',')[1]
+}
+// xlsx-js-style: fork de SheetJS que SÍ escribe estilos de celda (colores, bordes, moneda). El xlsx plano no.
+async function loadXLSXStyle(){ const m=await import('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/+esm'); return m.utils?m:(m.default||m) }
+// Hoja de liquidación de notaría con formato corporativo: título navy, encabezados, bordes, zebra y moneda CLP.
+function buildLiquidacionExcelWS(XLSX, {gastos, clients, titulo, sub}){
+  const NAVY='003C50', WHITE='FFFFFF', LINE='E4E8EB', ZEBRA='F5F7F9', TXT='3D3D3D', MUT='537281', AZ='185FA5'
+  const fmtOt = ot => ot?(String(ot).toUpperCase().startsWith('OT')?ot:'OT-'+ot):'—'
+  const gs=[...gastos].sort((a,b)=>(a.ot_number||'')>(b.ot_number||'')?1:-1)
+  const rows=gs.map(e=>[fmtOt(e.ot_number), e.concept||'—', clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente', e.amount||0])
+  const total=gs.reduce((a,e)=>a+(e.amount||0),0)
+  const ws=XLSX.utils.aoa_to_sheet([[titulo,'','',''],[sub||'','','',''],['OT','Descripción','Cliente','Costo'],...rows,['','','Total',total]])
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:3}},{s:{r:1,c:0},e:{r:1,c:3}}]
+  ws['!cols']=[{wch:15},{wch:56},{wch:24},{wch:15}]
+  ws['!rows']=[{hpt:28},{hpt:16},{hpt:20}]
+  const bd={top:{style:'thin',color:{rgb:LINE}},bottom:{style:'thin',color:{rgb:LINE}},left:{style:'thin',color:{rgb:LINE}},right:{style:'thin',color:{rgb:LINE}}}
+  const S=(addr,s)=>{ if(ws[addr]) ws[addr].s=s }
+  S('A1',{font:{bold:true,sz:14,color:{rgb:WHITE}},fill:{patternType:'solid',fgColor:{rgb:NAVY}},alignment:{horizontal:'left',vertical:'center'}})
+  S('A2',{font:{sz:10,italic:true,color:{rgb:MUT}},alignment:{horizontal:'left',vertical:'center'}})
+  ;['A3','B3','C3','D3'].forEach((a,i)=>S(a,{font:{bold:true,sz:11,color:{rgb:WHITE}},fill:{patternType:'solid',fgColor:{rgb:NAVY}},alignment:{horizontal:i===3?'right':'left',vertical:'center'},border:bd}))
+  const n=rows.length
+  for(let i=0;i<n;i++){ const r=4+i; const z=i%2===1?{fill:{patternType:'solid',fgColor:{rgb:ZEBRA}}}:{}
+    S('A'+r,{font:{sz:10,bold:true,color:{rgb:AZ}},alignment:{horizontal:'left',vertical:'center'},border:bd,...z})
+    S('B'+r,{font:{sz:10,color:{rgb:TXT}},alignment:{horizontal:'left',vertical:'center',wrapText:true},border:bd,...z})
+    S('C'+r,{font:{sz:10,color:{rgb:MUT}},alignment:{horizontal:'left',vertical:'center'},border:bd,...z})
+    const d='D'+r; if(ws[d]){ ws[d].t='n'; ws[d].z='"$"#,##0'; ws[d].s={font:{sz:10,color:{rgb:TXT}},numFmt:'"$"#,##0',alignment:{horizontal:'right',vertical:'center'},border:bd,...z} }
+  }
+  const tr=4+n
+  S('C'+tr,{font:{bold:true,sz:11,color:{rgb:TXT}},alignment:{horizontal:'right',vertical:'center'},border:{top:{style:'medium',color:{rgb:NAVY}}}})
+  const dt='D'+tr; if(ws[dt]){ ws[dt].t='n'; ws[dt].z='"$"#,##0'; ws[dt].s={font:{bold:true,sz:12,color:{rgb:NAVY}},numFmt:'"$"#,##0',alignment:{horizontal:'right',vertical:'center'},border:{top:{style:'medium',color:{rgb:NAVY}}}} }
+  return ws
+}
+// Excel de liquidación en base64 (para adjuntar al correo de la notaría).
+async function liquidacionExcelB64({gastos, clients, titulo, sub}){
+  const XLSX=await loadXLSXStyle()
+  const ws=buildLiquidacionExcelWS(XLSX,{gastos,clients,titulo,sub})
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
+  return XLSX.write(wb,{bookType:'xlsx',type:'base64'})
 }
 // Envío desde la CUENTA DE OFICINA vía edge function (SMTP). Fallback cuando el usuario no tiene
 // el permiso gmail.send: la rendición/liquidación se envía igual, con el PDF adjunto.
