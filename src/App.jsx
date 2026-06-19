@@ -14545,7 +14545,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       return {t:'→ Conciliado', c:'#0F6E56', bg:'#E1F5EE'}
     }
     if(m.estado==='parcial') return {t:`Parcial · resta ${fmtM((m.monto||0)-(m.monto_conciliado||0))}`, c:'#C77F18', bg:'#FFF8E1'}
-    if(m.categoria){ const s=TAG_STY[m.categoria]||{bg:'#F1EFE8',color:'#5F5E5A'}; return {t:m.categoria==='Devolución'?'← Devolución':m.categoria, c:s.color, bg:s.bg} }
+    if(m.categoria){ const s=TAG_STY[m.categoria]||{bg:'#F1EFE8',color:'#5F5E5A'}; const ct=m.categoria==='Devolución'?'← Devolución':m.categoria==='Provisión de gastos'?'Fondo por Rendir':m.categoria; return {t:ct, c:s.color, bg:s.bg} }
     if(m.tipo==='abono') return m.cliente_id ? {t:'Por conciliar', c:'#C77F18', bg:'#FFF8E1'} : {t:'Sin identificar', c:'#A35200', bg:'#FCEBEB'}
     return {t:'Sin clasificar', c:'#537281', bg:'#F1EFE8'}
   }
@@ -14775,7 +14775,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           : <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:10,color:'#C77F18',fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Identificar</button>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
                         {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}
-                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c; return (
+                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
                           tagFor===m.id
                             ? <>{cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{tagTxt(c)}</button>})}{m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}<button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button></>
                             : m.categoria
@@ -14857,7 +14857,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga dos facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?'#003C50':'#E6EEF1',color:comboFor===m.id?'#fff':'#003C50',border:'none'}}>Paga 2 facturas{comboFor===m.id?' ▴':' ▾'}</button>}
                           {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Factura N°{folioN(fmg.factura.invoice_no)||'—'} + {fmtM(fmg.excess)} gastos</button>}
                           <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Saldo a Favor | Adelanto</button>
-                          <button disabled={busy===m.id} onClick={()=>setCategoria(m,'Provisión de gastos')} title='No es honorario: es una provisión de gastos del cliente' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Provisión</button>
+                          <button disabled={busy===m.id} onClick={()=>setCategoria(m,'Provisión de gastos')} title='No es honorario: es una provisión de gastos del cliente' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Fondo por Rendir</button>
                           <button disabled={busy===m.id} onClick={()=>devolucionGastos(m)} title='El cliente devuelve un gasto que el estudio adelantó (corrige su saldo)' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Devolución de gastos</button>
                         </div>
                         {combo&&comboFor===m.id&&(()=>{ const tot=combo.reduce((s,f)=>s+saldoFactura(f),0); return (
