@@ -7420,6 +7420,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [rendicionClient,setRendicionClient] = useState(null)
   const [rendEdit,setRendEdit] = useState(null)   // rendición en edición (abre RendicionModal en modo edición)
   const [showHistorial,setShowHistorial] = useState(false)
+  const [histTab,setHistTab] = useState('clientes')   // historial: 'clientes' (rendiciones) | 'notaria' (liquidaciones)
   const [emailRend,setEmailRend] = useState(null)
   const [hFiltCliente,setHFiltCliente] = useState('')
   const [hFiltDesde,setHFiltDesde] = useState('')
@@ -7991,7 +7992,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
-                  {showHistorial?'Historial de rendiciones':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
+                  {showHistorial?'Historial':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
                 </span>
                 {selectedClient&&onSaveClientFields&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; const pc=cur?personChip(cur):null; return (
                   <button onClick={()=>setRespPickG(v=>!v)} style={{fontSize:10,background:pc?pc.bg:'#F1EFE8',color:pc?pc.color:C.grisText,borderRadius:10,padding:'2px 9px',fontWeight:600,border:'none',cursor:'pointer'}}>{cur?`${cur} ▾`:'+ responsable ▾'}</button>
@@ -8015,8 +8016,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial de rendiciones' aria-label='Historial de rendiciones' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
-            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),background:notaBtnOpen?C.soon:C.ambarBg,color:notaBtnOpen?'#fff':C.soonText,border:'1px solid #C77F18'}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial' aria-label='Historial' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
+            {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),fontWeight:500,background:notaBtnOpen?C.tealText:C.tealBg,color:notaBtnOpen?'#fff':C.tealText,border:`1px solid ${C.tealText}`}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaMenuOpen(o=>!o);setNotaBtnOpen(false)}} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
             {selectedClient&&!showNotaria&&!showHistorial&&<button onClick={()=>onAddFondo(selectedClient)} style={chipBtn('green')}>+ Fondo</button>}
             {selectedClient&&!showNotaria&&!showHistorial&&<button onClick={()=>onAdd(selectedClient)} style={chipBtn('primary')}>+ Gastos</button>}
@@ -8035,8 +8036,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {/* Botón Notaría (visible) — liquidar y carga de notaría */}
         {!selectedClient&&!showOrphans&&!showNotaria&&notaBtnOpen&&(
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',marginBottom:8}}>
-            <button onClick={()=>{setNotaBtnOpen(false);setShowNotaria(true)}} style={{...chipBtn('soft'),background:C.ambarBg,color:C.soonText,border:'1px solid #C77F18'}}>Liquidar notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
-            <button onClick={()=>{setNotaBtnOpen(false);onBulk(true)}} style={{...chipBtn('soft'),background:C.ambarBg,color:C.soonText,border:'1px solid #C77F18'}}>Cargar Excel notaría</button>
+            <button onClick={()=>{setNotaBtnOpen(false);setShowNotaria(true)}} style={{...chipBtn('soft'),fontWeight:500,background:C.tealBg,color:C.tealText,border:`1px solid ${C.tealText}`}}>Liquidar Notaría{notariaPend.length?` · ${notariaPend.length}`:''}</button>
+            <button onClick={()=>{setNotaBtnOpen(false);onBulk(true)}} style={{...chipBtn('soft'),fontWeight:500,background:C.tealBg,color:C.tealText,border:`1px solid ${C.tealText}`}}>Carga masiva</button>
           </div>
         )}
 
@@ -8404,24 +8405,38 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           })()}
           {showHistorial&&(
             <div style={{padding:'2px 0 0'}}>
-              <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
-                <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
-                  <option value=''>Todos los clientes</option>
-                  {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
-                </select>
-                <input type='month' value={hFiltDesde} onChange={e=>setHFiltDesde(e.target.value)} placeholder='Desde' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
-                <input type='month' value={hFiltHasta} onChange={e=>setHFiltHasta(e.target.value)} placeholder='Hasta' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
-              </div>
-              {(()=>{
-                const rends=(rendiciones||[]).filter(r=>{
-                  if(r.tipo!=='cliente') return false
-                  if(hFiltCliente&&r.client_id!==hFiltCliente) return false
-                  if(hFiltDesde&&r.created_at?.slice(0,7)<hFiltDesde) return false
-                  if(hFiltHasta&&r.created_at?.slice(0,7)>hFiltHasta) return false
-                  return true
-                }).sort((a,b)=>b.created_at>a.created_at?1:-1)
-                return renderHistorialTable(rends,true)
-              })()}
+              {/* Pestañas: separa rendiciones a CLIENTES de liquidaciones a NOTARÍA */}
+              {(()=>{ const tab=(id,lbl)=>{ const on=histTab===id; return <button onClick={()=>setHistTab(id)} style={{fontSize:13,fontWeight:500,background:on?C.accent:'#fff',color:on?'#fff':C.muted,border:`1px solid ${on?C.accent:C.border}`,borderRadius:20,padding:'6px 16px',cursor:'pointer'}}>{lbl}</button> }
+                return <div style={{display:'flex',gap:6,marginBottom:14}}>{tab('clientes','Clientes')}{tab('notaria',`Notaría${notaLiquidaciones.length?` · ${notaLiquidaciones.length}`:''}`)}</div> })()}
+              {histTab==='clientes'&&<>
+                <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
+                  <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
+                    <option value=''>Todos los clientes</option>
+                    {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
+                  </select>
+                  <input type='month' value={hFiltDesde} onChange={e=>setHFiltDesde(e.target.value)} placeholder='Desde' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
+                  <input type='month' value={hFiltHasta} onChange={e=>setHFiltHasta(e.target.value)} placeholder='Hasta' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
+                </div>
+                {(()=>{
+                  const rends=(rendiciones||[]).filter(r=>{
+                    if(r.tipo!=='cliente') return false
+                    if(hFiltCliente&&r.client_id!==hFiltCliente) return false
+                    if(hFiltDesde&&r.created_at?.slice(0,7)<hFiltDesde) return false
+                    if(hFiltHasta&&r.created_at?.slice(0,7)>hFiltHasta) return false
+                    return true
+                  }).sort((a,b)=>b.created_at>a.created_at?1:-1)
+                  return renderHistorialTable(rends,true)
+                })()}
+              </>}
+              {histTab==='notaria'&&(notaLiquidaciones.length===0
+                ? <div style={{fontSize:12,color:C.muted,padding:'24px 0',textAlign:'center'}}>Sin liquidaciones a notaría.</div>
+                : <div>{notaLiquidaciones.map(r=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const est=notaEstado(r); const estLbl=est==='enviada'?'✓ Enviada':est==='por_enviar'?'Por enviar':'Pagado histórico'; const estCol=est==='enviada'?C.greenText:est==='por_enviar'?C.soonText:C.done; return (
+                    <div key={r.id} onClick={()=>{setShowHistorial(false);setShowNotaria(true)}} style={{display:'flex',gap:12,alignItems:'center',padding:'9px 2px',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+                      <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text}}>{r.n_gastos||0} OT{r.periodo?<span style={{color:C.done}}> · {r.periodo}</span>:''}</div><div style={{fontSize:9,color:estCol}}>{estLbl}</div></div>
+                      <div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',textAlign:'right',whiteSpace:'nowrap'}}>{fmt(r.total)}</div>
+                    </div>) })}</div>
+              )}
             </div>
           )}
         </div>
