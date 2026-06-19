@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-19 — Notaría: 3 ajustes (destinatarios, saludo del correo, botones del historial)
+- Destinatarios: el destino (To) de la notaría se blinda — nunca puede ser una dirección @leabogados.cl (esas van solo en Cc). Filtra y auto-repara el valor guardado en localStorage/learnings (quedaba sobrescrito tras editar el campo en una prueba) y cae al default (sdelgado@notarialascar.cl, sdanotaria@gmail.com) si quedara vacío.
+- Correo: el "Estimados," ahora coincide con el cuerpo (14px, mismo gris) en los correos de notaría (enviar y reenviar); antes iba 16px y más oscuro.
+- Historial: las liquidaciones a notaría en Historial muestran los mismos botones que en Liquidar Notaría (Excel, Enviar a notaría, Reenviar, Ver comprobante, Añadir gastos, Deshacer). El selector "Añadir gastos" se extrajo a una función única reutilizada en ambas vistas.
+
 ## 2026-06-19 — Login: centrado óptico del bloque
 - El bloque de bienvenida (Bienvenido a / logo / FirmDesk / botón) se veía un poco bajo el centro por el espacio en blanco interno del PNG del logo. Se sube ópticamente con padding inferior mayor + boxSizing (sin scroll en mobile).
 
