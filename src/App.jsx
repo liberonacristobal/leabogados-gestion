@@ -14727,8 +14727,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:18,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:'#99ABB4'}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
                   <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
+                    {mostrarCli&&<><span title='Cliente' style={{fontSize:11,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'44%'}}>{cliName}</span><span style={{color:C.border,fontSize:12}}>|</span></>}
                     <span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF===m.rol_cuenta?'ambas':m.rol_cuenta)}} title='Filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color,cursor:'pointer'}}>{rc.t}</span>
-                    {mostrarCli&&<span title='Cliente' style={{fontSize:9,fontWeight:700,color:C.muted,background:'#F1EFE8',borderRadius:10,padding:'1px 8px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'46%'}}>{cliName}</span>}
                     <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                   </div>
                   <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomBanco}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#A32D2D',background:'#FCEBEB',borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</div>
@@ -14747,8 +14747,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   )})()}
                   </div>
                 </div>
-                {abierto&&(<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:7,lineHeight:1.5}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:'#185FA5',cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
+                {abierto&&(<div style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:5,lineHeight:1.45}}><b>Glosa:</b> {verGlosa?(m.descripcion||'—'):`${(m.descripcion||'—').slice(0,70)}${(m.descripcion||'').length>70?'…':''}`} {(m.descripcion||'').length>70?<span onClick={()=>setVerGlosa(v=>!v)} style={{color:'#185FA5',cursor:'pointer'}}>{verGlosa?'ver menos':'ver más'}</span>:null}{m.n_operacion?` · N° op. ${m.n_operacion}`:''}</div>
                 {m.es_interno&&(()=>{ const o=origenInterno(m); if(!o) return null; const c=o.cand; const nom=c.cliente_id?cmap[c.cliente_id]:(c.nombre_contraparte||'movimiento sin nombre'); const cta=c.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
                   return o.exact
                     ? <div style={{fontSize:11,color:C.accent,marginBottom:4}}>↔ origen: <b>{nom}</b> · abono en {cta} <span style={{color:C.greenText,fontWeight:600}}>(monto exacto)</span></div>
@@ -14905,7 +14905,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     </div>
                   )
                 })()}
-                {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9.5,color:'#99ABB4',marginTop:8,borderTop:`1px solid #F1F1F1`,paddingTop:6,lineHeight:1.6}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo por Rendir':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
+                {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9.5,color:'#99ABB4',marginTop:6,borderTop:`1px solid #F1F1F1`,paddingTop:4,lineHeight:1.4}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo por Rendir':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
                 </div>)}
               </div>
             )
