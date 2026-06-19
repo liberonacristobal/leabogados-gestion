@@ -50,6 +50,9 @@ const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDi
 const fmtShort = n => { const a=Math.abs(n||0), s=n<0?'-':''; if(a>=1000000) return s+'$'+(a/1000000).toFixed(a>=10000000?0:1).replace('.',',')+'M'; if(a>=1000) return s+'$'+Math.round(a/1000)+'K'; return s+'$'+a.toLocaleString('es-CL') }
 // UF abreviada para KPIs (UF 9.800 / UF 6.309), sin decimales para no recargar.
 const fmtUFk = n => `UF ${Math.round(n||0).toLocaleString('es-CL')}`
+// UF de respaldo (CLP) cuando no hay valor UF del día (ufHoy) ni congelado en la venta (uf_value).
+// Fuente única — nunca hardcodear 40000 suelto en una conversión (divergiría si cambia el respaldo).
+const UF_FALLBACK = 40000
 // Categoría legible para rendiciones (documento al cliente). Abreviaturas internas → nombre completo.
 const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c==='Notaría')?'Notaría Lascar':(c||'Otro')
 // Fecha DD-MM-AAAA a partir de un ISO 'AAAA-MM-DD'
@@ -1685,7 +1688,7 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
   const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   const data = useMemo(()=>{
     const arr = Array.from({length:12},(_,i)=>({mes:MESES[i], uf:0, clp:0}))
-    const ufConv = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
+    const ufConv = ufHoy || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
     sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada').forEach(s=>{
       const esRec = s.cobro_type==='mensual' && s.status==='Activo'
       // Monto mensual de esta venta en UF y CLP
@@ -1712,8 +1715,8 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
   const totalCLP = data.reduce((a,m)=>a+m.clp,0)
   // Ingreso recurrente: ventas mensuales recurrentes activas
   const recurrentes = sales.filter(s=>s.cobro_type==='mensual'&&s.status==='Activo')
-  const recUF = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||40000; const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0); return a+uf },0)
-  const recCLP = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||40000; const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref); return a+clp },0)
+  const recUF = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||UF_FALLBACK; const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0); return a+uf },0)
+  const recCLP = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||UF_FALLBACK; const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref); return a+clp },0)
   const [sel,setSel] = useState(null)
   // Formato compacto para la etiqueta sobre cada barra
   const compact = m => {
@@ -1767,7 +1770,7 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
             {openRec&&(
               <div style={{marginTop:8}}>
                 {[...recurrentes].map(s=>{
-                  const uref=ufHoy||s.uf_value||40000
+                  const uref=ufHoy||s.uf_value||UF_FALLBACK
                   const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref)
                   const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0)
                   const cn=clients.find(c=>String(c.id)===String(s.client_id))?.name||'—'
@@ -2075,7 +2078,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const ufState = useUF()
   const ufHoy = ufState.uf
 
-  const ufRef = ufHoy || salesYr.find(s=>s.uf_value)?.uf_value || 40000
+  const ufRef = ufHoy || salesYr.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
   // Calculo centralizado: delega a funciones de modulo (single source of truth)
   const esRec = s => esRecurrente(s)
   const ufDeVenta = s => ventaUF(s, ufRef)
@@ -2958,7 +2961,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const [q,setQ] = useState('')
   const ufState = useUF()
   const ufHoy = ufState.uf
-  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
+  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
   const filtered = useMemo(()=>{
     let r = sales
     // Búsqueda libre: si hay texto, busca por título de venta o nombre de cliente e ignora el filtro de estado.
@@ -6142,7 +6145,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const pagado = histo.filter(t=>t.estado==='pagado').reduce((a,t)=>a+(t.monto||0),0)
   const estLbl = {pendiente:['Pendiente','#99ABB4','#F5F7F9'],por_pagar:['Por pagar',C.accent,'#E6EEF1'],pagado:['Pagado',C.normal,'#E1F5EE']}
   // Ventas en que participa el proveedor (agrupa sus terceros por venta). "Su parte" = suma de sus cuentas de esa venta.
-  const ufRef = ufHoy || 40000
+  const ufRef = ufHoy || UF_FALLBACK
   const ventasInv = sel ? [...new Set(histo.map(t=>t.sale_id).filter(Boolean))].map(sid=>{
     const sale = (sales||[]).find(s=>String(s.id)===String(sid)); if(!sale) return null
     const ts = histo.filter(t=>String(t.sale_id)===String(sid))
@@ -10180,7 +10183,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
   const [respPick,setRespPick] = useState(false)   // asignar/cambiar abogado responsable desde el encabezado
   const ufState = useUF()
-  const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || 40000
+  const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
   const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
@@ -11923,7 +11926,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
 function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
   const {uf:ufHoy} = useUF()
   // Misma fuente de verdad que el Dashboard: ventaUF anualiza recurrentes y convierte CLP→UF.
-  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || 40000
+  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
   const esRec = s => esRecurrente(s)
   const costoVentaUF = s => ((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1)) + (s.moneda==='CLP'&&s.cost_clp&&ufRef>0 ? (parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1) : 0)
   const [sections,setSections] = useState({ventas:true,cobranza:true,gastos:true,tareas:false})
