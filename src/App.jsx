@@ -14355,6 +14355,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(!mov.cliente_id){ alert('Identifica el cliente antes de registrar la devolución.'); return }
     const resto=(mov.monto||0)-(mov.monto_conciliado||0)
     if(resto<=0){ alert('Esta transferencia ya está totalmente conciliada.'); return }
+    // #4: si ya existe un fondo igual sin respaldo, ofrecer vincular ese (no duplicar).
+    const exD = fondoExistente(mov, resto)
+    if(exD && window.confirm(`Este cliente ya tiene un fondo de ${fmtM(exD.amount||0)}${exD.date?' del '+fmtFechaDMY(exD.date):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese fondo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){
+      await vincularFondo(mov, exD.id, resto); return
+    }
     setBusy(mov.id)
     let fondo=null, cr=null
     try{
@@ -14388,6 +14393,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); alert('Error al crear saldo a favor: '+e.message) }
     setBusy(null)
   }
+  // #4 — Evitar duplicar fondos: ¿el cliente ya tiene un fondo del mismo monto SIN respaldo bancario (cargado a mano,
+  // no enlazado a ninguna conciliación, y que NO lo creó este flujo)? Si sí, se ofrece VINCULAR ese en vez de crear uno nuevo.
+  const fondoExistente = (mov, monto) => {
+    const cid = mov.cliente_id; if(!cid) return null
+    const linked = new Set(conc.filter(c=>c.tipo_destino==='fondo'&&c.gasto_id).map(c=>String(c.gasto_id)))
+    return (expenses||[]).find(e=> e.type==='fondo' && String(e.client_id)===String(cid) && Math.abs((e.amount||0)-monto)<=TOL && !linked.has(String(e.id)) && !/conciliaci[oó]n bancaria/i.test(e.concept||'')) || null
+  }
+  // Vincula un fondo YA existente (sin respaldo) a este movimiento, sin crear uno nuevo.
+  const vincularFondo = async(mov, fondoId, monto) => {
+    setBusy(mov.id)
+    try{
+      const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondoId, monto_aplicado:monto, origen:'manual' }).select().single()
+      if(ic.error) throw ic.error
+      const nuevoConc=(mov.monto_conciliado||0)+monto
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
+      if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); throw me }
+      setConc(p=>[...p,ic.data]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x))
+    }catch(e){ alert('Error al vincular el fondo: '+e.message) }
+    setBusy(null)
+  }
   // Fase 3.A — Provisión → fondo: acredita el abono al fondo del cliente (crea expenses type='fondo'), enlazado y reversible.
   const crearFondoProvision = async(mov)=>{
     if(busy) return
@@ -14396,6 +14421,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     // de la transferencia. Si no, una transferencia "factura + fondo" se contaría doble.
     const resto = (mov.monto||0) - (mov.monto_conciliado||0)
     if(resto<=0){ alert('Esta transferencia ya está totalmente conciliada.'); return }
+    // #4: si ya existe un fondo igual sin respaldo, ofrecer vincular ese (no duplicar).
+    const ex = fondoExistente(mov, resto)
+    if(ex && window.confirm(`Este cliente ya tiene un fondo de ${fmtM(ex.amount||0)}${ex.date?' del '+fmtFechaDMY(ex.date):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese fondo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){
+      await vincularFondo(mov, ex.id, resto); return
+    }
     setBusy(mov.id)
     let fondo=null, cr=null
     try{
@@ -14473,9 +14503,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const { error:ae } = await supabase.from('anticipos').delete().eq('id',r.anticipo_id); if(ae) throw ae
           setAnticipos&&setAnticipos(p=>p.filter(a=>String(a.id)!==String(r.anticipo_id)))
         } else if((r.tipo_destino==='fondo'||r.tipo_destino==='gasto') && r.gasto_id){
-          // Provisión (fondo) o gasto por cuenta del cliente (3.D): borra el expenses que se había creado.
-          const { error:fe } = await supabase.from('expenses').delete().eq('id',r.gasto_id); if(fe) throw fe
-          setExpenses&&setExpenses(p=>p.filter(x=>String(x.id)!==String(r.gasto_id)))
+          // 'gasto' (3.D) y los 'fondo' CREADOS por conciliación se borran. Un fondo VINCULADO (manual preexistente, #4) solo se desenlaza.
+          const exp=(expenses||[]).find(x=>String(x.id)===String(r.gasto_id))
+          const creadoAqui = r.tipo_destino==='gasto' || (exp && /conciliaci[oó]n bancaria/i.test(exp.concept||''))
+          if(creadoAqui){ const { error:fe } = await supabase.from('expenses').delete().eq('id',r.gasto_id); if(fe) throw fe
+            setExpenses&&setExpenses(p=>p.filter(x=>String(x.id)!==String(r.gasto_id))) }
         }
         const { error:de } = await supabase.from('conciliacion').delete().eq('id',r.id); if(de) throw de
       }
