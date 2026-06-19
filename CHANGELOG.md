@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · Tanda 2 (cierre: dedup fechas + barrido parseInt/UF)
+- Dedup: 5 helpers de fecha locales (fmtDMY/dmy) ahora delegan al global fmtFechaDMY. Salida idéntica.
+- Dinero: 6 formateadores locales con parseInt (n/fmtCLP0/fmt0) → global fmt. Enteros idénticos; decimales redondean (antes truncaban); negativos con signo -$ correcto.
+- UF: las UF sueltas pasan a fmtUF (prefijo "UF X", el canon); celdas de Excel intactas.
+
 ## 2026-06-19 — Fase 3 · Tanda 2 (formatos de fecha y dinero)
 - Fechas de timestamp (created_at/sent_at): nuevo helper fmtFechaTS = fecha LOCAL en DD-MM-AAAA, aplicado en 6 sitios. Evita el bug de zona horaria de cortar el ISO en UTC (corría el día en registros nocturnos) y unifica el formato.
 - Dinero: consolidados 3 helpers locales divergentes (fmtN/fmt/fmtM) al formateador global fmt (Intl). Positivos idénticos; negativos corrigen el signo 569Xl1.234 → -.234. Sin cambio de valor ni de color.

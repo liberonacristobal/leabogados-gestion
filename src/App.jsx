@@ -2624,7 +2624,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
         const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-        const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
+        const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
         // Una cuenta por pagar solo es deuda real si su factura existe (no borrada) y no está anulada. Las pagadas se conservan en el histórico.
         const billOk = bid => { if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }
         const porPagarTot = (terceros||[]).filter(t=>t.estado==='por_pagar'&&billOk(t.billing_id)).reduce((a,t)=>a+(t.monto||0),0)
@@ -2790,7 +2790,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const prov=payGroup.prov
         const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
         const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-        const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
+        const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
         const subtit = [prov?.razon_social?.trim(), prov?.rut].filter(Boolean).join(' · ')
         const copiar=()=>{ if(prov?.datos_pago){ navigator.clipboard?.writeText(prov.datos_pago); } }
         const marcar=async()=>{ setPayingNow(true); const r=await onPagarTercerosBulk(payGroup.cuentas.map(t=>t.id),{pagado_at:payFecha,referencia:payRef,factura_numero:payDoc,factura_fecha:payDocF}); setPayingNow(false); if(r) setPayGroup(null) }
@@ -4764,7 +4764,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [pagando,setPagando] = useState(false)
   const [payDate,setPayDate] = useState('')
   const [inclTerceros,setInclTerceros] = useState(true)   // al pagar la factura ancla: ¿el pago incluyó los terceros?
-  const fmtDMY = iso => { if(!iso) return '—'; const p=iso.slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:iso }
+  const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
   const [openClients,setOpenClients] = useState(()=>new Set())
   const toggleClient = id => setOpenClients(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
   const collapseAll = () => setOpenClients(new Set())
@@ -4862,7 +4862,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   }
   // Unificado a "convertir": la cuota programada pasa a emitida (Pendiente de cobro), no se borra.
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
-  const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${ui.uf.toLocaleString('es-CL',{maximumFractionDigits:2})} UF = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(confirm(msg)) await emitirConRS(b) }
+  const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(confirm(msg)) await emitirConRS(b) }
   const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
 
   const [descargando,setDescargando] = useState(false)
@@ -4982,7 +4982,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const confirmarEmitida = async(b) => {
     const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
     const ent = emitEnt ? ents.find(e=>e.id===emitEnt) : (ents.length===1?ents[0]:null)
-    const ui=ufInfoDe(b); if(ui && !confirm(`Emitir por ${ui.uf.toLocaleString('es-CL',{maximumFractionDigits:2})} UF = ${fmt(ui.clpHoy)} (UF de hoy)?`)) return
+    const ui=ufInfoDe(b); if(ui && !confirm(`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy)?`)) return
     await onEmitir(b, ent||null)
     setEmitiendo(null); setEmitEnt('')
   }
@@ -5260,7 +5260,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:(b.concept||'—')}</div>
-                  <div style={{fontSize:9.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`${b.concept||'—'} · `:''}{fmtDate(kpiDate(b))}{ui?` · ${ui.uf.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:''}</div>
+                  <div style={{fontSize:9.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`${b.concept||'—'} · `:''}{fmtDate(kpiDate(b))}{ui?` · ${fmtUF(ui.uf)}`:''}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:col}}>{er}{ui?' · UF hoy':''}</div></div>
               </div>
@@ -5425,7 +5425,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                           {rs.name&&<div style={{fontSize:10,color:C.muted,marginTop:1,letterSpacing:.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>}
                           <div style={{fontSize:12,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
                           <div style={{fontSize:11,color:C.muted,marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
-                            <span>{esCLP?'—':(ufEq?`UF ${ufEq.toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}`:'—')}</span>
+                            <span>{esCLP?'—':fmtUF(ufEq)}</span>
                             <span>Vence {fmtDate(b.due)}</span>
                           </div>
                           {emitiendo===b.id ? (
@@ -5516,8 +5516,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
 function printComprobante(bill, clientName){
   if(!bill) return
   const A='#003C50', MUT='#537281', GRAY='#E4E8EB', TXT='#3D3D3D'
-  const n=v=>'$'+(parseInt(v)||0).toLocaleString('es-CL')
-  const dmy=iso=>{ if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:'—' }
+  const n=v=>fmt(Number(v)||0)   // formateador CLP único (global fmt)
+  const dmy = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
   const row=(l,v)=>`<tr><td style='padding:8px 0;color:${MUT};width:160px;vertical-align:top'>${l}</td><td style='padding:8px 0;font-weight:600'>${v}</td></tr>`
   const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Comprobante ${bill.invoice_no||''}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:12px;background:#fff}.page{max-width:816px;margin:0 auto}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:16px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Comprobante de cobro</div>${bill.invoice_no?`<div style='font-size:11px;opacity:.85;margin-top:2px'>N° ${bill.invoice_no}</div>`:''}</div></div><div style='padding:24px 26px'><table style='width:100%;border-collapse:collapse;font-size:12px'>${row('Cliente', clientName||'—')}${bill.receptor_name?row('Razón social', bill.receptor_name+(bill.receptor_rut?` · ${bill.receptor_rut}`:'')):''}${row('Concepto', bill.concept||'—')}${row('Monto', n(bill.amount))}${row('Estado', bill.status||'—')}${row('Emisión', dmy(bill.issued_at))}${bill.status==='Pagado'?row('Fecha de pago', dmy(bill.paid_at)):row('Vencimiento', dmy(bill.due))}${bill.notes?row('Notas', bill.notes):''}</table><div style='margin-top:26px;padding-top:12px;border-top:1px solid ${GRAY};font-size:10px;color:${MUT};display:flex;justify-content:space-between'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago</span><span>Documento interno — no es el DTE del SII</span></div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
   const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
@@ -5764,7 +5764,7 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none'}
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-  const fmtCLP0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const fmtCLP0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const pill = on => ({fontSize:12,padding:'5px 12px',borderRadius:20,cursor:'pointer',border:on?'1px solid #003C50':`0.5px solid ${C.border}`,background:on?'#E6EEF1':'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
   const canSave = f.client_id && f.proyecto?.trim() && (parseInt(f.monto)||0)>0
   const guardar = () => onSave({...f, entity_id:f.entity_id||null})
@@ -5868,7 +5868,7 @@ function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,
 // Cubrir cuotas programadas con un anticipo. Sugiere por monto (consume desde la 1ª) y se puede ajustar a mano.
 function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,onClose}) {
   const cliente = clients.find(c=>String(c.id)===String(anticipo.client_id))
-  const fmtDMY = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
+  const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
   const cuotas = (billing||[]).filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&(anticipo.sale_id?String(b.sale_id)===String(anticipo.sale_id):String(b.client_id)===String(anticipo.client_id)))
     .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
   const autoSel = () => { const ids=new Set(); let acc=0; const m=anticipo.monto||0; for(const c of cuotas){ if(acc>=m) break; ids.add(c.id); acc+=c.amount||0 } return ids }
@@ -6015,7 +6015,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
   const [f,setF] = useState({nombre:'',razon_social:'',rut:'',datos_pago:''})
   const {uf:ufHoy} = useUF()
   const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-  const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const billOk = bid => { if(!bid) return true; const b=(billing||[]).find(x=>String(x.id)===String(bid)); return !!b && b.status!=='Anulada' }
@@ -8460,7 +8460,7 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
   useEffect(()=>{ if(!selectedClient||clientSales.length===0) return; const s=[...clientSales].sort((a,b)=>String(b.created_at||b.date||'').localeCompare(String(a.created_at||a.date||'')))[0]; setF(p=>p.sale_id||p.project?p:{...p,sale_id:s.id,project:s.title||''}) },[selectedClient,clientSales])
   const balance = selectedClient ? expenses.reduce((b,e)=> e.client_id===selectedClient.id ? b+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) : b, 0) : null
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-  const fmtCLP0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const fmtCLP0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const flabel={fontSize:10,fontWeight:600,color:'#99ABB4',letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:'#3D3D3D',background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none'}
@@ -12821,7 +12821,7 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   const norm = s => String(s??'').toLowerCase().trim()
   const normRut = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
   const inp = {width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
-  const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const fmtD = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
   const dueFromIssued = iso => { if(!iso) return null; const d=new Date(iso+'T12:00'); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10) }
   // Pagada sin fecha de pago: se asume pagada a los 20 días de emitida (criterio del estudio).
@@ -13376,7 +13376,7 @@ function PapeleraModal({clients=[],onClose,onChanged}){
     }catch(e){alert('Error: '+e.message)}
     setBusy(false)
   }
-  const fmt0 = n => '$'+(parseInt(n)||0).toLocaleString('es-CL')
+  const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const seccion = (tipo,titulo,rows,label) => (
     <div style={{marginBottom:16}}>
       <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{titulo} {rows.length>0&&`· ${rows.length}`}</div>
