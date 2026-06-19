@@ -14769,19 +14769,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         </div>
                       </div>
                     : <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,flexWrap:'wrap',fontSize:11}} onClick={e=>e.stopPropagation()}>
+                        {/* Cliente como chip gris-borde (igual al header): tocar = editar/cambiar cliente */}
                         {cliName
-                          ? <span style={{color:C.greenText,fontWeight:600}}>{cliName}</span>
-                          : <span style={{color:'#C77F18',fontWeight:600}}>Sin identificar</span>}
+                          ? <span onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} title='Tocar para editar / cambiar cliente' style={{fontWeight:500,color:C.muted,border:`1px solid ${C.border}`,borderRadius:3,padding:'1px 8px',background:'#fff',cursor:'pointer'}}>{cliName}</span>
+                          : <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:'#C77F18',fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Identificar</button>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
-                        <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'Editar':'Identificar'}</button>
-                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; return (<>
-                          <span style={{color:C.border}}>·</span>
-                          {tagFor===m.id
-                            ? <>{cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{c}</button>})}{m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}<button onClick={()=>setTagFor(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button></>
-                            : (m.tipo==='cargo'&&!cat
-                                ? <><button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Gastos Oficina</button><button onClick={()=>setTagFor(m.id)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button></>
-                                : <button onClick={()=>setTagFor(m.id)} style={{fontSize:11,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'Cambiar tag':(m.tipo==='abono'?'¿Provisión de gastos?':'+ Clasificar')}</button>)}
-                        </>)})()}
+                        {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}
+                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c; return (
+                          tagFor===m.id
+                            ? <>{cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{tagTxt(c)}</button>})}{m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}<button onClick={()=>setTagFor(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button></>
+                            : m.categoria
+                              ? (()=>{ const t=TAG_STY[m.categoria]||{bg:'#F1EFE8',color:'#5F5E5A'}; return <button onClick={()=>setTagFor(m.id)} title='Tocar para cambiar categoría' style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{tagTxt(m.categoria)}</button> })()
+                              : (m.tipo==='cargo'
+                                  ? <><button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Gastos Oficina</button><button onClick={()=>setTagFor(m.id)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button></>
+                                  : null)
+                        )})()}
                       </div>
                 )}
                 {/* Fase 3.D — Cargo por cuenta de un cliente: registra un gasto que descuenta su fondo (reversible, aprende glosa→cliente) */}
@@ -14813,7 +14815,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {m.tipo==='abono'&&!m.es_interno&&m.categoria==='Provisión de gastos'&&(()=>{
                   const fc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='fondo')
                   if(fc) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                    <span style={{fontSize:11,fontWeight:700,color:'#155E6B',background:'#DFF1F2',borderRadius:20,padding:'2px 9px'}}>Fondo por Rendir · {fmtM(fc.monto_aplicado)}</span>
+                    <span style={{fontSize:11,fontWeight:700,color:'#155E6B',background:'#DFF1F2',borderRadius:20,padding:'2px 9px'}}>Fondo por Rendir <span style={{color:'#9FE1CB',fontWeight:400}}>|</span> {fmtM(fc.monto_aplicado)}</span>
                     <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button></div>)
                   if(!m.cliente_id) return (<div style={{marginTop:5,fontSize:10,color:C.muted}}>Identifica el cliente para acreditar el fondo.</div>)
                   return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
