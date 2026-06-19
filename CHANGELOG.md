@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: centrado óptico del bloque
+- El bloque de bienvenida (Bienvenido a / logo / FirmDesk / botón) se veía un poco bajo el centro por el espacio en blanco interno del PNG del logo. Se sube ópticamente con padding inferior mayor + boxSizing (sin scroll en mobile).
+
 ## 2026-06-19 — Fix: la ventana ya no se cierra sola (recarga por refresco de token)
 - La app se recargaba entera (con spinner) cada vez que Supabase refrescaba el token o al volver el foco a la pestaña, porque el efecto de carga dependía de la identidad del objeto `session`. Eso desmontaba la UI y te sacaba de donde estabas (ej. liquidando notaría → de vuelta a la pantalla de Gastos).
 - Ahora el efecto depende del usuario (`session.user.id`): refresco de token / foco con el mismo usuario ya no recargan nada. Además el spinner de pantalla completa solo aparece en la primera carga (`booted`); recargas posteriores no desmontan la UI.
