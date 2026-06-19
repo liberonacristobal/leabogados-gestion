@@ -13948,6 +13948,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [respF,setRespF] = useState('todos')       // filtro por abogado responsable del cliente
   const [facChip,setFacChip] = useState(null)      // movimiento cuyo chip de factura está desplegado (Opción A)
   const [facMyc,setFacMyc] = useState(null)        // factura del detalle "Conciliar" (multi) desplegada
+  const [devolFor,setDevolFor] = useState(null)    // 3.B: movimiento con el checklist de gastos de devolución abierto
+  const [devolSel,setDevolSel] = useState(()=>new Set())  // gastos tildados para reembolsar
   const respByCid = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); return m },[clients])
   const respDisp = useMemo(()=>[...new Set((clients||[]).map(c=>c.abogado_responsable).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')),[clients])
   const [q,setQ] = useState('')                    // búsqueda por RUT / nombre / cliente
@@ -14287,6 +14289,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const reembGastoByCliente = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.tipo_destino==='gasto'){ const cid=cidByMov[c.movimiento_id]; if(cid) m[cid]=(m[cid]||0)+(c.monto_aplicado||0) } }); return m },[conc,cidByMov])
   // Gastos pendientes de reembolso del cliente = (gastos − fondos del ledger) − lo ya reembolsado por conciliación.
   const gastoPend = cid => Math.max(0, -saldoCliente(expenses, cid) - (reembGastoByCliente[cid]||0))
+  // 3.B — gastos del cliente AÚN no reembolsados (candidatos a marcar en una devolución), del más antiguo al más nuevo.
+  const gastosReembolsables = cid => (expenses||[]).filter(e=> e.type!=='fondo' && String(e.client_id)===String(cid) && !e.reembolso_fondo_id && !e.deleted_at).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
   // Caso "factura + gastos": el abono excede una factura y el exceso ≈ los gastos pendientes del cliente (reembolso junto a honorarios).
   const facturaMasGastos = (mov) => { if(!esConciliable(mov)) return null
     const pend = gastoPend(mov.cliente_id); if(pend<=0) return null
@@ -14350,7 +14354,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   }
   // Devolución de gastos (abono que es 100% reembolso de un gasto que el estudio adelantó): crea un fondo por el
   // resto no aplicado (corrige el saldo del cliente). Mismo motor que la provisión, con concepto "Devolución".
-  const devolucionGastos = async(mov)=>{
+  // 3.B — marca los gastos elegidos como reembolsados por este fondo (trazabilidad fina).
+  const marcarGastosReembolsados = async(fondoId, gastoIds)=>{
+    if(!fondoId || !gastoIds || !gastoIds.length) return
+    try{
+      await supabase.from('expenses').update({ reembolso_fondo_id:fondoId }).in('id', gastoIds)
+      setExpenses&&setExpenses(p=>p.map(e=>gastoIds.includes(e.id)?{...e,reembolso_fondo_id:fondoId}:e))
+    }catch(_){}
+  }
+  const devolucionGastos = async(mov, gastoIds)=>{
     if(busy) return
     if(!mov.cliente_id){ alert('Identifica el cliente antes de registrar la devolución.'); return }
     const resto=(mov.monto||0)-(mov.monto_conciliado||0)
@@ -14358,7 +14370,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     // #4: si ya existe un fondo igual sin respaldo, ofrecer vincular ese (no duplicar).
     const exD = fondoExistente(mov, resto)
     if(exD && window.confirm(`Este cliente ya tiene un fondo de ${fmtM(exD.amount||0)}${exD.date?' del '+fmtFechaDMY(exD.date):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese fondo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){
-      await vincularFondo(mov, exD.id, resto); return
+      await vincularFondo(mov, exD.id, resto); await marcarGastosReembolsados(exD.id, gastoIds); setDevolFor(null); return
     }
     setBusy(mov.id)
     let fondo=null, cr=null
@@ -14370,7 +14382,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const nuevoConc=(mov.monto_conciliado||0)+resto
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
       if(me) throw me
-      setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x))
+      await marcarGastosReembolsados(fondo.id, gastoIds)
+      setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x)); setDevolFor(null)
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); alert('Error al registrar devolución: '+e.message) }
     setBusy(null)
   }
@@ -14503,6 +14516,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const { error:ae } = await supabase.from('anticipos').delete().eq('id',r.anticipo_id); if(ae) throw ae
           setAnticipos&&setAnticipos(p=>p.filter(a=>String(a.id)!==String(r.anticipo_id)))
         } else if((r.tipo_destino==='fondo'||r.tipo_destino==='gasto') && r.gasto_id){
+          // 3.B: si este fondo había marcado gastos como reembolsados, libéralos (reembolso_fondo_id → null).
+          const marcados=(expenses||[]).filter(x=>String(x.reembolso_fondo_id)===String(r.gasto_id)).map(x=>x.id)
+          if(marcados.length){ await supabase.from('expenses').update({reembolso_fondo_id:null}).eq('reembolso_fondo_id',r.gasto_id)
+            setExpenses&&setExpenses(p=>p.map(x=>marcados.includes(x.id)?{...x,reembolso_fondo_id:null}:x)) }
           // 'gasto' (3.D) y los 'fondo' CREADOS por conciliación se borran. Un fondo VINCULADO (manual preexistente, #4) solo se desenlaza.
           const exp=(expenses||[]).find(x=>String(x.id)===String(r.gasto_id))
           const creadoAqui = r.tipo_destino==='gasto' || (exp && /conciliaci[oó]n bancaria/i.test(exp.concept||''))
@@ -14913,8 +14930,27 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Factura N°{folioN(fmg.factura.invoice_no)||'—'} + {fmtM(fmg.excess)} gastos</button>}
                           <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Saldo a Favor | Adelanto</button>
                           <button disabled={busy===m.id} onClick={()=>crearFondoProvision(m)} title='Acredita el resto al fondo por rendir del cliente (no toca la factura ya conciliada)' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Fondo por Rendir</button>
-                          <button disabled={busy===m.id} onClick={()=>devolucionGastos(m)} title='El cliente devuelve un gasto que el estudio adelantó (corrige su saldo)' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Devolución de gastos</button>
+                          <button disabled={busy===m.id} onClick={()=>{ const gs=gastosReembolsables(m.cliente_id); if(!gs.length){ devolucionGastos(m); return } const resto=(m.monto||0)-(m.monto_conciliado||0); let acc=0; const sel=new Set(); for(const g of gs){ if(acc>=resto) break; sel.add(g.id); acc+=(g.amount||0) } setDevolSel(sel); setDevolFor(devolFor===m.id?null:m.id) }} title='El cliente devuelve gastos que el estudio adelantó (corrige su saldo)' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:'#993C1D',border:'none'}}>Devolución de gastos{devolFor===m.id?' ▴':''}</button>
                         </div>
+                        {devolFor===m.id&&(()=>{ const gs=gastosReembolsables(m.cliente_id); const resto=(m.monto||0)-(m.monto_conciliado||0); const sum=gs.filter(g=>devolSel.has(g.id)).reduce((a,g)=>a+(g.amount||0),0); return (
+                          <div onClick={e=>e.stopPropagation()} style={{marginBottom:6,background:'#FAFBFC',border:'1px solid #F0997B',borderRadius:9,padding:'9px 11px'}}>
+                            <div style={{fontSize:10,fontWeight:700,color:'#993C1D',marginBottom:6}}>¿Qué gastos cubre esta devolución de {fmtM(resto)}? <span style={{fontWeight:400,color:C.muted}}>(opcional · marca trazabilidad)</span></div>
+                            {gs.map(g=>{ const on=devolSel.has(g.id); const cn=clients.find(c=>String(c.id)===String(g.client_id))?.name||''; return (
+                              <div key={g.id} onClick={()=>setDevolSel(p=>{const n=new Set(p);n.has(g.id)?n.delete(g.id):n.add(g.id);return n})} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer',fontSize:10.5}}>
+                                <span style={{width:15,height:15,borderRadius:4,border:`2px solid ${on?'#993C1D':C.border}`,background:on?'#993C1D':'#fff',color:'#fff',fontSize:9,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>{on?'✓':''}</span>
+                                <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.category&&g.category!=='Otro'?<b style={{color:'#185FA5'}}>{g.category} </b>:''}{g.concept||'—'} <span style={{color:'#99ABB4'}}>· {g.date?fmtFechaDMY(g.date):''}</span></span>
+                                <span style={{fontWeight:600,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(g.amount)}</span>
+                              </div>) })}
+                            {gs.length===0&&<div style={{fontSize:10,color:C.muted}}>Este cliente no tiene gastos pendientes de reembolsar.</div>}
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:7,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
+                              <span style={{fontSize:10,color:C.muted}}>Marcas <b style={{color:'#993C1D'}}>{fmtM(sum)}</b> de {fmtM(resto)}{sum>resto?' · excede':''}</span>
+                              <div style={{display:'flex',gap:6}}>
+                                <button onClick={()=>{setDevolFor(null);setDevolSel(new Set())}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+                                <button disabled={busy===m.id} onClick={()=>devolucionGastos(m,[...devolSel])} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#993C1D',color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Acreditar devolución {fmtM(resto)}</button>
+                              </div>
+                            </div>
+                          </div>
+                        )})()}
                         {combo&&comboFor===m.id&&(()=>{ const tot=combo.reduce((s,f)=>s+saldoFactura(f),0); return (
                           <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:6,borderLeft:`2px solid #99ABB4`,paddingLeft:8}}>
                             {combo.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliar(m,f,'manual')}} title='Conciliar solo esta factura' style={{textAlign:'left',fontSize:11,color:C.text,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer'}}>Factura N°{folioN(f.invoice_no)||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,28)} · <b>{fmtM(saldoFactura(f))}</b></button>))}
