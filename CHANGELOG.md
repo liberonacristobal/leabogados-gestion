@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · alineación incremental: mini-KPI de ficha
+- Cifra de las mini-KPI densas de la ficha (Por cobrar / Saldo fondos / A favor) de 15px (fuera de escala) a 13px (en escala, tier denso). No se sube a 17 para no desbordar montos grandes en iPhone.
+
 ## 2026-06-19 — Fase 3 · Tanda 4 (paleta → objeto C)
 - Canonizados 6 colores que estaban fuera de C: azulInfo (#185FA5), azulBg (unifica #E6F1FB y #E6EEF1 en uno), tealBg/tealText, ambarBg/coralText, grisText.
 - Reemplazados cientos de hex literales por su token de C (C.accent/C.muted/C.done/etc.) en valores de estilo JSX y ternarios — mismo valor, fuente única. Patrón anclado en : / ? para no tocar atributos SVG ni strings HTML de correo/PDF (esos quedan literales a propósito).
