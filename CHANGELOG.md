@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-19 — Correo servidor: encabezados ASCII (MIME ya no se rompe)
+- Auditoría: los correos del fallback de servidor (denomailer) llegaban como texto crudo, sin adjuntos. Causa: denomailer arma mal el "encoded-word" RFC 2047 del Asunto/From con tildes (token con espacios, sin plegar) → rompe el bloque de encabezados y el cliente muestra todo el MIME literal. Fix: encabezados (Asunto + nombre remitente) solo en ASCII; el cuerpo conserva las tildes. Requiere deploy de `notify-task`.
+
+## 2026-06-19 — Notaría · Excel con formato + "Permitir adelanto" condicional
+- El Excel de liquidación (descarga y adjunto al correo de la notaría) ahora va formateado: título navy, encabezados, bordes, filas zebra y montos en CLP. Usa `xlsx-js-style`. El correo a la notaría adjunta el Excel como detalle (con PDF de respaldo si el Excel fallara).
+- "Permitir adelanto" en los pendientes de notaría solo se muestra cuando el cliente NO cubre con su saldo (o si ya está activado, para poder apagarlo). Si cubre, no aparece.
+
 ## 2026-06-18 — Notaría · liquidar (guardar) → enviar con comprobante
 - "Liquidar" ahora solo GUARDA la liquidación como **Por enviar** (sin correo). Se mantienen los chequeos de fondos/adelanto. El modal ya no pide correo.
 - Nuevo paso **Enviar a notaría** (bottom sheet) desde el registro: muestra el **total a transferir**, deja **adjuntar el comprobante de transferencia** del banco (imagen/PDF, sube a Drive) y el correo de la notaría. Al enviar, el correo lleva **2 adjuntos** (detalle PDF + comprobante) y marca la liquidación **Enviada ✓** (guarda `comprobante_url`, con enlace "Ver comprobante").
