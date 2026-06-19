@@ -7554,9 +7554,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [notaConfirm,setNotaConfirm] = useState(false)
   // Correos por defecto de la notaría (Lascar): se precargan siempre; si el equipo guarda otros, esos mandan.
   const NOTARIA_DEFAULT = 'sdelgado@notarialascar.cl, sdanotaria@gmail.com'
-  const [notaEmail,setNotaEmail] = useState(()=>{ try{return localStorage.getItem('notaria_email')||NOTARIA_DEFAULT}catch(_){return NOTARIA_DEFAULT} })
+  // El destino de la notaría NUNCA debe ser una dirección @leabogados.cl (el estudio va en Cc). Filtra esas y, si queda vacío, usa el default. Auto-repara valores guardados erróneos (p.ej. tras una prueba).
+  const cleanNotaDest = s => String(s||'').split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
+  const [notaEmail,setNotaEmail] = useState(()=>{ try{return cleanNotaDest(localStorage.getItem('notaria_email'))||NOTARIA_DEFAULT}catch(_){return NOTARIA_DEFAULT} })
   // Correo(s) de la notaría: compartido para todo el equipo (no solo este dispositivo). Lo guardado manda sobre el localStorage.
-  useEffect(()=>{ supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaEmail(v) },()=>{}) },[])
+  useEffect(()=>{ supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=cleanNotaDest(data&&data[0]&&data[0].value); if(v) setNotaEmail(v) },()=>{}) },[])
   const [notaSend,setNotaSend] = useState(null)   // rendición en el sheet "Enviar a notaría" (o null)
   const [compFile,setCompFile] = useState(null)   // comprobante de transferencia adjunto (File)
   const [notaResp,setNotaResp] = useState(null)   // filtro de pendientes por abogado responsable del cliente ('__sin__'=sin responsable)
@@ -7646,7 +7648,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const notaEstado = r => r.estado_envio || (r.sent_at?'enviada':'pagado')
   // Paso 2: enviar a la notaría el detalle + el comprobante de transferencia (ya transferiste). Marca 'enviada'.
   const enviarNotaria = async(r) => {
-    const dest=(notaEmail||'').trim()
+    const dest=cleanNotaDest(notaEmail)||NOTARIA_DEFAULT
     if(!dest){ alert('Falta el correo de la notaría.'); return }
     if(!compFile){ alert('Adjunta el comprobante de transferencia.'); return }
     setNotaSending(true)
@@ -7669,7 +7671,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       // Correo (texto aprobado): detalle + comprobante.
       const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       const filas=gs.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
-      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Junto con saludar, adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${esc(periodo)}, junto con el comprobante de la transferencia por el total.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${total.toLocaleString('es-CL')}</td></tr></table><div style="font-size:13px;color:#1a1a1a;margin:14px 0 0;padding:10px 12px;background:#E6F1FB;border-radius:8px">Las boletas correspondientes deben emitirse a nombre de <b>Liberona Escala Abogados Limitada</b>, RUT <b>77.700.387-9</b>.</div><div style="font-size:13px;color:#666666;margin:16px 0 0">Quedamos atentos a cualquier observación.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">Liberona Escala Abogados</b></div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#666666;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Junto con saludar, adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${esc(periodo)}, junto con el comprobante de la transferencia por el total.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${total.toLocaleString('es-CL')}</td></tr></table><div style="font-size:13px;color:#1a1a1a;margin:14px 0 0;padding:10px 12px;background:#E6F1FB;border-radius:8px">Las boletas correspondientes deben emitirse a nombre de <b>Liberona Escala Abogados Limitada</b>, RUT <b>77.700.387-9</b>.</div><div style="font-size:13px;color:#666666;margin:16px 0 0">Quedamos atentos a cualquier observación.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">Liberona Escala Abogados</b></div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
       const texto='Estimados,\n\nJunto con saludar, adjuntamos la liquidación de las OT que estamos pagando correspondientes a '+periodo+', junto con el comprobante de la transferencia por el total.\n\n'+gs.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTotal transferido: $'+total.toLocaleString('es-CL')+'\n\nLas boletas correspondientes deben emitirse a nombre de Liberona Escala Abogados Limitada, RUT 77.700.387-9.\n\nQuedamos atentos a cualquier observación.\nSaludos cordiales,\nLiberona Escala Abogados'
       const subjectNota=`Liquidación de gastos y comprobante de transferencia — Liberona Escala Abogados — ${periodo}`
       const fechaLiq=fmtFechaDMY(r.created_at)
@@ -7695,7 +7697,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Reenvía una liquidación YA enviada: regenera el detalle y recupera el comprobante guardado en Drive. Cualquiera del equipo puede.
   // OJO: el cuerpo (html/texto) debe mantenerse en sync con enviarNotaria.
   const reenviarNotaria = async(r) => {
-    const dest=(notaEmail||'').trim()
+    const dest=cleanNotaDest(notaEmail)||NOTARIA_DEFAULT
     if(!dest){ alert('Falta el correo de la notaría.'); return }
     const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
     if(!gs.length){ alert('Esta liquidación no tiene gastos vivos para reenviar.'); return }
@@ -7708,7 +7710,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       const fechaLiq=fmtFechaDMY(r.created_at)
       const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       const filas=gs.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
-      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Junto con saludar, adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${esc(periodo)}, junto con el comprobante de la transferencia por el total.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${total.toLocaleString('es-CL')}</td></tr></table><div style="font-size:13px;color:#1a1a1a;margin:14px 0 0;padding:10px 12px;background:#E6F1FB;border-radius:8px">Las boletas correspondientes deben emitirse a nombre de <b>Liberona Escala Abogados Limitada</b>, RUT <b>77.700.387-9</b>.</div><div style="font-size:13px;color:#666666;margin:16px 0 0">Quedamos atentos a cualquier observación.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">Liberona Escala Abogados</b></div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#666666;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Junto con saludar, adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${esc(periodo)}, junto con el comprobante de la transferencia por el total.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${total.toLocaleString('es-CL')}</td></tr></table><div style="font-size:13px;color:#1a1a1a;margin:14px 0 0;padding:10px 12px;background:#E6F1FB;border-radius:8px">Las boletas correspondientes deben emitirse a nombre de <b>Liberona Escala Abogados Limitada</b>, RUT <b>77.700.387-9</b>.</div><div style="font-size:13px;color:#666666;margin:16px 0 0">Quedamos atentos a cualquier observación.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">Liberona Escala Abogados</b></div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
       const texto='Estimados,\n\nJunto con saludar, adjuntamos la liquidación de las OT que estamos pagando correspondientes a '+periodo+', junto con el comprobante de la transferencia por el total.\n\n'+gs.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTotal transferido: $'+total.toLocaleString('es-CL')+'\n\nLas boletas correspondientes deben emitirse a nombre de Liberona Escala Abogados Limitada, RUT 77.700.387-9.\n\nQuedamos atentos a cualquier observación.\nSaludos cordiales,\nLiberona Escala Abogados'
       const subjectNota=`Liquidación de gastos y comprobante de transferencia — Liberona Escala Abogados — ${periodo}`
       let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs,clients,titulo:`Liquidación Notaría Lascar al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
@@ -8009,6 +8011,52 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   ) : null
   // Separa gastos rendidos al cliente (client_rendered_at) y los muestra en una sección "Rendidos" colapsada (fuera de activos).
   const esRendido = e => e.type!=='fondo' && !!e.client_rendered_at
+  // Selector «añadir gastos a notaría» (agrupado por cliente con fondos). Único: se reutiliza en Liquidar Notaría y en Historial.
+  const addPicker = (r) => {
+                    // Selector agrupado por cliente: solo clientes con fondos disponibles (la oficina se cubre sola), replegados, con buscador.
+                    const byCli={}; notariaPend.forEach(e=>{ if(!e.client_id) return; (byCli[e.client_id]=byCli[e.client_id]||[]).push(e) })
+                    let grupos=Object.entries(byCli).map(([cid,items])=>{ const {disp,oficina:esOf}=dispCliente(cid); const cli=clients.find(c=>String(c.id)===String(cid)); return { cid, cli, items, total:items.reduce((a,e)=>a+(e.amount||0),0), disp, esOf, fecha:items.reduce((m,e)=>(e.date||'')>m?(e.date||''):m,'') } }).filter(g=> g.esOf || g.disp>0)
+                    const q=_normTxt(addSearch)
+                    if(q) grupos=grupos.map(g=>{ const cmatch=_normTxt(g.cli?.name).includes(q)||_normTxt(g.cli?.abogado_responsable).includes(q); const items=cmatch?g.items:g.items.filter(e=>_normTxt(e.concept).includes(q)||_normTxt(fmtOt(e.ot_number)).includes(q)); return {...g,items,_open:!cmatch} }).filter(g=>g.items.length>0)
+                    grupos.sort((a,b)=>a.fecha<b.fecha?1:-1)
+                    const selTot=notariaPend.filter(e=>addSel.has(e.id)).reduce((a,e)=>a+(e.amount||0),0)
+                    return (
+                    <div style={{marginTop:8,background:'#F5F7F9',borderRadius:8,padding:10}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:20,padding:'0 11px',height:31,marginBottom:9}}>
+                        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+                        <input value={addSearch} onChange={ev=>setAddSearch(ev.target.value)} placeholder='Buscar cliente, OT o trámite' style={{flex:1,border:'none',background:'none',outline:'none',fontSize:12,color:C.text}}/>
+                        {addSearch&&<span onClick={()=>setAddSearch('')} style={{color:C.done,fontSize:16,cursor:'pointer',lineHeight:1}}>×</span>}
+                      </div>
+                      {grupos.length===0
+                        ? <div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'14px 0'}}>{addSearch?'Sin resultados.':'No hay clientes con fondos disponibles.'}</div>
+                        : <>
+                          <div style={{fontSize:9,color:C.muted,fontWeight:600,letterSpacing:.3,marginBottom:7}}>{grupos.length} CLIENTE{grupos.length!==1?'S':''} CON FONDOS · TOCA PARA VER SUS GASTOS</div>
+                          {grupos.map(g=>{ const open=g._open||addOpenCli.has(g.cid); const cn=g.cli?.name||'Cliente'; const ab=g.cli?.abogado_responsable; return (
+                            <div key={g.cid} style={{background:'#fff',border:`0.5px solid ${open?C.done:C.border}`,borderRadius:9,padding:'10px 12px',marginBottom:6}}>
+                              <div onClick={()=>setAddOpenCli(p=>{const n=new Set(p);n.has(g.cid)?n.delete(g.cid):n.add(g.cid);return n})} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cn}</div>
+                                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{ab?ab+' · ':''}{g.items.length} OT · {fmt(g.total)}</div>
+                                </div>
+                                {g.esOf
+                                  ? <div style={{fontSize:11,fontWeight:600,color:C.greenText,flexShrink:0}}>se cubre sola</div>
+                                  : <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Disponible</div><div style={{fontSize:13,fontWeight:600,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(g.disp)}</div></div>}
+                                <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .15s'}}><polyline points='6 9 12 15 18 9'/></svg>
+                              </div>
+                              {open&&<div style={{marginTop:9,paddingTop:8,borderTop:`0.5px solid ${C.border}`,display:'flex',flexDirection:'column',gap:9}}>
+                                {g.items.map(e=>{ const on=addSel.has(e.id); return (
+                                  <div key={e.id} onClick={()=>setAddSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
+                                    <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+                                    <span style={{color:C.azulInfo,fontWeight:600,width:58,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
+                                    <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                                    <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
+                                  </div>) })}
+                              </div>}
+                            </div>
+                          )})}
+                        </>}
+                      <button disabled={addSel.size===0} onClick={()=>anadirGastosNota(r,[...addSel])} style={{width:'100%',marginTop:4,fontSize:13,fontWeight:600,background:addSel.size?C.accent:C.done,color:'#fff',border:'none',borderRadius:9,padding:11,cursor:addSel.size?'pointer':'default'}}>{addSel.size?`Añadir ${addSel.size} OT · ${fmt(selTot)}`:'Selecciona gastos'}</button>
+                    </div>) }
   const rendidosBlock = (key,rend) => { if(!rend.length) return null; const open=rendOpen.has(key); const tot=rend.reduce((a,e)=>a+(e.amount||0),0); return (
     <div style={{marginTop:6}}>
       <div onClick={()=>setRendOpen(p=>{const n=new Set(p);n.has(key)?n.delete(key):n.add(key);return n})} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 4px',cursor:'pointer',borderTop:`1px solid ${C.border}`}}>
@@ -8320,51 +8368,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set());setAddSearch('');setAddOpenCli(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir gastos'}</button>}
                     <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Deshacer</button>
                   </div>
-                  {adding&&(()=>{
-                    // Selector agrupado por cliente: solo clientes con fondos disponibles (la oficina se cubre sola), replegados, con buscador.
-                    const byCli={}; notariaPend.forEach(e=>{ if(!e.client_id) return; (byCli[e.client_id]=byCli[e.client_id]||[]).push(e) })
-                    let grupos=Object.entries(byCli).map(([cid,items])=>{ const {disp,oficina:esOf}=dispCliente(cid); const cli=clients.find(c=>String(c.id)===String(cid)); return { cid, cli, items, total:items.reduce((a,e)=>a+(e.amount||0),0), disp, esOf, fecha:items.reduce((m,e)=>(e.date||'')>m?(e.date||''):m,'') } }).filter(g=> g.esOf || g.disp>0)
-                    const q=_normTxt(addSearch)
-                    if(q) grupos=grupos.map(g=>{ const cmatch=_normTxt(g.cli?.name).includes(q)||_normTxt(g.cli?.abogado_responsable).includes(q); const items=cmatch?g.items:g.items.filter(e=>_normTxt(e.concept).includes(q)||_normTxt(fmtOt(e.ot_number)).includes(q)); return {...g,items,_open:!cmatch} }).filter(g=>g.items.length>0)
-                    grupos.sort((a,b)=>a.fecha<b.fecha?1:-1)
-                    const selTot=notariaPend.filter(e=>addSel.has(e.id)).reduce((a,e)=>a+(e.amount||0),0)
-                    return (
-                    <div style={{marginTop:8,background:'#F5F7F9',borderRadius:8,padding:10}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:20,padding:'0 11px',height:31,marginBottom:9}}>
-                        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
-                        <input value={addSearch} onChange={ev=>setAddSearch(ev.target.value)} placeholder='Buscar cliente, OT o trámite' style={{flex:1,border:'none',background:'none',outline:'none',fontSize:12,color:C.text}}/>
-                        {addSearch&&<span onClick={()=>setAddSearch('')} style={{color:C.done,fontSize:16,cursor:'pointer',lineHeight:1}}>×</span>}
-                      </div>
-                      {grupos.length===0
-                        ? <div style={{fontSize:11,color:C.muted,textAlign:'center',padding:'14px 0'}}>{addSearch?'Sin resultados.':'No hay clientes con fondos disponibles.'}</div>
-                        : <>
-                          <div style={{fontSize:9,color:C.muted,fontWeight:600,letterSpacing:.3,marginBottom:7}}>{grupos.length} CLIENTE{grupos.length!==1?'S':''} CON FONDOS · TOCA PARA VER SUS GASTOS</div>
-                          {grupos.map(g=>{ const open=g._open||addOpenCli.has(g.cid); const cn=g.cli?.name||'Cliente'; const ab=g.cli?.abogado_responsable; return (
-                            <div key={g.cid} style={{background:'#fff',border:`0.5px solid ${open?C.done:C.border}`,borderRadius:9,padding:'10px 12px',marginBottom:6}}>
-                              <div onClick={()=>setAddOpenCli(p=>{const n=new Set(p);n.has(g.cid)?n.delete(g.cid):n.add(g.cid);return n})} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cn}</div>
-                                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{ab?ab+' · ':''}{g.items.length} OT · {fmt(g.total)}</div>
-                                </div>
-                                {g.esOf
-                                  ? <div style={{fontSize:11,fontWeight:600,color:C.greenText,flexShrink:0}}>se cubre sola</div>
-                                  : <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Disponible</div><div style={{fontSize:13,fontWeight:600,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(g.disp)}</div></div>}
-                                <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .15s'}}><polyline points='6 9 12 15 18 9'/></svg>
-                              </div>
-                              {open&&<div style={{marginTop:9,paddingTop:8,borderTop:`0.5px solid ${C.border}`,display:'flex',flexDirection:'column',gap:9}}>
-                                {g.items.map(e=>{ const on=addSel.has(e.id); return (
-                                  <div key={e.id} onClick={()=>setAddSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
-                                    <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
-                                    <span style={{color:C.azulInfo,fontWeight:600,width:58,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
-                                    <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
-                                    <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
-                                  </div>) })}
-                              </div>}
-                            </div>
-                          )})}
-                        </>}
-                      <button disabled={addSel.size===0} onClick={()=>anadirGastosNota(r,[...addSel])} style={{width:'100%',marginTop:4,fontSize:13,fontWeight:600,background:addSel.size?C.accent:C.done,color:'#fff',border:'none',borderRadius:9,padding:11,cursor:addSel.size?'pointer':'default'}}>{addSel.size?`Añadir ${addSel.size} OT · ${fmt(selTot)}`:'Selecciona gastos'}</button>
-                    </div>) })()}
+                  {adding&&addPicker(r)}
                 </div>}
               </div>
             )})}
@@ -8524,9 +8528,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       {r.ot_numbers&&<div style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginBottom:7}}>OT: {r.ot_numbers}</div>}
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                         <button onClick={e=>{e.stopPropagation();descargarExcelNota(r)}} style={{fontSize:11,fontWeight:500,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>↓ Excel</button>
-                        {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' onClick={e=>e.stopPropagation()} style={{fontSize:11,fontWeight:500,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px'}}>Comprobante</a>}
+                        {est==='por_enviar'&&<button onClick={e=>{e.stopPropagation();setCompFile(null);setNotaSend(r)}} style={{fontSize:11,fontWeight:500,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>Enviar a notaría</button>}
                         {est==='enviada'&&<button onClick={e=>{e.stopPropagation();reenviarNotaria(r)}} disabled={reenviando===r.id} style={{fontSize:11,fontWeight:500,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 10px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'↻ Reenviar'}</button>}
+                        {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' onClick={e=>e.stopPropagation()} style={{fontSize:11,fontWeight:500,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px'}}>Ver comprobante</a>}
+                        {notariaPend.length>0&&<button onClick={e=>{e.stopPropagation();setNotaLiqAdd(notaLiqAdd===r.id?null:r.id);setAddSel(new Set());setAddSearch('');setAddOpenCli(new Set())}} style={{fontSize:11,fontWeight:500,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>{notaLiqAdd===r.id?'Cerrar':'Añadir gastos'}</button>}
+                        <button onClick={e=>{e.stopPropagation();deshacerNotaria(r)}} style={{fontSize:11,fontWeight:500,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>Deshacer</button>
                       </div>
+                      {notaLiqAdd===r.id&&<div onClick={e=>e.stopPropagation()}>{addPicker(r)}</div>}
                     </div>}
                   </div>) })}</div>
               })()}
