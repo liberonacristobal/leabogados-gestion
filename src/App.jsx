@@ -7423,9 +7423,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [histTab,setHistTab] = useState('clientes')   // historial: 'clientes' (rendiciones) | 'notaria' (liquidaciones)
   const [histOrden,setHistOrden] = useState('nuevo')   // orden por fecha: 'nuevo' (más nuevo primero) | 'antiguo'
   const [emailRend,setEmailRend] = useState(null)
-  const [hFiltCliente,setHFiltCliente] = useState('')
-  const [hFiltDesde,setHFiltDesde] = useState('')
-  const [hFiltHasta,setHFiltHasta] = useState('')
+  // Filtros del historial (idénticos en ambas pestañas): buscador + Mes + Año
+  const [hQ,setHQ] = useState('')
+  const [hMes,setHMes] = useState('')   // '' | '01'..'12'
+  const [hAnio,setHAnio] = useState('')  // '' | 'YYYY'
   const [showHistorialFicha,setShowHistorialFicha] = useState(false)   // historial dentro de la ficha del cliente
   const [hFichaDesde,setHFichaDesde] = useState('')
   const [hFichaHasta,setHFichaHasta] = useState('')
@@ -8421,35 +8422,38 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {/* Pestañas: separa rendiciones a CLIENTES de liquidaciones a NOTARÍA */}
               {(()=>{ const tab=(id,lbl)=>{ const on=histTab===id; return <button onClick={()=>setHistTab(id)} style={{fontSize:13,fontWeight:500,background:on?C.accent:'#fff',color:on?'#fff':C.muted,border:`1px solid ${on?C.accent:C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>{lbl}</button> }
                 return <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'center'}}>{tab('clientes','Clientes')}{tab('notaria',`Notaría${notaLiquidaciones.length?` · ${notaLiquidaciones.length}`:''}`)}<button onClick={()=>setHistOrden(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{marginLeft:'auto',fontSize:12,fontWeight:500,background:'#fff',color:C.muted,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{histOrden==='nuevo'?'↓ Más nuevo':'↑ Más antiguo'}</button></div> })()}
-              {histTab==='clientes'&&<>
-                <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
-                  <select value={hFiltCliente} onChange={e=>setHFiltCliente(e.target.value)} style={{flex:2,minWidth:120,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}>
-                    <option value=''>Todos los clientes</option>
-                    {clients.map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
-                  </select>
-                  <input type='month' value={hFiltDesde} onChange={e=>setHFiltDesde(e.target.value)} placeholder='Desde' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
-                  <input type='month' value={hFiltHasta} onChange={e=>setHFiltHasta(e.target.value)} placeholder='Hasta' style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12}}/>
+              {/* Filtros compartidos (idénticos en ambas pestañas): buscador + Mes + Año */}
+              {(()=>{
+                const selSty={fontSize:12,fontWeight:500,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 10px',cursor:'pointer',outline:'none'}
+                const MESES=[['','Mes'],['01','ene'],['02','feb'],['03','mar'],['04','abr'],['05','may'],['06','jun'],['07','jul'],['08','ago'],['09','sep'],['10','oct'],['11','nov'],['12','dic']]
+                const anios=[...new Set((rendiciones||[]).map(r=>(r.created_at||'').slice(0,4)).filter(Boolean))].sort().reverse()
+                return <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12}}>
+                  <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:6,background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px'}}>
+                    <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg>
+                    <input value={hQ} onChange={e=>setHQ(e.target.value)} placeholder={histTab==='clientes'?'Buscar cliente':'Buscar período'} style={{border:'none',background:'none',outline:'none',fontSize:12,color:C.text,width:'100%'}}/>
+                  </div>
+                  <select value={hMes} onChange={e=>setHMes(e.target.value)} style={selSty}>{MESES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+                  <select value={hAnio} onChange={e=>setHAnio(e.target.value)} style={selSty}><option value=''>Año</option>{anios.map(a=><option key={a} value={a}>{a}</option>)}</select>
                 </div>
-                {(()=>{
-                  const rends=(rendiciones||[]).filter(r=>{
-                    if(r.tipo!=='cliente') return false
-                    if(hFiltCliente&&r.client_id!==hFiltCliente) return false
-                    if(hFiltDesde&&r.created_at?.slice(0,7)<hFiltDesde) return false
-                    if(hFiltHasta&&r.created_at?.slice(0,7)>hFiltHasta) return false
-                    return true
-                  }).sort((a,b)=>{ const cmp=(a.created_at||'')<(b.created_at||'')?1:-1; return histOrden==='antiguo'?-cmp:cmp })
+              })()}
+              {(()=>{
+                const okFecha=r=>{ const ca=r.created_at||''; if(hAnio&&ca.slice(0,4)!==hAnio) return false; if(hMes&&ca.slice(5,7)!==hMes) return false; return true }
+                const q=hQ.trim().toLowerCase()
+                const ord=(a,b)=>{ const cmp=(a.created_at||'')<(b.created_at||'')?1:-1; return histOrden==='antiguo'?-cmp:cmp }
+                if(histTab==='clientes'){
+                  const rends=(rendiciones||[]).filter(r=>{ if(r.tipo!=='cliente') return false; if(!okFecha(r)) return false; if(q){ const cl=clients.find(x=>x.id===r.client_id); if(!(cl?.name||'').toLowerCase().includes(q)) return false } return true }).sort(ord)
                   return renderHistorialTable(rends,true,true)
-                })()}
-              </>}
-              {histTab==='notaria'&&(notaLiquidaciones.length===0
-                ? <div style={{fontSize:12,color:C.muted,padding:'24px 0',textAlign:'center'}}>Sin liquidaciones a notaría.</div>
-                : <div>{[...notaLiquidaciones].sort((a,b)=>{ const cmp=(a.created_at||'')<(b.created_at||'')?1:-1; return histOrden==='antiguo'?-cmp:cmp }).map(r=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const est=notaEstado(r); const estLbl=est==='enviada'?'✓ Enviada':est==='por_enviar'?'Por enviar':'Pagado histórico'; const estCol=est==='enviada'?C.greenText:est==='por_enviar'?C.soonText:C.done; return (
+                }
+                const liq=[...notaLiquidaciones].filter(r=>{ if(!okFecha(r)) return false; if(q&&!String(r.periodo||'').toLowerCase().includes(q)) return false; return true }).sort(ord)
+                if(!liq.length) return <div style={{fontSize:12,color:C.muted,padding:'24px 0',textAlign:'center'}}>Sin liquidaciones a notaría.</div>
+                const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+                return <div>{liq.map(r=>{ const d=r.created_at?new Date(r.created_at):null; const est=notaEstado(r); const estLbl=est==='enviada'?'✓ Enviada':est==='por_enviar'?'Por enviar':'Pagado histórico'; const estCol=est==='enviada'?C.greenText:est==='por_enviar'?C.soonText:C.done; return (
                     <div key={r.id} onClick={()=>{setShowHistorial(false);setShowNotaria(true)}} style={{display:'flex',gap:12,alignItems:'center',padding:'9px 2px',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer'}}>
                       <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div>
                       <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text}}>{r.n_gastos||0} OT{r.periodo?<span style={{color:C.done}}> · {r.periodo}</span>:''}</div><div style={{fontSize:9,color:estCol}}>{estLbl}</div></div>
                       <div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',textAlign:'right',whiteSpace:'nowrap'}}>{fmt(r.total)}</div>
                     </div>) })}</div>
-              )}
+              })()}
             </div>
           )}
         </div>
