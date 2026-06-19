@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Limited ve la ficha completa de sus clientes (donde es responsable)
+- Un usuario limited (Martín/Martina/Rodrigo) ahora ve la ficha completa —Resumen · Contacto · Financiero · Estado de cuenta— de los clientes de los que es abogado responsable, con las mismas acciones del admin (crear/editar ventas, facturación y anticipos) acotadas a esos clientes.
+- En los demás clientes sigue viendo solo Resumen + Contacto, como antes. Match por nombre normalizado (sin tildes/mayúsculas). Reutiliza FinancieroTab y EstadoCuentaTab del admin; la lista de clientes del limited no cambia.
+
 ## 2026-06-19 — Notaría: selector "añadir gastos" agrupado por cliente con fondos
 - El selector "Añadir gastos" de una liquidación de notaría dejó de ser un muro plano de ~40 OT con el cliente truncado. Ahora agrupa por cliente y solo muestra clientes con fondos disponibles (la Oficina aparece como "se cubre sola"), replegados.
 - Cada cliente muestra nombre grande + abogado + N° OT + total, y el Disponible en verde a la derecha. Tocas el cliente y se abren sus OT con checkbox para elegir cuáles incluir. Buscador (cliente/OT/trámite) arriba; orden por fecha (nuevo primero). El botón muestra "Añadir N OT · $total". Así no se adelanta plata de la oficina.
