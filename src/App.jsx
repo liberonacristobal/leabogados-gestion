@@ -8265,31 +8265,27 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           )}
 
           {notaSend&&(()=>{ const gsS=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(notaSend.id)); const totS=gsS.reduce((a,e)=>a+(e.amount||0),0); return (
-            <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.42)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}} onClick={e=>e.target===e.currentTarget&&!notaSending&&setNotaSend(null)}>
-              <div style={{background:'#fff',borderRadius:'18px 18px 0 0',width:'min(100vw,520px)',padding:'15px 16px 20px',maxHeight:'92vh',overflowY:'auto'}}>
-                <div style={{width:36,height:4,borderRadius:2,background:C.border,margin:'0 auto 12px'}}/>
-                <div style={{fontSize:15,fontWeight:600,color:C.accent,marginBottom:12}}>Enviar a notaría</div>
-                <div style={{background:C.accent,borderRadius:11,padding:'12px 14px',color:'#fff',textAlign:'center',marginBottom:14}}>
-                  <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5}}>Total a transferir</div>
-                  <div style={{fontSize:24,fontWeight:700,letterSpacing:-.5,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(totS)}</div>
-                  <div style={{fontSize:10,color:'#9FE1CB',marginTop:3}}>{notaSend.n_gastos||gsS.length} OT · Notaría Lascar</div>
-                </div>
-                <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Comprobante de transferencia</label>
-                {compFile
-                  ? <div style={{display:'flex',alignItems:'center',gap:9,border:'1px solid #9FE1CB',background:'#E1F5EE',borderRadius:9,padding:'9px 11px',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#0F6E56' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><polyline points='9 15 11 17 15 13'/></svg><span style={{flex:1,minWidth:0,fontSize:11.5,fontWeight:600,color:'#0F6E56',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{compFile.name}</span><button onClick={()=>setCompFile(null)} style={{background:'none',border:'none',color:'#99ABB4',fontSize:15,cursor:'pointer',lineHeight:1}}>×</button></div>
-                  : <label style={{border:`1.5px dashed ${C.muted}`,borderRadius:9,background:'#FAFBFC',padding:14,textAlign:'center',color:C.muted,fontSize:11.5,display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',marginBottom:14}}>
-                      <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
-                      <span>Toca para subir el comprobante del banco (imagen o PDF)</span>
-                      <input type='file' accept='image/*,application/pdf' onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(!f) return; if(f.size>15*1024*1024){ alert('El archivo supera 15 MB.'); return } setCompFile(f) }} style={{display:'none'}}/>
-                    </label>}
-                <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Correo de la notaría</label>
-                <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginBottom:14,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}}/>
-                <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>!notaSending&&setNotaSend(null)} style={{flex:1,height:40,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                  <button disabled={notaSending||!compFile||!(notaEmail||'').trim()} onClick={()=>enviarNotaria(notaSend)} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(notaSending||!compFile||!(notaEmail||'').trim())?'default':'pointer',opacity:(notaSending||!compFile||!(notaEmail||'').trim())?.5:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{notaSending?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>}{notaSending?'Enviando…':'Enviar detalle + comprobante'}</button>
-                </div>
+            <Modal title='Enviar a notaría' onClose={()=>!notaSending&&setNotaSend(null)} closeOnBackdrop={false}>
+              <div style={{background:C.accent,borderRadius:11,padding:'12px 14px',color:'#fff',textAlign:'center',marginBottom:14}}>
+                <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5}}>Total a transferir</div>
+                <div style={{fontSize:24,fontWeight:700,letterSpacing:-.5,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(totS)}</div>
+                <div style={{fontSize:10,color:'#9FE1CB',marginTop:3}}>{notaSend.n_gastos||gsS.length} OT · Notaría Lascar</div>
               </div>
-            </div>
+              <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Comprobante de transferencia</label>
+              {compFile
+                ? <div style={{display:'flex',alignItems:'center',gap:9,border:'1px solid #9FE1CB',background:'#E1F5EE',borderRadius:9,padding:'9px 11px',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#0F6E56' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><polyline points='9 15 11 17 15 13'/></svg><span style={{flex:1,minWidth:0,fontSize:11.5,fontWeight:600,color:'#0F6E56',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{compFile.name}</span><button onClick={()=>setCompFile(null)} style={{background:'none',border:'none',color:'#99ABB4',fontSize:15,cursor:'pointer',lineHeight:1}}>×</button></div>
+                : <label style={{border:`1.5px dashed ${C.muted}`,borderRadius:9,background:'#FAFBFC',padding:14,textAlign:'center',color:C.muted,fontSize:11.5,display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',marginBottom:14}}>
+                    <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
+                    <span>Toca para subir el comprobante del banco (imagen o PDF)</span>
+                    <input type='file' accept='image/*,application/pdf' onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(!f) return; if(f.size>15*1024*1024){ alert('El archivo supera 15 MB.'); return } setCompFile(f) }} style={{display:'none'}}/>
+                  </label>}
+              <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Correo de la notaría</label>
+              <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginBottom:16,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}}/>
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>!notaSending&&setNotaSend(null)} style={{flex:1,height:40,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button disabled={notaSending||!compFile||!(notaEmail||'').trim()} onClick={()=>enviarNotaria(notaSend)} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(notaSending||!compFile||!(notaEmail||'').trim())?'default':'pointer',opacity:(notaSending||!compFile||!(notaEmail||'').trim())?.5:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{notaSending?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>}{notaSending?'Enviando…':'Enviar detalle + comprobante'}</button>
+              </div>
+            </Modal>
           )})()}
         </div>
       )}
