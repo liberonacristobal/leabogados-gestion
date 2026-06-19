@@ -7562,6 +7562,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (caja chica + notaría pagada) − reservado para
   // OTROS gastos pendientes del cliente (no la notaría que estás liquidando). Así el fondo se reparte entre todo lo que debe.
   const dispCliente = cid => {
+    if(esOficina(cid)) return { fondo:0, pagado:0, reservado:0, resItems:[], disp:Infinity, oficina:true }   // Oficina = la firma: siempre cubre sus gastos
     const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.no_descuenta_saldo)
     const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
     const pagado=g.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
@@ -7784,7 +7785,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       <div style={{fontSize:14,fontWeight:700,color:c}}>{value}</div>
     </div>
   )
-  const KpiRow = ({bal}) => { const f=cFondos(bal.fondos), s=cSaldo(bal.saldo); return (
+  const KpiRow = ({bal,oficina}) => {
+    if(oficina) return (   // Oficina = la firma: no hay "saldo" (siempre cubre); muestra gastos, lo pendiente de liquidar y lo ya pagado
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+        <KpiRect label='Gastos de oficina' value={fmt(oficina.total)} c={C.accent} bg={C.azulBg}/>
+        <KpiRect label='Por pagar' value={fmt(oficina.porPagar)} c={C.soonText} bg={C.soonBg}/>
+        <KpiRect label='Pagado' value={fmt(oficina.pagado)} c={C.greenText} bg={C.greenBg}/>
+      </div>
+    )
+    const f=cFondos(bal.fondos), s=cSaldo(bal.saldo); return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
       <KpiRect label='Fondos' value={fmt(bal.fondos)} c={f.c} bg={f.bg}/>
       <KpiRect label='Gastos' value={fmt(bal.gastos)} c={C.overdue} bg='#FCEBEB'/>
@@ -8060,8 +8069,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
         )}
 
-        {/* Vista cliente seleccionado: KPIs (totales de todas las RS) */}
-        {selectedClient&&rb&&<KpiRow bal={rb.total}/>}
+        {/* Vista cliente seleccionado: KPIs (totales de todas las RS). Oficina = la firma: no hay saldo, sí Gastos / Por pagar / Pagado */}
+        {selectedClient&&rb&&(()=>{
+          if(esOficina(selectedClient.id)){
+            const gs=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type!=='fondo'&&!e.personal_de)
+            const total=gs.reduce((a,e)=>a+(e.amount||0),0)
+            const pagado=gs.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
+            const porPagar=gs.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
+            return <KpiRow oficina={{total,porPagar,pagado}}/>
+          }
+          return <KpiRow bal={rb.total}/>
+        })()}
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
         {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&(()=>{
@@ -8207,7 +8225,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>) })()}
           {/* Clientes (con su saldo de fondos) */}
           {Object.entries(notaGroups.byClient).filter(([cid])=>{ if(!notaResp) return true; const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; return resp===notaResp }).map(([cid,gs])=>{
-            const {fondo:fondosC, pagado:pagadoC, reservado:reservadoC, disp}=dispCliente(cid)
+            const {fondo:fondosC, pagado:pagadoC, reservado:reservadoC, disp, oficina:esOf}=dispCliente(cid)
             const aPagar=gs.reduce((a,e)=>a+(e.amount||0),0)
             const exc=excepNota.has(cid)   // "Permitir adelanto" activado para este cliente
             // Sin excepción y sin fondo libre → no pasa el filtro "con fondos". Con excepción, siempre se muestra.
@@ -8218,7 +8236,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             return (
             <div key={cid} style={{border:`1px solid ${rojo?'#F0997B':C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,padding:'8px 13px',background:rojo?C.overdueBg:'#F5F7F9',borderBottom:`1px solid ${rojo?'#F0997B':C.border}`}}>
-                <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>Disponible <b>{fmt(disp)}</b> de {fmt(fondosC)}</div></div>
+                <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:rojo?C.overdueText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{esOf?<>Oficina · <b>se cubre sola</b></>:<>Disponible <b>{fmt(disp)}</b> de {fmt(fondosC)}</>}</div></div>
                 <span style={{fontSize:10,borderRadius:10,padding:'2px 9px',fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:est.bg,color:est.c}}>{est.l}</span>
               </div>
               {reservadoC>0&&<div style={{fontSize:10,color:C.azulInfo,background:C.azulBg,padding:'4px 13px',borderBottom:`1px solid ${C.border}`}}>Otros gastos por pagar: {fmt(reservadoC)}</div>}

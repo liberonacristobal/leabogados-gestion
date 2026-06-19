@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Oficina: KPIs propios (Gastos / Por pagar / Pagado) y siempre cubre en notaría
+- La Oficina (la firma, is_internal) ya no muestra un saldo negativo confuso. Sus 3 tarjetas ahora son: Gastos de oficina (todo lo gastado, sin personales), Por pagar (lo no liquidado vía caja chica ni notaría = deuda real pendiente) y Pagado (lo ya liquidado).
+- En la Liquidación a notaría la Oficina siempre aparece disponible: dispCliente la trata como fondo infinito, queda como "Cubre · se cubre sola", sin "Sin fondos" ni candado. Nunca adelanta plata porque la plata es propia.
+
 ## 2026-06-19 — Conciliación: partir abono sin factura (adelanto + fondo por rendir)
 - Al tocar "Saldo a Favor | Adelanto" en un abono sin factura, aparece un split inline: pill Adelanto con monto editable (precargado con el total) + pill Fondo por Rendir (el resto, automático) + Confirmar.
 - Crea un anticipo por el adelanto (honorarios) y un fondo por rendir por el resto (gastos), y marca el movimiento conciliado. Si dejas el total en Adelanto, el fondo queda en 0 (como antes). Resuelve el caso honorarios+gastos juntos sin factura emitida.
