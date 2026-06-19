@@ -60,6 +60,8 @@ const RENDCAT = c => c==='CBR'?'Conservador de Bienes Raíces':(c==='Notaria'||c
 const fmtFechaDMY = d => { if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(d) }
 // Fecha breve '15 jun' (omite el año si es el actual; muestra '15 jun 24' si es otro año). Para botones-calendario compactos.
 const fechaBreve = d => { if(!d) return ''; const p=String(d).slice(0,10).split('-'); if(p.length!==3) return String(d); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const cur=new Date().getFullYear(); return `${+p[2]} ${M[+p[1]-1]||p[1]}${+p[0]!==cur?` ${p[0].slice(2)}`:''}` }
+// Fecha breve SIEMPRE con año ('19 jun 26'). Para campos donde el año importa.
+const fechaConAnio = d => { if(!d) return ''; const p=String(d).slice(0,10).split('-'); if(p.length!==3) return String(d); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${+p[2]} ${M[+p[1]-1]||p[1]} ${p[0].slice(2)}` }
 // Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
 const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-MM-AAAA con guiones) en toda la app
@@ -336,6 +338,9 @@ const Sel = ({value,onChange,options,placeholder,style}) => (
 const Txt = (p) => <textarea {...p} rows={2} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,resize:'none',boxSizing:'border-box',outline:'none'}}/>
 const Lbl = ({children}) => <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.7,marginBottom:2}}>{children}</div>
 const Fld = ({label,children,mb}) => <div className='fld' style={{marginBottom:mb??8}}><Lbl>{label}</Lbl>{children}</div>
+// Campo con label flotante DENTRO del box (ahorra alto: label chico arriba, valor abajo). Los inputs van borderless (fInp).
+const FloatFld = ({label,children,mb}) => <div style={{marginBottom:mb??8,background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px'}}><div style={{fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5,lineHeight:1.4}}>{label}</div>{children}</div>
+const fInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:14,color:C.text,padding:0,height:24,boxSizing:'border-box'}
 const Spin = () => <div style={{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
 const DriveIcon = ({size=14}) => <svg width={size} height={size} viewBox='0 0 87.3 78' xmlns='http://www.w3.org/2000/svg'><path d='m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z' fill='#0066da'/><path d='m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z' fill='#00ac47'/><path d='m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z' fill='#ea4335'/><path d='m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z' fill='#00832d'/><path d='m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z' fill='#2684fc'/><path d='m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z' fill='#ffba00'/></svg>
 // Logo de marca FirmDesk. variant: primary (tile azul) | mono (F azul sobre claro) | accent (tile verde)
@@ -8848,48 +8853,50 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   return (
     <>
       {/* Fila 1: Categoría · Monto · Fecha (categoría no aplica a fondos). Fecha = botón-calendario breve. */}
-      <div style={{display:'grid',gridTemplateColumns:isFondo?'1fr 1fr':'1.05fr 1fr 0.92fr',gap:7}}>
+      <div style={{display:'grid',gridTemplateColumns:isFondo?'1fr 1fr':'1.05fr 1fr 0.92fr',gap:7,marginBottom:8}}>
         {!isFondo&&(
-          <Fld label='Categoría'><Sel value={f.category} onChange={e=>up('category',e.target.value)} options={CATS_GASTO} style={{padding:'0 8px'}}/></Fld>
+          <FloatFld label='Categoría' mb={0}><select value={f.category} onChange={e=>up('category',e.target.value)} style={{...fInp,cursor:'pointer'}}>{CATS_GASTO.map(o=><option key={o} value={o}>{o}</option>)}</select></FloatFld>
         )}
-        <Fld label='Monto'><Inp type='number' value={f.amount} onChange={e=>up('amount',e.target.value)} style={{padding:'0 9px'}}/></Fld>
-        <Fld label='Fecha'>
-          <div style={{position:'relative',height:36}}>
-            <div style={{height:36,border:`1px solid ${C.border}`,background:'#F5F7F9',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',gap:5,fontSize:13,color:f.date?C.text:C.muted,boxSizing:'border-box',whiteSpace:'nowrap'}}>
-              <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='16' y1='2' x2='16' y2='6'/></svg>
-              {f.date?fechaBreve(f.date):'Fecha'}
+        <FloatFld label='Monto' mb={0}><input type='number' value={f.amount} onChange={e=>up('amount',e.target.value)} placeholder='0' style={fInp}/></FloatFld>
+        <FloatFld label='Fecha' mb={0}>
+          <div style={{position:'relative'}}>
+            <div style={{...fInp,display:'flex',alignItems:'center',gap:4,color:f.date?C.text:C.muted}}>
+              <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='16' y1='2' x2='16' y2='6'/></svg>
+              {f.date?fechaConAnio(f.date):'Fecha'}
             </div>
             <input type='date' value={f.date||''} onChange={e=>up('date',e.target.value)} onClick={e=>{try{e.currentTarget.showPicker&&e.currentTarget.showPicker()}catch{}}} style={{position:'absolute',inset:0,width:'100%',height:'100%',opacity:0,border:'none',margin:0,padding:0,cursor:'pointer'}}/>
           </div>
-        </Fld>
+        </FloatFld>
       </div>
       {/* Slot condicional: OT (Notaría) o Subcategoría (Otro) */}
       {!isFondo&&f.category==='Notaria'&&(
-        <Fld label='OT (notaría)'><Inp value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206'/></Fld>
+        <FloatFld label='OT (notaría)'><input value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206' style={fInp}/></FloatFld>
       )}
       {!isFondo&&f.category==='Otro'&&(
-        <Fld label='Subcategoría'>
-          <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Aseo, Cafetería, Suscripción...' style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
+        <FloatFld label='Subcategoría'>
+          <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Aseo, Cafetería, Suscripción...' style={fInp}/>
           <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
-        </Fld>
+        </FloatFld>
       )}
-      {/* Descripción a doble alto */}
-      <Fld label='Descripción'><Txt value={f.concept} onChange={e=>up('concept',e.target.value)} placeholder='Descripción...'/></Fld>
-      {/* Proyecto a fila completa */}
+      <FloatFld label='Descripción'><textarea value={f.concept} onChange={e=>up('concept',e.target.value)} rows={2} placeholder='Descripción...' style={{...fInp,height:'auto',resize:'none',fontFamily:'inherit',paddingTop:2}}/></FloatFld>
+      {/* Proyecto + adjuntar en la misma línea */}
       {!isFondo&&(
-        <Fld label='Proyecto'>
-          <input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
-          <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
-          {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
-        </Fld>
+        <div style={{display:'flex',gap:8,alignItems:'stretch',marginBottom:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <FloatFld label='Proyecto' mb={0}><input list='exp-edit-projects' value={f.project||''} onChange={e=>up('project',e.target.value)} placeholder='Proyecto (venta del cliente)…' style={fInp}/></FloatFld>
+            <datalist id='exp-edit-projects'>{projectOpts.map(p=><option key={p} value={p}/>)}</datalist>
+            {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
+          </div>
+          {expense?.id&&<div style={{display:'flex',alignItems:'center'}}><Attachments inline table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos' namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/></div>}
+        </div>
       )}
       {/* Razón social (el cliente ya va en el encabezado). Reasignar cliente = acción discreta "Cambiar cliente". */}
       {!personalOn&&(
         <div>
           {rsList.length>=1&&(
-            <Fld label='Razón social' mb={6}>
-              <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
-            </Fld>
+            <FloatFld label='Razón social' mb={6}>
+              <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{...fInp,cursor:'pointer'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
+            </FloatFld>
           )}
           {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
           {cambiarCli
@@ -8906,20 +8913,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           <button type='button' onClick={()=>{up('personal_de',null);setShowPersonal(false)}} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>✕</button>
         </div>
       )}
-      {/* Barra inferior: Adjuntar · Gasto personal */}
-      {!isFondo&&(
-        <div style={{display:'flex',alignItems:'center',gap:16,borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:2}}>
-          {expense?.id?(
-            <div style={{display:'flex',alignItems:'center',gap:6}}>
-              <span style={{fontSize:12,color:C.muted,fontWeight:600}}>Adjuntar</span>
-              <Attachments inline table='expense_attachments' idField='expense_id' entityId={expense.id} folderKind='gastos' namePrefix={`${client?.name||'Sin cliente'} · ${f.concept||'Gasto'}`} user={user} onChange={onAttachChange}/>
-            </div>
-          ):<span style={{fontSize:11,color:C.muted}}>Guarda el gasto para adjuntar archivos</span>}
-          {!showPersonal&&!personalOn&&(
-            <button type='button' onClick={()=>setShowPersonal(true)} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,marginLeft:'auto'}}>Gasto personal</button>
-          )}
-        </div>
-      )}
+      {!isFondo&&!expense?.id&&<div style={{fontSize:10,color:C.muted,marginTop:6}}>Guarda el gasto para adjuntar comprobantes.</div>}
       {!isFondo&&f.client_id&&!f.personal_de&&(
         <div style={{display:'flex',alignItems:'center',gap:9,marginTop:10}}>
           <Switch on={!!f.no_descuenta_saldo} onToggle={()=>up('no_descuenta_saldo',!f.no_descuenta_saldo)}/>
