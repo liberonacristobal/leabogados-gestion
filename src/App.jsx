@@ -9694,7 +9694,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
         <div key={m.id}>
           <div onClick={()=>setDetMov(open?null:m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:open?'none':'1px solid #F1F1F1',cursor:'pointer'}}>
             <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{d.dia}</div><div style={{fontSize:9.5,color:'#99ABB4'}}>{d.sub}</div></div>
-            <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:8.5,fontWeight:700,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'1px 5px'}}>{m.rol_cuenta==='gastos'?'Gastos':'Hon.'}</span></div><div style={{fontSize:11,color:c?C.muted:'#C77F18',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest}</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:8.5,fontWeight:700,background:m.rol_cuenta==='gastos'?'#FAEEDA':'#E6EEF1',color:m.rol_cuenta==='gastos'?'#854F0B':'#003C50',borderRadius:3,padding:'1px 5px'}}>{m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</span></div><div style={{fontSize:11,color:c?C.muted:'#C77F18',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest}</div></div>
             <b style={{color:m.tipo==='abono'?'#0F6E56':'#A32D2D',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
             <span style={{color:'#99ABB4',fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
           </div>
@@ -14507,11 +14507,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const cc=concByMov[m.id]||[]
     if(cc.length){
       const fon=cc.find(c=>c.tipo_destino==='fondo'), ant=cc.find(c=>c.tipo_destino==='anticipo'), facs=cc.filter(c=>c.tipo_destino==='factura')
-      if(fon) return {t:'✓ Abono | Fondo por Rendir', c:'#0F6E56', bg:'#E1F5EE'}
-      if(ant&&!facs.length) return {t:'✓ Adelanto', c:'#0F6E56', bg:'#E1F5EE'}
-      if(facs.length>1) return {t:`✓ ${facs.length} facturas`, c:'#0F6E56', bg:'#E1F5EE'}
-      if(facs.length===1){ const f=billing.find(b=>b.id===facs[0].factura_id); return {t:`✓ Factura N°${folioN(f?.invoice_no)||'—'}`, c:'#0F6E56', bg:'#E1F5EE'} }
-      return {t:'✓ Conciliado', c:'#0F6E56', bg:'#E1F5EE'}
+      if(fon) return {t:'→ Abono | Fondo por Rendir', c:'#E1F5EE', bg:'#0F6E56'}   // verde invertido: lo distingue de las facturas
+      if(ant&&!facs.length) return {t:'→ Adelanto', c:'#185FA5', bg:'#E6F1FB'}      // azul: otro color para el saldo a favor
+      if(facs.length>1) return {t:`→ ${facs.length} facturas`, c:'#0F6E56', bg:'#E1F5EE'}
+      if(facs.length===1){ const f=billing.find(b=>b.id===facs[0].factura_id); return {t:`→ Factura N°${folioN(f?.invoice_no)||'—'}`, c:'#0F6E56', bg:'#E1F5EE'} }
+      return {t:'→ Conciliado', c:'#0F6E56', bg:'#E1F5EE'}
     }
     if(m.estado==='parcial') return {t:`Parcial · resta ${fmtM((m.monto||0)-(m.monto_conciliado||0))}`, c:'#C77F18', bg:'#FFF8E1'}
     if(m.categoria){ const s=TAG_STY[m.categoria]||{bg:'#F1EFE8',color:'#5F5E5A'}; return {t:m.categoria, c:s.color, bg:s.bg} }
@@ -14688,16 +14688,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:'#5F5E5A'}):null
             return (
               <div key={m.id} id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?'#003C50':m.rol_cuenta==='gastos'?'#EF9F27':C.border}`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
-                <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer'}}>
+                <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}>
+                  <div style={{width:42,flexShrink:0,textAlign:'center',lineHeight:1.1,paddingTop:1}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:9,color:'#99ABB4'}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
+                  <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
                     <span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF===m.rol_cuenta?'ambas':m.rol_cuenta)}} title='Filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color,cursor:'pointer'}}>{rc.t}</span>
-                    <span style={{fontSize:11,color:C.muted}}>{fmtFechaDMY(m.fecha)}</span>
                     <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                   </div>
                   <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#A32D2D',background:'#FCEBEB',borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</div>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:3}}>
                     <span style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:ec.bg,color:ec.c}}>{ec.t}</span>
                     <span style={{fontSize:11,color:'#185FA5',fontWeight:500}}>{abierto?'Cerrar ▴':'Editar ▾'}</span>
+                  </div>
                   </div>
                 </div>
                 {abierto&&(<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
