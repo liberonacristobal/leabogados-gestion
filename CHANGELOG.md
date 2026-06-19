@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: botón final (subrayado + mark G)
+- El botón de ingreso queda estilo enlace subrayado (sin caja), con un mark “G” monocromo navy y texto “Entrar”. Cierra el rediseño del login (acento, Bienvenido cursivo, logo, subtítulo, botón mínimo).
+
 ## 2026-06-19 — Login: “Bienvenido” en cursiva (Fraunces itálica)
 - El saludo “Bienvenido” del login pasa a serif itálica (Fraunces, cargada desde Google Fonts solo la itálica usada).
 
