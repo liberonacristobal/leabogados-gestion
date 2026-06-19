@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · Tanda 3 (cifras de fila + etiqueta KPI)
+- Cifras de fila (montos) unificadas a 13/600 en las líneas que renderizan dinero (fmt/fmtN/fmtM/fmtShort/fmtCLP/fmtUF). Antes mezclaban 12/700 y 13/700.
+- Etiqueta KPI (helper kpiLbl) 10→9 (canon). Pendiente: barrido de los 105 labels de sección 10px (riesgo de densidad mobile, requiere confirmación).
+
 ## 2026-06-19 — Fase 3 · Tanda 3 (fracciones + títulos de modal)
 - Colapsadas 46 tamaños de fuente fraccionarios (8.5/9.5→9, 10.5/11.5→11, 12.5/13.5→13). Sin sistema de medios-puntos.
 - Títulos de modal unificados a 16/600: 5 que estaban a 15 (Dar de baja factura, Emitir por el bloque, Cubrir cuotas, Deshacer importación, Liquidar a notaría) y Registrar gastos (16/700→600). Nombres de proveedor intactos.
