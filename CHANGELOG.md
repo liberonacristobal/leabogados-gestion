@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-19 — Seguridad: RLS ON en las 28 tablas (cierra hallazgo crítico)
+- Activado Row Level Security en todas las tablas + política team_all (solo usuarios autenticados con email @leabogados.cl). Antes, con RLS off + GRANT a anon, cualquiera con la anon key pública podía leer/escribir todo por la API REST.
+- El front (sesión Google) y las edge functions (service_role) no se afectan. SQL corrido por el usuario en el SQL Editor; reversible.
+- CLAUDE.md actualizado: estándar de tablas nuevas ahora es RLS ON + team_all (no más DISABLE/anon).
+
 ## 2026-06-19 — Fase 3 · alineación incremental: mini-KPI de ficha
 - Cifra de las mini-KPI densas de la ficha (Por cobrar / Saldo fondos / A favor) de 15px (fuera de escala) a 13px (en escala, tier denso). No se sube a 17 para no desbordar montos grandes en iPhone.
 
