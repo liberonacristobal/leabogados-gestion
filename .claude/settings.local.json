@@ -234,7 +234,9 @@
       "Bash(perl -i -pe 's/titleCaseRS\\\\\\(/rsDisplay\\(/g' src/App.jsx)",
       "Bash(perl -i -pe 's/\\\\| \\\\$\\\\{rs\\\\.rut\\\\}/· \\\\${rs.rut}/g' src/App.jsx)",
       "Bash(perl -i -pe 's/fontSize:8\\\\.5/fontSize:9/g; s/fontSize:9\\\\.5/fontSize:9/g; s/fontSize:10\\\\.5/fontSize:11/g; s/fontSize:11\\\\.5/fontSize:11/g; s/fontSize:12\\\\.5/fontSize:13/g; s/fontSize:13\\\\.5/fontSize:13/g' src/App.jsx)",
-      "Bash(perl -i -pe ' *)"
+      "Bash(perl -i -pe ' *)",
+      "Bash(perl -i -pe 'if \\(/\\\\{\\(fmt|fmtN|fmtM|fmtShort|fmtCLP|fmtUF|fmt0\\)\\\\\\(/\\) { s/fontSize:12,fontWeight:700/fontSize:13,fontWeight:600/g; s/fontSize:13,fontWeight:700/fontSize:13,fontWeight:600/g; s/fontSize:12,fontWeight:600/fontSize:13,fontWeight:600/g }' src/App.jsx)",
+      "Bash(perl -i -pe 's/\\(const kpiLbl = \\\\{fontSize:\\)10/${1}9/' src/App.jsx)"
     ]
   }
 }
