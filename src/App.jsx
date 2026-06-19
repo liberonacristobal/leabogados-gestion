@@ -7535,7 +7535,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [excepNota,setExcepNota] = useState(()=>new Set())   // clientes con "Permitir adelanto" activado (excepción explícita)
   const [notaSending,setNotaSending] = useState(false)
   const [notaConfirm,setNotaConfirm] = useState(false)
-  const [notaEmail,setNotaEmail] = useState(()=>{ try{return localStorage.getItem('notaria_email')||''}catch(_){return ''} })
+  // Correos por defecto de la notaría (Lascar): se precargan siempre; si el equipo guarda otros, esos mandan.
+  const NOTARIA_DEFAULT = 'sdelgado@notarialascar.cl, sdanotaria@gmail.com'
+  const [notaEmail,setNotaEmail] = useState(()=>{ try{return localStorage.getItem('notaria_email')||NOTARIA_DEFAULT}catch(_){return NOTARIA_DEFAULT} })
   // Correo(s) de la notaría: compartido para todo el equipo (no solo este dispositivo). Lo guardado manda sobre el localStorage.
   useEffect(()=>{ supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaEmail(v) },()=>{}) },[])
   const [notaSend,setNotaSend] = useState(null)   // rendición en el sheet "Enviar a notaría" (o null)
