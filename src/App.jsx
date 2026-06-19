@@ -7536,6 +7536,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [notaSending,setNotaSending] = useState(false)
   const [notaConfirm,setNotaConfirm] = useState(false)
   const [notaEmail,setNotaEmail] = useState(()=>{ try{return localStorage.getItem('notaria_email')||''}catch(_){return ''} })
+  // Correo(s) de la notaría: compartido para todo el equipo (no solo este dispositivo). Lo guardado manda sobre el localStorage.
+  useEffect(()=>{ supabase.from('learnings').select('value').eq('kind','notaria_email').limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaEmail(v) },()=>{}) },[])
   const [notaSend,setNotaSend] = useState(null)   // rendición en el sheet "Enviar a notaría" (o null)
   const [compFile,setCompFile] = useState(null)   // comprobante de transferencia adjunto (File)
   const [notaResp,setNotaResp] = useState(null)   // filtro de pendientes por abogado responsable del cliente ('__sin__'=sin responsable)
@@ -7628,8 +7630,12 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     if(!dest){ alert('Falta el correo de la notaría.'); return }
     if(!compFile){ alert('Adjunta el comprobante de transferencia.'); return }
     setNotaSending(true)
+    // CC fijo: todo el estudio en copia, SIEMPRE, menos Rodrigo.
+    const ccEstudio = 'cl@leabogados.cl, ee@leabogados.cl, mc@leabogados.cl, mp@leabogados.cl'
     try{
       try{ localStorage.setItem('notaria_email',dest) }catch(_){}
+      // Aprende el/los correo(s) de la notaría: compartido para todo el equipo (una sola fila en learnings).
+      try{ await supabase.from('learnings').delete().eq('kind','notaria_email'); await supabase.from('learnings').insert({kind:'notaria_email',key:'dest',value:dest,meta:{}}) }catch(_){}
       const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
       const total=gs.reduce((a,e)=>a+(e.amount||0),0)
       const periodo=r.periodo||periodoNota(gs)
@@ -7656,8 +7662,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       else if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion Notaria Lascar al ${fechaLiq}.pdf`, mime:'application/pdf'})
       adjuntos.push({base64:compB64, name:`Comprobante transferencia.${ext}`, mime:compMime})
       let sent=false
-      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
-      if(!sent){ try{ await sendMailServer({to:dest,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
+      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,cc:ccEstudio,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
+      if(!sent){ try{ await sendMailServer({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
       if(!sent){ alert('No se pudo enviar el correo. Revisa la conexión o reintenta.'); setNotaSending(false); return }
       const now=new Date().toISOString()
       await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}).eq('id',r.id)
@@ -11199,7 +11205,7 @@ async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName, 
   return true
 }
 // Construye el MIME multipart y lo envía con la API de Gmail
-async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase64, pdfName, attachments}){
+async function sendGmailWithPdf(token, {to, cc, subject, bodyText, bodyHtml, pdfBase64, pdfName, attachments}){
   // RFC 2045: el base64 debe ir en líneas ≤76. Una sola línea larga (HTML/PDF reales) la trunca el SMTP
   // de reenvío → cuerpo y adjunto corruptos. wrap76 corta cada bloque en líneas de 76 con CRLF.
   const wrap76 = s => String(s||'').replace(/[\r\n]/g,'').replace(/(.{76})/g,'$1\r\n').trim()
@@ -11221,7 +11227,7 @@ async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase
     `--${boundary}`, `Content-Type: ${a.mime||'application/octet-stream'}; name="${a.name}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${a.name}"`, '', wrap76(a.base64), ''
   ])
   const mime = [
-    `To: ${to}`, `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`, 'MIME-Version: 1.0',
+    `To: ${to}`, ...(cc?[`Cc: ${cc}`]:[]), `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`, 'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
     ...cuerpo,
     ...attParts,
