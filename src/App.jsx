@@ -787,7 +787,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   // color según el dato, label mayúscula muted, cifra bold del color. El bg se pasa por tarjeta.
   const kpiCard = {flex:1,minWidth:0,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}
   const kpiLbl = {fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,whiteSpace:'nowrap'}
-  const kpiVal = {fontSize:15,fontWeight:700,whiteSpace:'nowrap',lineHeight:1.15}
+  const kpiVal = {fontSize:17,fontWeight:600,whiteSpace:'nowrap',lineHeight:1.15}
   const kpiSub = {fontSize:8,fontWeight:600,letterSpacing:.4,marginTop:1,textTransform:'uppercase'}
 
   // Auto-cierre del mensaje de confirmación post-liquidación
@@ -5202,7 +5202,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
           const go=f=>{setFilter(f);clearSel&&clearSel()}
-          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:col}}>{fmt(v)}</div></button>)
+          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:17,fontWeight:600,color:col}}>{fmt(v)}</div></button>)
           return (<div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16}}>
               <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Por cobrar · facturas emitidas sin pagar</div>
@@ -8098,7 +8098,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {showNotaria&&(
         <div style={{padding:'4px 20px 130px'}}>
           <div style={{display:'flex',gap:8,marginBottom:10}}>
-            <div style={{flex:1,background:'#FCEBEB',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:'#A32D2D',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Pendiente a notaría</div><div style={{fontSize:16,fontWeight:700,color:'#A32D2D'}}>{fmt(notaPendTotal)}</div><div style={{fontSize:9,color:'#A32D2D',fontWeight:600}}>{notariaPend.length} gasto{notariaPend.length!==1?'s':''}</div></div>
+            <div style={{flex:1,background:'#FCEBEB',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:'#A32D2D',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Pendiente a notaría</div><div style={{fontSize:17,fontWeight:600,color:'#A32D2D'}}>{fmt(notaPendTotal)}</div><div style={{fontSize:9,color:'#A32D2D',fontWeight:600}}>{notariaPend.length} gasto{notariaPend.length!==1?'s':''}</div></div>
             <div style={{flex:1,background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Notaría</div><div style={{fontSize:13,fontWeight:600,color:C.accent,marginTop:2}}>Notaría Lascar</div></div>
           </div>
           {/* Filtro por abogado responsable del cliente — "ver solo mis clientes" */}
