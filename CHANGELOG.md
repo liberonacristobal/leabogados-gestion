@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Notaría: botones teal pill + Historial con pestañas Clientes/Notaría
+- Botones de notaría (toggle Notaría, Liquidar Notaría, Carga masiva) pasan de amarillo a teal en pill, sin negrita (peso 500). "Cargar Excel notaría" → "Carga masiva"; "Liquidar notaría" → "Liquidar Notaría".
+- Historial (ícono reloj) ahora tiene 2 pestañas: Clientes (rendiciones, con filtros) y Notaría (liquidaciones en timeline, fecha a la izquierda y monto a la derecha, fuera de tarjeta). Título de la vista pasa a "Historial".
+
 ## 2026-06-19 — Notaría: botón Reenviar liquidación
 - Cada liquidación de notaría ya enviada tiene un botón ↻ Reenviar que cualquiera del equipo puede usar: regenera el detalle (Excel), recupera el comprobante guardado en Drive y lo manda de nuevo a los correos de la notaría con copia al estudio (mismo cuerpo, incluida la línea de a nombre de quién emitir las boletas). Pide confirmación.
 - Helper nuevo driveDownloadB64 para recuperar adjuntos desde Drive.
