@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · Tanda 2 (formatos de fecha y dinero)
+- Fechas de timestamp (created_at/sent_at): nuevo helper fmtFechaTS = fecha LOCAL en DD-MM-AAAA, aplicado en 6 sitios. Evita el bug de zona horaria de cortar el ISO en UTC (corría el día en registros nocturnos) y unifica el formato.
+- Dinero: consolidados 3 helpers locales divergentes (fmtN/fmt/fmtM) al formateador global fmt (Intl). Positivos idénticos; negativos corrigen el signo 569Xl1.234 → -.234. Sin cambio de valor ni de color.
+
 ## 2026-06-19 — Fase 3 · Tanda 1 (microtexto + regla RS)
 - Regla nueva: razón social en MAYÚSCULAS, sin bold. Helper único renombrado titleCaseRS→rsDisplay (uppercase); dato crudo intacto, PDF/export legales sin tocar.
 - F° → Factura N° en los 2 sitios de UI restantes; separador RS·RUT unificado a punto medio.
