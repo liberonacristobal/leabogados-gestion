@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · Tanda 3 inicio (escala tipográfica: cifras KPI)
+- Escala única aprobada: tamaños 9·11·13·16·17·20, pesos 400/600. Cifra KPI = 17/600 (canon del dashboard).
+- Unificadas a 17/600 las cifras KPI divergentes: caja chica (helper kpiVal, era 15/700), tabs de facturación Pendiente/Vencido (16/700) y Pendiente a notaría (16/700). Mismo color y valor. Las mini-KPI densas de la ficha quedan para una sub-tanda aparte.
+
 ## 2026-06-19 — Fase 3 · Tanda 2 (cierre: dedup fechas + barrido parseInt/UF)
 - Dedup: 5 helpers de fecha locales (fmtDMY/dmy) ahora delegan al global fmtFechaDMY. Salida idéntica.
 - Dinero: 6 formateadores locales con parseInt (n/fmtCLP0/fmt0) → global fmt. Enteros idénticos; decimales redondean (antes truncaban); negativos con signo -$ correcto.
