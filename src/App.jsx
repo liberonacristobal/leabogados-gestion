@@ -14041,6 +14041,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [verCarga,setVerCarga] = useState(false)         // caja de carga de cartolas colapsada (solo se usa al inicio)
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
   const [tagFor,setTagFor] = useState(null)      // id del movimiento con el picker de categoría abierto
+  const [splitMov,setSplitMov] = useState(null)  // id del movimiento con el split adelanto/fondo abierto
+  const [splitAdel,setSplitAdel] = useState('')  // monto que va a adelanto (el resto a fondo)
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
   const [conc,setConc] = useState([])           // filas de conciliacion (factura/anticipo aplicados)
   const [concView,setConcView] = useState('todos') // abonos: 'todos' | 'porconciliar' | 'conciliados'
@@ -14488,6 +14490,34 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(me) throw me
       setAnticipos&&setAnticipos(p=>[ant,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setPickFor(null)
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); alert('Error al crear saldo a favor: '+e.message) }
+    setBusy(null)
+  }
+  // Split (abono sin factura que junta honorarios + gastos): adel → anticipo, resto → fondo por rendir. Marca el movimiento conciliado.
+  const splitAdelantoFondo = async(mov, adelMonto)=>{
+    if(busy) return
+    if(!mov.cliente_id){ alert('Identifica el cliente primero.'); return }
+    const resto = (mov.monto||0) - (mov.monto_conciliado||0)
+    const adel = Math.max(0, Math.min(adelMonto||0, resto)); const fond = resto - adel
+    setBusy(mov.id)
+    let ant=null, fondo=null; const crs=[]
+    try{
+      if(adel>0){
+        const ia = await supabase.from('anticipos').insert({ client_id:mov.cliente_id, monto:adel, fecha:mov.fecha, nota:'Honorarios sin factura (conciliación bancaria)', estado:'disponible', created_by:user?.email||null }).select().single()
+        if(ia.error) throw ia.error; ant=ia.data
+        const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:adel, origen:'manual' }).select().single()
+        if(ic.error) throw ic.error; crs.push(ic.data)
+      }
+      if(fond>0){
+        const insF = await supabase.from('expenses').insert({ client_id:mov.cliente_id, type:'fondo', amount:fond, date:mov.fecha, concept:'Provisión de fondos (conciliación bancaria)', category:'Fondo', created_by:user?.email||null }).select().single()
+        if(insF.error) throw insF.error; fondo=insF.data
+        const icF = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:fond, origen:'manual' }).select().single()
+        if(icF.error) throw icF.error; crs.push(icF.data)
+      }
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:(mov.monto||0) }).eq('id',mov.id)
+      if(me) throw me
+      if(ant) setAnticipos&&setAnticipos(p=>[ant,...p]); if(fondo) setExpenses&&setExpenses(p=>[fondo,...p])
+      setConc(p=>[...p,...crs]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setSplitMov(null)
+    }catch(e){ for(const c of crs) await supabase.from('conciliacion').delete().eq('id',c.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); alert('Error al partir el abono: '+e.message) }
     setBusy(null)
   }
   // #4 — Evitar duplicar fondos: ¿el cliente ya tiene un fondo del mismo monto SIN respaldo bancario (cargado a mano,
@@ -15012,10 +15042,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
                           {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga varias facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?C.accent:C.azulBg,color:comboFor===m.id?'#fff':C.accent,border:'none'}}>Paga {combo.length} facturas{comboFor===m.id?' ▴':' ▾'}</button>}
                           {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:C.tealBg,color:C.tealText,border:'none'}}>Factura N°{folioN(fmg.factura.invoice_no)||'—'} + {fmtM(fmg.excess)} gastos</button>}
-                          <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>Saldo a Favor | Adelanto</button>
+                          <button disabled={busy===m.id} onClick={()=>{ if(splitMov===m.id){setSplitMov(null);return} const resto=(m.monto||0)-(m.monto_conciliado||0); setSplitAdel(String(resto)); setSplitMov(m.id) }} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:splitMov===m.id?C.azulInfo:C.azulBg,color:splitMov===m.id?'#fff':C.azulInfo,border:'none'}}>Saldo a Favor | Adelanto{splitMov===m.id?' ▴':''}</button>
                           <button disabled={busy===m.id} onClick={()=>crearFondoProvision(m)} title='Acredita el resto al fondo por rendir del cliente (no toca la factura ya conciliada)' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:C.tealBg,color:C.tealText,border:'none'}}>Fondo por Rendir</button>
                           <button disabled={busy===m.id} onClick={()=>{ const gs=gastosReembolsables(m.cliente_id); if(!gs.length){ devolucionGastos(m); return } const resto=(m.monto||0)-(m.monto_conciliado||0); let acc=0; const sel=new Set(); for(const g of gs){ if(acc>=resto) break; sel.add(g.id); acc+=(g.amount||0) } setDevolSel(sel); setDevolFor(devolFor===m.id?null:m.id) }} title='El cliente devuelve gastos que el estudio adelantó (corrige su saldo)' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:C.coralText,border:'none'}}>Devolución de gastos{devolFor===m.id?' ▴':''}</button>
                         </div>
+                        {splitMov===m.id&&(()=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const adel=Math.max(0,Math.min(parseInt(splitAdel)||0,resto)); const fond=resto-adel; return (
+                          <div onClick={e=>e.stopPropagation()} style={{marginBottom:6,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                            <span style={{fontSize:10,fontWeight:600,color:C.azulInfo,background:C.azulBg,borderRadius:6,padding:'3px 8px',display:'inline-flex',alignItems:'center',gap:5}}>Adelanto <input value={splitAdel} onChange={e=>setSplitAdel(e.target.value.replace(/[^0-9]/g,''))} inputMode='numeric' style={{width:80,border:`1px solid ${C.azulInfo}`,borderRadius:4,padding:'1px 5px',fontSize:11,fontWeight:600,color:C.accent,background:'#fff',outline:'none'}}/></span>
+                            <span style={{fontSize:10,fontWeight:600,color:C.tealText,background:C.tealBg,borderRadius:6,padding:'3px 8px'}}>Fondo por Rendir {fmtM(fond)}</span>
+                            <button disabled={busy===m.id||(adel<=0&&fond<=0)} onClick={()=>splitAdelantoFondo(m,adel)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'3px 11px',cursor:busy===m.id?'default':'pointer'}}>Confirmar</button>
+                          </div>) })()}
                         {devolFor===m.id&&(()=>{ const gs=gastosReembolsables(m.cliente_id); const resto=(m.monto||0)-(m.monto_conciliado||0); const sum=gs.filter(g=>devolSel.has(g.id)).reduce((a,g)=>a+(g.amount||0),0); return (
                           <div onClick={e=>e.stopPropagation()} style={{marginBottom:6,background:'#FAFBFC',border:'1px solid #F0997B',borderRadius:9,padding:'9px 11px'}}>
                             <div style={{fontSize:10,fontWeight:700,color:C.coralText,marginBottom:6}}>¿Qué gastos cubre esta devolución de {fmtM(resto)}? <span style={{fontWeight:400,color:C.muted}}>(opcional · marca trazabilidad)</span></div>

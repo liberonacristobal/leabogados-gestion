@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Conciliación: partir abono sin factura (adelanto + fondo por rendir)
+- Al tocar "Saldo a Favor | Adelanto" en un abono sin factura, aparece un split inline: pill Adelanto con monto editable (precargado con el total) + pill Fondo por Rendir (el resto, automático) + Confirmar.
+- Crea un anticipo por el adelanto (honorarios) y un fondo por rendir por el resto (gastos), y marca el movimiento conciliado. Si dejas el total en Adelanto, el fondo queda en 0 (como antes). Resuelve el caso honorarios+gastos juntos sin factura emitida.
+
 ## 2026-06-19 — Modal de gasto minimal (labels flotantes)
 - Modal de gasto rediseñado con labels DENTRO de los boxes (componente FloatFld): Categoría/Monto/Fecha, Descripción, Proyecto, Razón social, OT/Subcategoría. Ahorra alto.
 - Fecha del botón ahora con año (19 jun 26, helper fechaConAnio). Adjuntar movido a la línea de Proyecto (sin la palabra Adjuntar). Eliminado Gasto personal del modal (sin uso).
