@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Notaría: correo indica a nombre de quién emitir las boletas
+- El cuerpo del correo a la notaría ahora incluye, destacado tras el total: las boletas deben emitirse a nombre de Liberona Escala Abogados Limitada, RUT 77.700.387-9. (en HTML y en texto plano).
+
 ## 2026-06-19 — Notaría: correos por defecto precargados
 - El campo de correo de la notaría viene precargado con sdelgado@notarialascar.cl y sdanotaria@gmail.com. Si el equipo guarda otros (learnings), esos mandan; el default cubre dispositivos nuevos / primera vez.
 
