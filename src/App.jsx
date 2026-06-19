@@ -14768,32 +14768,22 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           <button onClick={()=>{setEditMov(null);setEditForm({rut:'',nombre:''})}} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                         </div>
                       </div>
-                    : <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+                    : <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,flexWrap:'wrap',fontSize:11}} onClick={e=>e.stopPropagation()}>
                         {cliName
-                          ? <span style={{fontSize:11,color:C.greenText,fontWeight:600}}>{cliName}</span>
-                          : <span style={{fontSize:11,color:'#C77F18',fontWeight:600}}>Sin identificar</span>}
-                        {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
+                          ? <span style={{color:C.greenText,fontWeight:600}}>{cliName}</span>
+                          : <span style={{color:'#C77F18',fontWeight:600}}>Sin identificar</span>}
+                        {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
                         <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>{cliName?'Editar':'Identificar'}</button>
+                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; return (<>
+                          <span style={{color:C.border}}>·</span>
+                          {tagFor===m.id
+                            ? <>{cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{c}</button>})}{m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}<button onClick={()=>setTagFor(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button></>
+                            : (m.tipo==='cargo'&&!cat
+                                ? <><button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Gastos Oficina</button><button onClick={()=>setTagFor(m.id)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button></>
+                                : <button onClick={()=>setTagFor(m.id)} style={{fontSize:11,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'Cambiar tag':(m.tipo==='abono'?'¿Provisión de gastos?':'+ Clasificar')}</button>)}
+                        </>)})()}
                       </div>
                 )}
-                {/* Capa 2 — tag manual. Cargos: siempre (a quién le pagas). Abonos: solo si ya tienen tag (para cambiar/
-                    quitar); marcar "Provisión" en abonos se hace desde la fila de conciliación, no con un prompt suelto. */}
-                {!m.es_interno&&(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats = m.tipo==='abono' ? CATS_ABONO : CATS_CARGO; return (
-                  <div style={{marginTop:4}} onClick={e=>e.stopPropagation()}>
-                    {tagFor===m.id
-                      ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
-                          {cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{c}</button>})}
-                          {m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}
-                          <button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button>
-                        </div>
-                      : (m.tipo==='cargo' && !cat
-                          ? <div style={{display:'flex',gap:7,alignItems:'center'}}>
-                              <button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Gastos Oficina</button>
-                              <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button>
-                            </div>
-                          : <button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:m.categoria?C.muted:(m.tipo==='abono'?'#155E6B':'#185FA5'),background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>{m.categoria?'Cambiar tag':(m.tipo==='abono'?'¿Provisión de gastos?':'+ Clasificar')}</button>)}
-                  </div>
-                )})()}
                 {/* Fase 3.D — Cargo por cuenta de un cliente: registra un gasto que descuenta su fondo (reversible, aprende glosa→cliente) */}
                 {m.tipo==='cargo'&&!m.es_interno&&(()=>{
                   const gc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='gasto'&&c.gasto_id)
