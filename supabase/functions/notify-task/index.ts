@@ -51,10 +51,14 @@ async function sendMail(
     if (html) msg.html = html;
     msg.content = text || (html ? "Ver el contenido en formato HTML." : subject);
     if (pdfBase64) {
+      // denomailer vuelve a codificar si recibe el adjunto ya en base64 (encoding:"base64") → PDF corrupto.
+      // Lo decodificamos a bytes y lo pasamos como binario: denomailer codifica una sola vez, MIME correcto.
+      const clean = String(pdfBase64).replace(/[\r\n\s]/g, "");
+      const bytes = Uint8Array.from(atob(clean), (c) => c.charCodeAt(0));
       msg.attachments = [{
         filename: pdfName || "documento.pdf",
-        content: pdfBase64,
-        encoding: "base64",
+        content: bytes,
+        encoding: "binary",
         contentType: "application/pdf",
       }];
     }

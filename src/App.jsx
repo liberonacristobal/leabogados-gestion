@@ -11107,7 +11107,10 @@ async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName})
 }
 // Construye el MIME multipart y lo envía con la API de Gmail
 async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase64, pdfName}){
-  const b64 = s => btoa(unescape(encodeURIComponent(s)))
+  // RFC 2045: el base64 debe ir en líneas ≤76. Una sola línea larga (HTML/PDF reales) la trunca el SMTP
+  // de reenvío → cuerpo y adjunto corruptos. wrap76 corta cada bloque en líneas de 76 con CRLF.
+  const wrap76 = s => String(s||'').replace(/[\r\n]/g,'').replace(/(.{76})/g,'$1\r\n').trim()
+  const b64 = s => wrap76(btoa(unescape(encodeURIComponent(s))))
   const boundary = 'lea_'+Date.now()
   const alt = 'alt_'+Date.now()
   // multipart/mixed → [ multipart/alternative → (text/plain, text/html) , application/pdf ]
@@ -11120,10 +11123,10 @@ async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase
     `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), ''
   ]
   const mime = [
-    `To: ${to}`, `Subject: =?UTF-8?B?${b64(subject)}?=`, 'MIME-Version: 1.0',
+    `To: ${to}`, `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`, 'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
     ...cuerpo,
-    `--${boundary}`, `Content-Type: application/pdf; name="${pdfName}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${pdfName}"`, '', pdfBase64, '',
+    `--${boundary}`, `Content-Type: application/pdf; name="${pdfName}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${pdfName}"`, '', wrap76(pdfBase64), '',
     `--${boundary}--`
   ].join('\r\n')
   const raw = btoa(unescape(encodeURIComponent(mime))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')

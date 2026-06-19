@@ -202,7 +202,8 @@
       "Bash(python3 -c \"import json; [print\\(s['id'],s['title']\\) for s in json.load\\(open\\('sales_full.json'\\)\\)]\")",
       "Bash(curl -s *)",
       "Bash(python3 *)",
-      "Bash(echo \"=== clients \\(1 fila, columnas\\) ===\")"
+      "Bash(echo \"=== clients \\(1 fila, columnas\\) ===\")",
+      "Bash(deno check *)"
     ]
   }
 }

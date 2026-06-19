@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-18 — Correo de notaría · MIME corregido (cuerpo + PDF)
+- Cliente (`sendGmailWithPdf`, envío desde el Gmail del admin): el base64 del HTML, el texto y el PDF iban en una sola línea; al reenviar por SMTP esas líneas (>998) se truncaban → cuerpo y adjunto corruptos. Ahora cada bloque base64 se corta en líneas de 76 (RFC 2045). El subject queda como encoded-word sin cortar (header).
+- Servidor (edge function `notify-task`, fallback para usuarios sin gmail.send): `denomailer` re-codificaba el adjunto recibido en base64 → PDF corrupto. Ahora se decodifica a bytes y se envía como binario (codifica una sola vez). Requiere `supabase functions deploy notify-task`.
+
 ## 2026-06-18 — Modal de gastos · rediseño compacto (canon)
 - Layout alineado a "Editar cliente": Categoría (desplegable) · Monto · Fecha en una sola fila. Fecha ahora es un botón-calendario con formato breve ("15 jun"; muestra el año solo si no es el actual) → libera ancho. Descripción a doble alto (textarea). Proyecto a fila completa. Cliente · Razón social en pareja.
 - Slot condicional bajo la fila 1: OT cuando la categoría es Notaría, Subcategoría cuando es Otro.
