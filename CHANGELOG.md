@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Notaría: CC fijo al estudio + recordar correo (compartido)
+- El correo de liquidación a la notaría ahora lleva SIEMPRE en copia a Cristóbal, Erasmo, Martín y Martina (cl@/ee@/mc@/mp@) — nunca Rodrigo. Aplica al envío por Gmail del usuario y al fallback de oficina (se agregó soporte cc a sendGmailWithPdf; notify-task y sendMailServer ya lo tenían).
+- El/los correo(s) de la notaría se recuerdan compartido para todo el equipo (tabla learnings, kind notaria_email), no solo en el dispositivo; se precargan al abrir. Acepta varios separados por coma.
+
 ## 2026-06-19 — Seguridad: RLS ON en las 28 tablas (cierra hallazgo crítico)
 - Activado Row Level Security en todas las tablas + política team_all (solo usuarios autenticados con email @leabogados.cl). Antes, con RLS off + GRANT a anon, cualquiera con la anon key pública podía leer/escribir todo por la API REST.
 - El front (sesión Google) y las edge functions (service_role) no se afectan. SQL corrido por el usuario en el SQL Editor; reversible.
