@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: “Bienvenido” en cursiva (Fraunces itálica)
+- El saludo “Bienvenido” del login pasa a serif itálica (Fraunces, cargada desde Google Fonts solo la itálica usada).
+
 ## 2026-06-19 — Login rediseñado (nórdico, minimal)
 - Nueva pantalla de inicio: línea navy de acento, “Bienvenido”, tu logo, subtítulo “FirmDesk · Gestión Oficina” y botón mínimo “Entrar” (contorno navy + ícono Google). Se quitó “Solo cuentas @leabogados.cl” y se corrigió “Gestión”.
 
