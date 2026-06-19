@@ -8763,6 +8763,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
     return [...set].sort()
   },[sales,expenses,f.client_id])
   const personalOn = !!f.personal_de
+  const [cambiarCli,setCambiarCli] = useState(false)   // el cliente vive en el encabezado; reasignar es una acción discreta
   return (
     <>
       {/* Fila 1: Categoría · Monto · Fecha (categoría no aplica a fondos). Fecha = botón-calendario breve. */}
@@ -8801,22 +8802,21 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           {sugProy&&!f.project&&<button type='button' onClick={()=>{up('project',sugProy);setSugProy(null)}} style={{marginTop:5,fontSize:11,fontWeight:600,color:C.greenText,background:'#E1F5EE',border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>Sugerido por glosa: {sugProy}</button>}
         </Fld>
       )}
-      {/* Cliente · Razón social (atenuados si es gasto personal: no se le carga a nadie) */}
-      <div style={{display:'grid',gridTemplateColumns:rsList.length>=1?'1fr 1fr':'1fr',gap:8,opacity:personalOn?.45:1,pointerEvents:personalOn?'none':'auto'}}>
-        <Fld label='Cliente'>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <span style={{fontSize:13,fontWeight:600,color:client?C.text:C.overdue,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{personalOn?'— sin cliente —':(client?.name||'Sin cliente')}</span>
-            {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
-            {!personalOn&&<ClientePicker clients={clients} onPick={cid=>setF(p=>({...p,client_id:cid,entity_id:null}))}/>}
-          </div>
-        </Fld>
-        {rsList.length>=1&&(
-          <Fld label='Razón social'>
-            <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
-          </Fld>
-        )}
-      </div>
-      {(f.client_render_id||f.render_id||f.notaria_render_id)&&<div style={{fontSize:10,color:C.overdue,marginTop:-2}}>Este gasto está en una rendición/liquidación: reábrela antes de moverlo a otro cliente.</div>}
+      {/* Razón social (el cliente ya va en el encabezado). Reasignar cliente = acción discreta "Cambiar cliente". */}
+      {!personalOn&&(
+        <div>
+          {rsList.length>=1&&(
+            <Fld label='Razón social' mb={6}>
+              <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:14,boxSizing:'border-box'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
+            </Fld>
+          )}
+          {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
+          {cambiarCli
+            ? <ClientePicker clients={clients} onPick={cid=>{setF(p=>({...p,client_id:cid,entity_id:null}));setCambiarCli(false)}}/>
+            : <button type='button' onClick={()=>setCambiarCli(true)} style={{fontSize:11,fontWeight:600,color:'#185FA5',background:'none',border:'none',cursor:'pointer',padding:0}}>Cambiar cliente</button>}
+        </div>
+      )}
+      {(f.client_render_id||f.render_id||f.notaria_render_id)&&<div style={{fontSize:10,color:C.overdue,marginTop:4}}>Este gasto está en una rendición/liquidación: reábrela antes de moverlo a otro cliente.</div>}
       {/* Personal de: chips cuando se activa */}
       {!isFondo&&(showPersonal||personalOn)&&(
         <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
@@ -16070,7 +16070,7 @@ export default function App() {
         {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
-        {modal?.type==='expenseEdit'&&<Modal title={modal.data?.client_id?`Editar · ${clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||'registro'}`:'Editar registro'} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='expenseEdit'&&<Modal title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
