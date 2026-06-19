@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login rediseñado (nórdico, minimal)
+- Nueva pantalla de inicio: línea navy de acento, “Bienvenido”, tu logo, subtítulo “FirmDesk · Gestión Oficina” y botón mínimo “Entrar” (contorno navy + ícono Google). Se quitó “Solo cuentas @leabogados.cl” y se corrigió “Gestión”.
+
 ## 2026-06-19 — Notaría: 3 ajustes (destinatarios, saludo del correo, botones del historial)
 - Destinatarios: el destino (To) de la notaría se blinda — nunca puede ser una dirección @leabogados.cl (esas van solo en Cc). Filtra y auto-repara el valor guardado en localStorage/learnings (quedaba sobrescrito tras editar el campo en una prueba) y cae al default (sdelgado@notarialascar.cl, sdanotaria@gmail.com) si quedara vacío.
 - Correo: el "Estimados," ahora coincide con el cuerpo (14px, mismo gris) en los correos de notaría (enviar y reenviar); antes iba 16px y más oscuro.
