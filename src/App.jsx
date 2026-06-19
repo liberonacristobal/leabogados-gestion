@@ -14728,10 +14728,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
                     <span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF===m.rol_cuenta?'ambas':m.rol_cuenta)}} title='Filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:3,background:rc.bg,color:rc.color,cursor:'pointer'}}>{rc.t}</span>
+                    {mostrarCli&&<span title='Cliente' style={{fontSize:9,fontWeight:700,color:C.muted,background:'#F1EFE8',borderRadius:10,padding:'1px 8px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'46%'}}>{cliName}</span>}
                     <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                   </div>
                   <div title={m.descripcion||''} style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomBanco}{m.rut_contraparte?<span style={{color:C.muted,fontWeight:400}}> · {m.rut_contraparte}</span>:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#A32D2D',background:'#FCEBEB',borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</div>
-                  {mostrarCli&&<div style={{fontSize:10.5,color:C.muted,fontWeight:600,marginTop:2,display:'flex',alignItems:'center',gap:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{width:6,height:6,borderRadius:'50%',background:C.muted,flexShrink:0}}/>{cliName}</div>}
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:3}}>
                     <span onClick={facObj?(e)=>{e.stopPropagation();setFacChip(facChip===m.id?null:m.id)}:undefined} style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:ec.bg,color:ec.c,cursor:facObj?'pointer':'default'}}>{ec.t}{facObj?(facChip===m.id?' ▴':' ▾'):''}</span>
                     <span style={{fontSize:11,color:'#185FA5',fontWeight:500}}>{abierto?'Cerrar ▴':'Editar ▾'}</span>
