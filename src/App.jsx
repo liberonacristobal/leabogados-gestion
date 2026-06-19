@@ -14028,10 +14028,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Notaría':{bg:'#FAECE7',color:'#993C1D'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Provisión de gastos':{bg:'#DFF1F2',color:'#155E6B'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'} }
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:'#E6EEF1',color:'#003C50'},'Proveedor':{bg:'#FAEEDA',color:'#854F0B'},'Cliente':{bg:'#E1F5EE',color:'#0F6E56'},'Gastos Oficina':{bg:'#E6F1FB',color:'#185FA5'},'Notaría':{bg:'#FAECE7',color:'#993C1D'},'Impuestos':{bg:'#FCEBEB',color:'#A32D2D'},'Provisión de gastos':{bg:'#DFF1F2',color:'#155E6B'},'Otro ingreso':{bg:'#F1EFE8',color:'#5F5E5A'},'Devolución':{bg:'#DFF1F2',color:'#155E6B'} }
   // Categorías distintas por sentido: cargos = a quién le pagas; abonos = solo se clasifican los de la cuenta de
   // Gastos que NO calzan factura (provisión de gastos = ocasional); un abono de honorarios es el pago del cliente.
-  const CATS_CARGO = ['Gastos Oficina','Notaría','Proveedor','Equipo','Contadora','Socio','Impuestos']
+  const CATS_CARGO = ['Gastos Oficina','Notaría','Proveedor','Equipo','Contadora','Socio','Impuestos','Devolución']
   const CATS_ABONO = ['Provisión de gastos','Otro ingreso']
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
