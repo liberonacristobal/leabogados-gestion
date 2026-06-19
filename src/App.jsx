@@ -14508,7 +14508,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const cc=concByMov[m.id]||[]
     if(cc.length){
       const fon=cc.find(c=>c.tipo_destino==='fondo'), ant=cc.find(c=>c.tipo_destino==='anticipo'), facs=cc.filter(c=>c.tipo_destino==='factura')
-      if(fon) return {t:'→ Abono | Fondo por Rendir', c:'#E1F5EE', bg:'#0F6E56'}   // verde invertido: lo distingue de las facturas
+      if(fon) return {t:'→ Fondo por Rendir', c:'#E1F5EE', bg:'#0F6E56'}   // verde invertido: lo distingue de las facturas
       if(ant&&!facs.length) return {t:'→ Adelanto', c:'#185FA5', bg:'#E6F1FB'}      // azul: otro color para el saldo a favor
       if(facs.length>1) return {t:`→ ${facs.length} facturas`, c:'#0F6E56', bg:'#E1F5EE'}
       if(facs.length===1){ const f=billing.find(b=>b.id===facs[0].factura_id); return {t:`→ Factura N°${folioN(f?.invoice_no)||'—'}`, c:'#0F6E56', bg:'#E1F5EE'} }
@@ -14790,7 +14790,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {m.tipo==='abono'&&!m.es_interno&&m.categoria==='Provisión de gastos'&&(()=>{
                   const fc=(concByMov[m.id]||[]).find(c=>c.tipo_destino==='fondo')
                   if(fc) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                    <span style={{fontSize:11,fontWeight:700,color:'#0F6E56',background:'#E1F5EE',borderRadius:20,padding:'2px 9px'}}>✓ Abono | Fondo por Rendir · {fmtM(fc.monto_aplicado)}</span>
+                    <span style={{fontSize:11,fontWeight:700,color:'#E1F5EE',background:'#0F6E56',borderRadius:20,padding:'2px 9px'}}>→ Fondo por Rendir · {fmtM(fc.monto_aplicado)}</span>
                     <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button></div>)
                   if(!m.cliente_id) return (<div style={{marginTop:5,fontSize:10,color:C.muted}}>Identifica el cliente para acreditar el fondo.</div>)
                   return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
@@ -14861,7 +14861,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     </div>
                   )
                 })()}
-                {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9.5,color:'#99ABB4',marginTop:8,borderTop:`1px solid #F1F1F1`,paddingTop:6,lineHeight:1.6}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Abono | Fondo por Rendir':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
+                {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9.5,color:'#99ABB4',marginTop:8,borderTop:`1px solid #F1F1F1`,paddingTop:6,lineHeight:1.6}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo por Rendir':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
                 </div>)}
               </div>
             )
