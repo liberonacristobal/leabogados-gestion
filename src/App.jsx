@@ -7913,14 +7913,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     return (
       <div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`,opacity:r.anulada_at?0.6:1}}>
         {timeline ? (
-          <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'flex',gap:12,alignItems:'flex-start',cursor:'pointer'}}>
+          <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'flex',gap:12,alignItems:'center',cursor:'pointer'}}>
             {(()=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div> })()}
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{r.user_name||''}{rs?` · ${rs}`:''}</div>
-              <div style={{marginTop:3}}>{estadoBadge(r)}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{r.user_name||''}{rs?` · ${rs}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div>
             </div>
-            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>-{fmt(r.total)}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>-{fmt(r.total)}</div><div style={{marginTop:3}}>{estadoBadge(r)}</div></div>
           </div>
         ) : (
         <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
@@ -7948,7 +7947,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             ))}
           </div>
         })()}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+        {(!timeline||expandRend===r.id)&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
           {r.anulada_at
             ? <span style={{fontSize:10,color:C.overdue,fontWeight:600}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</span>
             : <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.overdue,background:'none',border:`1px solid ${C.overdue}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>}
@@ -7957,7 +7956,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
             {cl&&!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
           </div>
-        </div>
+        </div>}
       </div>
     )
   }
@@ -8447,12 +8446,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 const liq=[...notaLiquidaciones].filter(r=>{ if(!okFecha(r)) return false; if(q&&!String(r.periodo||'').toLowerCase().includes(q)) return false; return true }).sort(ord)
                 if(!liq.length) return <div style={{fontSize:12,color:C.muted,padding:'24px 0',textAlign:'center'}}>Sin liquidaciones a notaría.</div>
                 const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-                return <div>{liq.map(r=>{ const d=r.created_at?new Date(r.created_at):null; const est=notaEstado(r); const estLbl=est==='enviada'?'✓ Enviada':est==='por_enviar'?'Por enviar':'Pagado histórico'; const estCol=est==='enviada'?C.greenText:est==='por_enviar'?C.soonText:C.done; return (
-                    <div key={r.id} onClick={()=>{setShowHistorial(false);setShowNotaria(true)}} style={{display:'flex',gap:12,alignItems:'center',padding:'9px 2px',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+                return <div>{liq.map(r=>{ const d=r.created_at?new Date(r.created_at):null; const est=notaEstado(r); const estLbl=est==='enviada'?'Enviada':est==='por_enviar'?'Por enviar':'Pagado histórico'; const estBg=est==='enviada'?C.greenBg:est==='por_enviar'?'#FFF8E1':C.border; const estCol=est==='enviada'?C.greenText:est==='por_enviar'?C.soon:C.muted; const open=expandRend===r.id; return (
+                  <div key={r.id}>
+                    <div onClick={()=>setExpandRend(open?null:r.id)} style={{display:'flex',gap:12,alignItems:'center',padding:'9px 2px',borderBottom:open?'none':`0.5px solid ${C.border}`,cursor:'pointer'}}>
                       <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text}}>{r.n_gastos||0} OT{r.periodo?<span style={{color:C.done}}> · {r.periodo}</span>:''}</div><div style={{fontSize:9,color:estCol}}>{estLbl}</div></div>
-                      <div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',textAlign:'right',whiteSpace:'nowrap'}}>{fmt(r.total)}</div>
-                    </div>) })}</div>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Notaría Lascar</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>{r.periodo?`${r.periodo} · `:''}{r.n_gastos||0} OT</div></div>
+                      <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(r.total)}</div><div style={{marginTop:3}}><span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:estBg,color:estCol,whiteSpace:'nowrap'}}>{estLbl}</span></div></div>
+                    </div>
+                    {open&&<div style={{padding:'6px 2px 10px 54px',borderBottom:`0.5px solid ${C.border}`}}>
+                      {r.ot_numbers&&<div style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginBottom:7}}>OT: {r.ot_numbers}</div>}
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <button onClick={e=>{e.stopPropagation();descargarExcelNota(r)}} style={{fontSize:11,fontWeight:500,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>↓ Excel</button>
+                        {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' onClick={e=>e.stopPropagation()} style={{fontSize:11,fontWeight:500,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px'}}>Comprobante</a>}
+                        {est==='enviada'&&<button onClick={e=>{e.stopPropagation();reenviarNotaria(r)}} disabled={reenviando===r.id} style={{fontSize:11,fontWeight:500,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 10px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'↻ Reenviar'}</button>}
+                      </div>
+                    </div>}
+                  </div>) })}</div>
               })()}
             </div>
           )}
