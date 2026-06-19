@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Ajuste de saldo manual (⋯ en tarjeta Saldo fondos, solo admin)
+- ⋯ discreto en la tarjeta Saldo fondos del Estado de cuenta (solo admin) → modal "Ajustar saldo | cliente" (formato canónico, con advertencia + monto + motivo obligatorio).
+- Crea un gasto categoría "Ajuste" que rebaja el saldo del cliente; queda como movimiento (motivo · fecha · autor) auditable y eliminable. Para reflejar gastos antiguos no cargados sin tener que cargarlos uno a uno.
+
 ## 2026-06-19 — Gasto "ya pagado" / Pago histórico (no descuenta del saldo)
 - Toggle discreto "Gasto ya pagado" en el modal de gasto (solo gastos con cliente): el gasto queda en el historial pero NO descuenta del saldo del cliente. Columna nueva expenses.no_descuenta_saldo (ALTER lo corre el usuario).
 - Excluido de las 4 fuentes de saldo (fgCliente, rsBalances, Ficha, clientsWithMovs) de forma consistente. En la lista: chip gris "Pago histórico" + monto en gris tachado.

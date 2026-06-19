@@ -9592,7 +9592,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
 
 // Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
-function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion}){
+function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste}){
   const [sec,setSec]=useState('honorarios')
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
   const [det,setDet]=useState(null); const [detG,setDetG]=useState(null)
@@ -9630,11 +9630,11 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     const cmp=ord==='monto'?(x,y)=>(y.amount||0)-(x.amount||0):ord==='proyecto'?(x,y)=>((ventaById[x.sale_id]?.title||x.concept||'zzz')).localeCompare(ventaById[y.sale_id]?.title||y.concept||'zzz')||((x.issued_at||'')<(y.issued_at||'')?1:-1):(x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1
     Object.values(g).forEach(a=>a.sort(cmp));return g},[facturas,ord,ventaById])
   const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=(b.amount||0);o.pag+=(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0));o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
-  const kpi=(label,val,sub,col)=>(<div style={{background:'#F5F7F9',borderRadius:8,padding:'8px 9px'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
+  const kpi=(label,val,sub,col,corner)=>(<div style={{background:'#F5F7F9',borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
   return (<div style={{padding:'14px 20px 40px'}}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:12}}>
       {kpi('Por cobrar',porCobrar,`facturado ${fmt(facturado)} − pagado ${fmt(pagadoTot)}`,porCobrar>0?C.overdueText:C.greenText)}
-      {kpi('Saldo fondos',fg.saldo,`fondos ${fmt(fg.fondos)} − gastos ${fmt(fg.gastos)}`,fg.saldo<0?C.overdueText:C.greenText)}
+      {kpi('Saldo fondos',fg.saldo,`fondos ${fmt(fg.fondos)} − gastos ${fmt(fg.gastos)}`,fg.saldo<0?C.overdueText:C.greenText,onAjuste&&<button onClick={()=>onAjuste(client)} title='Ajustar saldo' style={{position:'absolute',top:4,right:6,background:'none',border:'none',color:C.done,cursor:'pointer',fontSize:13,lineHeight:1,padding:2}}>⋯</button>)}
       {kpi('A favor',aFavor,'anticipos disponibles',aFavor>0?C.greenText:C.muted)}
     </div>
     <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:10}}>
@@ -10257,7 +10257,7 @@ Liberona Escala Abogados`
   )
 }
 
-function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab}) {
+function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste}) {
   const [emailRend,setEmailRend] = useState(null)
   const [ftab,setFtab] = useState(initialFtab||'resumen')
   const [openRS,setOpenRS] = useState(()=>new Set())   // grupos de "Cobros pendientes" por RS, colapsados por defecto
@@ -10639,13 +10639,13 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
       {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange}/>}
-      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion}/>}
+      {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onAjuste={onAjuste}/>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
 }
 
-function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha}) {
+function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha}) {
   const [verProv,setVerProv] = useState(false)
 
   const handleAnularRendicion = async(r) => {
@@ -10710,6 +10710,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
       <ClientFicha
         client={selected}
         initialFtab={forceFtab}
+        onAjuste={onAjuste}
         onSaveFields={onSaveFields}
         clients={clients}
         sales={sales}
@@ -15090,6 +15091,32 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   )
 }
 
+// Ajuste manual de saldo (solo admin): crea un gasto categoría "Ajuste" que rebaja el saldo del cliente. Visible/auditable en sus movimientos.
+function AjusteModal({client, user, onSave, onClose, saving}){
+  const [monto,setMonto] = useState('')
+  const [motivo,setMotivo] = useState('')
+  const hoy = new Date().toISOString().slice(0,10)
+  const m = parseInt(monto)||0
+  const valid = m>0 && motivo.trim()
+  const inp = {width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:14,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}
+  return (
+    <div>
+      <div style={{display:'flex',gap:8,alignItems:'flex-start',background:'#FFF8E1',borderRadius:8,padding:'9px 11px',marginBottom:16}}>
+        <span style={{fontSize:15,color:C.soonText,lineHeight:1,marginTop:1}}>⚠</span>
+        <div style={{fontSize:11,color:C.soonText,lineHeight:1.5}}>Cambia el saldo a mano. Úsalo solo para reflejar gastos antiguos que no están cargados.</div>
+      </div>
+      <Lbl>Monto <span style={{textTransform:'none',letterSpacing:0,color:C.done}}>(rebaja el saldo)</span></Lbl>
+      <input value={monto} onChange={e=>setMonto(e.target.value.replace(/[^0-9]/g,''))} inputMode='numeric' placeholder='0' style={inp}/>
+      <div style={{marginTop:14}}><Lbl>Motivo <span style={{textTransform:'none',letterSpacing:0,color:C.done}}>(obligatorio)</span></Lbl>
+        <input value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder='Ej: gastos de CBR 2024 no cargados' style={inp}/></div>
+      <div style={{display:'flex',gap:10,marginTop:20}}>
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={!valid||saving} onClick={()=>onSave({client_id:client.id,type:'gasto',category:'Ajuste',concept:motivo.trim(),amount:m,date:hoy,created_by:user?.email||null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!valid||saving)?'default':'pointer',opacity:(!valid||saving)?.6:1}}>{saving?'Creando...':'Crear ajuste'}</button>
+      </div>
+    </div>
+  )
+}
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null)
@@ -16288,7 +16315,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c)=>setModal({type:'fondo',data:c})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)}/>}
           </div>
         )}
         {userRole==='limited'&&tab==='tasks'&&(
@@ -16313,6 +16340,7 @@ export default function App() {
         {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='ajuste'&&<Modal title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='pdfupload'&&<Modal title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
