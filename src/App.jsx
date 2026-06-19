@@ -7546,6 +7546,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [notaSending,setNotaSending] = useState(false)
   const [notaConfirm,setNotaConfirm] = useState(false)
   const [notaEmail,setNotaEmail] = useState(()=>{ try{return localStorage.getItem('notaria_email')||''}catch(_){return ''} })
+  const [notaSend,setNotaSend] = useState(null)   // rendición en el sheet "Enviar a notaría" (o null)
+  const [compFile,setCompFile] = useState(null)   // comprobante de transferencia adjunto (File)
   const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)>1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   // Gastos de notaría por $1 (o menos): escrituras/trabajos anulados, solo orden — no se liquidan, se pueden eliminar.
   const notariaAnulados = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)<=1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
@@ -7590,6 +7592,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const notaSinFondosSel = notaSel.filter(e=>e.client_id && saldoCliente(expenses,e.client_id)<0)
   const periodoNota = gs => { const fs=gs.map(e=>e.date).filter(Boolean).sort(); if(!fs.length) return new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const mY=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); return mY(fs[0])===mY(fs[fs.length-1])?mY(fs[0]):`${fmtFechaDMY(fs[0])} – ${fmtFechaDMY(fs[fs.length-1])}` }
 
+  // Liquidar = GUARDAR la liquidación como 'por_enviar' (sin correo). El envío a la notaría es un 2º paso (enviarNotaria).
   const liquidarNotaria = async() => {
     if(!notaSel.length) return
     setNotaSending(true)
@@ -7597,50 +7600,76 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       const renderId=crypto.randomUUID(), now=new Date().toISOString()
       const periodo=periodoNota(notaSel)
       const ot=[...new Set(notaSel.map(e=>e.ot_number).filter(Boolean))].join(', ')
-      const {error:rErr}=await supabase.from('rendiciones').insert({id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null,sent_at:now})
+      const row={id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null,estado_envio:'por_enviar'}
+      const {error:rErr}=await supabase.from('rendiciones').insert(row)
       if(rErr) throw rErr
       const ids=notaSel.map(e=>e.id)
       const {error:uErr}=await supabase.from('expenses').update({notaria_render_id:renderId,notaria_liquidado_at:now}).in('id',ids)
       if(uErr) throw uErr
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
-      if(setRendiciones) setRendiciones(p=>[{id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null,created_at:now,sent_at:now},...p])
-      const dest=(notaEmail||'').trim()
-      if(dest){
-        try{ localStorage.setItem('notaria_email',dest) }catch(_){}
-        let sent=false
-        // HTML + texto + PDF se arman una sola vez (no dependen del token): sirven al envío del usuario y al fallback del servidor.
-        const filas=notaSel.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
-        const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Adjuntamos la liquidación de las siguientes órdenes de trabajo (OT) que estamos pagando — ${periodo}.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">TOTAL</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${notaTotal.toLocaleString('es-CL')}</td></tr></table></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
-        const texto='Estimados,\n\nAdjuntamos la liquidación de las OT que estamos pagando — '+periodo+'.\n\n'+notaSel.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTOTAL: $'+notaTotal.toLocaleString('es-CL')
-        const subjectNota=`Liquidación de gastos — Liberona Escala Abogados — ${periodo}`
-        const pdfNameNota=`Liquidacion notaria ${periodo}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'
-        let pdf=null; try{ pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:notaSel,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){}
-        // 1) desde el correo del usuario
-        try{ const token=await driveToken(); if(token && pdf){ await sendGmailWithPdf(token,{to:dest,subject:subjectNota,bodyText:texto,bodyHtml:html,pdfBase64:pdf,pdfName:pdfNameNota}); sent=true } }catch(_){ sent=false }
-        // 2) fallback: desde la cuenta de oficina (servidor) con el PDF adjunto
-        if(!sent && pdf){ try{ await sendMailServer({to:dest,subject:subjectNota,html,text:texto,pdfBase64:pdf,pdfName:pdfNameNota}); sent=true }catch(_){ sent=false } }
-        // 3) último recurso: abrir el correo a mano
-        if(!sent){ const a=document.createElement('a'); a.href='mailto:'+dest+'?subject='+encodeURIComponent(subjectNota); a.click() }
-      }
+      if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set()); setNotaConfirm(false)
     }catch(e){alert('Error al liquidar: '+e.message)}
     setNotaSending(false)
   }
-  // Marcar como ya pagados (gastos históricos): registra la liquidación SIN correo (sent_at null = "Pagado histórico").
+  // Marcar como ya pagados (gastos históricos): registra la liquidación SIN correo (estado_envio='pagado').
   const marcarPagadoNotaria = async() => {
     if(!notaSel.length) return
     if(!confirm(`¿Marcar ${notaSel.length} gasto(s) como ya pagados a la notaría? Salen de pendientes; no se envía correo.`)) return
     try{
       const renderId=crypto.randomUUID(), now=new Date().toISOString()
       const periodo=periodoNota(notaSel), ot=[...new Set(notaSel.map(e=>e.ot_number).filter(Boolean))].join(', ')
-      const {error:rErr}=await supabase.from('rendiciones').insert({id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null})
+      const row={id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null,estado_envio:'pagado'}
+      const {error:rErr}=await supabase.from('rendiciones').insert(row)
       if(rErr) throw rErr
       const ids=notaSel.map(e=>e.id)
       await supabase.from('expenses').update({notaria_render_id:renderId,notaria_liquidado_at:now}).in('id',ids)
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
-      if(setRendiciones) setRendiciones(p=>[{id:renderId,user_name:currentUserName,periodo,total:notaTotal,n_gastos:notaSel.length,tipo:'notaria',ot_numbers:ot||null,created_at:now},...p])
+      if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set())
     }catch(e){alert('Error: '+e.message)}
+  }
+  // Estado de envío de una liquidación (compat filas viejas sin estado_envio: con sent_at→enviada, si no→pagado).
+  const notaEstado = r => r.estado_envio || (r.sent_at?'enviada':'pagado')
+  // Paso 2: enviar a la notaría el detalle + el comprobante de transferencia (ya transferiste). Marca 'enviada'.
+  const enviarNotaria = async(r) => {
+    const dest=(notaEmail||'').trim()
+    if(!dest){ alert('Falta el correo de la notaría.'); return }
+    if(!compFile){ alert('Adjunta el comprobante de transferencia.'); return }
+    setNotaSending(true)
+    try{
+      try{ localStorage.setItem('notaria_email',dest) }catch(_){}
+      const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
+      const total=gs.reduce((a,e)=>a+(e.amount||0),0)
+      const periodo=r.periodo||periodoNota(gs)
+      // Sube el comprobante a Drive (queda enlazado) y se arma como adjunto base64 para el correo.
+      const fileToB64 = f => new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(String(rd.result).split(',')[1]||''); rd.onerror=rej; rd.readAsDataURL(f) })
+      const compB64 = await fileToB64(compFile)
+      const compMime = compFile.type||'application/octet-stream'
+      const compName = (compFile.name||'Comprobante transferencia').replace(/[^\w.\s-]/g,'').trim()
+      let comprobanteUrl=null
+      try{ const tk=await driveToken(); if(tk){ const folders=await driveAdjuntosFolders(tk); const up=await driveUpload(tk,folders.gastos,compFile,`Comprobante notaría ${periodo} · ${compName}`); comprobanteUrl=up?.webViewLink||null } }catch(_){}
+      // Correo (texto aprobado): detalle + comprobante.
+      const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      const filas=gs.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Junto con saludar, adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${esc(periodo)}, junto con el comprobante de la transferencia por el total.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${total.toLocaleString('es-CL')}</td></tr></table><div style="font-size:13px;color:#666666;margin:16px 0 0">Quedamos atentos a cualquier observación.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">Liberona Escala Abogados</b></div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
+      const texto='Estimados,\n\nJunto con saludar, adjuntamos la liquidación de las OT que estamos pagando correspondientes a '+periodo+', junto con el comprobante de la transferencia por el total.\n\n'+gs.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTotal transferido: $'+total.toLocaleString('es-CL')+'\n\nQuedamos atentos a cualquier observación.\nSaludos cordiales,\nLiberona Escala Abogados'
+      const subjectNota=`Liquidación de gastos y comprobante de transferencia — Liberona Escala Abogados — ${periodo}`
+      let pdf=null; try{ pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:gs,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){}
+      const ext = compMime.includes('pdf')?'pdf':(compMime.includes('png')?'png':(compMime.includes('jpeg')||compMime.includes('jpg')?'jpg':'dat'))
+      const adjuntos=[]
+      if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion Notaria Lascar al ${fmtFechaDMY(r.created_at)}.pdf`, mime:'application/pdf'})
+      adjuntos.push({base64:compB64, name:`Comprobante transferencia.${ext}`, mime:compMime})
+      let sent=false
+      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
+      if(!sent){ try{ await sendMailServer({to:dest,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
+      if(!sent){ alert('No se pudo enviar el correo. Revisa la conexión o reintenta.'); setNotaSending(false); return }
+      const now=new Date().toISOString()
+      await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}).eq('id',r.id)
+      if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}:x))
+      setNotaSend(null); setCompFile(null)
+    }catch(e){alert('Error al enviar: '+e.message)}
+    setNotaSending(false)
   }
   const deshacerNotaria = async(r) => {
     if(!confirm('¿Deshacer esta liquidación de notaría? Los gastos vuelven a pendientes.')) return
@@ -8168,13 +8197,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
           {notaLiquidaciones.length>0&&<div style={{marginTop:18}}>
             <div style={{fontSize:10,fontWeight:600,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Liquidaciones a notaría</div>
-            {notaLiquidaciones.map(r=>{ const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; return (
-              <div key={r.id} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:6}}>
+            {notaLiquidaciones.map(r=>{ const open=notaLiqOpen===r.id; const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id)); const adding=notaLiqAdd===r.id; const est=notaEstado(r); return (
+              <div key={r.id} style={{border:`1px solid ${est==='por_enviar'?'#FAC775':C.border}`,borderLeft:est==='por_enviar'?'3px solid #EF9F27':`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:6}}>
                 <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
-                  <div style={{minWidth:0,display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:13,color:'#99ABB4',transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Liquidación Notaría Lascar al {fmtFechaDMY(r.created_at)||'—'}</div><div style={{fontSize:10,color:'#99ABB4'}}>{r.user_name?`${r.user_name} · `:''}{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.periodo?` · período ${r.periodo}`:''}</div></div></div>
-                  <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.total)}</div><span style={{fontSize:9,fontWeight:600,borderRadius:4,padding:'1px 6px',background:r.sent_at?'#E1F5EE':'#F1EFE8',color:r.sent_at?C.greenText:'#5F5E5A'}}>{r.sent_at?'Enviada a notaría':'Pagado histórico'}</span></div>
+                  <div style={{minWidth:0,display:'flex',alignItems:'baseline',gap:6}}><span style={{fontSize:13,color:'#99ABB4',transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Notaría Lascar · {fmtFechaDMY(r.created_at)||'—'}</div><div style={{fontSize:10,color:'#99ABB4'}}>{r.user_name?`${r.user_name} · `:''}{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.periodo?` · ${r.periodo}`:''}</div></div></div>
+                  <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.total)}</div>{est==='por_enviar'?<span style={{fontSize:9.5,fontWeight:700,color:'#854F0B',display:'inline-flex',alignItems:'center',gap:4,marginTop:2}}><span style={{width:6,height:6,borderRadius:'50%',background:'#EF9F27'}}/>Por enviar</span>:est==='enviada'?<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,marginTop:2,display:'inline-block'}}>✓ Enviada</span>:<span style={{fontSize:9.5,fontWeight:600,color:'#99ABB4',marginTop:2,display:'inline-block'}}>Pagado histórico</span>}</div>
                 </div>
                 {r.ot_numbers&&!open&&<div style={{fontSize:10,color:'#185FA5',fontWeight:600,marginTop:4}}>OT: {r.ot_numbers}</div>}
+                {est==='por_enviar'&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:9}}><button onClick={ev=>{ev.stopPropagation();setCompFile(null);setNotaSend(r)}} style={{background:C.accent,color:'#fff',fontSize:12,fontWeight:700,borderRadius:8,padding:'7px 15px',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>Enviar a notaría</button></div>}
                 {open&&<div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
                   {gs.map(e=>{ const cn=clients.find(c=>String(c.id)===String(e.client_id))?.name||'Sin cliente'; return (
                     <div key={e.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'4px 0',fontSize:11}}>
@@ -8184,6 +8214,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     </div>) })}
                   <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
                     <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:'#0F6E56',background:'#E1F5EE',border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>↓ Excel</button>
+                    {est==='por_enviar'&&<button onClick={()=>{setCompFile(null);setNotaSend(r)}} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Enviar a notaría</button>}
+                    {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' style={{fontSize:10,fontWeight:600,color:'#185FA5',textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px'}}>Ver comprobante</a>}
                     {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#E6EEF1',border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir gastos'}</button>}
                     <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Deshacer</button>
                   </div>
@@ -8206,17 +8238,43 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:18}}>
               <div style={{background:'#fff',borderRadius:16,width:'min(92vw,420px)',padding:20}}>
                 <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>Liquidar a notaría</div>
-                <div style={{fontSize:12,color:C.muted,marginBottom:notaSinFondosSel.length?8:12}}>{selNota.size} gasto{selNota.size!==1?'s':''} · {fmt(notaTotal)}. Se enviará el detalle (OT + montos) a la notaría con PDF adjunto.</div>
-                {notaSinFondosSel.length>0&&<div style={{fontSize:12,color:'#A32D2D',background:'#FCEBEB',border:'1px solid #F0997B',borderRadius:8,padding:'8px 10px',marginBottom:12,lineHeight:1.4}}><b>Atención:</b> incluyes {notaSinFondosSel.length} gasto{notaSinFondosSel.length!==1?'s':''} de cliente(s) <b>sin fondos</b> ({fmt(notaSinFondosSel.reduce((a,e)=>a+(e.amount||0),0))}) — estarías adelantando plata de la oficina.</div>}
-                <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Correo de la notaría</label>
-                <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginTop:4,marginBottom:14,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:13,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}}/>
+                <div style={{fontSize:12,color:C.muted,marginBottom:notaSinFondosSel.length?8:14,lineHeight:1.4}}>{selNota.size} gasto{selNota.size!==1?'s':''} · <b style={{color:C.text}}>{fmt(notaTotal)}</b>. Se <b>guarda</b> la liquidación como <b style={{color:'#854F0B'}}>Por enviar</b>. El correo a la notaría lo mandas después, cuando hagas la transferencia.</div>
+                {notaSinFondosSel.length>0&&<div style={{fontSize:12,color:'#A32D2D',background:'#FCEBEB',border:'1px solid #F0997B',borderRadius:8,padding:'8px 10px',marginBottom:14,lineHeight:1.4}}><b>Atención:</b> incluyes {notaSinFondosSel.length} gasto{notaSinFondosSel.length!==1?'s':''} de cliente(s) <b>sin fondos</b> ({fmt(notaSinFondosSel.reduce((a,e)=>a+(e.amount||0),0))}) — estarías adelantando plata de la oficina.</div>}
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>setNotaConfirm(false)} style={{flex:1,height:40,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                  <button disabled={notaSending} onClick={liquidarNotaria} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:notaSending?'default':'pointer',opacity:notaSending?.6:1}}>{notaSending?'Enviando…':'Liquidar y enviar'}</button>
+                  <button disabled={notaSending} onClick={liquidarNotaria} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:notaSending?'default':'pointer',opacity:notaSending?.6:1}}>{notaSending?'Guardando…':'Liquidar'}</button>
                 </div>
               </div>
             </div>
           )}
+
+          {notaSend&&(()=>{ const gsS=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(notaSend.id)); const totS=gsS.reduce((a,e)=>a+(e.amount||0),0); return (
+            <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.42)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}} onClick={e=>e.target===e.currentTarget&&!notaSending&&setNotaSend(null)}>
+              <div style={{background:'#fff',borderRadius:'18px 18px 0 0',width:'min(100vw,520px)',padding:'15px 16px 20px',maxHeight:'92vh',overflowY:'auto'}}>
+                <div style={{width:36,height:4,borderRadius:2,background:C.border,margin:'0 auto 12px'}}/>
+                <div style={{fontSize:15,fontWeight:600,color:C.accent,marginBottom:12}}>Enviar a notaría</div>
+                <div style={{background:C.accent,borderRadius:11,padding:'12px 14px',color:'#fff',textAlign:'center',marginBottom:14}}>
+                  <div style={{fontSize:10,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.5}}>Total a transferir</div>
+                  <div style={{fontSize:24,fontWeight:700,letterSpacing:-.5,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(totS)}</div>
+                  <div style={{fontSize:10,color:'#9FE1CB',marginTop:3}}>{notaSend.n_gastos||gsS.length} OT · Notaría Lascar</div>
+                </div>
+                <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Comprobante de transferencia</label>
+                {compFile
+                  ? <div style={{display:'flex',alignItems:'center',gap:9,border:'1px solid #9FE1CB',background:'#E1F5EE',borderRadius:9,padding:'9px 11px',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#0F6E56' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><polyline points='9 15 11 17 15 13'/></svg><span style={{flex:1,minWidth:0,fontSize:11.5,fontWeight:600,color:'#0F6E56',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{compFile.name}</span><button onClick={()=>setCompFile(null)} style={{background:'none',border:'none',color:'#99ABB4',fontSize:15,cursor:'pointer',lineHeight:1}}>×</button></div>
+                  : <label style={{border:`1.5px dashed ${C.muted}`,borderRadius:9,background:'#FAFBFC',padding:14,textAlign:'center',color:C.muted,fontSize:11.5,display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',marginBottom:14}}>
+                      <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
+                      <span>Toca para subir el comprobante del banco (imagen o PDF)</span>
+                      <input type='file' accept='image/*,application/pdf' onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(!f) return; if(f.size>15*1024*1024){ alert('El archivo supera 15 MB.'); return } setCompFile(f) }} style={{display:'none'}}/>
+                    </label>}
+                <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Correo de la notaría</label>
+                <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginBottom:14,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}}/>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>!notaSending&&setNotaSend(null)} style={{flex:1,height:40,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button disabled={notaSending||!compFile||!(notaEmail||'').trim()} onClick={()=>enviarNotaria(notaSend)} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(notaSending||!compFile||!(notaEmail||'').trim())?'default':'pointer',opacity:(notaSending||!compFile||!(notaEmail||'').trim())?.5:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{notaSending?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>}{notaSending?'Enviando…':'Enviar detalle + comprobante'}</button>
+                </div>
+              </div>
+            </div>
+          )})()}
         </div>
       )}
 
@@ -11096,24 +11154,26 @@ async function liquidacionPdfBase64({me, periodo, gastos, clients, titulo}){
 }
 // Envío desde la CUENTA DE OFICINA vía edge function (SMTP). Fallback cuando el usuario no tiene
 // el permiso gmail.send: la rendición/liquidación se envía igual, con el PDF adjunto.
-async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName}){
+async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName, attachments}){
   const res = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
-    body:JSON.stringify({mail:{to, cc:cc||null, subject, html:html||null, text:text||null, pdfBase64:pdfBase64||null, pdfName:pdfName||null}})
+    body:JSON.stringify({mail:{to, cc:cc||null, subject, html:html||null, text:text||null, pdfBase64:pdfBase64||null, pdfName:pdfName||null, attachments:attachments||null}})
   })
   if(!res.ok){ let m=''; try{ m=(await res.json()).error||'' }catch(_){} throw new Error('Servidor '+res.status+(m?': '+m:'')) }
   return true
 }
 // Construye el MIME multipart y lo envía con la API de Gmail
-async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase64, pdfName}){
+async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase64, pdfName, attachments}){
   // RFC 2045: el base64 debe ir en líneas ≤76. Una sola línea larga (HTML/PDF reales) la trunca el SMTP
   // de reenvío → cuerpo y adjunto corruptos. wrap76 corta cada bloque en líneas de 76 con CRLF.
   const wrap76 = s => String(s||'').replace(/[\r\n]/g,'').replace(/(.{76})/g,'$1\r\n').trim()
   const b64 = s => wrap76(btoa(unescape(encodeURIComponent(s))))
+  // Adjuntos: lista [{base64,name,mime}]. Compat: pdfBase64/pdfName = un adjunto PDF.
+  const atts = (attachments&&attachments.length) ? attachments : (pdfBase64?[{base64:pdfBase64,name:pdfName||'documento.pdf',mime:'application/pdf'}]:[])
   const boundary = 'lea_'+Date.now()
   const alt = 'alt_'+Date.now()
-  // multipart/mixed → [ multipart/alternative → (text/plain, text/html) , application/pdf ]
+  // multipart/mixed → [ multipart/alternative → (text/plain, text/html) , adjuntos… ]
   const cuerpo = bodyHtml ? [
     `--${boundary}`, `Content-Type: multipart/alternative; boundary="${alt}"`, '',
     `--${alt}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), '',
@@ -11122,11 +11182,14 @@ async function sendGmailWithPdf(token, {to, subject, bodyText, bodyHtml, pdfBase
   ] : [
     `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), ''
   ]
+  const attParts = atts.flatMap(a=>[
+    `--${boundary}`, `Content-Type: ${a.mime||'application/octet-stream'}; name="${a.name}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${a.name}"`, '', wrap76(a.base64), ''
+  ])
   const mime = [
     `To: ${to}`, `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`, 'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
     ...cuerpo,
-    `--${boundary}`, `Content-Type: application/pdf; name="${pdfName}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${pdfName}"`, '', wrap76(pdfBase64), '',
+    ...attParts,
     `--${boundary}--`
   ].join('\r\n')
   const raw = btoa(unescape(encodeURIComponent(mime))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')

@@ -203,7 +203,8 @@
       "Bash(curl -s *)",
       "Bash(python3 *)",
       "Bash(echo \"=== clients \\(1 fila, columnas\\) ===\")",
-      "Bash(deno check *)"
+      "Bash(deno check *)",
+      "Bash(supabase --version)"
     ]
   }
 }

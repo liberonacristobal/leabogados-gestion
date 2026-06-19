@@ -38,9 +38,10 @@ async function sendViaSMTP(to: string, subject: string, html: string) {
 
 // Envío genérico desde la cuenta de oficina, con adjunto PDF opcional y cc.
 // Lo usa el fallback de rendiciones/liquidaciones cuando el usuario no tiene permiso gmail.send.
+type MailAttachment = { base64: string; name?: string; mime?: string };
 async function sendMail(
-  { to, cc, subject, html, text, pdfBase64, pdfName }:
-  { to: string; cc?: string; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string },
+  { to, cc, subject, html, text, pdfBase64, pdfName, attachments }:
+  { to: string; cc?: string; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string; attachments?: MailAttachment[] },
 ) {
   const client = new SMTPClient({
     connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } },
@@ -50,17 +51,18 @@ async function sendMail(
     if (cc) msg.cc = cc;
     if (html) msg.html = html;
     msg.content = text || (html ? "Ver el contenido en formato HTML." : subject);
-    if (pdfBase64) {
-      // denomailer vuelve a codificar si recibe el adjunto ya en base64 (encoding:"base64") → PDF corrupto.
+    // Lista unificada de adjuntos. Compat: pdfBase64/pdfName = un adjunto PDF.
+    const atts: MailAttachment[] = (attachments && attachments.length)
+      ? attachments
+      : (pdfBase64 ? [{ base64: pdfBase64, name: pdfName || "documento.pdf", mime: "application/pdf" }] : []);
+    if (atts.length) {
+      // denomailer vuelve a codificar si recibe el adjunto ya en base64 (encoding:"base64") → archivo corrupto.
       // Lo decodificamos a bytes y lo pasamos como binario: denomailer codifica una sola vez, MIME correcto.
-      const clean = String(pdfBase64).replace(/[\r\n\s]/g, "");
-      const bytes = Uint8Array.from(atob(clean), (c) => c.charCodeAt(0));
-      msg.attachments = [{
-        filename: pdfName || "documento.pdf",
-        content: bytes,
-        encoding: "binary",
-        contentType: "application/pdf",
-      }];
+      msg.attachments = atts.map((a) => {
+        const clean = String(a.base64).replace(/[\r\n\s]/g, "");
+        const bytes = Uint8Array.from(atob(clean), (c) => c.charCodeAt(0));
+        return { filename: a.name || "documento", content: bytes, encoding: "binary", contentType: a.mime || "application/octet-stream" };
+      });
     }
     await client.send(msg);
   } finally {
@@ -83,13 +85,13 @@ serve(async (req) => {
 
     // ── Envío genérico (rendiciones / liquidaciones) con adjunto PDF, desde la cuenta de oficina ──
     if (payload && payload.mail) {
-      const { to, cc, subject, html, text, pdfBase64, pdfName } = payload.mail;
+      const { to, cc, subject, html, text, pdfBase64, pdfName, attachments } = payload.mail;
       if (!to || !subject) {
         return new Response(JSON.stringify({ error: "Falta to o subject" }), {
           status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
-      await sendMail({ to, cc, subject, html, text, pdfBase64, pdfName });
+      await sendMail({ to, cc, subject, html, text, pdfBase64, pdfName, attachments });
       return new Response(JSON.stringify({ ok: true, sent_to: to, via: "servidor" }), {
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });

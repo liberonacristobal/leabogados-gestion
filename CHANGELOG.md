@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-18 — Notaría · liquidar (guardar) → enviar con comprobante
+- "Liquidar" ahora solo GUARDA la liquidación como **Por enviar** (sin correo). Se mantienen los chequeos de fondos/adelanto. El modal ya no pide correo.
+- Nuevo paso **Enviar a notaría** (bottom sheet) desde el registro: muestra el **total a transferir**, deja **adjuntar el comprobante de transferencia** del banco (imagen/PDF, sube a Drive) y el correo de la notaría. Al enviar, el correo lleva **2 adjuntos** (detalle PDF + comprobante) y marca la liquidación **Enviada ✓** (guarda `comprobante_url`, con enlace "Ver comprobante").
+- Registro con 3 estados minimalistas: **Por enviar** (ámbar, con botón Enviar destacado) · **Enviada ✓** (verde) · **Pagado histórico** (gris). Compat con filas viejas (sin `estado_envio`: con `sent_at`→enviada, si no→pagado).
+- Multi-adjunto: `sendGmailWithPdf` y la edge `notify-task` aceptan varios adjuntos (compat con el envío de un PDF). **Requiere `supabase functions deploy notify-task`.**
+- Texto del correo actualizado (asunto e intro mencionan el comprobante; total rotulado "Total transferido").
+- SQL (corrido por el usuario): `rendiciones.estado_envio text`, `rendiciones.comprobante_url text`.
+
 ## 2026-06-18 — Correo de notaría · MIME corregido (cuerpo + PDF)
 - Cliente (`sendGmailWithPdf`, envío desde el Gmail del admin): el base64 del HTML, el texto y el PDF iban en una sola línea; al reenviar por SMTP esas líneas (>998) se truncaban → cuerpo y adjunto corruptos. Ahora cada bloque base64 se corta en líneas de 76 (RFC 2045). El subject queda como encoded-word sin cortar (header).
 - Servidor (edge function `notify-task`, fallback para usuarios sin gmail.send): `denomailer` re-codificaba el adjunto recibido en base64 → PDF corrupto. Ahora se decodifica a bytes y se envía como binario (codifica una sola vez). Requiere `supabase functions deploy notify-task`.
