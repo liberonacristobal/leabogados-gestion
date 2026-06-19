@@ -14182,18 +14182,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // cercanía de fecha (la del mes del pago primero) → así el pago de mayo calza la factura de mayo, no la de junio.
   const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
     if(!esConciliable(mov)) return []
-    const pm=(mov.fecha||'').slice(0,7), pr=crNormRut(mov.rut_contraparte)
+    const pr=crNormRut(mov.rut_contraparte)
     const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
-    const diaDist = iso => (payT&&iso) ? Math.abs((new Date(iso.slice(0,10)+'T12:00').getTime()-payT)/86400000) : 999
+    // delta = días entre la EMISIÓN de la factura y el pago (positivo = pago DESPUÉS de emitir).
+    const deltaDias = iso => (payT&&iso) ? (payT - new Date(iso.slice(0,10)+'T12:00').getTime())/86400000 : null
     let xs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
-      .map(b=>({b,saldo:saldoFactura(b),d:mesDiff((b.issued_at||'').slice(0,7),pm),dd:diaDist(b.issued_at)}))
-      // Permite factura hasta 1 mes POSTERIOR al pago (transferencia poco antes de emitirla); las anteriores sin límite.
-      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.d===null||x.d<=1))
+      .map(b=>({b,saldo:saldoFactura(b),delta:deltaDias(b.issued_at)}))
+      // El pago cae hasta ~60 días DESPUÉS de emitir la factura (capta pagos tardíos; excluye facturas futuras y las muy lejanas).
+      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-3 && x.delta<=60)))
     // Calce EXACTO en pesos (no hay comisiones bancarias → TOL=0): solo facturas con el monto idéntico.
     const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
-    return xs.sort((a,b)=>   // 1) RS del pagador, 2) cercanía por DÍA a la fecha de la factura, 3) monto
+    return xs.sort((a,b)=>   // 1) RS del pagador, 2) cercanía por DÍA emisión→pago, 3) monto
         ((pr&&crNormRut(b.b.receptor_rut)===pr?1:0)-(pr&&crNormRut(a.b.receptor_rut)===pr?1:0))
-        || (a.dd-b.dd)
+        || ((a.delta==null?999:Math.abs(a.delta))-(b.delta==null?999:Math.abs(b.delta)))
         || (Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)))
       .map(x=>x.b) }
   // Mejor candidato para el AUTO: exacto+único; si hay varios del mismo monto, desempata por RS del pagador y luego mes del pago.
@@ -14205,6 +14206,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(pool.length===1) return pool[0]
     const sm=pool.filter(f=>(f.issued_at||'').slice(0,7)===pm); return sm.length===1?sm[0]:null }
   const tieneCand = m => esConciliable(m) && candidatos(m).length>0
+  // Sugerencia de cliente por MONTO: para abonos sin identificar (depósitos sin RUT), busca una factura de algún
+  // cliente cuyo saldo calce EXACTO con el abono y caiga en la ventana de fecha. Solo sugiere si el cliente es ÚNICO.
+  const clientePorMonto = (mov) => {
+    if(mov.cliente_id || mov.es_interno || mov.tipo!=='abono') return null
+    const amt = mov.monto||0; if(amt<=0) return null
+    const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
+    const inwin = iso => { if(!payT||!iso) return true; const d=(payT-new Date(iso.slice(0,10)+'T12:00').getTime())/86400000; return d>=-3 && d<=60 }
+    const ms = (billing||[]).filter(b=> b.client_id && !b.deleted_at && b.status!=='Anulada' && (b.amount||0)>0 && (b.status==='Pendiente'||b.status==='Pagado') && saldoFactura(b)>TOL && Math.abs(saldoFactura(b)-amt)<=TOL && inwin(b.issued_at))
+    if(!ms.length) return null
+    const cids=[...new Set(ms.map(b=>String(b.client_id)))]
+    if(cids.length!==1) return null
+    return { cid:cids[0], factura:ms[0] }
+  }
   // Descalce = abono no interno, no conciliado, sin clasificar como no-honorario, y que NO tiene factura candidata
   // (sin cliente asociado, o con cliente pero sin factura que calce → fondo/anticipo/monto partido).
   const esDescalce = m => m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !tieneCand(m) && (!m.categoria||m.categoria==='Cliente')
@@ -14780,6 +14794,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           ? <span onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} title='Tocar para editar / cambiar cliente' style={{fontWeight:500,color:C.muted,border:`1px solid ${C.border}`,borderRadius:3,padding:'1px 8px',background:'#fff',cursor:'pointer'}}>{cliName}</span>
                           : <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:10,color:'#C77F18',fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Identificar</button>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
+                        {!cliName&&!sugerencias[m.id]&&(()=>{ const cm=clientePorMonto(m); if(!cm) return null; const nom=cmap[cm.cid]||clients.find(c=>String(c.id)===String(cm.cid))?.name||'cliente'; return <button onClick={()=>identificar(m,cm.cid,true)} title={`Calza por monto exacto con la Factura N°${folioN(cm.factura.invoice_no)||'—'} de ${nom}`} style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E6EEF1',color:'#003C50',border:'none',cursor:'pointer'}}>¿{nom}? · F°{folioN(cm.factura.invoice_no)||'—'}</button> })()}
                         {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}
                         {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
                           tagFor===m.id
