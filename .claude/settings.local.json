@@ -211,7 +211,11 @@
       "Bash(perl -0pi -e \"s/\\(<span style=\\\\{\\\\{\\)fontSize:11\\(,fontWeight:700,color:'#155E6B',background:'#DFF1F2',borderRadius:20,padding:'2px 9px'\\\\}\\\\}>Fondo por Rendir\\)/\\\\${1}fontSize:10\\\\${2}/\" src/App.jsx)",
       "Bash(perl -0pi -e \"s/\\(onClick=\\\\{clickable\\\\?\\\\\\(e\\\\\\)=>\\\\{e.stopPropagation\\\\\\(\\\\\\);setFacMyc\\\\\\(facMyc===r.factura_id\\\\?null:r.factura_id\\\\\\)\\\\}:undefined\\\\} style=\\\\{\\\\{\\)fontSize:11/\\\\${1}fontSize:10/\" src/App.jsx)",
       "Bash(curl -s '__TRACKED_VAR__/billing?select=id,invoice_no,status,amount,deleted_at&client_id=eq.__TRACKED_VAR__' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
-      "Bash(curl -s '__TRACKED_VAR__/conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura&limit=3000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
+      "Bash(curl -s '__TRACKED_VAR__/conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura&limit=3000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/cartola_movimientos?select=id,cliente_id,monto,rol_cuenta,nombre_contraparte,fecha&tipo=eq.abono&estado=eq.pendiente&es_interno=eq.false&limit=3000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/billing?select=id,client_id,invoice_no,amount,status,deleted_at,issued_at&limit=5000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura&limit=5000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(echo \"abonos pendientes: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/ab.json'\\)\\)\\)\\)\"\\)  facturas: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/bill.json'\\)\\)\\)\\)\"\\)\")"
     ]
   }
 }

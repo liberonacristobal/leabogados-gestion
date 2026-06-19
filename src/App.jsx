@@ -14251,8 +14251,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Detecta el caso "una transferencia paga 2 facturas": par de facturas del pool cuyos saldos suman el monto (±TOL).
   const combos = (mov) => { if(!esConciliable(mov)) return null
     const fs = facturasCliente(mov.cliente_id).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0)
-    let best=null, bestD=TOL+1
-    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ const d=Math.abs(fs[i].saldo+fs[j].saldo-(mov.monto||0)); if(d<=TOL&&d<bestD){ bestD=d; best=[fs[i].f,fs[j].f] } }
+    const target=(mov.monto||0); let best=null, bestD=TOL+1
+    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ const d=Math.abs(fs[i].saldo+fs[j].saldo-target); if(d<=TOL&&d<bestD){ bestD=d; best=[fs[i].f,fs[j].f] } }
+    if(best) return best
+    // 3 facturas que sumen el abono (solo si no hubo par; cap para no explotar)
+    if(fs.length<=45){ for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++) for(let k=j+1;k<fs.length;k++){ const d=Math.abs(fs[i].saldo+fs[j].saldo+fs[k].saldo-target); if(d<=TOL&&d<bestD){ bestD=d; best=[fs[i].f,fs[j].f,fs[k].f] } } }
     return best }
   // Combo EXACTO para el AUTO: par ÚNICO de facturas (no futuras) cuyos saldos suman EXACTO el monto del abono.
   const comboExacto = (mov, exclude) => { if(!esConciliable(mov)) return null
@@ -14828,7 +14831,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=facturasCliente(m.cliente_id)
                   const combo=(myConc.length===0&&cands.length===0)?combos(m):null
                   const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
-                  const showPick=myConc.length===0||resto>TOL; const sug=showPick?mejorCandidato(m):null
+                  // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
+                  // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
+                  const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       <div style={{fontSize:9,fontWeight:700,color:'#99ABB4',textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
@@ -14854,7 +14859,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         </div>}
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
                           {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:'#C77F18',textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
-                          {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga dos facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?'#003C50':'#E6EEF1',color:comboFor===m.id?'#fff':'#003C50',border:'none'}}>Paga 2 facturas{comboFor===m.id?' ▴':' ▾'}</button>}
+                          {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga varias facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?'#003C50':'#E6EEF1',color:comboFor===m.id?'#fff':'#003C50',border:'none'}}>Paga {combo.length} facturas{comboFor===m.id?' ▴':' ▾'}</button>}
                           {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Factura N°{folioN(fmg.factura.invoice_no)||'—'} + {fmtM(fmg.excess)} gastos</button>}
                           <button disabled={busy===m.id} onClick={()=>saldoAFavor(m)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#E6F1FB',color:'#185FA5',border:'none'}}>Saldo a Favor | Adelanto</button>
                           <button disabled={busy===m.id} onClick={()=>crearFondoProvision(m)} title='Acredita el resto al fondo por rendir del cliente (no toca la factura ya conciliada)' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>Fondo por Rendir</button>
@@ -14865,7 +14870,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             {combo.map(f=>(<button key={f.id} disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliar(m,f,'manual')}} title='Conciliar solo esta factura' style={{textAlign:'left',fontSize:11,color:C.text,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:busy===m.id?'default':'pointer'}}>Factura N°{folioN(f.invoice_no)||'—'} · {mesAbbr(f.issued_at)} · {(f.concept||'').slice(0,28)} · <b>{fmtM(saldoFactura(f))}</b></button>))}
                             <div style={{fontSize:10,color:C.muted}}>Suma: {fmtM(tot)} {tot===(m.monto||0)?'=':'≠'} abono {fmtM(m.monto)} · toca una para conciliar solo esa</div>
                             <div style={{display:'flex',gap:8,marginTop:2}}>
-                              <button disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliarCombo(m,combo)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:'pointer'}}>Confirmar las 2</button>
+                              <button disabled={busy===m.id} onClick={()=>{setComboFor(null);reconciliarCombo(m,combo)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:'#003C50',color:'#fff',cursor:'pointer'}}>Confirmar las {combo.length}</button>
                               <button onClick={()=>setComboFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                             </div>
                           </div>) })()}
