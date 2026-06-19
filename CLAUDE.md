@@ -4,7 +4,7 @@ App de gestión legal para Liberona Escala Abogados. Estas reglas son permanente
 
 ## Arquitectura
 
-- Archivo único: `src/App.jsx` (~5200 líneas). React + Vite. Supabase (proyecto `kibuwhtpoxrnfowfdolu`, RLS off). Deploy en Vercel.
+- Archivo único: `src/App.jsx` (~16.250 líneas). React + Vite. Supabase (proyecto `kibuwhtpoxrnfowfdolu`, RLS off). Deploy en Vercel.
 - Paleta corporativa OBLIGATORIA (objeto `C`): accent/AZUL1 `#003C50`, muted/AZUL2 `#537281`, AZUL3 `#99ABB4`, AZUL4 `#E4E8EB`, text/GRAFITO `#3D3D3D`, verde `#1D9E75`, rojo `#E24B4A`. NUNCA azules genéricos ni colores fuera de esta paleta.
 - Roles: admin (Cristóbal cl@, Erasmo ee@) ven todo; limited (Martín mc@, Martina mp@, Rodrigo rd@) ven solo Tareas, Gastos y Caja Chica.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-19 — Auditoría Fase 2: fixes autónomos (rendimiento + higiene)
+- Rendimiento Conciliación (rank 1, el único con impacto real en runtime): `facturasCliente`/`clientePorMonto` re-escaneaban TODO `billing` por cada movimiento dentro de memos que corren con hasta 8.000 movimientos → O(movs×facturas), congelaba el iPhone al entrar o filtrar. Ahora se indexan las facturas con saldo una vez (`facturasConSaldo` + `facturasPorCliente`, memoizados) y el lookup por cliente es O(1). Misma lógica de filtrado, sin cambio de comportamiento.
+- Higiene de repo: quitados del control de versiones los 55 backups `src/App.jsx.bak_*` (22 MB) que ensuciaban toda búsqueda de código; agregado `*.bak*` a `.gitignore`. El historial de git conserva las versiones.
+- Doc: corregido el conteo de líneas en CLAUDE.md (~5200 → ~16.250).
+
 ## 2026-06-19 — Seguridad: API key de Anthropic fuera del front (edge function claude-proxy)
 - Auditoría (crítico): la API key de Claude viajaba en el bundle público de Vercel (`import.meta.env.VITE_ANTHROPIC_API_KEY` + `x-api-key` + `anthropic-dangerous-direct-browser-access`) en ~10 llamadas directas a `api.anthropic.com`. Cualquiera con la URL podía extraerla y gastar con cargo a la cuenta.
 - Fix: nueva edge function `claude-proxy` (verify_jwt=true, valida que el email del JWT sea del equipo) que guarda `ANTHROPIC_API_KEY` como secreto de Supabase y reenvía a Anthropic. El front llama a esa función vía un único helper `claudeCall()`; nunca toca la key ni api.anthropic.com. Modelos en allowlist, max_tokens acotado.
