@@ -62,6 +62,9 @@ const fechaBreve = d => { if(!d) return ''; const p=String(d).slice(0,10).split(
 // Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
 const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-MM-AAAA con guiones) en toda la app
+// Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
+// fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
+const fmtFechaTS = ts => { if(!ts) return '—'; const d=new Date(ts); return isNaN(d)?'—':`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}` }
 const daysLeft = d => { if(!d) return null; return Math.round((new Date(d+'T12:00') - new Date()) / 86400000) }
 // Archivo automatico de tareas: una tarea Terminada se considera archivada cuando se completo
 // hace mas de DAYS_TO_ARCHIVE dias. Las terminadas sin completed_at (historicas) cuentan como archivadas.
@@ -572,7 +575,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
                       <div onClick={()=>setOpenRend(isOpen?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',cursor:'pointer'}}>
                         <div style={{minWidth:0,flex:1}}>
                           <div style={{fontSize:12,fontWeight:600,color:'#3D3D3D'}}>{r.periodo}</div>
-                          <div style={{fontSize:10,color:'#537281'}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
+                          <div style={{fontSize:10,color:'#537281'}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}</div>
                         </div>
                         <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                           <div style={{fontSize:12,fontWeight:700,color:'#E24B4A'}}>-${(r.total||0).toLocaleString('es-CL')}</div>
@@ -1831,7 +1834,7 @@ function useUF(){
 // Señal visible y auditable del valor UF usado. Discreta (gris) si es de hoy; naranja con alerta si no.
 function UFStamp({uf,isToday,asOf,loading}){
   if(loading && uf==null) return null
-  const fmtN = n => '$'+Math.round(n).toLocaleString('es-CL')
+  const fmtN = fmt   // formateador CLP único (global): signo correcto -$, redondeo único
   const f = asOf ? new Date(asOf+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}) : null
   const base = {display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:600,whiteSpace:'nowrap',borderRadius:6,padding:'2px 7px'}
   if(isToday && uf!=null) return <span style={{...base,color:C.muted,background:'#F5F7F9'}}>UF al {f} · {fmtN(uf)}</span>
@@ -7860,7 +7863,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
           </div>
           <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.overdue}}>-{fmt(r.total)}</div>
           <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
@@ -8427,7 +8430,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {attachExpense&&<Modal title={`Adjuntos — ${attachExpense.concept||'Gasto'}`} onClose={()=>setAttachExpense(null)}><Attachments table='expense_attachments' idField='expense_id' entityId={attachExpense.id} folderKind='gastos' namePrefix={`${selectedClient?.name||''} · ${attachExpense.concept||'Gasto'}`} user={currentUser} onChange={(delta,item)=>{ if(setExpenseAttachments) setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id)) }}/></Modal>}
       {liqDetail&&(()=>{ const gs=(expenses||[]).filter(e=>String(e.render_id)===String(liqDetail.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0); return (
         <Modal title='Liquidación de caja chica' onClose={()=>setLiqDetail(null)}>
-          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{liqDetail.user_name||''} · {liqDetail.periodo||''} · {liqDetail.created_at?new Date(liqDetail.created_at).toLocaleDateString('es-CL'):''}</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{liqDetail.user_name||''} · {liqDetail.periodo||''} · {liqDetail.created_at?fmtFechaTS(liqDetail.created_at):''}</div>
           {gs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin gastos en esta liquidación.</div>}
           {gs.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return (
             <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'7px 0',borderBottom:`0.5px solid ${C.border}`}}>
@@ -9504,7 +9507,6 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const [fgOrd,setFgOrd]=useState('desc')      // orden por fecha en Fondos y gastos: 'desc' | 'asc'
   const [detMov,setDetMov]=useState(null)      // movimiento con detalle expandido en Movimientos
   const [movF,setMovF]=useState('todos')       // filtro Movimientos: todos|abonos|cargos|sin
-  const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   const _MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const mesAA=iso=>{const dp=String(iso||'').slice(0,10).split('-');return dp.length>=3?`${_MES[parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''}
   const dCol=iso=>{const dp=String(iso||'').slice(0,10).split('-');return {dia:dp.length>=3?dp[2]:'—',sub:dp.length>=3?`${_MES[parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''}}
@@ -9932,7 +9934,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <div>
               <label style={lbl}>Cliente desde</label>
-              <input value={client.created_at?new Date(client.created_at).toLocaleDateString('es-CL'):'—'} disabled style={{...inp,background:'#F5F7F9',color:C.muted}}/>
+              <input value={fmtFechaTS(client.created_at)} disabled style={{...inp,background:'#F5F7F9',color:C.muted}}/>
             </div>
             <div>
               <label style={lbl}>Tipo de servicio</label>
@@ -10451,11 +10453,11 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                   <div onClick={()=>verPdf(r)} style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',cursor:'pointer'}}>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div>
-                      <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {new Date(r.created_at).toLocaleDateString('es-CL')}{r.user_name?` · ${r.user_name}`:''}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}</div>
                       {r.anulada_at
                         ? <div style={{fontSize:10,fontWeight:600,color:C.overdue,marginTop:2}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</div>
                         : r.sent_at
-                        ? <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:2}}>Enviada {new Date(r.sent_at).toLocaleDateString('es-CL')}</div>
+                        ? <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:2}}>Enviada {fmtFechaTS(r.sent_at)}</div>
                         : <div style={{fontSize:10,fontWeight:600,color:'#C77F18',marginTop:2}}>Pendiente de envío</div>}
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
@@ -13954,7 +13956,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [cargoCliLearn,setCargoCliLearn] = useState({})  // glosaKey → client_id aprendido (cargo por cuenta de cliente)
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
-  const fmtM = n => '$'+Math.round(n||0).toLocaleString('es-CL')
+  const fmtM = fmt
   const mesAbbr = iso => { if(!iso) return ''; const [y,mo]=String(iso).slice(0,7).split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${M[+mo-1]||mo} ${(y||'').slice(2)}` }
 
   const cargar = useCallback(async()=>{
