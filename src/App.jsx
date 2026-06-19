@@ -7548,6 +7548,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [notaEmail,setNotaEmail] = useState(()=>{ try{return localStorage.getItem('notaria_email')||''}catch(_){return ''} })
   const [notaSend,setNotaSend] = useState(null)   // rendición en el sheet "Enviar a notaría" (o null)
   const [compFile,setCompFile] = useState(null)   // comprobante de transferencia adjunto (File)
+  const [notaResp,setNotaResp] = useState(null)   // filtro de pendientes por abogado responsable del cliente ('__sin__'=sin responsable)
   const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)>1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   // Gastos de notaría por $1 (o menos): escrituras/trabajos anulados, solo orden — no se liquidan, se pueden eliminar.
   const notariaAnulados = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)<=1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
@@ -8111,6 +8112,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <div style={{flex:1,background:'#FCEBEB',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:'#A32D2D',fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Pendiente a notaría</div><div style={{fontSize:16,fontWeight:700,color:'#A32D2D'}}>{fmt(notaPendTotal)}</div><div style={{fontSize:9,color:'#A32D2D',fontWeight:600}}>{notariaPend.length} gasto{notariaPend.length!==1?'s':''}</div></div>
             <div style={{flex:1,background:'#F5F7F9',borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Notaría</div><div style={{fontSize:13,fontWeight:600,color:C.accent,marginTop:2}}>Notaría Lascar</div></div>
           </div>
+          {/* Filtro por abogado responsable del cliente — "ver solo mis clientes" */}
+          {(()=>{ const m={}; Object.keys(notaGroups.byClient).forEach(cid=>{ const k=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(ents.length<2) return null; return (
+            <div style={{display:'flex',alignItems:'center',gap:6,overflowX:'auto',marginBottom:9,paddingBottom:2}}>
+              <span style={{fontSize:10,color:'#99ABB4',fontWeight:600,textTransform:'uppercase',letterSpacing:.4,flexShrink:0}}>Responsable</span>
+              <button onClick={()=>setNotaResp(null)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',border:`1px solid ${!notaResp?C.accent:C.border}`,background:!notaResp?C.accent:'#fff',color:!notaResp?'#fff':C.muted,cursor:'pointer'}}>Todos</button>
+              {ents.map(([k,n])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:'#5F5E5A'}:personChip(k); const on=notaResp===k; return (
+                <button key={k} onClick={()=>setNotaResp(on?null:k)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',border:`1px solid ${on?pc.color:'transparent'}`,background:on?pc.color:pc.bg,color:on?'#fff':pc.color,cursor:'pointer',whiteSpace:'nowrap'}}>{sin?'Sin responsable':k} · {n}</button>
+              )})}
+            </div>
+          )})()}
           {Object.keys(notaGroups.byClient).length>0&&(
             <div style={{display:'flex',gap:6,marginBottom:8}}>
               {[[true,'Solo con fondos del cliente'],[false,'Ver todos']].map(([v,l])=>{ const on=notaFondos===v; return (
@@ -8137,7 +8148,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               </div>
             </div>) })()}
           {/* Clientes (con su saldo de fondos) */}
-          {Object.entries(notaGroups.byClient).map(([cid,gs])=>{
+          {Object.entries(notaGroups.byClient).filter(([cid])=>{ if(!notaResp) return true; const resp=clients.find(c=>String(c.id)===String(cid))?.abogado_responsable||'__sin__'; return resp===notaResp }).map(([cid,gs])=>{
             const {fondo:fondosC, pagado:pagadoC, reservado:reservadoC, disp}=dispCliente(cid)
             const aPagar=gs.reduce((a,e)=>a+(e.amount||0),0)
             const exc=excepNota.has(cid)   // "Permitir adelanto" activado para este cliente
@@ -8158,8 +8169,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gs.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede) })}
             </div>
           )})}
-          {/* Personales */}
-          {Object.entries(notaGroups.personal).map(([persona,gs])=>{ const pc=personChip(persona); return (
+          {/* Personales (se ocultan al filtrar por responsable: no son clientes) */}
+          {!notaResp&&Object.entries(notaGroups.personal).map(([persona,gs])=>{ const pc=personChip(persona); return (
             <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 13px',background:'#F5F7F9',borderBottom:`1px solid ${C.border}`}}>
                 <span style={{fontSize:12,fontWeight:700,color:C.accent}}>Personal · <span style={{fontSize:11,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 7px'}}>{persona}</span></span>
@@ -8168,8 +8179,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {gs.map(notaRow)}
             </div>
           )})}
-          {/* Sin asignar: marcar como personal de una persona */}
-          {notaGroups.sin.length>0&&(
+          {/* Sin asignar: marcar como personal de una persona (oculto al filtrar por responsable) */}
+          {!notaResp&&notaGroups.sin.length>0&&(
             <div style={{border:`1px dashed ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:8}}>
               <div style={{padding:'8px 13px',background:'#F5F7F9',borderBottom:`0.5px solid ${C.border}`,fontSize:11,color:C.muted}}>Sin cliente ni persona — márcalos como personal o asígnales cliente en Gastos</div>
               {notaGroups.sin.map(e=>(
