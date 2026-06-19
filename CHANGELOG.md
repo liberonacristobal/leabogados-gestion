@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Fase 3 · Tanda 1 (microtexto + regla RS)
+- Regla nueva: razón social en MAYÚSCULAS, sin bold. Helper único renombrado titleCaseRS→rsDisplay (uppercase); dato crudo intacto, PDF/export legales sin tocar.
+- F° → Factura N° en los 2 sitios de UI restantes; separador RS·RUT unificado a punto medio.
+
 ## 2026-06-19 — Auditoría Fase 2: UF de respaldo centralizada (rank 6)
 - El valor UF de respaldo (40000 CLP) estaba hardcodeado en 9 conversiones UF↔CLP dispersas; si cambiaba, había que tocar 9 lugares y arriesgar divergencia de cifras. Ahora hay una constante única `UF_FALLBACK`. Mismo valor, sin cambio de comportamiento.
 

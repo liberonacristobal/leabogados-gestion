@@ -230,7 +230,9 @@
       "Bash(echo \"abonos pendientes: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/ab.json'\\)\\)\\)\\)\"\\)  facturas: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/bill.json'\\)\\)\\)\\)\"\\)\")",
       "Bash(supabase projects *)",
       "Bash(xargs -0 du -ch)",
-      "Bash(xargs du -ch)"
+      "Bash(xargs du -ch)",
+      "Bash(perl -i -pe 's/titleCaseRS\\\\\\(/rsDisplay\\(/g' src/App.jsx)",
+      "Bash(perl -i -pe 's/\\\\| \\\\$\\\\{rs\\\\.rut\\\\}/· \\\\${rs.rut}/g' src/App.jsx)"
     ]
   }
 }
