@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Pills más estrechas (historial)
+- Pestañas del historial y control de orden por fecha pasan a relleno compacto (3px 11px) en vez de 6px 16px. Regla: los pills nuevos van estrechos (como chipBtn).
+
 ## 2026-06-19 — Historial: Clientes en timeline + orden por fecha (clientes y notaría)
 - Pestaña Clientes del historial pasa a timeline (fecha a la izquierda, header = nombre del cliente, monto a la derecha); se mantiene expandible con sus acciones. La ficha del cliente no cambia (modo timeline opt-in en renderRendRow/renderHistorialTable).
 - Control de orden por fecha (↓ Más nuevo / ↑ Más antiguo, default nuevo primero) arriba a la derecha, aplica a ambas pestañas. Inicio de la regla: toda lista con fecha llevará este control, incremental por vista.
