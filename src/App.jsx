@@ -28,6 +28,22 @@ const C = {
   // tints canónicos de estado (consolidados): fondo + texto para ámbar/rojo/verde
   soonBg:'#FFF8E1', soonText:'#854F0B', overdueBg:'#FCEBEB', overdueText:'#A32D2D', greenBg:'#E1F5EE',
 }
+// Único puente a Claude. La API key NO vive en el front (sería pública en el bundle):
+// vive como secreto en la edge function claude-proxy, que valida el JWT del equipo.
+// Devuelve el JSON de Anthropic tal cual (el llamador lee data.content[0].text).
+async function claudeCall(body){
+  const {data:{session}} = await supabase.auth.getSession()
+  if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
+  const resp = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/claude-proxy',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},
+    body:JSON.stringify(body)
+  })
+  const data = await resp.json().catch(()=>({}))
+  if(!resp.ok) throw new Error(data.error||('Error '+resp.status))
+  return data
+}
+
 const fmt = n => new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(n||0)
 const fmtUF = n => n ? `UF ${Number(n).toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}` : '—'
 // CLP abreviado para KPIs ($216,2M / $30K). Conserva el signo.
@@ -840,13 +856,12 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         if((!e.client_id&&!s.client_id)||(!e.category&&!s.category)) needIA.push(e)
         if(s.client_id||s.category) sug[e.id]=s
       })
-      const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
-      if(apiKey && needIA.length){
+      if(needIA.length){
         const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
         const prompt=`Eres asistente contable del estudio Liberona Escala Abogados. Te paso GASTOS de caja chica a los que les falta cliente o categoría, la lista de CLIENTES y las CATEGORÍAS válidas. Para cada gasto sugiere el cliente (id de la lista) y/o la categoría más probable según la glosa. Si no es claro, usa null. Devuelve SOLO un JSON array: [{"id":"<id del gasto>","client_id":"<id o null>","category":"<una de las categorías o null>"}]. NUNCA inventes un client_id fuera de la lista ni una categoría fuera de las dadas.\nCATEGORIAS: ${JSON.stringify(CAT_LIST)}\nCLIENTES: ${JSON.stringify(clientList)}\nGASTOS: ${JSON.stringify(needIA.map(e=>({id:e.id,glosa:e.concept||'',monto:e.amount||0,falta_cliente:!e.client_id,falta_categoria:!e.category})))}`
         try{
-          const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})})
-          const j=await resp.json(); const txt=j?.content?.[0]?.text||''
+          const j=await claudeCall({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})
+          const txt=j?.content?.[0]?.text||''
           const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
           arr.forEach(o=>{ const e=needIA.find(x=>String(x.id)===String(o.id)); if(!e) return; const s=sug[e.id]||{}; if(!e.client_id && o.client_id && clients.some(c=>String(c.id)===String(o.client_id))){ s.client_id=o.client_id; s.cliIA=true } if(!e.category && o.category && CAT_LIST.includes(o.category)){ s.category=o.category; s.catIA=true } if(s.client_id||s.category) sug[e.id]=s })
         }catch(err){}
@@ -2238,14 +2253,12 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   },[bb,tasks,expenses,sales,negatives,totalNeg])
 
   const resumenHoyIA = async()=>{
-    const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
-    if(!apiKey){ alert('Falta la API key de Claude.'); return }
     if(!atenderHoy.items.length){ setIaHoy('Todo al día — sin pendientes urgentes.'); return }
     setIaHoyBusy(true)
     const prompt=`Eres el copiloto del socio de un estudio de abogados. Estos son los pendientes de HOY (ya calculados, no inventes cifras): ${atenderHoy.items.map(i=>i.iaTxt).join('; ')}. Escribe 2 frases MUY breves, en español de Chile, tono directo, diciendo en qué enfocarse hoy y por qué (prioriza cobranza/plazos). No listes todo, da el foco. Sin saludo ni markdown.`
     try{
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})})
-      const data=await resp.json(); const txt=(data.content?.[0]?.text||'').trim()
+      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      const txt=(data.content?.[0]?.text||'').trim()
       if(txt) setIaHoy(txt)
     }catch(e){ alert('No se pudo generar el resumen: '+(e?.message||e)) }
     setIaHoyBusy(false)
@@ -3434,10 +3447,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
         const result = await mammoth.extractRawText({arrayBuffer: arrayBuf})
         text = result.value
       }
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':import.meta.env.VITE_ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,system:`Eres un experto extractor de datos de propuestas y contratos de servicios legales en Chile. Lee TODO el documento y devuelve SOLO un JSON (sin markdown ni backticks) con estos campos. Reglas:
+      const apiData = await claudeCall({model:'claude-sonnet-4-6',max_tokens:4000,system:`Eres un experto extractor de datos de propuestas y contratos de servicios legales en Chile. Lee TODO el documento y devuelve SOLO un JSON (sin markdown ni backticks) con estos campos. Reglas:
 - Si un dato no está explícito pero se infiere con certeza, infiérelo; si no, usa "" o null. No inventes.
 - cliente_nombre: cliente/contraparte a quien se dirige la propuesta (persona o empresa).
 - cliente_rut: RUT chileno formato 12.345.678-9 si aparece.
@@ -3452,9 +3462,6 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,proveedore
 - tipo_honorario_badges: lista de etiquetas como "fijo","variable","éxito","mensual","por hora".
 - notas: condiciones relevantes (reajuste, vigencia, gastos, IVA, hitos, etc.).
 Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto, moneda, honorario_total, forma_cobro, n_cuotas, tipo_honorario_badges, notas }`,messages:[{role:'user',content:text.slice(0,40000)}]})
-      })
-      if(!resp.ok) throw new Error('Error API '+resp.status)
-      const apiData = await resp.json()
       const raw = (apiData.content?.[0]?.text || '{}').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
       const parsed = JSON.parse(raw)
       setPropuestaData(parsed)
@@ -6369,16 +6376,13 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
 
   // IA: profesionaliza las descripciones de los gastos seleccionados (expande abreviaciones legales, corrige tildes). Guarda el resultado.
   const mejorarDescripcionesIA = async()=>{
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-    if(!apiKey){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
     const sel = disponibles.filter(e=>selected.has(e.id))
     if(!sel.length) return
     setLimpiandoIA(true)
     const lista = sel.map((e,i)=>`${i+1}. "${e.concept||''}"`).join('\n')
     const prompt = `Eres asistente de una firma de abogados chilena. Profesionaliza estas descripciones de GASTOS para una rendición al cliente: corrige ortografía y tildes ("notaria"→"Notaría", "inscripcion"→"Inscripción"), capitaliza bien y EXPANDE abreviaciones legales chilenas ("EP"→"Escritura Pública", "CV"→"Compraventa", "CCV"→"Copia con Vigencia", "GP"→"Gravámenes y Prohibiciones", "D.O."→"Diario Oficial", "+K"→"Empresa en un Día", "CBR"→"Conservador de Bienes Raíces", "CBRS"→"Conservador de Bienes Raíces de Santiago"). Mantén el significado; si ya está correcta, devuélvela igual. NO inventes datos. Responde SOLO un array JSON sin markdown: [{"i":1,"concepto":"..."}]\n\nDESCRIPCIONES:\n${lista}`
     try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})})
-      const data = await resp.json()
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})
       const raw = (data.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
       const arr = JSON.parse(raw)
       const updates = []
@@ -6882,8 +6886,6 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
 
   // Nivel 4: lote a Claude (Opus) para nombres sin resolver + corrección de conceptos.
   const aiMatchBatch = async(batch) => {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-    if(!apiKey) return []
     const clientesDB = clients.map(c=>`- ID: ${c.id} | Nombre: "${c.name}" | RUT: ${c.rut||'-'} | RS: "${c.razon_social||''}"`).join('\n')
     const lista = batch.map((r,i)=>`${i+1}. "${r.nombre||r.rut||''}" | concepto: "${r.concepto||''}"${r.subconcepto?` | subconcepto: "${r.subconcepto}"`:''}${r.ot?` | OT: "${r.ot}"`:''}${r.notas?` | notas: "${r.notas}"`:''}`).join('\n')
     const prompt = `Eres un asistente experto para una firma de abogados chilena. Debes hacer match entre nombres de una planilla histórica y clientes del sistema. Los nombres pueden estar abreviados, sin sufijos legales, con errores de tipeo o con distintas capitalizaciones.
@@ -6901,12 +6903,7 @@ TAREA 2 — compón la GLOSA del gasto en "concepto_corregido": combina el conce
 Responde SOLO con un array JSON sin markdown ni texto adicional:
 [{"index":1,"raw_nombre":"...","client_id":"uuid o null","client_nombre":"... o null","confidence":0-100,"reason":"breve","is_internal":true/false,"concepto_corregido":"..."}]`
     try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-opus-4-8',max_tokens:8000,messages:[{role:'user',content:prompt}]})
-      })
-      const data = await resp.json()
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:8000,messages:[{role:'user',content:prompt}]})
       const raw = (data.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
       let arr
       try{ arr = JSON.parse(raw) }
@@ -6937,7 +6934,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       setRows(rows.map(r=>({...r})))
       // IA: compone/limpia la GLOSA de TODAS las filas (uniformidad) y resuelve el cliente solo de las que siguen sin asignar.
       const aiRows = rows.filter(r=> r.concepto || r.subconcepto)
-      if(aiRows.length && import.meta.env.VITE_ANTHROPIC_API_KEY){
+      if(aiRows.length){
         const lotes=[]; for(let i=0;i<aiRows.length;i+=20) lotes.push(aiRows.slice(i,i+20))
         setMatchProg({done:0,total:lotes.length})
         for(let li=0; li<lotes.length; li++){
@@ -9394,14 +9391,13 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
   const [aiSug,setAiSug] = useState({})
   const [aiBusy,setAiBusy] = useState(null)
   const sugerirIA = async(g,idx)=>{
-    const key=import.meta.env.VITE_ANTHROPIC_API_KEY; if(!key){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
     setAiBusy(idx)
     try{
       const ventas=g.sales.map(s=>`${s.id} :: ${s.title}${s.year?` (${s.year})`:''} · modalidad ${s.cobro_type||'?'}${s.cobro_config?.nCuotas?` ${s.cobro_config.nCuotas} cuotas`:''} · total $${(s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0)||0).toLocaleString('es-CL')}`).join('\n')
       const concs=g.rows.slice(0,8).map(r=>`- ${r.concept} · $${(r.amount||0).toLocaleString('es-CL')}${r.issued_at?` · emitida ${r.issued_at}`:''}`).join('\n')
       const prompt=`Asistente contable de un estudio de abogados. Estas facturas no están asignadas a un proyecto (venta). ¿A cuál venta pertenecen? Cruza por PRIORIDAD: modalidad de pago y número de cuotas de la venta › monto por cuota › fecha › glosa. Si las facturas dicen "cuota X/N", deben calzar con una venta de modalidad cuotas con N cuotas. Responde SOLO con el id exacto de la venta, o la palabra ninguna.\n\nVentas del cliente:\n${ventas}\n\nFacturas:\n${concs}`
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:60,messages:[{role:'user',content:prompt}]})})
-      const j=await resp.json(); const txt=(j?.content?.[0]?.text||'').trim()
+      const j=await claudeCall({model:'claude-opus-4-8',max_tokens:60,messages:[{role:'user',content:prompt}]})
+      const txt=(j?.content?.[0]?.text||'').trim()
       const m=g.sales.find(s=>txt.includes(String(s.id)))
       if(m) setAiSug(p=>({...p,[idx]:m})); else alert('La IA no encontró una venta clara para esta serie.')
     }catch(e){ alert('Error IA: '+e.message) }
@@ -10076,16 +10072,14 @@ Liberona Escala Abogados`
   const [aiBusy,setAiBusy] = useState(false)
   // La IA redacta el correo, pero las CIFRAS y los DATOS DE CUENTA van fijos (se le pasan y se le prohíbe cambiarlos).
   const redactarIA = async()=>{
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-    if(!apiKey){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
     setAiBusy(true)
     const terminado = client?.status==='Terminado'
     const cierreTipo = saldoCliente<0?'falta_fondos':(saldoCliente>0?(terminado?'a_favor_devolver':'a_favor_proximos'):'cubierto')
     const facts = { saludo: saludoCli(client?.name), cliente: client?.name, correlativo: r.correlativo||null, periodo: r.periodo, proyecto: r.project||null, subproyecto: r.subproject||null, total_rendido: r.total, saldo: saldoCliente, tipo_cierre: cierreTipo, remitente: user?.name||'', cuenta_LEA: cierreTipo==='falta_fondos'?{titular:'Liberona Escala Abogados Limitada',rut:'77.700.387-9',banco:'Banco BICE',cuenta_corriente:'138392-2',correo:'administracion@leabogados.cl'}:null }
     const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un CORREO BREVE (máx 6 líneas) para enviar a un cliente junto al PDF adjunto de su rendición de gastos. Español de Chile, cordial y profesional. REGLAS DURAS: usa el saludo EXACTO "${saludoCli(client?.name)}:"; NO inventes ni cambies cifras ni datos de cuenta, usa SOLO los que te paso (textualmente); menciona que el detalle está en el documento adjunto; si hay "proyecto", menciónalo de forma natural en la primera frase; NO listes los gastos uno a uno. Según "tipo_cierre": falta_fondos → pide transferir el saldo a su cargo a la cuenta indicada (incluye los datos de cuenta tal cual; nombra a "Liberona Escala Abogados Limitada" DENTRO de la frase, NUNCA como etiqueta — está PROHIBIDO usar las palabras "Destinatario" o "Titular"); a_favor_devolver → hay saldo a favor y se concluyó la gestión, pide sus datos de cuenta corriente a administracion@leabogados.cl para reintegrarlo; a_favor_proximos → el saldo a favor queda disponible para los próximos trabajos; cubierto → no menciones saldo. Cierra con "Saludos cordiales," y el remitente. Devuelve SOLO el texto del correo, sin asunto ni markdown. Datos:\n${JSON.stringify(facts,null,2)}`
     try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})})
-      const data = await resp.json(); const txt = (data.content?.[0]?.text||'').trim()
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})
+      const txt = (data.content?.[0]?.text||'').trim()
       if(!txt) throw new Error('respuesta vacía')
       setBody(txt); logEvent('rendicion','correo_ia',{client_id:r.client_id},user?.name)
     }catch(e){ alert('Error al redactar con IA: '+(e?.message||e)) }
@@ -12951,7 +12945,6 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   // Auditoría con IA (Opus 4.8) ANTES de importar: solo lee y opina, no modifica nada.
   const revisarIA = async() => {
     if(!rows?.length) return
-    if(!import.meta.env.VITE_ANTHROPIC_API_KEY){ alert('Falta la API key de Claude (VITE_ANTHROPIC_API_KEY).'); return }
     setIaBusy(true); setIaReport(null)
     try{
       const muestra = rows.map((r,i)=>`${i+1}|${(r.nombre||'').slice(0,40)}|${r.rut||''}|${r.monto??''}|${r.emision||''}|${r.pago||''}|${r.status||''}|${(r.concepto||'').slice(0,45)}|${r.client_id?'match':'SIN'}`).join('\n')
@@ -12964,13 +12957,7 @@ Enfócate en: filas SIN cliente (cuántas y agrupar por cliente nuevo), montos n
 
 FILAS (${rows.length}):
 ${muestra}`
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':import.meta.env.VITE_ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
-      })
-      if(!resp.ok) throw new Error('API '+resp.status)
-      const j = await resp.json()
+      const j = await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
       let txt = (j?.content?.[0]?.text||'').replace(/```json|```/g,'').trim()
       const rep = JSON.parse(txt)
       setIaReport(rep)
@@ -13581,16 +13568,15 @@ async function escanearTareasGmail(clients=[], onProgress){
     done++; if(onProgress&&done%10===0) onProgress(done,ids.length)
   }
   for(let i=0;i<ids.length;i+=8){ await Promise.all(ids.slice(i,i+8).map(fetchMeta)) }
-  const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY
-  if(!apiKey || !correos.length) return []
+  if(!correos.length) return []
   const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
   const hoyISO=new Date().toISOString().slice(0,10); const out=[]
   for(let i=0;i<correos.length;i+=20){
     const batch=correos.slice(i,i+20); if(onProgress) onProgress(correos.length===0?0:Math.min(correos.length,i),correos.length)
     const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES. Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "client_id" (de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","client_id":"<id o null>","due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
-      const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+      const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
       arr.forEach(o=>{ if(!o||!o.task) return; const c=batch.find(x=>x.id===o.id); if(!c) return; out.push({...c, title:o.title||c.subject, client_id:(o.client_id&&clients.some(cl=>String(cl.id)===String(o.client_id)))?o.client_id:null, due:(o.due&&/^\d{4}-\d{2}-\d{2}$/.test(o.due))?o.due:null, note:o.note||''}) })
     }catch(_){}
   }
@@ -13714,14 +13700,14 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   }
 
   const asociarIA = async(ambig)=>{
-    const apiKey=import.meta.env.VITE_ANTHROPIC_API_KEY; if(!apiKey||!ambig.length) return
+    if(!ambig.length) return
     const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>{ const ents=(clientEntities||[]).filter(e=>e.client_id===c.id); return {id:c.id,nombre:c.name,rs:ents.map(e=>e.name).filter(Boolean),rut:c.rut||ents.map(e=>e.rut).filter(Boolean)[0]||''} })
     for(let i=0;i<ambig.length;i+=25){
       const batch=ambig.slice(i,i+25); setProg({done:i,total:ambig.length,label:'Asociando con IA…'})
       const prompt=`Eres asistente del estudio de abogados Liberona Escala Abogados (@leabogados.cl). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. IMPORTANTE: si el dominio es genérico de proveedor (gmail.com, hotmail, outlook, yahoo, icloud, live, etc.) NO lo uses para asociar — en ese caso asígnalo SOLO si el NOMBRE del contacto o de la empresa que aparece en los asuntos coincide CLARAMENTE con un cliente de la lista; ante cualquier duda devuelve null (es mucho mejor dejarlo sin asignar que asignarlo al cliente equivocado). Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
       try{
-        const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})})
-        const data=await resp.json(); const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+        const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+        const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
         arr.forEach(o=>{ const a=batch.find(x=>x.email===o.email); if(a){ if(o.client_id&&clients.some(c=>String(c.id)===String(o.client_id))){ a.client_id=o.client_id; a.byIA=true } if(o.cargo) a.cargo=o.cargo } })
       }catch(_){}
     }
