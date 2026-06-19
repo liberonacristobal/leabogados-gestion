@@ -241,7 +241,8 @@
       "Bash(git checkout *)",
       "Bash(perl -i -pe \"s/\\(greenBg:'#E1F5EE',\\)/\\\\$1\\\\n  azulInfo:'#185FA5', azulBg:'#E6F1FB', tealBg:'#DFF1F2', tealText:'#155E6B', ambarBg:'#FAEEDA', coralText:'#993C1D', grisText:'#5F5E5A',/\" src/App.jsx)",
       "Bash(perl -i -pe 's/fontSize:15\\(,fontWeight:600,color:col\\\\}\\\\}>\\\\{fmt\\\\\\(val\\\\\\)\\\\}\\)/fontSize:13$1/' src/App.jsx)",
-      "Bash(perl -i -pe \"s/showHistorial\\\\?'Historial de rendiciones'/showHistorial?'Historial'/; s/title='Historial de rendiciones' aria-label='Historial de rendiciones'/title='Historial' aria-label='Historial'/\" src/App.jsx)"
+      "Bash(perl -i -pe \"s/showHistorial\\\\?'Historial de rendiciones'/showHistorial?'Historial'/; s/title='Historial de rendiciones' aria-label='Historial de rendiciones'/title='Historial' aria-label='Historial'/\" src/App.jsx)",
+      "Bash(sips -g pixelWidth -g pixelHeight le-logo-blanco.png)"
     ]
   }
 }
