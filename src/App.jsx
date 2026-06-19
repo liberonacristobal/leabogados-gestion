@@ -14656,6 +14656,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar RUT, nombre o cliente…' style={{flex:1,minWidth:0,border:'none',outline:'none',fontSize:12,color:C.text,background:'transparent'}}/>
             {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>✕</button>}
           </div>
+          {/* Atajo "Mis clientes": filtra por el responsable = usuario actual (reusa respF) */}
+          {(()=>{ const mio=(user?.name||'').trim(); if(!mio) return null; const on=respF===mio; return (
+            <button onClick={()=>setRespF(on?'todos':mio)} title='Ver solo mis clientes' style={{fontSize:11,fontWeight:700,padding:'6px 11px',borderRadius:8,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5}}>
+              <svg width='12' height='12' viewBox='0 0 24 24' fill={on?'#fff':'none'} stroke={on?'#fff':C.accent} strokeWidth='2' strokeLinejoin='round'><polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/></svg>
+              Mis clientes
+            </button>
+          )})()}
           <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {orden==='desc'?'↓':'↑'}</button>
         </div>
 
