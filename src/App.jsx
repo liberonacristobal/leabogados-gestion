@@ -14343,18 +14343,23 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const crearFondoProvision = async(mov)=>{
     if(busy) return
     if(!mov.cliente_id){ alert('Identifica el cliente antes de acreditar el fondo.'); return }
+    // El fondo se acredita por el RESTO no aplicado (monto − lo ya conciliado a facturas/otros), no por el total
+    // de la transferencia. Si no, una transferencia "factura + fondo" se contaría doble.
+    const resto = (mov.monto||0) - (mov.monto_conciliado||0)
+    if(resto<=0){ alert('Esta transferencia ya está totalmente conciliada.'); return }
     setBusy(mov.id)
     let fondo=null, cr=null
     try{
-      const ins = await supabase.from('expenses').insert({ client_id:mov.cliente_id, type:'fondo', amount:(mov.monto||0), date:mov.fecha, concept:'Provisión de fondos (conciliación bancaria)', category:'Fondo', created_by:user?.email||null }).select().single()
+      const ins = await supabase.from('expenses').insert({ client_id:mov.cliente_id, type:'fondo', amount:resto, date:mov.fecha, concept:'Provisión de fondos (conciliación bancaria)', category:'Fondo', created_by:user?.email||null }).select().single()
       if(ins.error) throw ins.error
       fondo=ins.data
-      const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:(mov.monto||0), origen:'manual' }).select().single()
+      const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:resto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error
       cr=ic.data
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:(mov.monto||0) }).eq('id',mov.id)
+      const nuevoConciliado = (mov.monto_conciliado||0) + resto
+      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConciliado }).eq('id',mov.id)
       if(me) throw me
-      setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x))
+      setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConciliado}:x))
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); alert('Error al crear fondo: '+e.message) }
     setBusy(null)
   }
@@ -14776,7 +14781,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   if(!m.cliente_id) return (<div style={{marginTop:5,fontSize:10,color:C.muted}}>Identifica el cliente para acreditar el fondo.</div>)
                   return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
                     <span style={{fontSize:10,color:'#155E6B'}}>Acreditar al fondo de {cmap[m.cliente_id]||'cliente'}:</span>
-                    <button disabled={busy===m.id} onClick={()=>crearFondoProvision(m)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>+ Crear fondo {fmtM(m.monto)}</button></div>)
+                    <button disabled={busy===m.id} onClick={()=>crearFondoProvision(m)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:'#DFF1F2',color:'#155E6B',border:'none'}}>+ Crear fondo {fmtM((m.monto||0)-(m.monto_conciliado||0))}</button></div>)
                 })()}
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
                 {sub==='abonos'&&esConciliable(m)&&(()=>{
