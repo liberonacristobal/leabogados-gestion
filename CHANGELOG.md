@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Historial: ícono sin recuadro
+- El botón de historial pasa a ser solo el ícono (18px), sin borde ni fondo. Mantiene el área de toque.
+
 ## 2026-06-19 — Pills más estrechas (historial)
 - Pestañas del historial y control de orden por fecha pasan a relleno compacto (3px 11px) en vez de 6px 16px. Regla: los pills nuevos van estrechos (como chipBtn).
 
