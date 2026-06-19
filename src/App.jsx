@@ -7557,7 +7557,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (caja chica + notaría pagada) − reservado para
   // OTROS gastos pendientes del cliente (no la notaría que estás liquidando). Así el fondo se reparte entre todo lo que debe.
   const dispCliente = cid => {
-    const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo')
+    const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.no_descuenta_saldo)
     const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
     const pagado=g.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
     const esNotaPend=e=>e.category==='Notaria'&&!e.notaria_render_id   // lo que se liquida ahora a la notaría (no se reserva)
@@ -7820,7 +7820,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):alert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>✓ Caja chica</button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
               {isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Carga masiva</span>}
-              {!isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Pago histórico</span>}
+              {!isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Gasto histórico</span>}
               {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10,padding:'1px 8px',borderRadius:20,background:pc.bg,color:pc.color,fontWeight:700}}>Personal · {e.personal_de}</span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -8923,7 +8923,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       {!isFondo&&f.client_id&&!f.personal_de&&(
         <div style={{display:'flex',alignItems:'center',gap:9,marginTop:10}}>
           <Switch on={!!f.no_descuenta_saldo} onToggle={()=>up('no_descuenta_saldo',!f.no_descuenta_saldo)}/>
-          <div><div style={{fontSize:12,color:C.text}}>Gasto ya pagado</div><div style={{fontSize:10,color:C.muted,marginTop:1}}>Queda en el historial, no descuenta del saldo del cliente.</div></div>
+          <span style={{fontSize:12,color:C.text}}>Gasto histórico</span>
         </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>

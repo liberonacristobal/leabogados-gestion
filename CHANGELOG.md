@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Gasto histórico: textos + fix del fondo en notaría
+- Toggle del modal: "Gasto ya pagado" → "Gasto histórico" (sin la línea de ayuda). Chip de la lista: "Pago histórico" → "Gasto histórico".
+- BUG corregido: el "Disponible" para pagar notaría (dispCliente) no excluía los gastos marcados como históricos, así que el fondo no se recomponía. Ahora los excluye igual que fgCliente → al marcar un gasto histórico, el fondo vuelve a su disponible real para pagar la notaría.
+
 ## 2026-06-19 — Ajuste de saldo manual (⋯ en tarjeta Saldo fondos, solo admin)
 - ⋯ discreto en la tarjeta Saldo fondos del Estado de cuenta (solo admin) → modal "Ajustar saldo | cliente" (formato canónico, con advertencia + monto + motivo obligatorio).
 - Crea un gasto categoría "Ajuste" que rebaja el saldo del cliente; queda como movimiento (motivo · fecha · autor) auditable y eliminable. Para reflejar gastos antiguos no cargados sin tener que cargarlos uno a uno.
