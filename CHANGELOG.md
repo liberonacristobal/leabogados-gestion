@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Historial: control de orden solo flecha
+- El control de orden por fecha pasa a ser solo la flecha (↓/↑), sin el texto "Más nuevo/Más antiguo".
+
 ## 2026-06-19 — Historial: filtros minimalistas (buscador + Mes ▾ + Año ▾) idénticos en ambas pestañas
 - Reemplazados el dropdown de cliente y los dos inputs month por una fila única: buscador + Mes ▾ + Año ▾, idéntica en Clientes y Notaría. El buscador filtra por nombre de cliente (Clientes) o período (Notaría). Quitados los estados de filtro viejos sin uso.
 
