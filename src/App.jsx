@@ -7534,6 +7534,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [selNota,setSelNota] = useState(()=>new Set())
   const [excepNota,setExcepNota] = useState(()=>new Set())   // clientes con "Permitir adelanto" activado (excepción explícita)
   const [notaSending,setNotaSending] = useState(false)
+  const [reenviando,setReenviando] = useState(null)   // id de la liquidación de notaría que se está reenviando
   const [notaConfirm,setNotaConfirm] = useState(false)
   // Correos por defecto de la notaría (Lascar): se precargan siempre; si el equipo guarda otros, esos mandan.
   const NOTARIA_DEFAULT = 'sdelgado@notarialascar.cl, sdanotaria@gmail.com'
@@ -7673,6 +7674,45 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       setNotaSend(null); setCompFile(null)
     }catch(e){alert('Error al enviar: '+e.message)}
     setNotaSending(false)
+  }
+  // Reenvía una liquidación YA enviada: regenera el detalle y recupera el comprobante guardado en Drive. Cualquiera del equipo puede.
+  // OJO: el cuerpo (html/texto) debe mantenerse en sync con enviarNotaria.
+  const reenviarNotaria = async(r) => {
+    const dest=(notaEmail||'').trim()
+    if(!dest){ alert('Falta el correo de la notaría.'); return }
+    const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
+    if(!gs.length){ alert('Esta liquidación no tiene gastos vivos para reenviar.'); return }
+    const periodo=r.periodo||periodoNota(gs)
+    if(!confirm(`¿Reenviar la liquidación (${periodo}) a la notaría?\n${dest}\nCon copia al estudio.`)) return
+    setReenviando(r.id)
+    const ccEstudio='cl@leabogados.cl, ee@leabogados.cl, mc@leabogados.cl, mp@leabogados.cl'
+    try{
+      const total=gs.reduce((a,e)=>a+(e.amount||0),0)
+      const fechaLiq=fmtFechaDMY(r.created_at)
+      const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      const filas=gs.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||'Sin cliente'; return `<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number||'—')}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(e.concept||'—')} <span style="color:#99ABB4">· ${esc(cn)}</span></td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(e.amount||0).toLocaleString('es-CL')}</td></tr>` }).join('')
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Estimados,</div><div style="font-size:14px;color:#666666;margin:0 0 16px">Junto con saludar, adjuntamos la liquidación de las órdenes de trabajo (OT) que estamos pagando correspondientes a ${esc(periodo)}, junto con el comprobante de la transferencia por el total.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="2" style="padding:7px 0;font-size:13px;font-weight:bold">Total transferido</td><td style="padding:7px 0;font-size:13px;font-weight:bold;text-align:right">$${total.toLocaleString('es-CL')}</td></tr></table><div style="font-size:13px;color:#1a1a1a;margin:14px 0 0;padding:10px 12px;background:#E6F1FB;border-radius:8px">Las boletas correspondientes deben emitirse a nombre de <b>Liberona Escala Abogados Limitada</b>, RUT <b>77.700.387-9</b>.</div><div style="font-size:13px;color:#666666;margin:16px 0 0">Quedamos atentos a cualquier observación.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">Liberona Escala Abogados</b></div></div><div style="padding:16px 28px;border-top:1px solid #eeeeee;font-size:11px;color:#999999">gestion.leabogados.cl · Liberona Escala Abogados</div></div></body></html>`
+      const texto='Estimados,\n\nJunto con saludar, adjuntamos la liquidación de las OT que estamos pagando correspondientes a '+periodo+', junto con el comprobante de la transferencia por el total.\n\n'+gs.map(e=>`• ${e.ot_number||'s/OT'} · ${(e.concept||'—')} · $${(e.amount||0).toLocaleString('es-CL')}`).join('\n')+'\n\nTotal transferido: $'+total.toLocaleString('es-CL')+'\n\nLas boletas correspondientes deben emitirse a nombre de Liberona Escala Abogados Limitada, RUT 77.700.387-9.\n\nQuedamos atentos a cualquier observación.\nSaludos cordiales,\nLiberona Escala Abogados'
+      const subjectNota=`Liquidación de gastos y comprobante de transferencia — Liberona Escala Abogados — ${periodo}`
+      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs,clients,titulo:`Liquidación Notaría Lascar al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
+      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:'Liberona Escala Abogados',periodo,gastos:gs,clients,titulo:'Liquidación de gastos — Notaría'}) }catch(_){} }
+      const adjuntos=[]
+      if(xls) adjuntos.push({base64:xls, name:`Liquidacion Notaria Lascar al ${fechaLiq}.xlsx`, mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+      else if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion Notaria Lascar al ${fechaLiq}.pdf`, mime:'application/pdf'})
+      // Recupera el comprobante desde Drive (quedó enlazado al enviar). Si no se puede, reenvía solo el detalle.
+      let conComp=false
+      if(r.comprobante_url){
+        const m=String(r.comprobante_url).match(/\/d\/([A-Za-z0-9_-]+)/)||String(r.comprobante_url).match(/[?&]id=([A-Za-z0-9_-]+)/)
+        const fid=m&&m[1]
+        if(fid){ try{ const tk=await driveToken(); if(tk){ const b=await driveDownloadB64(tk,fid); if(b&&b.base64){ adjuntos.push({base64:b.base64,name:`Comprobante transferencia.${b.ext}`,mime:b.mime}); conComp=true } } }catch(_){} }
+      }
+      let sent=false
+      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,cc:ccEstudio,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
+      if(!sent){ try{ await sendMailServer({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
+      if(!sent){ alert('No se pudo reenviar. Revisa la conexión o reintenta.'); setReenviando(null); return }
+      alert('Reenviado a la notaría'+(conComp?' con el comprobante.':'.\n(No se pudo recuperar el comprobante de Drive; se reenvió solo el detalle.)'))
+    }catch(e){ alert('Error al reenviar: '+e.message) }
+    setReenviando(null)
   }
   const deshacerNotaria = async(r) => {
     if(!confirm('¿Deshacer esta liquidación de notaría? Los gastos vuelven a pendientes.')) return
@@ -8229,6 +8269,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
                     <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>↓ Excel</button>
                     {est==='por_enviar'&&<button onClick={()=>{setCompFile(null);setNotaSend(r)}} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Enviar a notaría</button>}
+                    {est==='enviada'&&<button onClick={()=>reenviarNotaria(r)} disabled={reenviando===r.id} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:6,padding:'3px 9px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'↻ Reenviar'}</button>}
                     {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' style={{fontSize:10,fontWeight:600,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px'}}>Ver comprobante</a>}
                     {notariaPend.length>0&&<button onClick={()=>{setNotaLiqAdd(adding?null:r.id);setAddSel(new Set())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>{adding?'Cerrar':'Añadir gastos'}</button>}
                     <button onClick={()=>deshacerNotaria(r)} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'3px 9px',cursor:'pointer'}}>Deshacer</button>
@@ -11038,6 +11079,19 @@ async function driveGet(token,url){
   if(r.status===401) throw new DriveAuthError()
   if(!r.ok) throw new Error('Drive API error '+r.status)
   return r.json()
+}
+// Descarga un archivo de Drive como base64 (para reenviar adjuntos ya guardados, ej. comprobante de notaría). Devuelve {base64,mime,ext} o null.
+async function driveDownloadB64(token, fileId){
+  try{
+    let mime='application/octet-stream'
+    try{ const meta=await driveGet(token,`https://www.googleapis.com/drive/v3/files/${fileId}?fields=mimeType`); if(meta&&meta.mimeType) mime=meta.mimeType }catch(_){}
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+token}})
+    if(!r.ok) return null
+    const buf=new Uint8Array(await r.arrayBuffer())
+    let bin=''; const CH=8192; for(let i=0;i<buf.length;i+=CH){ bin+=String.fromCharCode.apply(null, buf.subarray(i,i+CH)) }
+    const ext = mime.includes('pdf')?'pdf':(mime.includes('png')?'png':((mime.includes('jpeg')||mime.includes('jpg'))?'jpg':'dat'))
+    return { base64: btoa(bin), mime, ext }
+  }catch(_){ return null }
 }
 
 // ── DRIVE: escritura de adjuntos (carpeta compartida "Respaldo Gastos APP") ──────

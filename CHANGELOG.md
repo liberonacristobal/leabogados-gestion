@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19 — Notaría: botón Reenviar liquidación
+- Cada liquidación de notaría ya enviada tiene un botón ↻ Reenviar que cualquiera del equipo puede usar: regenera el detalle (Excel), recupera el comprobante guardado en Drive y lo manda de nuevo a los correos de la notaría con copia al estudio (mismo cuerpo, incluida la línea de a nombre de quién emitir las boletas). Pide confirmación.
+- Helper nuevo driveDownloadB64 para recuperar adjuntos desde Drive.
+
 ## 2026-06-19 — Notaría: correo indica a nombre de quién emitir las boletas
 - El cuerpo del correo a la notaría ahora incluye, destacado tras el total: las boletas deben emitirse a nombre de Liberona Escala Abogados Limitada, RUT 77.700.387-9. (en HTML y en texto plano).
 
