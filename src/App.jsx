@@ -400,7 +400,7 @@ function LoginScreen({loading}) {
       <div style={{fontSize:11,color:C.done,marginTop:2,marginBottom:30,letterSpacing:1}}>FirmDesk · Gestión Oficina</div>
       <button onClick={signInWithGoogle} disabled={loading} style={{display:'inline-flex',alignItems:'center',gap:10,background:'none',border:'none',borderBottom:`1px solid ${C.done}`,borderRadius:0,padding:'0 0 6px',color:C.accent,fontSize:14,fontWeight:500,cursor:'pointer'}}>
         {loading?<Spin/>:<>
-          <span style={{width:18,height:18,borderRadius:4,background:C.accent,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>G</span>
+          <span style={{width:20,height:20,borderRadius:'50%',background:C.accent,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>G</span>
           Entrar
         </>}
       </button>
