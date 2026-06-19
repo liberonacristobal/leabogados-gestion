@@ -1,6 +1,18 @@
 {
   "permissions": {
     "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash(sed *)",
+      "Bash(wc *)",
+      "Bash(rg *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(nl *)",
       "Bash(vercel --version)",
       "Bash(echo \"---EXIT: $?---\")",
       "Bash(vercel whoami *)",
@@ -216,7 +228,9 @@
       "Bash(curl -s '__TRACKED_VAR__/billing?select=id,client_id,invoice_no,amount,status,deleted_at,issued_at&limit=5000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
       "Bash(curl -s '__TRACKED_VAR__/conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura&limit=5000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
       "Bash(echo \"abonos pendientes: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/ab.json'\\)\\)\\)\\)\"\\)  facturas: $\\(python3 -c \"import json;print\\(len\\(json.load\\(open\\('/tmp/bill.json'\\)\\)\\)\\)\"\\)\")",
-      "Bash(supabase projects *)"
+      "Bash(supabase projects *)",
+      "Bash(xargs -0 du -ch)",
+      "Bash(xargs du -ch)"
     ]
   }
 }
