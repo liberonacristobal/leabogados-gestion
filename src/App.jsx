@@ -15230,6 +15230,7 @@ export default function App() {
   const [expenseAttachments,setExpenseAttachments]=useState([])
   const [billingAttachments,setBillingAttachments]=useState([])
   const [loading,setLoading]=useState(false)
+  const [booted,setBooted]=useState(false)   // primera carga completada: las recargas posteriores NO desmontan la UI (no te sacan de donde estabas)
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
   const [modal,setModal]=useState(null)
@@ -15291,7 +15292,7 @@ export default function App() {
   useEffect(()=>{
     if(DEMO){
       const d=demoData
-      setPettyCash(d.petty_cash||[]); setRendiciones(d.rendiciones||[]); setClients(d.clients||[]); setSales(d.sales||[]); setBilling(d.billing||[]); setExpenses(d.expenses||[]); setTasks(d.tasks||[]); setClientEntities(d.client_entities||[]); setExpenseAttachments([]); setBillingAttachments([]); setAnticipos(d.anticipos||[]); setProveedores(d.proveedores||[]); setTerceros(d.terceros_pagos||[]); setBulkImports([]); setImportAliases([]); setLoading(false)
+      setPettyCash(d.petty_cash||[]); setRendiciones(d.rendiciones||[]); setClients(d.clients||[]); setSales(d.sales||[]); setBilling(d.billing||[]); setExpenses(d.expenses||[]); setTasks(d.tasks||[]); setClientEntities(d.client_entities||[]); setExpenseAttachments([]); setBillingAttachments([]); setAnticipos(d.anticipos||[]); setProveedores(d.proveedores||[]); setTerceros(d.terceros_pagos||[]); setBulkImports([]); setImportAliases([]); setLoading(false); setBooted(true)
       return
     }
     if(!session) return
@@ -15317,8 +15318,9 @@ export default function App() {
       q('memoria de alias', supabase.from('import_aliases').select('*')),
     ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia)
       if(loadErrs.length) alert('No se pudieron cargar: '+loadErrs.join(', ')+'.\nAlgunas cifras pueden verse incompletas. Recarga la página antes de ingresar datos para no duplicar.')})
-      .catch(err=>{ console.error(err); alert('Error al cargar datos: '+(err?.message||err)+'\nRecarga la página.') }).finally(()=>setLoading(false))
-  },[session])
+      .catch(err=>{ console.error(err); alert('Error al cargar datos: '+(err?.message||err)+'\nRecarga la página.') }).finally(()=>{setLoading(false);setBooted(true)})
+    // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
+  },[session?.user?.id])
 
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
@@ -16394,7 +16396,7 @@ export default function App() {
             )}
           </div>
         </div>
-        {loading?(
+        {loading&&!booted?(
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
