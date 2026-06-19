@@ -127,22 +127,8 @@ const rsLabel = (clientId, clients, clientEntities, entityId) => {
 const folioN = no => String(no||'').replace(/^factura\s*/i,'').trim()
 // Folio SOLO dígitos: para deduplicar facturas sin importar si vienen "318" o "Factura 318" (causa de duplicados en cargas).
 const folioDigits = no => String(no||'').replace(/\D/g,'')
-// Razón social del SII a Title Case SOLO para mostrar (el dato crudo NUNCA se toca). Respeta sufijos (SpA/Ltda/S.A./EIRL) y conectores (y/e/de…).
-const _RS_MIN = new Set(['y','e','o','de','del','la','las','los','el','en','da'])
-const _RS_KEEP = {'spa':'SpA','sa':'S.A.','s.a.':'S.A.','ltda':'Ltda','ltda.':'Ltda','eirl':'EIRL','e.i.r.l.':'EIRL'}
-const titleCaseRS = s => {
-  if(!s) return s
-  const raw = String(s).trim()
-  const letters = raw.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g,'')
-  if(letters && letters !== letters.toUpperCase()) return raw   // ya viene en mixto → respetar
-  return raw.toLowerCase().split(/\s+/).map((w,i)=>{
-    if(_RS_KEEP[w]) return _RS_KEEP[w]
-    if(i>0 && _RS_MIN.has(w)) return w
-    if(w==='&'||/^\d/.test(w)) return w
-    if(w.replace(/[.\-]/g,'').length<=1) return w.toUpperCase()   // siglas/iniciales sueltas (B, S)
-    return w.charAt(0).toUpperCase()+w.slice(1)
-  }).join(' ')
-}
+// Razón social del SII en MAYÚSCULAS SOLO para mostrar (el dato crudo NUNCA se toca; PDF/export legal usan la RS tal cual).
+const rsDisplay = s => s ? String(s).trim().toUpperCase() : s
 // Clave de glosa para aprender gasto→proyecto: palabras significativas (≥4) ordenadas, así "Certificado dominio CBR" matchea independiente del orden.
 const glosaKey = s => _normTxt(s).split(' ').filter(w=>w.length>=4).slice(0,5).sort().join(' ')
 // Clave de SERIE de facturas: glosa base sin "cuota N/M", "N/M", meses, años → para agrupar hermanas (1/3, 2/3, 3/3; o las mensuales) y no dejarlas huérfanas.
@@ -480,7 +466,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
           {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600}}>{cl.abogado_responsable}</span> })()}
         </div>
         <div style={{fontSize:11,color:'#537281',marginTop:3}}>{cl.type||''}{cl.rut?` · ${cl.rut}`:''}</div>
-        {(rs.name!==cl.name||rs.multi)&&<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${titleCaseRS(rs.name)}${rs.rut?` | ${rs.rut}`:''}`}</div>}
+        {(rs.name!==cl.name||rs.multi)&&<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>}
       </div>
     )
   }
@@ -525,7 +511,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,o
               </div>
               {openEnt&&entities.map(e=>(
                 <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:'1px solid #E4E8EB'}}>
-                  <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCaseRS(e.name)||'—'}</div>
+                  <div style={{fontSize:12,fontWeight:500,color:'#3D3D3D',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(e.name)||'—'}</div>
                   <div style={{fontSize:11,color:'#537281',fontFamily:'monospace'}}>{e.rut}</div>
                   <Chev/>
                 </div>
@@ -3045,7 +3031,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
           <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
             <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name||'—'}</div>
-            {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (rs.name!==client?.name||rs.rut)?<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCaseRS(rs.name)}{rs.rut?` | ${rs.rut}`:''}</div>:null })()}
+            {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (rs.name!==client?.name||rs.rut)?<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>:null })()}
           </div>
           <div style={{textAlign:'right',flexShrink:0}}>
             {ufA>0&&<div style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmtUF(ufA)}{rec?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</div>}
@@ -5012,7 +4998,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <span style={{fontSize:12,color:C.accent,transform:isOpen?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
             <div style={{minWidth:0}}>
               <div style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
-              {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name&&!rs.multi)?<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCaseRS(rs.name)}{rs.rut?` | ${rs.rut}`:''}</div>:null })()}
+              {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name&&!rs.multi)?<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>:null })()}
               {!isOpen&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{nDocs} doc{nDocs!==1?'s':''}{vencidoMonto>0&&<span style={{color:C.overdue,fontWeight:700}}> · {fmt(vencidoMonto)} vencido</span>}</div>}
             </div>
           </div>
@@ -5319,7 +5305,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               <div key={c.id} style={{border:`1px solid ${nV>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
                 <div onClick={()=>toggleClient(c.id)} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>{pend>0&&<span style={{fontSize:13,fontWeight:700,color:nV>0?C.overdue:C.soon,flexShrink:0}}>{fmt(pend)}</span>}</div>
-                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.multi||rs.name!==c.name||rs.rut)?<div style={{fontSize:9,color:rs.multi?'#854F0B':C.muted,fontWeight:rs.multi?600:400,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${titleCaseRS(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
+                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.multi||rs.name!==c.name||rs.rut)?<div style={{fontSize:9,color:rs.multi?'#854F0B':C.muted,fontWeight:rs.multi?600:400,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
                   <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap'}}>
                     {nP>0&&<span style={{fontSize:8.5,background:'#F1EFE8',color:'#5F5E5A',borderRadius:9,padding:'1px 7px'}}>{nP} prog</span>}
                     {nE>0&&<span style={{fontSize:8.5,background:'#E6EEF1',color:'#003C50',borderRadius:9,padding:'1px 7px'}}>{nE} emit</span>}
@@ -5433,7 +5419,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                             <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'}</div>
                             <div style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(b.amount)}</div>
                           </div>
-                          {rs.name&&<div style={{fontSize:10,color:C.muted,marginTop:1,letterSpacing:.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCaseRS(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>}
+                          {rs.name&&<div style={{fontSize:10,color:C.muted,marginTop:1,letterSpacing:.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(rs.name)}{rs.rut?` · ${rs.rut}`:''}</div>}
                           <div style={{fontSize:12,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
                           <div style={{fontSize:11,color:C.muted,marginTop:2,display:'flex',gap:8,flexWrap:'wrap'}}>
                             <span>{esCLP?'—':(ufEq?`UF ${ufEq.toLocaleString('es-CL',{minimumFractionDigits:0,maximumFractionDigits:2})}`:'—')}</span>
@@ -5482,7 +5468,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',padding:'7px 10px',marginBottom:5}}>
               <div onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
                 <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {titleCaseRS(rs.name)}</span>:''}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}</div>
                   <div style={{fontSize:9.5,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''} · {fmtDate(kpiDate(b))}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:col}}>{er}</div></div>
@@ -7967,7 +7953,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   return <span title='La oficina ya pagó esto por sobre el fondo del cliente — deuda efectiva por cobrar' style={{fontSize:10,fontWeight:700,color:'#854F0B',background:'#FFF3DC',border:'1px solid #FAC775',borderRadius:10,padding:'2px 9px',whiteSpace:'nowrap'}}>Adelanto {fmt(porCobrar)} por cobrar</span>
                 })()}
               </div>
-              {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{titleCaseRS(selEnts[0].name)}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
+              {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{rsDisplay(selEnts[0].name)}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
               {selectedClient&&onSaveClientFields&&respPickG&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; return (
                 <div style={{marginTop:5,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                   {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>asignarRespG(m)} style={{fontSize:10,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
@@ -8322,7 +8308,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const row = c => {
               const sal=saldoDe(c), neg=sal<0
               const ents=(clientEntities||[]).filter(x=>x.client_id===c.id)
-              const rsLine = ents.length>1 ? `${ents.length} razones sociales` : (ents[0] ? `${titleCaseRS(ents[0].name)}${ents[0].rut?` · ${ents[0].rut}`:''}` : 'Sin razón social')
+              const rsLine = ents.length>1 ? `${ents.length} razones sociales` : (ents[0] ? `${rsDisplay(ents[0].name)}${ents[0].rut?` · ${ents[0].rut}`:''}` : 'Sin razón social')
               return (
                 <div key={c.id} onClick={()=>setSelectedClient(c)} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'9px 12px',borderBottom:`1px solid #EEF1F3`,borderLeft:`3px solid ${neg?C.overdue:C.normal}`,cursor:'pointer'}}>
                   <div style={{width:32,height:32,borderRadius:'50%',background:neg?'#FCEBEB':'#E1F5EE',color:neg?'#A32D2D':C.greenText,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{initials(c.name)}</div>
@@ -10217,7 +10203,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:18,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
-            {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div style={{fontSize:11,color:C.muted,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${titleCaseRS(rs.name)}${rs.rut?` | ${rs.rut}`:''}`}</div>:null })()}
+            {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div style={{fontSize:11,color:C.muted,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
             <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
               {client.type}
               {client.is_occasional&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:'#5F5E5A',fontWeight:600}}>ocasional</span>}
@@ -10255,7 +10241,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               </div>
               {openEnt&&entities.map(e=>(
                 <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCaseRS(e.name)||'—'}</div>
+                  <div style={{fontSize:12,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(e.name)||'—'}</div>
                   <div style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</div>
                   <Chev/>
                 </div>
@@ -10707,7 +10693,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>{c.name}<span style={{color:C.done,fontSize:13,fontWeight:300}}>|</span><button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} title={ended?'Reactivar cliente':'Archivar (terminar) cliente'} style={{flexShrink:0,width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>{ended?<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}</button>{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:'#E4E8EB',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4}}>Interno</span>}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:'#C77F18',background:'#FFF8E1',borderRadius:20,padding:'1px 8px'}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
                   <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
-                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.name!==c.name||rs.multi)?<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${titleCaseRS(rs.name)}${rs.rut?` | ${rs.rut}`:''}`}</div>:null })()}
+                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.name!==c.name||rs.multi)?<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
                 </div>
                 {responsableDe[c.id]&&(()=>{ const pc=personChip(responsableDe[c.id]); return <span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{responsableDe[c.id]}</span> })()}
               </div>
@@ -14329,7 +14315,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const excess=(mov.monto||0)-movAplicado
       // El reembolso de gastos crea un FONDO (entra al saldo del cliente → lo corrige), no un bulto sin efecto.
       if(excess>0){
-        const insFon = await supabase.from('expenses').insert({ client_id:mov.cliente_id, type:'fondo', amount:excess, date:mov.fecha, concept:`Reembolso de gastos · F°${folioN(fg.factura.invoice_no)||'—'} (conciliación)`, category:'Fondo', created_by:user?.email||null }).select().single()
+        const insFon = await supabase.from('expenses').insert({ client_id:mov.cliente_id, type:'fondo', amount:excess, date:mov.fecha, concept:`Reembolso de gastos · Factura N°${folioN(fg.factura.invoice_no)||'—'} (conciliación)`, category:'Fondo', created_by:user?.email||null }).select().single()
         if(insFon.error) throw insFon.error; fondo=insFon.data
         const insG = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:excess, origen:'manual' }).select().single()
         if(insG.error) throw insG.error; crG=insG.data; movAplicado+=excess
@@ -14833,7 +14819,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           ? <span onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} title='Tocar para editar / cambiar cliente' style={{fontWeight:500,color:C.muted,border:`1px solid ${C.border}`,borderRadius:3,padding:'1px 8px',background:'#fff',cursor:'pointer'}}>{cliName}</span>
                           : <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:10,color:'#C77F18',fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Identificar</button>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E1F5EE',color:'#0F6E56',border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
-                        {!cliName&&!sugerencias[m.id]&&(()=>{ const cm=clientePorMonto(m); if(!cm) return null; const nom=cmap[cm.cid]||clients.find(c=>String(c.id)===String(cm.cid))?.name||'cliente'; return <button onClick={()=>identificar(m,cm.cid,true)} title={`Calza por monto exacto con la Factura N°${folioN(cm.factura.invoice_no)||'—'} de ${nom}`} style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E6EEF1',color:'#003C50',border:'none',cursor:'pointer'}}>¿{nom}? · F°{folioN(cm.factura.invoice_no)||'—'}</button> })()}
+                        {!cliName&&!sugerencias[m.id]&&(()=>{ const cm=clientePorMonto(m); if(!cm) return null; const nom=cmap[cm.cid]||clients.find(c=>String(c.id)===String(cm.cid))?.name||'cliente'; return <button onClick={()=>identificar(m,cm.cid,true)} title={`Calza por monto exacto con la Factura N°${folioN(cm.factura.invoice_no)||'—'} de ${nom}`} style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:'#E6EEF1',color:'#003C50',border:'none',cursor:'pointer'}}>¿{nom}? · Factura N°{folioN(cm.factura.invoice_no)||'—'}</button> })()}
                         {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}
                         {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
                           tagFor===m.id
