@@ -209,7 +209,9 @@
       "Bash(sed 's/></>\\\\n</g' _xlsx_peek/xl/worksheets/sheet1.xml)",
       "Bash(perl -0pi -e \"s/\\(<span style=\\\\{\\\\{\\)fontSize:11\\(,fontWeight:700,color:'#993C1D',background:'#FAECE7',borderRadius:20,padding:'2px 9px'\\\\}\\\\}>→ Gasto por cuenta\\)/\\\\${1}fontSize:10\\\\${2}/\" src/App.jsx)",
       "Bash(perl -0pi -e \"s/\\(<span style=\\\\{\\\\{\\)fontSize:11\\(,fontWeight:700,color:'#155E6B',background:'#DFF1F2',borderRadius:20,padding:'2px 9px'\\\\}\\\\}>Fondo por Rendir\\)/\\\\${1}fontSize:10\\\\${2}/\" src/App.jsx)",
-      "Bash(perl -0pi -e \"s/\\(onClick=\\\\{clickable\\\\?\\\\\\(e\\\\\\)=>\\\\{e.stopPropagation\\\\\\(\\\\\\);setFacMyc\\\\\\(facMyc===r.factura_id\\\\?null:r.factura_id\\\\\\)\\\\}:undefined\\\\} style=\\\\{\\\\{\\)fontSize:11/\\\\${1}fontSize:10/\" src/App.jsx)"
+      "Bash(perl -0pi -e \"s/\\(onClick=\\\\{clickable\\\\?\\\\\\(e\\\\\\)=>\\\\{e.stopPropagation\\\\\\(\\\\\\);setFacMyc\\\\\\(facMyc===r.factura_id\\\\?null:r.factura_id\\\\\\)\\\\}:undefined\\\\} style=\\\\{\\\\{\\)fontSize:11/\\\\${1}fontSize:10/\" src/App.jsx)",
+      "Bash(curl -s '__TRACKED_VAR__/billing?select=id,invoice_no,status,amount,deleted_at&client_id=eq.__TRACKED_VAR__' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura&limit=3000' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
     ]
   }
 }
