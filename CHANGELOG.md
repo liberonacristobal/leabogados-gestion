@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Auditoría Fase 2: UF de respaldo centralizada (rank 6)
+- El valor UF de respaldo (40000 CLP) estaba hardcodeado en 9 conversiones UF↔CLP dispersas; si cambiaba, había que tocar 9 lugares y arriesgar divergencia de cifras. Ahora hay una constante única `UF_FALLBACK`. Mismo valor, sin cambio de comportamiento.
+
 ## 2026-06-19 — Auditoría Fase 2: fixes autónomos (rendimiento + higiene)
 - Rendimiento Conciliación (rank 1, el único con impacto real en runtime): `facturasCliente`/`clientePorMonto` re-escaneaban TODO `billing` por cada movimiento dentro de memos que corren con hasta 8.000 movimientos → O(movs×facturas), congelaba el iPhone al entrar o filtrar. Ahora se indexan las facturas con saldo una vez (`facturasConSaldo` + `facturasPorCliente`, memoizados) y el lookup por cliente es O(1). Misma lógica de filtrado, sin cambio de comportamiento.
 - Higiene de repo: quitados del control de versiones los 55 backups `src/App.jsx.bak_*` (22 MB) que ensuciaban toda búsqueda de código; agregado `*.bak*` a `.gitignore`. El historial de git conserva las versiones.
