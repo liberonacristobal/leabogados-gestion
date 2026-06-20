@@ -10246,7 +10246,7 @@ Saludos cordiales,`
       const token = await driveToken()
       if(token){
         try{
-          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
+          const pdf = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
           await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:textoFull, bodyHtml:buildEmailHtml(texto, lang), pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
@@ -10255,7 +10255,7 @@ Saludos cordiales,`
         // Fallback robusto: el usuario no tiene permiso gmail.send → enviar IGUAL desde la cuenta de oficina
         // (servidor SMTP) con el PDF adjunto. Solo si el servidor también falla, se descarga y se abre Gmail a mano.
         try{
-          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
+          const pdf = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
           await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:textoFull, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
           conAdjunto = true
           alert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
@@ -10263,7 +10263,7 @@ Saludos cordiales,`
           // Último recurso: descargar el PDF REAL (jsPDF) y abrir Gmail para adjuntarlo a mano.
           alert('No se pudo enviar automáticamente.\nGmail: '+(sendErr?.message||sendErr||'—')+'\nServidor: '+(srvErr?.message||srvErr||'—')+'\n\nDescargamos el PDF y abrimos Gmail para que lo adjuntes.')
           try{
-            const b64 = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
+            const b64 = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
             const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
             const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}))
             const a = document.createElement('a'); a.href=url
@@ -11256,54 +11256,109 @@ async function driveToken(){
 //    (agregar a supabase.js cuando esté habilitado en Google Cloud Console). Sin ese scope,
 //    la API devuelve 403 y el modal cae al fallback de Gmail compose (sin adjunto). ──
 // PDF de la rendición (jsPDF) → base64 sin el prefijo dataURL
-async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldoMonto=0, totFondos=0, lang='es'){
+async function rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang='es'){
   const EN = lang==='en'
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const doc = new jsPDF({unit:'pt', format:'letter'})
-  const W = doc.internal.pageSize.getWidth()
-  doc.setFillColor(0,60,80); doc.rect(0,0,W,74,'F')
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16)
-  doc.text(EN?'Expense Report':'Rendición de gastos', 40, 34)
-  doc.setFont('helvetica','normal'); doc.setFontSize(10)
-  doc.text(`${client?.name||''}${r.project?` · ${r.project}${r.subproject?` (${r.subproject})`:''}`:''}`, 40, 54)
-  doc.setFont('helvetica','bold'); doc.setFontSize(12)
-  doc.text('LIBERONA ESCALA ABOGADOS', W-40, 44, {align:'right'})
-  // Cabecera ejecutiva (diseño A): 3 cifras clave — Fondos · Gastos del período · Saldo
-  const saldoSigned = debeCliente ? -saldoMonto : saldoMonto
-  const bw=(W-80-12)/3, by=86, bh=42
-  const kcard=(i,lbl,val,bg,fg)=>{ const x=40+i*(bw+6); doc.setFillColor(bg[0],bg[1],bg[2]); doc.roundedRect(x,by,bw,bh,4,4,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7); const lc=fg[0]===255?[255,255,255]:[153,171,180]; doc.setTextColor(lc[0],lc[1],lc[2]); doc.text(lbl.toUpperCase(), x+10, by+16); doc.setFontSize(13); doc.setTextColor(fg[0],fg[1],fg[2]); doc.text(val, x+10, by+34) }
-  kcard(0,EN?'Funds received':'Fondos recibidos',fmtN(totFondos),[245,247,249],[15,110,86])
-  kcard(1,EN?'Expenses (period)':'Gastos del período',fmtN(r.total),[245,247,249],[61,61,61])
-  const sPos=saldoSigned>=0
-  kcard(2,sPos?(EN?'Balance in your favor':'Saldo a favor'):(EN?'Outstanding balance':'Saldo pendiente'),(saldoSigned<0?'-':'')+fmtN(Math.abs(saldoSigned)),sPos?[225,245,238]:[252,235,235],sPos?[15,110,86]:[163,45,45])
-  let y = 160
-  doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8.5)
-  doc.text(EN?'DATE':'FECHA', 40, y); doc.text(EN?'DETAIL':'DETALLE', 135, y); doc.text(EN?'AMOUNT':'MONTO', W-40, y, {align:'right'})
-  y += 8; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(40,y,W-40,y); y += 18
-  ;(det||[]).forEach(e=>{
-    doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(61,61,61)
-    doc.text(fmtFechaDMY(e.date), 40, y)
-    doc.text(String(e.concept||'—').slice(0,46), 135, y)
-    doc.setFont('helvetica','bold'); doc.setTextColor(226,75,74)
-    doc.text('-'+fmtN(e.amount), W-40, y, {align:'right'})
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(83,114,129)
-    doc.text((RENDCAT(e.category)+(e.subcategory?': '+e.subcategory:'')).slice(0,58), 135, y+12)
-    y += 27
-    if(y > 700){ doc.addPage(); y = 60 }
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight()
+  // Datos: MISMA fuente que el "Ver PDF" (rendicionPdfHtml) para que ambos coincidan.
+  const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
+  const entsClient = (clientEntities||[]).filter(x=>x.client_id===(client&&client.id))
+  const gEnt = (gastos.find(e=>e.entity_id)||{}).entity_id
+  const scopeEntId = entsClient.length>1 ? gEnt : null
+  const ent = entsClient.length===1 ? entsClient[0] : (gEnt ? (clientEntities||[]).find(x=>x.id===gEnt) : null)
+  const scopedMovs = (expenses||[]).filter(e=>e.client_id===(client&&client.id) && (!scopeEntId || e.entity_id===scopeEntId))
+  const fondos = scopedMovs.filter(e=>e.type==='fondo').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
+  const { previas, rendidoAntes } = rendicionesPreviasDe(scopedMovs, r.id)
+  const razon = (ent&&ent.name) || (client&&client.name) || '—'
+  const rut = (ent&&ent.rut) || (client&&client.rut) || ''
+  const totGastos = gastos.reduce((a,e)=>a+(e.amount||0),0)
+  const totFondos = fondos.reduce((a,e)=>a+(e.amount||0),0)
+  const saldo = totFondos - rendidoAntes - totGastos
+  const fechaEmision = r.created_at ? new Date(r.created_at).toLocaleDateString(EN?'en-GB':'es-CL',{day:'2-digit',month:'long',year:'numeric'}) : ''
+  const T = EN
+    ? {reportNo:'Report No.',issued:'Issued',exp:n=>`${n} expense${n!==1?'s':''}`,attn:'Attn',project:'PROJECT',funds:'Funds received',expPeriod:'Expenses (period)',balFavor:'Balance in your favor',balPending:'Outstanding balance',date:'DATE',concept:'DESCRIPTION',category:'CATEGORY',amount:'AMOUNT',totalExp:'Total expenses',fundsSection:'FUNDS RECEIVED',noFunds:'No funds recorded',fundSummary:'FUND SUMMARY',received:'Funds received',prev:'Report',thisRep:'This report',avail:'Available balance',due:'Balance due',footer:'Expense report'}
+    : {reportNo:'Rendición N°',issued:'Emisión',exp:n=>`${n} gasto${n!==1?'s':''}`,attn:'Dirigido a',project:'PROYECTO',funds:'Fondos recibidos',expPeriod:'Gastos del período',balFavor:'Saldo a favor',balPending:'Saldo pendiente',date:'FECHA',concept:'CONCEPTO',category:'CATEGORÍA',amount:'MONTO',totalExp:'Total gastos',fundsSection:'FONDOS RECIBIDOS',noFunds:'Sin fondos registrados',fundSummary:'RESUMEN DEL FONDO',received:'Fondos recibidos',prev:'Rendición',thisRep:'Esta rendición',avail:'Saldo disponible',due:'Saldo a su cargo',footer:'Rendición de gastos'}
+  const M=40, cNavy=[0,60,80], cMuted=[83,114,129], cTxt=[61,61,61], cA3=[153,171,180], cGreen=[15,110,86], cRed=[163,45,45], cGray=[228,232,235]
+  const cMonto = W-M, cCat = W-196
+  // ===== Header navy =====
+  doc.setFillColor(0,60,80); doc.rect(0,0,W,76,'F')
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.text('LIBERONA ESCALA', M, 38)
+  doc.setFontSize(7.5); doc.setTextColor(153,171,180); doc.text('A B O G A D O S', M, 51)
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(String(razon).slice(0,42), W-M, 36, {align:'right'})
+  if(rut){ doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(153,171,180); doc.text(rut, W-M, 52, {align:'right'}) }
+  // ===== Franja meta =====
+  doc.setFillColor(237,240,243); doc.rect(0,76,W,24,'F'); doc.setTextColor(61,61,61); doc.setFontSize(9)
+  let mx=M
+  if(r.correlativo){ doc.setFont('helvetica','bold'); const s=`${T.reportNo} ${r.correlativo}`; doc.text(s, mx, 91); mx+=doc.getTextWidth(s)+14 }
+  doc.setFont('helvetica','normal')
+  const mA=`${T.issued}: ${fechaEmision}`; doc.text(mA, mx, 91); mx+=doc.getTextWidth(mA)+14
+  doc.text(T.exp(gastos.length), mx, 91)
+  if(r.dirigido_a){ doc.setFont('helvetica','bold'); doc.text(`${T.attn}: ${r.dirigido_a}`, W-M, 91, {align:'right'}) }
+  // ===== KPIs =====
+  let y=120; const bw=(W-2*M-12)/3, bh=44
+  const kcard=(i,lbl,val,bg,fg)=>{ const x=M+i*(bw+6); doc.setFillColor(bg[0],bg[1],bg[2]); doc.roundedRect(x,y,bw,bh,4,4,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7); const lc=fg[0]===255?[255,255,255]:[153,171,180]; doc.setTextColor(lc[0],lc[1],lc[2]); doc.text(lbl.toUpperCase(), x+10, y+17); doc.setFontSize(13); doc.setTextColor(fg[0],fg[1],fg[2]); doc.text(val, x+10, y+35) }
+  const sPos=saldo>=0
+  kcard(0,T.funds,fmtN(totFondos),[245,247,249],cGreen)
+  kcard(1,T.expPeriod,fmtN(totGastos),[245,247,249],cTxt)
+  kcard(2,sPos?T.balFavor:T.balPending,(saldo<0?'-':'')+fmtN(Math.abs(saldo)),sPos?[225,245,238]:[252,235,235],sPos?cGreen:cRed)
+  y+=bh+20
+  // ===== Proyecto =====
+  if(r.project){ doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(83,114,129); doc.text(T.project, M, y); doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(61,61,61); doc.text(String(r.project+(r.subproject?` · ${r.subproject}`:'')).slice(0,70), M+58, y); y+=20 }
+  // ===== Tabla gastos =====
+  doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8)
+  doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCat, y); doc.text(T.amount, cMonto, y, {align:'right'})
+  y+=7; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(M,y,W-M,y); y+=16
+  const ensure=(n)=>{ if(y > H-70-n){ doc.addPage(); y=56 } }
+  gastos.forEach(e=>{
+    ensure(24)
+    const ot=e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):''
+    const seg2 = !!(ot||e.respaldo)
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(61,61,61)
+    doc.text(fmtFechaDMY(e.date), M, y)
+    doc.text(String(e.concept||'—').slice(0,40), M+72, y)
+    doc.setFontSize(8.5); doc.setTextColor(83,114,129); doc.text(RENDCAT(e.category).slice(0,24), cCat, y)
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(fmtN(e.amount), cMonto, y, {align:'right'})
+    if(seg2){ let sx=M+72; doc.setFont('helvetica','bold'); doc.setFontSize(7.5)
+      if(ot){ doc.setTextColor(24,95,165); doc.text(ot, sx, y+11); sx+=doc.getTextWidth(ot)+10 }
+      if(e.respaldo){ doc.setTextColor(15,110,86); doc.text(EN?'✓ receipt':'✓ respaldo', sx, y+11) }
+    }
+    y += seg2?23:18
   })
-  doc.setDrawColor(83,114,129); doc.setLineWidth(1.5); doc.line(40,y,W-40,y); y += 20
-  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(EN?'TOTAL REPORTED':'TOTAL RENDIDO', 40, y)
-  doc.setTextColor(226,75,74); doc.text('-'+fmtN(r.total), W-40, y, {align:'right'})
-  // Datos bancarios SOLO si el cliente debe al Estudio (saldo a su cargo)
-  if(debeCliente){
-    y += 36
-    doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(10.5)
-    doc.text(`${EN?'Balance due':'Saldo a su cargo'}: ${fmtN(saldoMonto)}`, 40, y); y += 18
-    doc.setFontSize(9.5); doc.text(EN?'Transfer to:':'Transferir a:', 40, y); y += 15
-    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(83,114,129)
-    ;(EN?['Account holder: Liberona Escala Abogados Ltda.','Tax ID (RUT): 77.700.387-9','Bank: Banco BICE','Checking account: 138392-2','Confirmation: administracion@leabogados.cl']:['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl']).forEach(l=>{ doc.text(l,40,y); y += 14 })
+  y+=2; doc.setDrawColor(0,60,80); doc.setLineWidth(1.2); doc.line(M,y,W-M,y); y+=16
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(61,61,61); doc.text(T.totalExp, M, y); doc.text(fmtN(totGastos), cMonto, y, {align:'right'}); y+=28
+  // ===== Fondos recibidos =====
+  ensure(40); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0,60,80); doc.text(T.fundsSection, M, y); y+=16
+  if(fondos.length){ fondos.forEach(f=>{ ensure(16); doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(fmtFechaDMY(f.date), M, y); doc.text(String(f.concept||T.received).slice(0,52), M+72, y); doc.setFont('helvetica','bold'); doc.setTextColor(15,110,86); doc.text(fmtN(f.amount), cMonto, y, {align:'right'}); y+=16 }) }
+  else { doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(83,114,129); doc.text(T.noFunds, M, y); y+=16 }
+  y+=10
+  // ===== Resumen del fondo (si hay rendiciones previas) =====
+  if(previas&&previas.length){
+    const boxH = 36 + (previas.length+2)*15 + 16
+    ensure(boxH+10); doc.setFillColor(0,60,80); doc.roundedRect(M,y,W-2*M,boxH,6,6,'F')
+    let yy=y+20; doc.setTextColor(153,171,180); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(T.fundSummary, M+16, yy); yy+=17
+    const lrow=(lbl,val,neg)=>{ doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(153,171,180); doc.text(lbl, M+16, yy); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.text((neg?'-':'')+fmtN(val), W-M-16, yy, {align:'right'}); yy+=15 }
+    lrow(T.received, totFondos)
+    previas.forEach(pp=>lrow(`${T.prev} ${pp.fecha?fmtFechaDMY(String(pp.fecha).slice(0,10)):''}`, pp.total, true))
+    lrow(T.thisRep, totGastos, true)
+    yy+=3; doc.setDrawColor(90,110,125); doc.setLineWidth(0.5); doc.line(M+16,yy-9,W-M-16,yy-9)
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255); doc.text(T.avail, M+16, yy+4); doc.text((saldo<0?'-':'')+fmtN(saldo), W-M-16, yy+4, {align:'right'})
+    y += boxH+14
   }
-  // Sin cierre "Atentamente": el correo ya cierra con la firma del remitente; el PDF no lo repite.
+  // ===== Saldo a su cargo (si el cliente debe) =====
+  if(saldo<0){
+    const rows = EN?['Account holder: Liberona Escala Abogados Ltda.','Tax ID (RUT): 77.700.387-9','Bank: Banco BICE','Checking account: 138392-2','Confirmation: administracion@leabogados.cl']:['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl']
+    const boxH = 30 + rows.length*15
+    ensure(boxH+10); doc.setFillColor(252,235,235); doc.roundedRect(M,y,W-2*M,boxH,6,6,'F')
+    let yy=y+20; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(`${T.due}: ${fmtN(Math.abs(saldo))}`, M+16, yy); yy+=17
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(83,114,129); rows.forEach(l=>{ doc.text(l, M+16, yy); yy+=15 })
+    y += boxH+14
+  }
+  // ===== Footer =====
+  const fy=H-28; doc.setDrawColor(228,232,235); doc.setLineWidth(0.5); doc.line(M,fy-12,W-M,fy-12)
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(83,114,129)
+  doc.text('Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl', M, fy)
+  doc.text(T.footer, W-M, fy, {align:'right'})
   return doc.output('datauristring').split(',')[1]
 }
 // PDF de la liquidación de caja chica (jsPDF) → base64. Agrupado por cliente, mismo estilo que la rendición.
