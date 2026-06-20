@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Conciliación (pulir) Fase 2: fila limpia
+- Fila de movimiento: cliente/contraparte de protagonista (nombre grande) + chip de cuenta + monto en la 1ª línea; glosa/RUT (+ "revisar RUT") de secundaria y chip de estado a la derecha en la 2ª línea; se quita el rótulo "Editar ▾" (la fila se expande al tocar). El panel de acciones intacto.
+
 ## 2026-06-20 — Conciliación (pulir) Fase 1: KPIs + borde por estado
 - KPIs (Abonos/Cargos/Internos/Sin identificar) con borde-acento + fondo de color (canónico).
 - La fila de movimiento pasa a borde de color por ESTADO de conciliación (verde conciliado / ámbar por conciliar / naranja sin identificar / gris interno) en vez de por cuenta; la cuenta sigue en su chip. Sin tocar el motor de conciliación.
