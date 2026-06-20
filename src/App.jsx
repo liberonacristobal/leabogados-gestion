@@ -404,11 +404,11 @@ function LoginScreen({loading}) {
           Entrar
         </>}
       </button>
-      <a href="https://firmdesk.app" target="_blank" rel="noreferrer" style={{position:'absolute',bottom:18,textDecoration:'none',display:'inline-flex',alignItems:'center',gap:12,padding:'11px 18px',border:'1px solid #E6E8E3',borderRadius:14,background:'#FBFCFB',fontFamily:"system-ui,'Segoe UI',Roboto,sans-serif"}}>
-        <svg width='38' height='38' viewBox='0 0 100 100'><rect x='0' y='0' width='100' height='100' rx='23' fill='#0E3B49'/><g fill='#fff'><rect x='38' y='27' width='10' height='38' rx='2'/><rect x='38' y='27' width='27' height='10' rx='2'/><rect x='38' y='42' width='20' height='10' rx='2'/></g><rect x='29' y='69' width='43' height='5' rx='2.5' fill='#17A06B'/><rect x='29' y='74' width='43' height='5' rx='2' fill='#0F8455'/></svg>
+      <a href="https://firmdesk.app" target="_blank" rel="noreferrer" style={{position:'absolute',bottom:18,textDecoration:'none',display:'inline-flex',alignItems:'center',gap:11,padding:'7px 24px',border:'1px solid #E6E8E3',borderRadius:13,background:'#FBFCFB',fontFamily:"system-ui,'Segoe UI',Roboto,sans-serif"}}>
+        <svg width='29' height='29' viewBox='0 0 100 100'><rect x='0' y='0' width='100' height='100' rx='23' fill='#0E3B49'/><g fill='#fff'><rect x='38' y='27' width='10' height='38' rx='2'/><rect x='38' y='27' width='27' height='10' rx='2'/><rect x='38' y='42' width='20' height='10' rx='2'/></g><rect x='29' y='69' width='43' height='5' rx='2.5' fill='#17A06B'/><rect x='29' y='74' width='43' height='5' rx='2' fill='#0F8455'/></svg>
         <span style={{display:'inline-flex',flexDirection:'column',lineHeight:1.15}}>
-          <span style={{fontSize:10,fontWeight:500,letterSpacing:'.22em',color:'#9AA3A7'}}>POWERED BY</span>
-          <span style={{fontSize:20,fontWeight:600,letterSpacing:'-.01em'}}><span style={{color:'#0E3B49'}}>Firm</span><span style={{color:'#17A06B'}}>Desk</span></span>
+          <span style={{fontSize:9,fontWeight:500,letterSpacing:'.2em',color:'#9AA3A7'}}>POWERED BY</span>
+          <span style={{fontSize:18,fontWeight:600,letterSpacing:'-.01em'}}><span style={{color:'#0E3B49'}}>Firm</span><span style={{color:'#17A06B'}}>Desk</span></span>
         </span>
       </a>
     </div>
