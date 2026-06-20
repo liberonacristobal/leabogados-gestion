@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Logos del correo por URL alojada (Gmail no muestra data-URI)
+- Encabezado y firma referencian los logos por URL absoluta del sitio (/le-logo-blanco.png y /le-logo-color.png). Gmail bloquea imágenes embebidas (data-URI); las alojadas sí las proxea. Assets verificados en vivo.
+
 ## 2026-06-20 — Logos del correo embebidos (siempre se ven)
 - El logo de la firma vuelve a ir embebido (versión liviana ~27KB, no la URL): las imágenes por URL las bloquea Gmail por defecto y no aparecían. Ahora encabezado y firma van embebidos → se ven siempre, sin depender de "mostrar imágenes".
 
