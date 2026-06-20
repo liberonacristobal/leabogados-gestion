@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Logos del correo embebidos inline (cid) en el envío Gmail
+- Al enviar por Gmail (vía API), los logos (encabezado y firma) van como imágenes inline (Content-ID/cid) dentro de un multipart/related → se ven SIEMPRE, sin tocar "mostrar imágenes". La vista previa y la vía servidor siguen con URL (la preview se ve en el navegador).
+
 ## 2026-06-20 — Encabezado del correo Gmail-safe (bgcolor)
 - El encabezado azul desaparecía en Gmail porque usa `background:` abreviado y `border-radius` (Gmail los elimina). Se reescribe como tabla con atributo `bgcolor`, que Gmail respeta. La caja de datos de cuenta usa `background-color`.
 

@@ -250,7 +250,8 @@
       "Bash(perl -CSD -i -pe 's/\\\\x{21bb} Reenviar/Reenviar/g' src/App.jsx)",
       "Bash(perl -i -pe \"s/prompt: 'consent'/prompt: 'select_account'/g\" src/supabase.js)",
       "mcp__a7dd3888-e3b9-43c6-8d45-abcf3ee33b4a__create_draft",
-      "Bash(sips --resampleWidth 360 public/le-logo-color.png --out /tmp/logo-color-360.png)"
+      "Bash(sips --resampleWidth 360 public/le-logo-color.png --out /tmp/logo-color-360.png)",
+      "mcp__a7dd3888-e3b9-43c6-8d45-abcf3ee33b4a__list_drafts"
     ]
   }
 }
