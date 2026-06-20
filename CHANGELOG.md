@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Facturación (pulir) Fase 1: fila compacta con borde de color
+- La fila de factura (Por cliente / Emitidas) pasa a estado en el borde izquierdo (semáforo: rojo vencida / ámbar por vencer / verde pagada), folio como "Factura N° XX", días mini a la derecha, y las acciones (Registrar pago / Ya emitida / Editar / Deshacer / Reactivar) aparecen al tocar la fila (ya no agrandan la fila). Sin tocar estados ni lógica.
+
 ## 2026-06-20 — Cargo de la firma traducido en correos en inglés
 - En correos EN, el cargo de la firma se traduce: Socio→Partner, Abogado→Attorney, Procuradora→Paralegal (el resto de la firma queda igual). En español sin cambios.
 
