@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Pie de firma en el correo de rendición
+- Cada usuario configura su firma una vez (Nombre / Cargo / Teléfono / Correo) en "Mi firma" dentro del modal de envío; se guarda por usuario y se reutiliza.
+- El correo agrega la firma con el logo de Liberona Escala (reemplaza el cierre genérico). Va en el HTML y en el texto plano, ES y EN.
+
 ## 2026-06-20 — Rendición: el Proyecto se asigna a los gastos (no los filtra)
 - Al elegir un proyecto en la rendición, ya NO se ocultan los gastos sin asignar: se muestran para poder asociarlos (los gastos de OTRO proyecto sí quedan separados).
 - Al rendir, el proyecto se guarda en cada gasto seleccionado que no lo tenía → la app aprende y no vuelve a pedirlo; la próxima vez aparecen bajo ese proyecto.
