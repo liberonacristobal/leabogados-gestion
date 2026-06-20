@@ -53,19 +53,16 @@ La app maneja dinero, UF, gastos, saldos y proyecciones. Cero tolerancia a error
 
 ## Patrón "Pulir" (rediseño de vistas y modales)
 
-Disparador: cuando se pida "pulir/pule/pulí <vista>" (o mejorar una vista/modal), correr este checklist. Es un retoque guiado de usabilidad, no rehacer desde cero ni tocar la lógica de negocio (salvo bug). SIEMPRE proponer en render (antes/después), recomendar una opción y construir tras OK. Validado en +Gasto/+Fondo/Rendir y en el modal de Rendición.
+Disparador: "pulir/pule/pulí <vista>" → correr estas reglas sobre esa vista. Retoque guiado de usabilidad (no rehacer ni tocar la lógica salvo bug); proponer en render, recomendar una opción y construir tras OK.
 
-- **Nada rígido**: todo elemento visible debe ser tocable y llevar a una acción. Una tarjeta/cifra que solo informa es un target desperdiciado → hacerla accionable.
-- **Co-locación**: la acción vive donde está el dato que afecta ("+" de Fondos = agregar fondo; "Dirigido a" junto a Proyecto). Un dato elegido viaja al paso siguiente (no repetir: se elige una vez).
-- **Menos chrome / campos condicionales**: eliminar lo redundante; lo opcional (subproyecto, filtros de fecha) se **colapsa** ("+ Subproyecto", "Filtrar por fecha ▾") y solo aparece si hace falta.
-- **Labels dentro del cuadro** (FloatFld, como el modal de Gasto) para ahorrar alto; campos en una línea cuando se pueda.
-- **Economía de texto**: símbolos/labels cortos ("Saldo" no "Saldo actual"; "+" no "Agregar fondo").
-- **Targets táctiles cómodos en iPhone**: separar tamaño visual (~20px) del área de toque (~34px). Verificar a 375px con el caso difícil (nombre largo se trunca, botones se mantienen).
-- **Estado visible**: los botones comunican estado, no son genéricos ("Rendir · N · $monto" vs "Rendir"; "✓ Al día").
-- **Color semántico**: rojo solo para problema real (negativo/debe), verde para algo bueno, gris/neutro para el cero.
-- **Consistencia visual**: un solo patrón de header (modales tipo `Acción | Cliente`, acento + nombre en gris, como Editar Cliente).
-- **Sugerir, no tipear**: ofrecer contactos/datos de la ficha en vez de campos vacíos.
-- **Rigor / fuente única**: cuestionar de dónde sale cada cifra; un contador/dato debe usar la MISMA fórmula que el detalle que abre, y derivarse de la fuente correcta (ej. el período = mes de los gastos, no "hoy").
+- **Economía de espacio** (regla del proyecto): labels dentro del cuadro, campos en una línea, nada de padding/secciones que obliguen a scroll en iPhone.
+- **Menos es más / campos condicionales**: lo opcional (subproyecto, fechas) se colapsa y solo aparece si hace falta — no contaminar.
+- **Co-locación**: "Dirigido a" junto a Proyecto, y el correo elegido viaja al paso siguiente (no repetir trabajo: lo eliges una vez).
+- **La herramienta aprende / sugiere**: "Dirigido a" propone los contactos de la ficha en vez de escribir.
+- **Consistencia visual**: header igual al de Editar Cliente (un solo patrón de encabezado).
+- **Rigor en las cifras**: cuestionar de dónde sale cada dato (el período) y arreglar la fórmula si está mal.
+
+En una frase: compactar sin perder función — títulos dentro del cuadro, lo opcional colapsado, campos co-locados, sugerencias en vez de tipeo, header unificado, y los datos derivados de la fuente correcta.
 
 ## Flujo de trabajo
 
