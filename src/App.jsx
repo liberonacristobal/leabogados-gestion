@@ -6289,7 +6289,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     if(e.no_descuenta_saldo && !mine) return false   // gasto histórico no se rinde
     if(e.client_rendered_at && !mine) return false   // gastos de OTRA rendición no entran
     if(!mine){   // los filtros de proyecto/fecha solo acotan los candidatos a AGREGAR, nunca esconden los propios
-      if(proyecto){ const sid=proyToSale[proyecto]; const ok=(e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
+      if(proyecto){ const sid=proyToSale[proyecto]; const ok=!e.project || (e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
       if(fDesde && e.date && e.date < fDesde) return false
       if(fHasta && e.date && e.date > fHasta) return false
     }
@@ -6393,12 +6393,14 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       // Marcar gastos como rendidos, avisando si alguno falla
       let falloMarca = 0
       for(const e of gastosSel) {
-        const {error} = await supabase.from('expenses').update({client_rendered_at:now,client_render_id:renderId}).eq('id',e.id)
+        const patch = {client_rendered_at:now,client_render_id:renderId}
+        if(proyecto && !e.project) patch.project = proyecto   // asociar el gasto al proyecto si no lo estaba (memoria: no volver a pedirlo)
+        const {error} = await supabase.from('expenses').update(patch).eq('id',e.id)
         if(error) falloMarca++
       }
       if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
-      if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
+      if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId,...(proyecto&&!e.project?{project:proyecto}:{})}:e))
       const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:periodoSel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,dirigido_email:atencionEmail||null,ot_numbers:otNums||null}
       if(onRendicionComplete) onRendicionComplete(rendObj)
       await guardarDirigido()
@@ -10134,7 +10136,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   },[client?.id])
   const addCc = em => { const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(prev=>[...prev,e]); setCcInput('') }
   const removeCc = em => setCc(prev=>prev.filter(x=>x!==em))
-  const [asunto,setAsunto] = useState(`Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${client?.name||''}${r.project?` · ${r.project}`:''}`)
+  const [asunto,setAsunto] = useState(`Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${r.project||client?.name||''}`)
   const [lang,setLang] = useState('es')
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
@@ -10155,7 +10157,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><div style="background:${A};padding:18px 24px;border-radius:8px 8px 0 0"><table width="100%"><tr><td style="vertical-align:middle"><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}</td></tr></table></div><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}</div><div style="padding:12px 24px;border:1px solid ${A4};border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:${MUTED};text-align:center">Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</div></div>`
   }
   const saludoCliEn = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
-  const asuntoFor = lang => { const proj = r.project?` · ${r.project}`:''; return lang==='en' ? `Expense Report${r.correlativo?` No. ${r.correlativo}`:''} — ${client?.name||''}${proj}` : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${client?.name||''}${proj}` }
+  const asuntoFor = lang => { const label = r.project || client?.name || ''; return lang==='en' ? `Expense Report${r.correlativo?` No. ${r.correlativo}`:''} — ${label}` : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${label}` }
   const cuerpoCorreo = (lang='es') => {
     const abs = fmtN(Math.abs(saldoCliente))
     if(lang==='en'){
