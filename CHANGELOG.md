@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Cargo de la firma traducido en correos en inglés
+- En correos EN, el cargo de la firma se traduce: Socio→Partner, Abogado→Attorney, Procuradora→Paralegal (el resto de la firma queda igual). En español sin cambios.
+
 ## 2026-06-20 — Logo real en el encabezado del PDF de rendición
 - El PDF adjunto mostraba el nombre en texto ("LIBERONA ESCALA"); ahora embebe el logo real (imagen) en el encabezado azul vía jsPDF addImage (con fallback a texto por si falla).
 
