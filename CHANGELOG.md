@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Rendición no enviada = Borrador
+- Si cierras una rendición sin enviar el correo, el historial la muestra como "Borrador" (antes "Pendiente") y no le asigna N° hasta enviarla; el botón "Enviar" sigue disponible para retomarla. Nunca aparece como "Enviada" (eso solo ocurre al mandar el correo).
+
 ## 2026-06-20 — Asunto con proyecto + se quita el período de la rendición
 - Si hay proyecto, el asunto del correo lo incluye: "Rendición de gastos N° 1 — Cliente · Proyecto".
 - Se elimina el período (el rango de fechas auto-derivado enredaba): ya no aparece en el asunto, el cuerpo ni los PDF. La rendición se identifica por N° + proyecto/cliente; las fechas exactas siguen en el detalle de cada gasto. ES y EN, plantilla fija + IA.
