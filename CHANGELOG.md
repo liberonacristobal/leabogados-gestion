@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: subtítulo serif itálico + pill borde ultra fino
+- Subtítulo “FirmDesk · Gestión Oficina” en Fraunces itálica, 10px, color de “Bienvenido” (#537281) al 60%. Botón pill con borde ultra fino (0.5px) y fondo transparente.
+
 ## 2026-06-19 — Login: botón pill transparente (3%) con chip pequeño
 - El botón de ingreso queda como pill con relleno navy al 3% (casi imperceptible), chip “G” en círculo pequeño + “Entrar”. Minimalista.
 
