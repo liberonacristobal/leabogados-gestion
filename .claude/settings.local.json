@@ -248,7 +248,9 @@
       "Bash(perl -i -pe \"s/\\\\\" alt=\\\\\"Liberona Escala Abogados\\\\\" style=\\\\{\\\\{width:'100%',maxWidth:300,height:'auto',marginBottom:14\\\\}\\\\}/\\\\\" alt=\\\\\"Liberona Escala Abogados\\\\\" style={{display:'block',width:'min\\(300px,78vw\\)',height:'auto',marginBottom:14}}/\" src/App.jsx)",
       "Bash(perl -i -pe \"s/'\\\\x{21bb} Reenviar'/'Reenviar'/g\" src/App.jsx)",
       "Bash(perl -CSD -i -pe 's/\\\\x{21bb} Reenviar/Reenviar/g' src/App.jsx)",
-      "Bash(perl -i -pe \"s/prompt: 'consent'/prompt: 'select_account'/g\" src/supabase.js)"
+      "Bash(perl -i -pe \"s/prompt: 'consent'/prompt: 'select_account'/g\" src/supabase.js)",
+      "mcp__a7dd3888-e3b9-43c6-8d45-abcf3ee33b4a__create_draft",
+      "Bash(sips --resampleWidth 360 public/le-logo-color.png --out /tmp/logo-color-360.png)"
     ]
   }
 }

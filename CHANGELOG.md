@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Logos del correo embebidos (siempre se ven)
+- El logo de la firma vuelve a ir embebido (versión liviana ~27KB, no la URL): las imágenes por URL las bloquea Gmail por defecto y no aparecían. Ahora encabezado y firma van embebidos → se ven siempre, sin depender de "mostrar imágenes".
+
 ## 2026-06-20 — PDF adjunto reconstruido para calzar con el "Ver PDF"
 - El PDF que se adjunta/descarga (jsPDF) se rehízo para tener el mismo diseño del "Ver PDF": header con razón social/RUT, franja meta (N°/emisión/gastos/dirigido a), 3 KPIs, barra de proyecto, tabla (fecha/concepto/categoría/monto con OT y respaldo), total, sección Fondos recibidos y Resumen del fondo. Misma fuente de datos que el Ver PDF.
 
