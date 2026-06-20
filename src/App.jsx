@@ -11304,10 +11304,7 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(83,114,129)
     ;(EN?['Account holder: Liberona Escala Abogados Ltda.','Tax ID (RUT): 77.700.387-9','Bank: Banco BICE','Checking account: 138392-2','Confirmation: administracion@leabogados.cl']:['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl']).forEach(l=>{ doc.text(l,40,y); y += 14 })
   }
-  y += 22; doc.setTextColor(61,61,61); doc.setFont('helvetica','normal'); doc.setFontSize(10)
-  doc.text(EN?'Sincerely,':'Atentamente,', 40, y); y += 15
-  doc.setFont('helvetica','bold'); doc.text(user?.name||'', 40, y); y += 14
-  doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
+  // Sin cierre "Atentamente": el correo ya cierra con la firma del remitente; el PDF no lo repite.
   return doc.output('datauristring').split(',')[1]
 }
 // PDF de la liquidación de caja chica (jsPDF) → base64. Agrupado por cliente, mismo estilo que la rendición.
