@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: fijo en iPhone (sin scroll) + subtítulo 25% más grande
+- La pantalla de login ya no se desplaza en iPhone: usa 100dvh/100svh + overflow hidden, así queda fija a la altura visible. Subtítulo “FirmDesk · Gestión Oficina” un 25% más grande (12.5px).
+
 ## 2026-06-19 — Login: subtítulo serif itálico + pill borde ultra fino
 - Subtítulo “FirmDesk · Gestión Oficina” en Fraunces itálica, 10px, color de “Bienvenido” (#537281) al 60%. Botón pill con borde ultra fino (0.5px) y fondo transparente.
 
