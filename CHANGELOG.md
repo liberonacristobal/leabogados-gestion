@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Conciliación (pulir) Fase 4: estado en chips livianos
+- El filtro de estado de conciliación deja de ser un select escondido: ahora es una fila de chips que aparece solo en Abonos y solo muestra los estados con pendientes (Por conciliar / Descalces / Sin identificar) con su conteo en vivo; si todo está conciliado, la fila no aparece. Tocar un chip filtra; tocarlo de nuevo (o "Todos") vuelve a ver todo.
+
 ## 2026-06-20 — Conciliación (pulir) Fase 3: contadores limpios
 - "Conciliar automático": el texto largo de progreso se reemplaza por una barra fina + N/Total conciliadas + %. Las "posibles provisiones (Cta. Gastos)" pasan a un chip tappable "N provisiones →" (solo si >0) que filtra a Cta. Gastos. El badge "400+ (top 400)" se vuelve "N de Total" y solo aparece cuando la lista pasa del tope.
 
