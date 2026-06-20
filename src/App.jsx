@@ -2245,7 +2245,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       tareasVenc.length&&{sev:0,dot:C.overdue,lbl:'Tareas vencidas',val:`${tareasVenc.length}`,go:'tasks',iaTxt:`${tareasVenc.length} tareas vencidas`},
       porCobrar7.length&&{sev:1,dot:C.soon,lbl:'Por cobrar esta semana',val:`${porCobrar7.length} · ${fmtShort(sum(porCobrar7))}`,go:'billing',iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sum(porCobrar7))})`},
       cajaSinLiq.length&&{sev:1,dot:C.soon,lbl:'Caja chica sin liquidar',val:`${cajaSinLiq.length} · ${fmtN(sum(cajaSinLiq))}`,go:'expenses',iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
-      negatives.length&&{sev:1,dot:C.soon,lbl:'Clientes sin fondos',val:`${negatives.length} · ${fmtShort(Math.abs(totalNeg))}`,go:'clients',iaTxt:`${negatives.length} clientes sin fondos`},
       rendCli.length&&{sev:2,dot:C.normal,lbl:'Rendiciones por hacer',val:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,go:'expenses',iaTxt:`${rendCli.length} clientes con gastos por rendir`},
       propTardias.length&&{sev:2,dot:C.done,lbl:'Propuestas tardías (+14d)',val:`${propTardias.length} · ${fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0)))}`,go:'sales',iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
     ].filter(Boolean).sort((a,b)=>a.sev-b.sev)
