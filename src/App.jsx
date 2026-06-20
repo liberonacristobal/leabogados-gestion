@@ -4731,6 +4731,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [showBuscar,setShowBuscar] = useState(false)
   const [q,setQ] = useState('')
   const [payingId,setPayingId] = useState(null)
+  const [expandBill,setExpandBill] = useState(null)
   const [pagando,setPagando] = useState(false)
   const [payDate,setPayDate] = useState('')
   const [inclTerceros,setInclTerceros] = useState(true)   // al pagar la factura ancla: ¿el pago incluyó los terceros?
@@ -4991,43 +4992,34 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               const dl=daysLeft(b.due)
               const dEmis=b.issued_at?Math.max(0,Math.round((Date.now()-new Date(b.issued_at+'T12:00').getTime())/86400000)):null
               const semCol=(pagado||anticipada)?C.muted:(dl==null?C.muted:dl<0?C.overdue:dl<=7?C.soon:C.normal)
-              const semTxt=anticipada?'':prog?(dl!=null?(dl<0?`${Math.abs(dl)} días vencida`:`vence en ${dl} días`):''):((dl!=null&&dl<0)?`${Math.abs(dl)} días vencida`:(dEmis!=null?`${dEmis} días`:''))
+              const diasMini=(!pagado&&!anticipada&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''
+              const exp=expandBill===b.id
               return (
-              <div key={b.id} onClick={()=>onEdit(b)} style={{position:'relative',background:C.card,borderRadius:12,padding:'11px 13px',marginBottom:6,border:`1px solid ${C.border}`,cursor:'pointer'}}>
-                {/* línea 1: concepto + monto */}
-                <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-                  {prog&&<input type='checkbox' checked={selected.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{marginTop:3,flexShrink:0,cursor:'pointer'}}/>}
-                  <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}</div>
-                  <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado)?C.overdue:C.text,whiteSpace:'nowrap',flexShrink:0}}>{fmt(b.amount)}</div>
-                </div>
-                {/* línea 2: factura n° + fecha */}
-                <div style={{fontSize:11,color:C.done,marginTop:4}}>{prog?`Vence ${fmtDMY(b.due)}`:`N° ${folioN(b.invoice_no)||'—'} · ${fmtDMY(b.issued_at)}`}</div>
-                {/* línea 3: semáforo + tags | acciones */}
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:7}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
-                    {semTxt&&<span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.muted}}><span style={{width:8,height:8,borderRadius:'50%',background:semCol,flexShrink:0}}/>{semTxt}</span>}
-                    {pagado&&b.paid_at&&<span style={{fontSize:11,fontWeight:600,color:C.normal}}>Pagada {fmtDMY(b.paid_at)}</span>}
-                    {b.billing_type==='reembolso'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:'#F2E9DE',color:C.soon,fontWeight:600}}>Reembolso</span>}
-                    {anulada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:C.overdueBg,color:C.overdue,fontWeight:600}}>Anulada</span>}
-                    {tercerosByBilling.has(b.id)&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:C.azulBg,color:C.accent,fontWeight:600}}>Proveedores</span>}
-                    {anticipada&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:10,background:C.greenBg,color:C.greenText,fontWeight:600}}>Anticipada</span>}
+              <div key={b.id} style={{background:C.card,borderRadius:10,marginBottom:6,border:`1px solid ${C.border}`,borderLeft:`3px solid ${semCol}`,overflow:'hidden'}}>
+                <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',gap:9,alignItems:'center',padding:'9px 12px',cursor:'pointer'}}>
+                  {prog&&<input type='checkbox' checked={selected.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{flexShrink:0,cursor:'pointer'}}/>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}{b.billing_type==='reembolso'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:'#F2E9DE',color:C.soon,fontWeight:600,marginLeft:6}}>Reembolso</span>}{anticipada&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:C.greenBg,color:C.greenText,fontWeight:600,marginLeft:6}}>Anticipada</span>}{tercerosByBilling.has(b.id)&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:C.azulBg,color:C.accent,fontWeight:600,marginLeft:6}}>Proveedores</span>}</div>
+                    <div style={{fontSize:11,color:C.done,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{prog?`Vence ${fmtDMY(b.due)}`:`Factura N° ${folioN(b.invoice_no)||'—'} · ${fmtDMY(b.issued_at)}`}{pagado&&b.paid_at?` · Pagada ${fmtDMY(b.paid_at)}`:''}</div>
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    {client.id==='__none__'&&onAssignClient&&!prog&&<span onClick={e=>e.stopPropagation()}><AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/></span>}
-                    {prog ? (
-                      selected.size===0&&<button onClick={(e)=>{e.stopPropagation();marcarEmitida(b)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Ya emitida</button>
-                    ):(!anulada&&!pagado&&!anticipada)?(
-                      <button onClick={(e)=>{e.stopPropagation();setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Registrar pago</button>
-                    ):(pagado&&onRevertirPago)?(
-                      <button onClick={(e)=>{e.stopPropagation(); if(confirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Deshacer pago</button>
-                    ):(anulada&&onReactivar)&&(
-                      <button onClick={(e)=>{e.stopPropagation(); if(confirm('¿Reactivar esta factura anulada? Vuelve a Pendiente y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>Reactivar</button>
-                    )}
-                    <button onClick={(e)=>{e.stopPropagation();onEdit(b)}} aria-label='Editar' style={{width:24,height:24,borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                      <svg width='13' height='13' viewBox='0 0 24 24' fill={C.muted}><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>
-                    </button>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado&&!anticipada)?C.overdue:C.text,whiteSpace:'nowrap'}}>{fmt(b.amount)}</div>
+                    {diasMini&&<div style={{fontSize:10,fontWeight:600,color:semCol,marginTop:1}}>{diasMini}</div>}
                   </div>
                 </div>
+                {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',padding:'9px 12px',borderTop:`1px solid ${C.border}`}}>
+                  {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
+                  {prog ? (
+                    <button onClick={()=>marcarEmitida(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Ya emitida</button>
+                  ):(!anulada&&!pagado&&!anticipada)?(
+                    <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Registrar pago</button>
+                  ):(pagado&&onRevertirPago)?(
+                    <button onClick={()=>{ if(confirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Deshacer pago</button>
+                  ):(anulada&&onReactivar)&&(
+                    <button onClick={()=>{ if(confirm('¿Reactivar esta factura anulada? Vuelve a Pendiente y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Reactivar</button>
+                  )}
+                  <button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Editar</button>
+                </div>}
               </div>
               )
             })}
