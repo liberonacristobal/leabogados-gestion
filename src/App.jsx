@@ -304,10 +304,10 @@ const FIRMA_DEFAULTS = {
   'mc@leabogados.cl':{nombre:'Martín Campero Mantelli',cargo:'Abogado',telefono:'+56 9 9149 3495'},
   'mp@leabogados.cl':{nombre:'Martina Pérez Giuras',cargo:'Procuradora',telefono:'+56 9 3467 4534'}
 }
-function firmaCorreoHtml(f){
+function firmaCorreoHtml(f, logoSrc){
   if(!f || !(f.nombre||f.cargo||f.telefono)) return ''
   const MUTED='#537281', TXT='#3D3D3D'
-  return `<table cellpadding="0" cellspacing="0" style="margin-top:22px;max-width:100%"><tbody><tr><td style="vertical-align:middle;padding-right:16px"><img src="${location.origin}/le-logo-color.png" alt="Liberona Escala Abogados" width="150" style="display:block;width:150px;max-width:100%;height:auto;border:0;outline:none"/></td><td style="vertical-align:middle;border-left:1px solid #B9C2C8;padding-left:16px">${f.nombre?`<div style="font-size:13px;font-weight:700;color:${TXT};text-transform:uppercase;letter-spacing:.3px;line-height:1.35">${f.nombre}</div>`:''}${f.cargo?`<div style="font-size:11px;color:${MUTED};line-height:1.5">${f.cargo}</div>`:''}${f.telefono?`<div style="font-size:11px;color:${MUTED};margin-top:10px;line-height:1.5">${f.telefono}</div>`:''}<div style="font-size:11px;color:${MUTED};line-height:1.5">Av. Kennedy Lateral 7900, Of. 905, Vitacura</div><div style="font-size:11px;color:${MUTED};line-height:1.5">Santiago - Chile</div><a href="https://leabogados.cl" style="font-size:11px;color:#5E8088;text-decoration:none;display:inline-block;line-height:1.5">www.leabogados.cl</a></td></tr></tbody></table>`
+  return `<table cellpadding="0" cellspacing="0" style="margin-top:22px;max-width:100%"><tbody><tr><td style="vertical-align:middle;padding-right:16px"><img src="${logoSrc}" alt="Liberona Escala Abogados" width="150" style="display:block;width:150px;max-width:100%;height:auto;border:0;outline:none"/></td><td style="vertical-align:middle;border-left:1px solid #B9C2C8;padding-left:16px">${f.nombre?`<div style="font-size:13px;font-weight:700;color:${TXT};text-transform:uppercase;letter-spacing:.3px;line-height:1.35">${f.nombre}</div>`:''}${f.cargo?`<div style="font-size:11px;color:${MUTED};line-height:1.5">${f.cargo}</div>`:''}${f.telefono?`<div style="font-size:11px;color:${MUTED};margin-top:10px;line-height:1.5">${f.telefono}</div>`:''}<div style="font-size:11px;color:${MUTED};line-height:1.5">Av. Kennedy Lateral 7900, Of. 905, Vitacura</div><div style="font-size:11px;color:${MUTED};line-height:1.5">Santiago - Chile</div><a href="https://leabogados.cl" style="font-size:11px;color:#5E8088;text-decoration:none;display:inline-block;line-height:1.5">www.leabogados.cl</a></td></tr></tbody></table>`
 }
 function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='es'){
   const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
@@ -10163,15 +10163,17 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   }
   // Envuelve el texto del correo (lo que el usuario ve/edita) en HTML con la marca del estudio,
   // para que no llegue plano. Las líneas indentadas (datos de cuenta) se muestran en una caja.
-  const buildEmailHtml = (text, lang='es') => {
+  const buildEmailHtml = (text, lang='es', useCid=false) => {
     const A='#003C50', A4='#E4E8EB', MUTED='#537281', BG='#F7F9FA'
+    const logoW = useCid?'cid:lealogow':`${location.origin}/le-logo-blanco.png`
+    const logoC = useCid?'cid:lealogoc':`${location.origin}/le-logo-color.png`
     const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     const lines = String(text).split('\n')
     let out='', box=[]
     const flush=()=>{ if(box.length){ out+=`<div style="background-color:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.indexOf(':'); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+1).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
     lines.forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()? `<p style="margin:0 0 10px">${esc(l)}</p>` : '' } })
     flush()
-    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma)}</div></div>`
+    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${logoW}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma, logoC)}</div></div>`
   }
   const saludoCliEn = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
   const asuntoFor = lang => { const label = r.project || client?.name || ''; return lang==='en' ? `Expense Report${r.correlativo?` No. ${r.correlativo}`:''} — ${label}` : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${label}` }
@@ -10237,6 +10239,8 @@ Saludos cordiales,`
     const texto = body
     const firmaTxt = firma.nombre ? [firma.nombre, firma.cargo, firma.telefono, 'Av. Kennedy Lateral 7900, Of. 905, Vitacura', 'Santiago - Chile', 'www.leabogados.cl'].filter(Boolean).join('\n') : ''
     const textoFull = firmaTxt ? texto+'\n\n'+firmaTxt : texto
+    const _stripD = u=>String(u||'').replace(/^data:[^,]+,/,'')
+    const logosInline = [{cid:'lealogow',b64:_stripD(logoBlanco),mime:'image/png'},{cid:'lealogoc',b64:_stripD(logoColor),mime:'image/png'}]
     const ccStr = [...cc, ...(studioOn?studioEmails:[])].filter(Boolean).join(', ')
     setSending(true)
     try{
@@ -10247,7 +10251,7 @@ Saludos cordiales,`
       if(token){
         try{
           const pdf = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
-          await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:textoFull, bodyHtml:buildEmailHtml(texto, lang), pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
+          await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:textoFull, bodyHtml:buildEmailHtml(texto, lang, true), inlineImages:logosInline, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
@@ -11461,7 +11465,7 @@ async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName, 
   return true
 }
 // Construye el MIME multipart y lo envía con la API de Gmail
-async function sendGmailWithPdf(token, {to, cc, subject, bodyText, bodyHtml, pdfBase64, pdfName, attachments}){
+async function sendGmailWithPdf(token, {to, cc, subject, bodyText, bodyHtml, pdfBase64, pdfName, attachments, inlineImages}){
   // RFC 2045: el base64 debe ir en líneas ≤76. Una sola línea larga (HTML/PDF reales) la trunca el SMTP
   // de reenvío → cuerpo y adjunto corruptos. wrap76 corta cada bloque en líneas de 76 con CRLF.
   const wrap76 = s => String(s||'').replace(/[\r\n]/g,'').replace(/(.{76})/g,'$1\r\n').trim()
@@ -11471,13 +11475,27 @@ async function sendGmailWithPdf(token, {to, cc, subject, bodyText, bodyHtml, pdf
   const boundary = 'lea_'+Date.now()
   const alt = 'alt_'+Date.now()
   // multipart/mixed → [ multipart/alternative → (text/plain, text/html) , adjuntos… ]
-  const cuerpo = bodyHtml ? [
-    `--${boundary}`, `Content-Type: multipart/alternative; boundary="${alt}"`, '',
+  // Imágenes inline (cid): el HTML las referencia con src="cid:xxx"; van en un multipart/related que envuelve el alternative.
+  const rel = 'rel_'+Date.now()
+  const inlineParts = (inlineImages||[]).flatMap(im=>[
+    `--${rel}`, `Content-Type: ${im.mime||'image/png'}`, 'Content-Transfer-Encoding: base64', `Content-ID: <${im.cid}>`, `Content-Disposition: inline; filename="${im.cid}.png"`, '', wrap76(im.b64), ''
+  ])
+  const altBlock = [
     `--${alt}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), '',
     `--${alt}`, 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyHtml), '',
     `--${alt}--`, ''
-  ] : [
+  ]
+  const cuerpo = !bodyHtml ? [
     `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(bodyText), ''
+  ] : (inlineImages&&inlineImages.length) ? [
+    `--${boundary}`, `Content-Type: multipart/related; boundary="${rel}"`, '',
+    `--${rel}`, `Content-Type: multipart/alternative; boundary="${alt}"`, '',
+    ...altBlock,
+    ...inlineParts,
+    `--${rel}--`, ''
+  ] : [
+    `--${boundary}`, `Content-Type: multipart/alternative; boundary="${alt}"`, '',
+    ...altBlock
   ]
   const attParts = atts.flatMap(a=>[
     `--${boundary}`, `Content-Type: ${a.mime||'application/octet-stream'}; name="${a.name}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${a.name}"`, '', wrap76(a.base64), ''
