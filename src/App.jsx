@@ -10107,6 +10107,22 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const totFondosCli = _rs.totFondos
   const debeCliente = saldoCliente < 0
   const [para,setPara] = useState(client?.email||'')
+  // Cc: gente del cliente (con chips, aprendida y editable) + copia al estudio (responsable + quienes cargaron los gastos).
+  const EMAIL_BY_NAME = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const toEmail = x => { if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
+  const myEmail = (user?.email||'').toLowerCase()
+  const studioEmails = useMemo(()=>{ const set=new Set(); const resp=toEmail(client?.abogado_responsable); if(resp) set.add(resp); det.forEach(e=>{ const em=toEmail(e.created_by); if(em) set.add(em) }); set.delete(myEmail); return [...set] },[client?.abogado_responsable, det, myEmail])
+  const [studioOn,setStudioOn] = useState(true)
+  const [cc,setCc] = useState([])
+  const [ccInput,setCcInput] = useState('')
+  const [fichaContacts,setFichaContacts] = useState([])
+  useEffect(()=>{ if(!client?.id) return; let alive=true
+    supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setFichaContacts((data||[]).filter(c=>c.email)) },()=>{})
+    supabase.from('learnings').select('value').eq('kind','rendicion_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(prev=>[...new Set([...prev,...ems])]) } },()=>{})
+    return ()=>{alive=false}
+  },[client?.id])
+  const addCc = em => { const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(prev=>[...prev,e]); setCcInput('') }
+  const removeCc = em => setCc(prev=>prev.filter(x=>x!==em))
   const [asunto,setAsunto] = useState(`Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${client?.name||''}`)
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
@@ -10174,6 +10190,7 @@ Liberona Escala Abogados`
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
     const texto = body
+    const ccStr = [...cc, ...(studioOn?studioEmails:[])].filter(Boolean).join(', ')
     setSending(true)
     try{
       // Envío directo con PDF adjunto vía Gmail API (si el token tiene el scope gmail.send)
@@ -10183,7 +10200,7 @@ Liberona Escala Abogados`
       if(token){
         try{
           const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
-          await sendGmailWithPdf(token, {to:para.trim(), subject:asunto, bodyText:texto, bodyHtml:buildEmailHtml(texto), pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
+          await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:texto, bodyHtml:buildEmailHtml(texto), pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
@@ -10192,7 +10209,7 @@ Liberona Escala Abogados`
         // (servidor SMTP) con el PDF adjunto. Solo si el servidor también falla, se descarga y se abre Gmail a mano.
         try{
           const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
-          await sendMailServer({to:para.trim(), subject:asunto, html:buildEmailHtml(texto), text:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
+          await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto), text:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
           alert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
         }catch(srvErr){
@@ -10222,6 +10239,7 @@ Liberona Escala Abogados`
       const {error:seErr}=await supabase.from('rendiciones').update({sent_at:now, correlativo:corr}).eq('id',r.id)
       if(seErr) console.error('No se pudo marcar la rendición como enviada:',seErr.message)
       else onSent && onSent(r.id, now, corr)
+      try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(_){}
       alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
     }catch(e){ alert('Error: '+e.message) }
@@ -10232,6 +10250,19 @@ Liberona Escala Abogados`
       {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soon,fontSize:12,marginBottom:12}}>El cliente no tiene email. Escríbelo abajo o complétalo en su ficha.</div>}
       <Fld label='De'><Inp value={user?.email||''} disabled style={{opacity:.7}}/></Fld>
       <Fld label='Para'><Inp type='email' value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl'/></Fld>
+      <div style={{marginBottom:12}}>
+        <Lbl>Cc (con copia)</Lbl>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,padding:7,minHeight:38,boxSizing:'border-box'}}>
+          {cc.map(em=><span key={em} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 6px 3px 10px',fontSize:12}}>{em}<button onClick={()=>removeCc(em)} aria-label='Quitar' style={{background:'none',border:'none',color:C.azulInfo,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button></span>)}
+          <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if((e.key==='Enter'||e.key===',')&&ccInput.trim()){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>ccInput.trim()&&addCc(ccInput)} placeholder={cc.length?'':'agregar correo…'} style={{flex:1,minWidth:120,border:'none',outline:'none',fontSize:13,color:C.text,background:'none'}}/>
+        </div>
+        {(()=>{ const sug=fichaContacts.filter(c=>!cc.includes((c.email||'').toLowerCase())); if(!sug.length) return null; return (
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>
+            {sug.map(c=><button key={c.email} onClick={()=>addCc(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre?c.nombre+' · ':''}{c.email}</button>)}
+          </div>
+        )})()}
+        {studioEmails.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}><Switch on={studioOn} onToggle={()=>setStudioOn(v=>!v)}/><span style={{fontSize:12,color:C.text}}>Copia al estudio <span style={{color:C.done}}>({studioEmails.join(', ')})</span></span></div>}
+      </div>
       <Fld label='Asunto'><Inp value={asunto} onChange={e=>setAsunto(e.target.value)}/></Fld>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
         <Lbl>Mensaje</Lbl>
