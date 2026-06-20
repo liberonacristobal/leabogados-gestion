@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Correo: logo por URL (no base64) y diagnóstico de envío
+- La firma y el encabezado del correo usan el logo por URL absoluta (logo a color servido en /le-logo-color.png) en vez de base64 embebido → aliviana el correo (destraba el envío por servidor) y el logo se ve en el correo real.
+- El aviso de fallo de envío ahora muestra el error real (Gmail / Servidor) para diagnosticar.
+
 ## 2026-06-20 — Firma más discreta
 - La firma se achicó para no competir con el cuerpo del correo (14px): logo 150px, nombre 13px, datos 11px.
 
