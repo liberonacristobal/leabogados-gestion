@@ -2121,7 +2121,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const topAreas = Object.entries(byArea).sort((a,b)=>b[1]-a[1]).slice(0,3)
 
   const balances = {}
-  expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) })
+  expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):(e.no_descuenta_saldo?0:-(e.amount||0))) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [funnelKpi,setFunnelKpi] = useState(null)   // paso del funnel (facturado/cobrado/programado) abierto para ver su detalle
@@ -8553,7 +8553,7 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
   useEffect(()=>{ setF(p=>({...p, entity_id: clientEnts.length===1?clientEnts[0].id:(clientEnts.some(e=>e.id===p.entity_id)?p.entity_id:'')})) },[clientEnts])
   // Sugerir el proyecto: la venta más reciente del cliente (venta = proyecto), si aún no se eligió.
   useEffect(()=>{ if(!selectedClient||clientSales.length===0) return; const s=[...clientSales].sort((a,b)=>String(b.created_at||b.date||'').localeCompare(String(a.created_at||a.date||'')))[0]; setF(p=>p.sale_id||p.project?p:{...p,sale_id:s.id,project:s.title||''}) },[selectedClient,clientSales])
-  const balance = selectedClient ? expenses.reduce((b,e)=> e.client_id===selectedClient.id ? b+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) : b, 0) : null
+  const balance = selectedClient ? saldoCliente(expenses, selectedClient.id) : null
   const cIni = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const fmtCLP0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
@@ -10689,7 +10689,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
     return [...base].sort((a,b)=>{ const ta=tareasDe[a.id]||0,tb=tareasDe[b.id]||0; if((ta>0)!==(tb>0)) return tb>0?1:-1; return tb-ta })
   },[clients,sFilter,q,respSel,responsableDe,tareasDe])
   const balances = useMemo(()=>{
-    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):-(e.amount||0)) }); return m
+    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):(e.no_descuenta_saldo?0:-(e.amount||0))) }); return m
   },[expenses])
 
   // Proveedores inline (mismo formato que clientes: lista → ficha, pantalla completa)

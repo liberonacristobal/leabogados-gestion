@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Fix: el gasto histórico ya no aparece como deuda/saldo negativo
+- Tres fórmulas inline reinventaban el saldo del cliente sin excluir los gastos históricos (no_descuenta_saldo): el modal “Registrar fondo” (mostraba deuda fantasma, ej. David Midgley −$10.400), el mapa de saldos del Dashboard y el de la lista de clientes. Se alinean con la fórmula canónica (fgCliente): el modal de fondo usa saldoCliente; los mapas excluyen el histórico. Ahora ningún cliente con gasto histórico muestra saldo negativo por ese motivo.
+
 ## 2026-06-20 — Saldo cero neutro + patrón de tarjetas en vista limited
 - El saldo en $0 ahora se muestra en gris neutro (no rojo). El rojo queda solo para saldo negativo y el verde para saldo a favor. Aplica en admin (cSaldo) y en la vista limited.
 - La vista de clientes del limited adopta el mismo patrón: “+” en las tarjetas Fondos y Gastos (se quitan los botones del encabezado).
