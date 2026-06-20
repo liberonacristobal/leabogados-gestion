@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: subtítulo serif light recto (sin itálica)
+- El subtítulo “FirmDesk · Gestión Oficina” pasa a Fraunces upright (recta), peso light (300); “Bienvenido” se mantiene en itálica.
+
 ## 2026-06-19 — Dashboard: panel de caja chica sin admins
 - El panel “Gestión Caja Chica” del Dashboard ya no muestra a los admins (Cristóbal, Erasmo), que no tienen caja chica; quedan solo los usuarios de caja chica (Martín, Martina).
 
