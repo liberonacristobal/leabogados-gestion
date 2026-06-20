@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Encabezado del correo Gmail-safe (bgcolor)
+- El encabezado azul desaparecía en Gmail porque usa `background:` abreviado y `border-radius` (Gmail los elimina). Se reescribe como tabla con atributo `bgcolor`, que Gmail respeta. La caja de datos de cuenta usa `background-color`.
+
 ## 2026-06-20 — Logos del correo por URL alojada (Gmail no muestra data-URI)
 - Encabezado y firma referencian los logos por URL absoluta del sitio (/le-logo-blanco.png y /le-logo-color.png). Gmail bloquea imágenes embebidas (data-URI); las alojadas sí las proxea. Assets verificados en vivo.
 
