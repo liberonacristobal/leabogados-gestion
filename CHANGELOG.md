@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Dashboard: panel de caja chica sin admins
+- El panel “Gestión Caja Chica” del Dashboard ya no muestra a los admins (Cristóbal, Erasmo), que no tienen caja chica; quedan solo los usuarios de caja chica (Martín, Martina).
+
 ## 2026-06-19 — Dashboard: eliminada la tarjeta KPI “Clientes sin fondos”
 - Se quitó la tarjeta-KPI dedicada “Clientes sin fondos” del Dashboard (se deformaba). La fila de alerta del mismo nombre en el resumen del día se mantiene.
 
