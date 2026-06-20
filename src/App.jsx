@@ -5164,12 +5164,12 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
           const go=f=>{setFilter(f);clearSel&&clearSel()}
-          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:17,fontWeight:600,color:col}}>{fmt(v)}</div></button>)
+          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:17,fontWeight:600,color:col}}>{fmt(v)}</div></button>)
           return (<div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16}}>
               <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Por cobrar · facturas emitidas sin pagar</div>
               <div style={{fontSize:26,fontWeight:700,color:C.accent,lineHeight:1.1}}>{fmt(porCobrar)}</div>
-              <div style={{height:7,background:C.border,borderRadius:4,margin:'10px 0 7px',overflow:'hidden',display:'flex'}}>
+              <div style={{height:7,background:C.greenBg,borderRadius:4,margin:'10px 0 7px',overflow:'hidden',display:'flex'}}>
                 <div style={{width:`${porCobrar>0?Math.min(100,Math.round(venAll/porCobrar*100)):0}%`,background:C.overdue}}/>
               </div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:11,flexWrap:'wrap',gap:6}}>

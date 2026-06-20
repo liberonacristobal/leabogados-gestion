@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Facturación (pulir) Fase 4: Resumen afinado
+- Resumen: las 4 tarjetas (Por cobrar/Vencidas/Cobradas/Programadas) con borde-acento de su color (consistente con los KPIs); la barra de por-cobrar con base verde (al día) y segmento rojo (vencido). El resto del Resumen ya tenía desglose y chips con monto.
+
 ## 2026-06-20 — Facturación (pulir) Fase 3: chips de grupo + filas consistentes
 - Headers de grupo por estado (Vencidas/Emitidas/Programadas/Pagadas/Anuladas) ahora en CHIPS con color semántico (Vencidas rojo, Emitidas ámbar, Pagadas verde, resto gris) + el total del grupo en chip, en "Por cliente" y "Todas".
 - Filas de "Por cliente" y "Todas": borde de color + "Factura N° XX" + días mini (en vez de repetir el estado) + acciones (Pagar/Conciliar/Editar) al tocar la fila (ya no inline).
