@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: badge “Powered by FirmDesk” al pie + subtítulo “Gestión Oficina”
+- Se agrega el badge “Powered by FirmDesk” (marca F + verde, colores propios de FirmDesk) anclado al pie del login. El subtítulo bajo el logo pasa de “FirmDesk · Gestión Oficina” a solo “Gestión Oficina” para no repetir la marca.
+
 ## 2026-06-19 — Login: subtítulo serif light recto (sin itálica)
 - El subtítulo “FirmDesk · Gestión Oficina” pasa a Fraunces upright (recta), peso light (300); “Bienvenido” se mantiene en itálica.
 
