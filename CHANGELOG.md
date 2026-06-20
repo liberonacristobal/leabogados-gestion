@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Saldo cero neutro + patrón de tarjetas en vista limited
+- El saldo en $0 ahora se muestra en gris neutro (no rojo). El rojo queda solo para saldo negativo y el verde para saldo a favor. Aplica en admin (cSaldo) y en la vista limited.
+- La vista de clientes del limited adopta el mismo patrón: “+” en las tarjetas Fondos y Gastos (se quitan los botones del encabezado).
+
 ## 2026-06-20 — Gastos del cliente: tarjetas con “+” y Rendir inteligente
 - Las tarjetas Fondos y Gastos pasan a ser accionables: un “+” en la esquina (área de toque 34px) abre +Fondo / +Gasto. Se quitaron los pills “+ Fondo” y “+ Gastos” del encabezado. “Saldo actual” → “Saldo”.
 - El botón Rendir ahora muestra el estado: “↓ Rendir · N · $monto” cuando hay gastos por rendir, y “✓ Al día” (atenuado) cuando no hay. Encabezado más limpio y con estado a la vista.

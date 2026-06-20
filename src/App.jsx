@@ -544,23 +544,21 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
           <div style={{marginBottom:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Gastos y Fondos</div>
-              <div style={{display:'flex',gap:6}}>
-                <button onClick={()=>onAddFondo(cl)} style={chipBtn('green')}>+ Fondo</button>
-                <button onClick={()=>onAddGasto(cl)} style={chipBtn('soft')}>+ Gasto</button>
-              </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
-              <div style={{background:C.greenBg,borderRadius:8,padding:'8px 10px'}}>
+              <div style={{position:'relative',background:C.greenBg,borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>FONDOS</div>
                 <div style={{fontSize:12,fontWeight:700,color:C.normal}}>${fondos.toLocaleString('es-CL')}</div>
+                <button onClick={()=>onAddFondo(cl)} aria-label='Agregar fondo' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.normal,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span></button>
               </div>
-              <div style={{background:C.overdueBg,borderRadius:8,padding:'8px 10px'}}>
+              <div style={{position:'relative',background:C.overdueBg,borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS</div>
                 <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>${gastos.toLocaleString('es-CL')}</div>
+                <button onClick={()=>onAddGasto(cl)} aria-label='Agregar gasto' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.overdue,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span></button>
               </div>
-              <div style={{background:saldo<0?C.overdueBg:C.greenBg,borderRadius:8,padding:'8px 10px'}}>
+              <div style={{background:saldo<0?C.overdueBg:saldo===0?'#F1EFE8':C.greenBg,borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
-                <div style={{fontSize:12,fontWeight:700,color:saldo<0?C.overdue:C.greenText}}>${saldo.toLocaleString('es-CL')}</div>
+                <div style={{fontSize:12,fontWeight:700,color:saldo<0?C.overdue:saldo===0?C.grisText:C.greenText}}>${saldo.toLocaleString('es-CL')}</div>
               </div>
             </div>
             {clientExpenses.slice(0,8).map(e=>{
@@ -7729,7 +7727,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
   // Colores de KPI según reglas (labels siempre gris #99ABB4)
   const cFondos = v => v>0?{c:C.normal,bg:C.greenBg} : v===0?{c:C.soon,bg:'#FEF6EE'} : {c:C.overdue,bg:C.overdueBg}
-  const cSaldo = v => v>0?{c:C.normal,bg:C.greenBg} : {c:C.overdue,bg:C.overdueBg}
+  const cSaldo = v => v>0?{c:C.normal,bg:C.greenBg} : v===0?{c:C.grisText,bg:'#F1EFE8'} : {c:C.overdue,bg:C.overdueBg}
   const KpiRect = ({label,value,c,bg,onPlus,plusColor}) => (
     <div style={{position:'relative',background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
       <div style={{fontSize:10,color:C.done,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</div>
