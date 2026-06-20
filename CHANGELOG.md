@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Conciliación (pulir) Fase 3: contadores limpios
+- "Conciliar automático": el texto largo de progreso se reemplaza por una barra fina + N/Total conciliadas + %. Las "posibles provisiones (Cta. Gastos)" pasan a un chip tappable "N provisiones →" (solo si >0) que filtra a Cta. Gastos. El badge "400+ (top 400)" se vuelve "N de Total" y solo aparece cuando la lista pasa del tope.
+
 ## 2026-06-20 — Conciliación (pulir) Fase 2: fila limpia
 - Fila de movimiento: cliente/contraparte de protagonista (nombre grande) + chip de cuenta + monto en la 1ª línea; glosa/RUT (+ "revisar RUT") de secundaria y chip de estado a la derecha en la 2ª línea; se quita el rótulo "Editar ▾" (la fila se expande al tocar). El panel de acciones intacto.
 
