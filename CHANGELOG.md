@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-20 — Modal de Rendición “pulido” (compacto)
+- Header estilo Editar Cliente (Rendición | Cliente). Labels dentro del cuadro (Razón social, Proyecto, Dirigido a). Proyecto y Dirigido a en una sola línea.
+- “Dirigido a” sugiere persona + correo (de la ficha); al elegirla, su correo se precarga en el “Para” del modal de envío.
+- Subproyecto colapsado (“+ Subproyecto”) y filtro por fecha colapsado (“Filtrar por fecha”) para ahorrar espacio.
+- Fix: el período de la rendición se deriva del mes de los gastos (antes guardaba la fecha de hoy).
+
 ## 2026-06-20 — Rendición al cliente: Cc con sugerencias, copia al estudio y aprendizaje
 - El modal “Enviar rendición al cliente” suma un campo Cc con chips (removibles, editables). Precarga los destinatarios aprendidos de la última rendición de ese cliente y sugiere los contactos de su ficha (con email).
 - Toggle “Copia al estudio”: agrega al abogado responsable y a quienes cargaron los gastos de esa rendición (mapeados a su correo del equipo), para que sepan que se rindió.
