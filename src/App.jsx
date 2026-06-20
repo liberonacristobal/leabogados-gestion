@@ -14924,31 +14924,54 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
           <div style={{fontSize:20,fontWeight:600,color:C.text,letterSpacing:-.4}}>Conciliación bancaria</div>
-          <span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>{loading?'Cargando…':`${G.nMov} movimientos`}</span>
+          {loading&&<span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>Cargando…</span>}
         </div>
       </div>
 
       <div style={{padding:'14px 20px 0'}}>
-        {/* Carga de cartolas — colapsada por defecto (solo se usa para cargar; ocupa mucho espacio en el día a día) */}
-        {(verCarga||importing)
-          ? <div style={{padding:'16px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',background:'#F5F7F9',marginBottom:12,position:'relative'}}>
-              {!importing&&<button onClick={()=>setVerCarga(false)} style={{position:'absolute',top:8,right:10,background:'none',border:'none',color:C.muted,fontSize:16,lineHeight:1,cursor:'pointer'}}>×</button>}
-              <div style={{fontSize:14,color:C.accent,fontWeight:600,marginBottom:8}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Cargar cartolas BICE (.xlsx)'}</div>
-              {!importing&&(
-                <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
-                  <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                    <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
-                    Elegir archivos
-                  </label>
-                  <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                    <input type='file' webkitdirectory='' directory='' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
-                    Seleccionar carpeta
-                  </label>
+        {/* Cartolas: una sola línea (detalle a la izquierda · cargar a la derecha) */}
+        {cartolas.length>0
+          ? <div style={{marginBottom:12,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'#F5F7F9'}}>
+                <span onClick={()=>setVerCartolas(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+                  <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Cartolas</span>
+                  <span style={{fontSize:11,color:C.muted}}>{cartolas.length} · {movs.length} mov.</span>
+                  <span style={{fontSize:13,color:C.muted}}>{verCartolas?'▴':'▾'}</span>
+                </span>
+                <button onClick={()=>setVerCarga(v=>!v)} style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>+ Cargar</button>
+              </div>
+              {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?C.accent:'#EF9F27'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
+                <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,borderLeft:`3px solid ${pc}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                    <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Cta. Honorarios':'Cta. Gastos'} · {mesLbl}</span>
+                    <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmtFechaDMY?fmtFechaDMY(c.fMin):c.fMin} → {fmtFechaDMY?fmtFechaDMY(c.fMax):c.fMax} · {c.n} mov.</span>
+                  </div>
+                  <div style={{fontSize:11,marginTop:2}}><span style={{color:C.greenText,fontWeight:600}}>+{fmtM(c.abo)}</span> <span style={{color:C.muted}}>abonos</span> · <span style={{color:C.overdue,fontWeight:600}}>−{fmtM(c.car)}</span> <span style={{color:C.muted}}>cargos</span></div>
                 </div>
-              )}
-              <div style={{fontSize:11,color:C.muted,marginTop:8}}>Varios a la vez o una carpeta entera (ambas cuentas). Re-subir no duplica.</div>
+              )})}
             </div>
           : <div style={{textAlign:'right',marginBottom:8}}><button onClick={()=>setVerCarga(true)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>+ Cargar cartolas</button></div>}
+
+        {/* Caja de importación — se despliega con "+ Cargar" */}
+        {(verCarga||importing)&&(
+          <div style={{padding:'16px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',background:'#F5F7F9',marginBottom:12,position:'relative'}}>
+            {!importing&&<button onClick={()=>setVerCarga(false)} style={{position:'absolute',top:8,right:10,background:'none',border:'none',color:C.muted,fontSize:16,lineHeight:1,cursor:'pointer'}}>×</button>}
+            <div style={{fontSize:14,color:C.accent,fontWeight:600,marginBottom:8}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Cargar cartolas BICE (.xlsx)'}</div>
+            {!importing&&(
+              <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+                <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                  <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
+                  Elegir archivos
+                </label>
+                <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                  <input type='file' webkitdirectory='' directory='' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
+                  Seleccionar carpeta
+                </label>
+              </div>
+            )}
+            <div style={{fontSize:11,color:C.muted,marginTop:8}}>Varios a la vez o una carpeta entera (ambas cuentas). Re-subir no duplica.</div>
+          </div>
+        )}
 
         {/* Reporte del último lote */}
         {reportes&&(
@@ -14972,35 +14995,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         )}
 
-        {/* Cartolas cargadas (colapsado; se despliega por cuenta y mes) */}
-        {cartolas.length>0&&(
-          <div style={{marginBottom:12,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-            <div onClick={()=>setVerCartolas(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer',background:'#F5F7F9'}}>
-              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Cartolas cargadas</span>
-              <span style={{fontSize:11,color:C.muted}}>{cartolas.length} · {movs.length} mov.</span>
-              <span style={{marginLeft:'auto',fontSize:13,color:C.muted}}>{verCartolas?'▴':'▾'}</span>
-            </div>
-            {verCartolas&&cartolas.map((c,i)=>{ const pc=c.rol==='honorarios'?C.accent:'#EF9F27'; const mesLbl=(()=>{const[y,mo]=c.mes.split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return `${M[+mo-1]||mo} ${y}`})(); return (
-              <div key={i} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,borderLeft:`3px solid ${pc}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{c.rol==='honorarios'?'Cta. Honorarios':'Cta. Gastos'} · {mesLbl}</span>
-                  <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmtFechaDMY?fmtFechaDMY(c.fMin):c.fMin} → {fmtFechaDMY?fmtFechaDMY(c.fMax):c.fMax} · {c.n} mov.</span>
-                </div>
-                <div style={{fontSize:11,marginTop:2}}><span style={{color:C.greenText,fontWeight:600}}>+{fmtM(c.abo)}</span> <span style={{color:C.muted}}>abonos</span> · <span style={{color:C.overdue,fontWeight:600}}>−{fmtM(c.car)}</span> <span style={{color:C.muted}}>cargos</span></div>
-              </div>
-            )})}
-          </div>
-        )}
-
-        {/* KPIs globales */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:12}}>
-          {[['Abonos',`${G.nAbo}`,fmtM(G.sumAbo),'#0F6E56'],['Cargos',`${G.nCar}`,fmtM(G.sumCar),'#A32D2D'],['Internos',`${G.internos}`,'',C.muted],['Sin identificar',`${G.sinId}`,'',G.sinId?C.soon:C.muted]].map(([l,n,sub2,col])=>(
-            <div key={l} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,background:(col==='#0F6E56'?C.greenBg:col==='#A32D2D'?C.overdueBg:col===C.soon?C.soonBg:'#F5F7F9'),borderRadius:9,padding:'7px 9px'}}>
-              <div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
-              <div style={{fontSize:15,fontWeight:700,color:col}}>{n}</div>
-              {sub2&&<div style={{fontSize:9,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub2}</div>}
-            </div>
-          ))}
+        {/* Resumen en una línea */}
+        <div style={{fontSize:12,color:C.muted,marginBottom:12,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+          <span><b style={{color:C.greenText}}>{fmtM(G.sumAbo)}</b> abonos</span>
+          <span style={{color:C.border}}>·</span>
+          <span><b style={{color:C.overdue}}>{fmtM(G.sumCar)}</b> cargos</span>
+          {G.internos>0&&<><span style={{color:C.border}}>·</span><span>{G.internos} internos</span></>}
         </div>
 
         {/* Filtros — una sola línea de controles (tipo + cuenta + mes + año + estado) */}
