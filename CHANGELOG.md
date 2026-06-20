@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Fix saldo de rendición (fondos sin razón social)
+- Bug: si los gastos traían razón social pero los fondos no, el saldo de la rendición ignoraba los fondos y mostraba al cliente como deudor (decía “saldo a su cargo”) aunque tuviera saldo a favor. Caso Agustín Cabañas: $200.000 fondo − $139.400 gastos = $60.600 a favor, salía como deuda de $139.400.
+- Con 1 razón social, todo (incl. fondos sin entity_id) pertenece a esa RS. Corregido en el modal de envío y en el PDF (ambos generadores).
+
 ## 2026-06-20 — Rendición en inglés (toggle ES | EN)
 - Toggle ES|EN junto a “Redactar con IA” en el modal de envío: traduce de una vez el correo (asunto + cuerpo) y AMBOS PDF (vista previa y adjunto).
 - Cuerpo con los cierres según saldo: el cliente debe → datos bancarios de LEA; saldo a favor con gestión concluida → pide su cuenta para reintegro; a favor en curso → queda para próximos; cero → sin párrafo extra. Igual lógica en inglés.

@@ -299,9 +299,11 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
 function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='es'){
   const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
-  const entId = (gastos.find(e=>e.entity_id)||{}).entity_id
-  const ent = entId ? (clientEntities||[]).find(x=>x.id===entId) : null
-  // Acota a la RS de esta rendición (multi-RS); si los gastos no tienen entity_id, todo el cliente.
+  const _entsC = (clientEntities||[]).filter(x=>x.client_id===(client&&client.id))
+  const _gEnt = (gastos.find(e=>e.entity_id)||{}).entity_id
+  // Scope del saldo: con 1 RS = todo el cliente (incl. fondos sin entity_id); con 2+ RS se acota a la RS de los gastos.
+  const entId = _entsC.length>1 ? _gEnt : null
+  const ent = _entsC.length===1 ? _entsC[0] : (_gEnt ? (clientEntities||[]).find(x=>x.id===_gEnt) : null)
   const scopedMovs = (expenses||[]).filter(e=>e.client_id===(client&&client.id) && (!entId || e.entity_id===entId))
   const fondos = scopedMovs.filter(e=>e.type==='fondo').sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
   const {previas, rendidoAntes} = rendicionesPreviasDe(scopedMovs, r.id)
@@ -10109,7 +10111,8 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   useEffect(()=>{ const ids=det.map(e=>e.id); if(!ids.length) return; let alive=true; supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive) setAttachSet(new Set((data||[]).map(x=>String(x.expense_id)))) },()=>{}); return ()=>{alive=false} },[r.id])
   // Saldo del fondo con la MISMA fuente única que el PDF y el modal: fondos − gastos ya rendidos (de la RS).
   // Negativo = el cliente debe al Estudio → se incluyen los datos bancarios.
-  const entId = (det.find(e=>e.entity_id)||{}).entity_id
+  // 1 RS: todo el cliente (incl. fondos sin entity_id) pertenece a esa RS; solo se acota con 2+ RS.
+  const entId = ((clientEntities||[]).filter(e=>e.client_id===r.client_id).length>1) ? (det.find(e=>e.entity_id)||{}).entity_id : null
   const _rs = rendicionSaldo(expenses, r.client_id, entId)
   const saldoCliente = _rs.saldo
   const totFondosCli = _rs.totFondos
