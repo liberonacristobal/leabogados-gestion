@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: sello FirmDesk pulido (02 “Desk”, bicolor)
+- El badge “Powered by FirmDesk” usa el sello refinado del manual de marca (versión 02 “Desk”): la F flota sobre un tablero a dos tonos (#17A06B + canto frontal #0F8455), viewBox 100×100, esquinas rx 23.
+
 ## 2026-06-19 — Login: badge “Powered by FirmDesk” al pie + subtítulo “Gestión Oficina”
 - Se agrega el badge “Powered by FirmDesk” (marca F + verde, colores propios de FirmDesk) anclado al pie del login. El subtítulo bajo el logo pasa de “FirmDesk · Gestión Oficina” a solo “Gestión Oficina” para no repetir la marca.
 
