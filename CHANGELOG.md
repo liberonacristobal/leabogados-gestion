@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Gastos del cliente: tarjetas con “+” y Rendir inteligente
+- Las tarjetas Fondos y Gastos pasan a ser accionables: un “+” en la esquina (área de toque 34px) abre +Fondo / +Gasto. Se quitaron los pills “+ Fondo” y “+ Gastos” del encabezado. “Saldo actual” → “Saldo”.
+- El botón Rendir ahora muestra el estado: “↓ Rendir · N · $monto” cuando hay gastos por rendir, y “✓ Al día” (atenuado) cuando no hay. Encabezado más limpio y con estado a la vista.
+
 ## 2026-06-20 — Gastos: quitar pill de responsable + fix “adelanto por cobrar”
 - Se elimina el pill/botón del abogado responsable (y su selector) en la vista de Gastos de cada cliente; el responsable sigue editándose desde la ficha/edición del cliente.
 - El pill “Adelanto X por cobrar” ahora excluye gastos históricos (no_descuenta_saldo) y los pagados por el cliente (paid_by_client), alineándose con el saldo canónico. Elimina adelantos fantasma (ej. David Midgley, Pablo Liberona) cuando provenían de gastos históricos.
