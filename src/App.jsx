@@ -297,6 +297,12 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
 }
 
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
+function firmaCorreoHtml(f){
+  if(!f || !(f.nombre||f.cargo||f.telefono||f.correo)) return ''
+  const A='#003C50', A4='#E4E8EB', MUTED='#537281'
+  const linea = (f.telefono&&f.correo) ? `${f.telefono} · ${f.correo}` : (f.telefono||f.correo||'')
+  return `<div style="margin-top:20px;padding-top:14px;border-top:1px solid ${A4}"><table cellpadding="0" cellspacing="0"><tbody><tr><td style="vertical-align:middle;padding-right:13px"><div style="background:${A};border-radius:6px;padding:8px 12px;display:inline-block"><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:20px;display:block"/></div></td><td style="vertical-align:middle;border-left:2px solid ${A4};padding-left:13px">${f.nombre?`<div style="font-size:14px;font-weight:700;color:${A}">${f.nombre}</div>`:''}${f.cargo?`<div style="font-size:11px;color:${MUTED};margin-top:1px">${f.cargo}</div>`:''}${linea?`<div style="font-size:11px;color:${MUTED};margin-top:3px">${linea}</div>`:''}</td></tr></tbody></table></div>`
+}
 function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='es'){
   const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
   const _entsC = (clientEntities||[]).filter(x=>x.client_id===(client&&client.id))
@@ -10134,10 +10140,16 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     supabase.from('learnings').select('value').eq('kind','rendicion_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(prev=>[...new Set([...prev,...ems])]) } },()=>{})
     return ()=>{alive=false}
   },[client?.id])
+  useEffect(()=>{ let alive=true
+    supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ const ff=JSON.parse(data.value); setFirma(prev=>({...prev,...ff})) }catch(_){} } },()=>{})
+    return ()=>{alive=false}
+  },[myEmail])
   const addCc = em => { const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(prev=>[...prev,e]); setCcInput('') }
   const removeCc = em => setCc(prev=>prev.filter(x=>x!==em))
   const [asunto,setAsunto] = useState(`Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${r.project||client?.name||''}`)
   const [lang,setLang] = useState('es')
+  const [firma,setFirma] = useState({nombre:user?.name||'', cargo:'Abogado', telefono:'', correo:user?.email||''})
+  const [showFirma,setShowFirma] = useState(false)
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
@@ -10154,7 +10166,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     const flush=()=>{ if(box.length){ out+=`<div style="background:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.indexOf(':'); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+1).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
     lines.forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()? `<p style="margin:0 0 10px">${esc(l)}</p>` : '' } })
     flush()
-    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><div style="background:${A};padding:18px 24px;border-radius:8px 8px 0 0"><table width="100%"><tr><td style="vertical-align:middle"><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}</td></tr></table></div><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}</div><div style="padding:12px 24px;border:1px solid ${A4};border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:${MUTED};text-align:center">Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</div></div>`
+    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><div style="background:${A};padding:18px 24px;border-radius:8px 8px 0 0"><table width="100%"><tr><td style="vertical-align:middle"><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}</td></tr></table></div><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma)}</div><div style="padding:12px 24px;border:1px solid ${A4};border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:${MUTED};text-align:center">Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</div></div>`
   }
   const saludoCliEn = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
   const asuntoFor = lang => { const label = r.project || client?.name || ''; return lang==='en' ? `Expense Report${r.correlativo?` No. ${r.correlativo}`:''} — ${label}` : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${label}` }
@@ -10174,9 +10186,7 @@ Please find attached your expense report${r.correlativo?` No. ${r.correlativo}`:
 
 We remain at your disposal for any questions.
 
-Kind regards,
-${user?.name||''}
-Liberona Escala Abogados`
+Kind regards,`
     }
     const cuentaLEA = `\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Comprobante a: administracion@leabogados.cl`
     let cierre = ''
@@ -10191,9 +10201,7 @@ Adjuntamos su rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''}${r
 
 Quedamos atentos a cualquier consulta.
 
-Saludos cordiales,
-${user?.name||''}
-Liberona Escala Abogados`
+Saludos cordiales,`
   }
   const [body,setBody] = useState(()=>cuerpoCorreo('es'))
   useEffect(()=>{ setBody(cuerpoCorreo(lang)); setAsunto(asuntoFor(lang)) },[lang])  // toggle ES|EN regenera correo + asunto
@@ -10222,6 +10230,8 @@ Liberona Escala Abogados`
   const enviar = async() => {
     if(!para.trim()){ alert('Falta el email del cliente.'); return }
     const texto = body
+    const firmaTxt = [firma.nombre, firma.cargo, [firma.telefono,firma.correo].filter(Boolean).join(' · ')].filter(Boolean).join('\n')
+    const textoFull = firmaTxt ? texto+'\n\n'+firmaTxt : texto
     const ccStr = [...cc, ...(studioOn?studioEmails:[])].filter(Boolean).join(', ')
     setSending(true)
     try{
@@ -10232,7 +10242,7 @@ Liberona Escala Abogados`
       if(token){
         try{
           const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
-          await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:texto, bodyHtml:buildEmailHtml(texto, lang), pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
+          await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:textoFull, bodyHtml:buildEmailHtml(texto, lang), pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
@@ -10241,7 +10251,7 @@ Liberona Escala Abogados`
         // (servidor SMTP) con el PDF adjunto. Solo si el servidor también falla, se descarga y se abre Gmail a mano.
         try{
           const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
-          await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:texto, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
+          await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:textoFull, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
           conAdjunto = true
           alert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
         }catch(srvErr){
@@ -10256,9 +10266,9 @@ Liberona Escala Abogados`
             document.body.appendChild(a); a.click(); a.remove()
             setTimeout(()=>URL.revokeObjectURL(url), 5000)
           }catch(_){ verPDF() }
-          const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+          const gmailUrl=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para.trim())}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(textoFull)}`
           const win=window.open(gmailUrl,'_blank')
-          if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+          if(!win) window.location.href=`mailto:${para.trim()}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(textoFull)}`
         }
       }
       const now = new Date().toISOString()
@@ -10272,6 +10282,7 @@ Liberona Escala Abogados`
       if(seErr) console.error('No se pudo marcar la rendición como enviada:',seErr.message)
       else onSent && onSent(r.id, now, corr)
       try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(_){}
+      try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
       alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
     }catch(e){ alert('Error: '+e.message) }
@@ -10318,6 +10329,17 @@ Liberona Escala Abogados`
       </div>
       <textarea value={body} onChange={e=>setBody(e.target.value)} rows={8} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:6}}/>
       <div style={{fontSize:10,color:C.done,marginBottom:12}}>Las cifras y los datos de cuenta van fijos; la IA solo redacta. Revisa antes de enviar.</div>
+      <div style={{marginBottom:12}}>
+        <button onClick={()=>setShowFirma(v=>!v)} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Mi firma {showFirma?'▴':'▾'}</button>
+        {showFirma&&<><div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {[['nombre','Nombre'],['cargo','Cargo'],['telefono','Teléfono'],['correo','Correo']].map(([k,lbl])=>(
+            <div key={k} style={{background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px'}}>
+              <div style={{fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5}}>{lbl}</div>
+              <input value={firma[k]||''} onChange={e=>setFirma(f=>({...f,[k]:e.target.value}))} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
+            </div>
+          ))}
+        </div><div style={{fontSize:10,color:C.done,marginTop:6}}>Se guarda para tus próximos correos. El correo incluye el logo de Liberona Escala.</div></>}
+      </div>
       <details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
