@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login: botón pill transparente (3%) con chip pequeño
+- El botón de ingreso queda como pill con relleno navy al 3% (casi imperceptible), chip “G” en círculo pequeño + “Entrar”. Minimalista.
+
 ## 2026-06-19 — Login: botón final (subrayado + mark G)
 - El botón de ingreso queda estilo enlace subrayado (sin caja), con un mark “G” monocromo navy y texto “Entrar”. Cierra el rediseño del login (acento, Bienvenido cursivo, logo, subtítulo, botón mínimo).
 
