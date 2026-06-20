@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Logo real en el encabezado del PDF de rendición
+- El PDF adjunto mostraba el nombre en texto ("LIBERONA ESCALA"); ahora embebe el logo real (imagen) en el encabezado azul vía jsPDF addImage (con fallback a texto por si falla).
+
 ## 2026-06-20 — Logos del correo embebidos inline (cid) en el envío Gmail
 - Al enviar por Gmail (vía API), los logos (encabezado y firma) van como imágenes inline (Content-ID/cid) dentro de un multipart/related → se ven SIEMPRE, sin tocar "mostrar imágenes". La vista previa y la vía servidor siguen con URL (la preview se ve en el navegador).
 

@@ -11287,8 +11287,7 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   const cMonto = W-M, cCat = W-196
   // ===== Header navy =====
   doc.setFillColor(0,60,80); doc.rect(0,0,W,76,'F')
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.text('LIBERONA ESCALA', M, 38)
-  doc.setFontSize(7.5); doc.setTextColor(153,171,180); doc.text('A B O G A D O S', M, 51)
+  try{ doc.addImage(logoBlanco, 'PNG', M, 25, 170, 26) }catch(_){ doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('LIBERONA ESCALA', M, 40) }
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(String(razon).slice(0,42), W-M, 36, {align:'right'})
   if(rut){ doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(153,171,180); doc.text(rut, W-M, 52, {align:'right'}) }
   // ===== Franja meta =====
