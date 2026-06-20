@@ -15036,7 +15036,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             <option value='descalces'>Descalces{resumenConc.descalces?` (${resumenConc.descalces})`:''}</option>
             <option value='sinid'>Sin identificar{G.sinId?` (${G.sinId})`:''}</option>
           </select>}
-          <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length>lista.length?'+ (top 400)':''}</span>
+          <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{(()=>{const tot=movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length;return tot>lista.length?` de ${tot}`:''})()}</span>
         </div>
         )})()}
 
@@ -15059,9 +15059,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
         {/* Conciliación (Fase 2) — solo abonos: acción + resumen (el estado se elige en el filtro de arriba) */}
         {sub==='abonos'&&(
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
             <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:12,fontWeight:700,padding:'6px 14px',borderRadius:8,border:'none',background:(autoRun||resumenConc.pend===0)?C.done:C.accent,color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer'}}>{autoRun?'Conciliando…':'Conciliar automático'}</button>
-            <span style={{fontSize:11,color:C.muted}}>{resumenConc.done}/{resumenConc.total} conciliadas{resumenConc.fondos>0?` · ${resumenConc.fondos} posibles provisiones (Cta. Gastos)`:''}</span>
+            {resumenConc.total>0&&(()=>{ const pct=Math.round(resumenConc.done/resumenConc.total*100); return (
+              <div style={{flex:1,minWidth:130}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:C.muted,marginBottom:3}}><span>{resumenConc.done}/{resumenConc.total} conciliadas</span><span style={{color:C.greenText,fontWeight:600}}>{pct}%</span></div>
+                <div style={{height:5,background:C.greenBg,borderRadius:3,overflow:'hidden'}}><div style={{width:`${pct}%`,height:'100%',background:C.normal}}/></div>
+              </div>
+            )})()}
+            {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones)' style={{fontSize:10,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:14,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{resumenConc.fondos} provisiones →</span>}
           </div>
         )}
 
