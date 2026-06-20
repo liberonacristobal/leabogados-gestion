@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Firma más discreta
+- La firma se achicó para no competir con el cuerpo del correo (14px): logo 150px, nombre 13px, datos 11px.
+
 ## 2026-06-20 — Firma: logo sin deformar + espaciado del texto
 - Logo de la firma: solo width fijo + height:auto (antes height fijo + max-width lo aplastaba) → mantiene su proporción real (600×91) en cualquier ancho.
 - Texto: el espacio va solo entre el cargo y el teléfono; teléfono, dirección, ciudad y web quedan pegados.
