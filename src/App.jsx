@@ -405,7 +405,7 @@ function LoginScreen({loading}) {
         </>}
       </button>
       <a href="https://firmdesk.app" target="_blank" rel="noreferrer" style={{position:'absolute',bottom:18,textDecoration:'none',display:'inline-flex',alignItems:'center',gap:12,padding:'11px 18px',border:'1px solid #E6E8E3',borderRadius:14,background:'#FBFCFB',fontFamily:"system-ui,'Segoe UI',Roboto,sans-serif"}}>
-        <svg width='38' height='38' viewBox='0 0 120 120'><rect width='120' height='120' rx='27.6' fill='#0E3B49'/><g fill='#fff'><rect x='45' y='33' width='12' height='49' rx='2.5'/><rect x='45' y='33' width='33' height='12' rx='2.5'/><rect x='45' y='52' width='25' height='12' rx='2.5'/></g><rect x='45' y='89' width='33' height='8' rx='4' fill='#17A06B'/></svg>
+        <svg width='38' height='38' viewBox='0 0 100 100'><rect x='0' y='0' width='100' height='100' rx='23' fill='#0E3B49'/><g fill='#fff'><rect x='38' y='27' width='10' height='38' rx='2'/><rect x='38' y='27' width='27' height='10' rx='2'/><rect x='38' y='42' width='20' height='10' rx='2'/></g><rect x='29' y='69' width='43' height='5' rx='2.5' fill='#17A06B'/><rect x='29' y='74' width='43' height='5' rx='2' fill='#0F8455'/></svg>
         <span style={{display:'inline-flex',flexDirection:'column',lineHeight:1.15}}>
           <span style={{fontSize:10,fontWeight:500,letterSpacing:'.22em',color:'#9AA3A7'}}>POWERED BY</span>
           <span style={{fontSize:20,fontWeight:600,letterSpacing:'-.01em'}}><span style={{color:'#0E3B49'}}>Firm</span><span style={{color:'#17A06B'}}>Desk</span></span>
