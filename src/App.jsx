@@ -6279,6 +6279,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const disponibles = allMovs.filter(e=>{
     if(e.type!=='gasto') return false
     const mine = esEdicion && String(e.client_render_id)===String(editRend.id)   // gasto que YA está en esta rendición: siempre visible (pre-marcado)
+    if(e.no_descuenta_saldo && !mine) return false   // gasto histórico no se rinde
     if(e.client_rendered_at && !mine) return false   // gastos de OTRA rendición no entran
     if(!mine){   // los filtros de proyecto/fecha solo acotan los candidatos a AGREGAR, nunca esconden los propios
       if(proyecto){ const sid=proyToSale[proyecto]; const ok=(e.project||'')===proyecto || (sid && String(e.sale_id)===String(sid)); if(!ok) return false }
@@ -7733,7 +7734,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     <div style={{position:'relative',background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
       <div style={{fontSize:10,color:C.done,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</div>
       <div style={{fontSize:14,fontWeight:700,color:c}}>{value}</div>
-      {onPlus&&<button onClick={onPlus} aria-label={'Agregar '+label} style={{position:'absolute',top:0,right:0,width:34,height:34,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:20,height:20,borderRadius:'50%',background:plusColor||C.accent,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:15,lineHeight:1,fontWeight:600}}>+</span></button>}
+      {onPlus&&<button onClick={onPlus} aria-label={'Agregar '+label} style={{position:'absolute',top:0,right:0,width:34,height:34,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:20,height:20,borderRadius:'50%',background:plusColor||C.accent,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span></button>}
     </div>
   )
   const KpiRow = ({bal,oficina}) => {
@@ -8035,7 +8036,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial' aria-label='Historial' style={{background:'none',border:'none',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:4}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),fontWeight:500,background:notaBtnOpen?C.tealText:C.tealBg,color:notaBtnOpen?'#fff':C.tealText,border:`1px solid ${C.tealText}`}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaMenuOpen(o=>!o);setNotaBtnOpen(false)}} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
-            {selectedClient&&(()=>{ const por=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type==='gasto'&&!e.client_rendered_at); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
+            {selectedClient&&(()=>{ const por=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
           </div>
         </div>
 
