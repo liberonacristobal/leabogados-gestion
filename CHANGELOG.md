@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Facturación (pulir) Fase 3: chips de grupo + filas consistentes
+- Headers de grupo por estado (Vencidas/Emitidas/Programadas/Pagadas/Anuladas) ahora en CHIPS con color semántico (Vencidas rojo, Emitidas ámbar, Pagadas verde, resto gris) + el total del grupo en chip, en "Por cliente" y "Todas".
+- Filas de "Por cliente" y "Todas": borde de color + "Factura N° XX" + días mini (en vez de repetir el estado) + acciones (Pagar/Conciliar/Editar) al tocar la fila (ya no inline).
+
 ## 2026-06-20 — Facturación (pulir) Fase 2: KPIs canónicos + header del modal de pago
 - Las 4 tarjetas KPI (Por cobrar/Programado/Vencido/Cobrado) ahora con borde-acento de color (estilo canónico del Dashboard), manteniendo el click-para-filtrar.
 - El modal Registrar pago estrena header "Registrar pago | Cliente" (patrón Acción | Cliente).
