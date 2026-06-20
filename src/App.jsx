@@ -7729,10 +7729,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Colores de KPI según reglas (labels siempre gris #99ABB4)
   const cFondos = v => v>0?{c:C.normal,bg:C.greenBg} : v===0?{c:C.soon,bg:'#FEF6EE'} : {c:C.overdue,bg:C.overdueBg}
   const cSaldo = v => v>0?{c:C.normal,bg:C.greenBg} : {c:C.overdue,bg:C.overdueBg}
-  const KpiRect = ({label,value,c,bg}) => (
-    <div style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
+  const KpiRect = ({label,value,c,bg,onPlus,plusColor}) => (
+    <div style={{position:'relative',background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
       <div style={{fontSize:10,color:C.done,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>{label}</div>
       <div style={{fontSize:14,fontWeight:700,color:c}}>{value}</div>
+      {onPlus&&<button onClick={onPlus} aria-label={'Agregar '+label} style={{position:'absolute',top:0,right:0,width:34,height:34,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:20,height:20,borderRadius:'50%',background:plusColor||C.accent,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:15,lineHeight:1,fontWeight:600}}>+</span></button>}
     </div>
   )
   const KpiRow = ({bal,oficina}) => {
@@ -7745,9 +7746,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     )
     const f=cFondos(bal.fondos), s=cSaldo(bal.saldo); return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-      <KpiRect label='Fondos' value={fmt(bal.fondos)} c={f.c} bg={f.bg}/>
-      <KpiRect label='Gastos' value={fmt(bal.gastos)} c={C.overdue} bg='#FCEBEB'/>
-      <KpiRect label='Saldo actual' value={fmt(bal.saldo)} c={s.c} bg={s.bg}/>
+      <KpiRect label='Fondos' value={fmt(bal.fondos)} c={f.c} bg={f.bg} onPlus={()=>onAddFondo(selectedClient)} plusColor={C.normal}/>
+      <KpiRect label='Gastos' value={fmt(bal.gastos)} c={C.overdue} bg='#FCEBEB' onPlus={()=>onAdd(selectedClient)} plusColor={C.overdue}/>
+      <KpiRect label='Saldo' value={fmt(bal.saldo)} c={s.c} bg={s.bg}/>
     </div>
   )}
 
@@ -8034,9 +8035,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial' aria-label='Historial' style={{background:'none',border:'none',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:4}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),fontWeight:500,background:notaBtnOpen?C.tealText:C.tealBg,color:notaBtnOpen?'#fff':C.tealText,border:`1px solid ${C.tealText}`}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaMenuOpen(o=>!o);setNotaBtnOpen(false)}} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
-            {selectedClient&&!showNotaria&&!showHistorial&&<button onClick={()=>onAddFondo(selectedClient)} style={chipBtn('green')}>+ Fondo</button>}
-            {selectedClient&&!showNotaria&&!showHistorial&&<button onClick={()=>onAdd(selectedClient)} style={chipBtn('primary')}>+ Gastos</button>}
-            {selectedClient&&<button onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} style={chipBtn('greenSolid')}>↓ Rendir</button>}
+            {selectedClient&&(()=>{ const por=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type==='gasto'&&!e.client_rendered_at); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
           </div>
         </div>
 
