@@ -14995,7 +14995,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {/* KPIs globales */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:12}}>
           {[['Abonos',`${G.nAbo}`,fmtM(G.sumAbo),'#0F6E56'],['Cargos',`${G.nCar}`,fmtM(G.sumCar),'#A32D2D'],['Internos',`${G.internos}`,'',C.muted],['Sin identificar',`${G.sinId}`,'',G.sinId?C.soon:C.muted]].map(([l,n,sub2,col])=>(
-            <div key={l} style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'7px 9px'}}>
+            <div key={l} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,background:(col==='#0F6E56'?C.greenBg:col==='#A32D2D'?C.overdueBg:col===C.soon?C.soonBg:'#F5F7F9'),borderRadius:9,padding:'7px 9px'}}>
               <div style={{fontSize:9,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
               <div style={{fontSize:15,fontWeight:700,color:col}}>{n}</div>
               {sub2&&<div style={{fontSize:9,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub2}</div>}
@@ -15077,7 +15077,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const mostrarCli=cliName&&String(cliName).trim().toLowerCase()!==String(nomBanco||'').trim().toLowerCase()   // solo si aporta (≠ nombre del banco)
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:C.grisText}):null
             return (
-              <div key={m.id} id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${m.rol_cuenta==='honorarios'?C.accent:m.rol_cuenta==='gastos'?'#EF9F27':C.border}`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
+              <div key={m.id} id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${ec.c}`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
                 <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer',display:'flex',gap:10,alignItems:'center'}}>
                   <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:18,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
                   <div style={{flex:1,minWidth:0}}>

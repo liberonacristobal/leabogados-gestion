@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Conciliación (pulir) Fase 1: KPIs + borde por estado
+- KPIs (Abonos/Cargos/Internos/Sin identificar) con borde-acento + fondo de color (canónico).
+- La fila de movimiento pasa a borde de color por ESTADO de conciliación (verde conciliado / ámbar por conciliar / naranja sin identificar / gris interno) en vez de por cuenta; la cuenta sigue en su chip. Sin tocar el motor de conciliación.
+
 ## 2026-06-20 — Facturación (pulir) Fase 4: Resumen afinado
 - Resumen: las 4 tarjetas (Por cobrar/Vencidas/Cobradas/Programadas) con borde-acento de su color (consistente con los KPIs); la barra de por-cobrar con base verde (al día) y segmento rojo (vencido). El resto del Resumen ya tenía desglose y chips con monto.
 
