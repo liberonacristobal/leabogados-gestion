@@ -404,7 +404,7 @@ function LoginScreen({loading}) {
           Entrar
         </>}
       </button>
-      <a href="https://firmdesk.app" target="_blank" rel="noreferrer" style={{position:'absolute',bottom:22,textDecoration:'none',display:'inline-flex',alignItems:'center',gap:8,padding:'6px 11px',border:'1px solid #E6E8E3',borderRadius:11,background:'#FBFCFB'}}>
+      <a href="https://firmdesk.app" target="_blank" rel="noreferrer" style={{position:'absolute',bottom:22,textDecoration:'none',display:'inline-flex',alignItems:'center',gap:8,padding:'6px 11px',border:'1px solid #E6E8E3',borderRadius:11,background:'#FBFCFB',fontFamily:"system-ui,'Segoe UI',Roboto,sans-serif"}}>
         <svg width='22' height='22' viewBox='0 0 120 120'><rect width='120' height='120' rx='27.6' fill='#0E3B49'/><g fill='#fff'><rect x='45' y='33' width='12' height='49' rx='2.5'/><rect x='45' y='33' width='33' height='12' rx='2.5'/><rect x='45' y='52' width='25' height='12' rx='2.5'/></g><rect x='45' y='89' width='33' height='8' rx='4' fill='#17A06B'/></svg>
         <span style={{display:'inline-flex',flexDirection:'column',lineHeight:1.15}}>
           <span style={{fontSize:7,fontWeight:500,letterSpacing:'.22em',color:'#9AA3A7'}}>POWERED BY</span>
