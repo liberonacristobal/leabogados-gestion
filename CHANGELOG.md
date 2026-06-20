@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Login Google: menos confirmaciones (prompt select_account)
+- En src/supabase.js el OAuth pasa de prompt:consent (forzaba la pantalla de permisos en cada inicio) a prompt:select_account: Google pide permisos solo la primera vez; luego se entra eligiendo la cuenta. Cada usuario debe reentrar una vez tras el cambio.
+
 ## 2026-06-19 — Login: fijo en iPhone (sin scroll) + subtítulo 25% más grande
 - La pantalla de login ya no se desplaza en iPhone: usa 100dvh/100svh + overflow hidden, así queda fija a la altura visible. Subtítulo “FirmDesk · Gestión Oficina” un 25% más grande (12.5px).
 
