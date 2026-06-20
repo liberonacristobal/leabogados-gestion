@@ -5274,7 +5274,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                 <div onClick={()=>toggleClient(c.id)} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>{pend>0&&<span style={{fontSize:13,fontWeight:600,color:nV>0?C.overdue:C.soon,flexShrink:0}}>{fmt(pend)}</span>}</div>
                   {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.multi||rs.name!==c.name||rs.rut)?<div style={{fontSize:9,color:rs.multi?C.soonText:C.muted,fontWeight:rs.multi?600:400,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
-                  <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap'}}>
+                  <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap',alignItems:'center'}}>
                     {nP>0&&<span style={{fontSize:9,background:'#F1EFE8',color:C.grisText,borderRadius:9,padding:'1px 7px'}}>{nP} prog</span>}
                     {nE>0&&<span style={{fontSize:9,background:C.azulBg,color:C.accent,borderRadius:9,padding:'1px 7px'}}>{nE} emit</span>}
                     {nV>0&&<span style={{fontSize:9,background:C.overdueBg,color:C.overdueText,borderRadius:9,padding:'1px 7px'}}>{nV} venc</span>}
