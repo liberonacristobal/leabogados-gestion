@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Firma: logo sin deformar + espaciado del texto
+- Logo de la firma: solo width fijo + height:auto (antes height fijo + max-width lo aplastaba) → mantiene su proporción real (600×91) en cualquier ancho.
+- Texto: el espacio va solo entre el cargo y el teléfono; teléfono, dirección, ciudad y web quedan pegados.
+
 ## 2026-06-20 — Historial de rendiciones rediseñado (timeline)
 - Fila tipo timeline: fecha de emisión día-grande a la izquierda, proyecto en pill chico, N°/usuario/gastos en línea fina, monto + estado a la derecha (en vez del rango de fechas y la grilla).
 - Las anuladas se agrupan plegadas en "Anuladas · N" (se expanden al tocar). Las acciones (Anular/Editar/Ver PDF/Enviar) aparecen al expandir la fila.
