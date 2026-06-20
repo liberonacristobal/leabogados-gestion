@@ -10250,6 +10250,12 @@ Liberona Escala Abogados`
       {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soon,fontSize:12,marginBottom:12}}>El cliente no tiene email. Escríbelo abajo o complétalo en su ficha.</div>}
       <Fld label='De'><Inp value={user?.email||''} disabled style={{opacity:.7}}/></Fld>
       <Fld label='Para'><Inp type='email' value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl'/></Fld>
+      {(()=>{ const sug=fichaContacts.filter(c=>(c.email||'').toLowerCase()!==(para||'').toLowerCase()); if(!sug.length) return null; return (
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:-2,marginBottom:12,alignItems:'center'}}>
+          <span style={{fontSize:10,color:C.done}}>Sugeridos:</span>
+          {sug.map(c=><button key={'to'+c.email} onClick={()=>setPara(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}
+        </div>
+      )})()}
       <div style={{marginBottom:12}}>
         <Lbl>Cc (con copia)</Lbl>
         <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,padding:7,minHeight:38,boxSizing:'border-box'}}>
