@@ -15029,13 +15029,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             {respDisp.map(r=><option key={r} value={r}>{r}</option>)}
             <option value='__sin__'>Sin responsable</option>
           </select>
-          {sub==='abonos'&&<select value={concView} onChange={e=>setConcView(e.target.value)} style={selSty}>
-            <option value='todos'>Estado</option>
-            <option value='porconciliar'>Por conciliar</option>
-            <option value='conciliados'>Conciliadas</option>
-            <option value='descalces'>Descalces{resumenConc.descalces?` (${resumenConc.descalces})`:''}</option>
-            <option value='sinid'>Sin identificar{G.sinId?` (${G.sinId})`:''}</option>
-          </select>}
           <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{(()=>{const tot=movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length;return tot>lista.length?` de ${tot}`:''})()}</span>
         </div>
         )})()}
@@ -15070,6 +15063,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones)' style={{fontSize:10,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:14,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{resumenConc.fondos} provisiones →</span>}
           </div>
         )}
+
+        {/* Estado de conciliación — chips livianos: solo estados con pendientes (>0); tocar filtra, tocar de nuevo = Todos */}
+        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',resumenConc.pend,C.soonText,'#FAC775'],['descalces','Descalces',resumenConc.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',G.sinId,C.soonText,C.border]].filter(c=>c[2]>0); return ch.length>0?(
+          <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
+            <span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Ver</span>
+            {ch.map(([v,l,n,fg,bd])=>{ const on=concView===v; return <span key={v} onClick={()=>setConcView(on?'todos':v)} style={{fontSize:11,fontWeight:600,borderRadius:12,padding:'3px 11px',cursor:'pointer',border:`1px solid ${on?fg:bd}`,background:on?fg:'#fff',color:on?'#fff':fg}}>{l} · {n}</span> })}
+            {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{fontSize:10,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Todos</span>}
+          </div>
+        ):null })()}
 
         {/* Lista */}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
