@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-20 — Modal “Enviar rendición” pulido
+- Header “Enviar rendición | Cliente”; “De” en una línea fina; Asunto con label dentro del cuadro.
+- Destinatarios en un solo bloque estilo Gmail: chips Para (navy) + Cc (azul), con sugerencias de la ficha y “Copia al estudio”. Lo que escribes/eliges entra como Para si está vacío, si no como Cc.
+- Fix: el aviso “falta destinatario” solo aparece si realmente no hay correo en Para (antes salía aunque el destinatario estuviera puesto).
+
 ## 2026-06-20 — Modal de Rendición “pulido” (compacto)
 - Header estilo Editar Cliente (Rendición | Cliente). Labels dentro del cuadro (Razón social, Proyecto, Dirigido a). Proyecto y Dirigido a en una sola línea.
 - “Dirigido a” sugiere persona + correo (de la ficha); al elegirla, su correo se precarga en el “Para” del modal de envío.

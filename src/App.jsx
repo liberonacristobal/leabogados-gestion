@@ -10250,30 +10250,35 @@ Liberona Escala Abogados`
     setSending(false)
   }
   return (
-    <Modal title='Enviar rendición al cliente' onClose={onClose} closeOnBackdrop={false}>
-      {!client?.email && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soon,fontSize:12,marginBottom:12}}>El cliente no tiene email. Escríbelo abajo o complétalo en su ficha.</div>}
-      <Fld label='De'><Inp value={user?.email||''} disabled style={{opacity:.7}}/></Fld>
-      <Fld label='Para'><Inp type='email' value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl'/></Fld>
-      {(()=>{ const sug=fichaContacts.filter(c=>(c.email||'').toLowerCase()!==(para||'').toLowerCase()); if(!sug.length) return null; return (
-        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:-2,marginBottom:12,alignItems:'center'}}>
-          <span style={{fontSize:10,color:C.done}}>Sugeridos:</span>
-          {sug.map(c=><button key={'to'+c.email} onClick={()=>setPara(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}
-        </div>
-      )})()}
-      <div style={{marginBottom:12}}>
-        <Lbl>Cc (con copia)</Lbl>
-        <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,padding:7,minHeight:38,boxSizing:'border-box'}}>
-          {cc.map(em=><span key={em} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 6px 3px 10px',fontSize:12}}>{em}<button onClick={()=>removeCc(em)} aria-label='Quitar' style={{background:'none',border:'none',color:C.azulInfo,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button></span>)}
-          <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if((e.key==='Enter'||e.key===',')&&ccInput.trim()){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>ccInput.trim()&&addCc(ccInput)} placeholder={cc.length?'':'agregar correo…'} style={{flex:1,minWidth:120,border:'none',outline:'none',fontSize:13,color:C.text,background:'none'}}/>
-        </div>
-        {(()=>{ const sug=fichaContacts.filter(c=>!cc.includes((c.email||'').toLowerCase())); if(!sug.length) return null; return (
-          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>
-            {sug.map(c=><button key={c.email} onClick={()=>addCc(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre?c.nombre+' · ':''}{c.email}</button>)}
+    <Modal title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
+      {!para.trim() && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soon,fontSize:12,marginBottom:12}}>Falta el destinatario. Escríbelo abajo o complétalo en la ficha del cliente.</div>}
+      <div style={{fontSize:11,color:C.done,marginBottom:10}}>De <span style={{color:C.muted}}>{user?.email||''}</span></div>
+      {/* Destinatarios: un solo bloque con chips (Para = principal navy, Cc = copias azules). Si Para está vacío, lo que escribes/eliges entra como Para. */}
+      {(()=>{
+        const flLbl={fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5}
+        const addOne = em => { const e=String(em||'').trim(); if(!e) return; if(!para.trim()) setPara(e); else addCc(e); setCcInput('') }
+        const sug=fichaContacts.filter(c=>(c.email||'').toLowerCase()!==(para||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase()))
+        return (
+        <div style={{marginBottom:12}}>
+          <div style={{background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}>
+            <div style={{...flLbl,marginBottom:5}}>Destinatarios</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:5,alignItems:'center'}}>
+              {para.trim()&&<span style={{display:'inline-flex',alignItems:'center',gap:5,background:C.accent,color:'#fff',borderRadius:16,padding:'3px 7px 3px 9px',fontSize:12}}><span style={{fontSize:9,opacity:.65,fontWeight:600,letterSpacing:.5}}>PARA</span>{para}<button onClick={()=>setPara('')} aria-label='Quitar' style={{background:'none',border:'none',color:'#fff',cursor:'pointer',fontSize:14,lineHeight:1,padding:0,opacity:.8}}>×</button></span>}
+              {cc.map(em=><span key={em} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 6px 3px 8px',fontSize:12}}><span style={{fontSize:9,color:C.azulInfo,fontWeight:600,letterSpacing:.5}}>CC</span>{em}<button onClick={()=>removeCc(em)} aria-label='Quitar' style={{background:'none',border:'none',color:C.azulInfo,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button></span>)}
+              <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if((e.key==='Enter'||e.key===',')&&ccInput.trim()){ e.preventDefault(); addOne(ccInput) } }} onBlur={()=>ccInput.trim()&&addOne(ccInput)} placeholder={para.trim()?'+ agregar copia…':'correo del cliente…'} style={{flex:1,minWidth:130,border:'none',outline:'none',fontSize:13,color:C.text,background:'none'}}/>
+            </div>
           </div>
-        )})()}
-        {studioEmails.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}><Switch on={studioOn} onToggle={()=>setStudioOn(v=>!v)}/><span style={{fontSize:12,color:C.text}}>Copia al estudio <span style={{color:C.done}}>({studioEmails.join(', ')})</span></span></div>}
+          {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>
+            {sug.map(c=><button key={c.email} onClick={()=>addOne(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre?c.nombre+' · ':''}{c.email}</button>)}
+          </div>}
+          {studioEmails.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}><Switch on={studioOn} onToggle={()=>setStudioOn(v=>!v)}/><span style={{fontSize:12,color:C.text}}>Copia al estudio <span style={{color:C.done}}>({studioEmails.join(', ')})</span></span></div>}
+        </div>
+        )
+      })()}
+      <div style={{background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginBottom:12}}>
+        <div style={{fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5}}>Asunto</div>
+        <input value={asunto} onChange={e=>setAsunto(e.target.value)} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
       </div>
-      <Fld label='Asunto'><Inp value={asunto} onChange={e=>setAsunto(e.target.value)}/></Fld>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
         <Lbl>Mensaje</Lbl>
         <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:26,opacity:aiBusy?.6:1}}>{aiBusy?'Redactando…':'Redactar con IA'}</button>
