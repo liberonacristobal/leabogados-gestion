@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Gastos: quitar pill de responsable + fix “adelanto por cobrar”
+- Se elimina el pill/botón del abogado responsable (y su selector) en la vista de Gastos de cada cliente; el responsable sigue editándose desde la ficha/edición del cliente.
+- El pill “Adelanto X por cobrar” ahora excluye gastos históricos (no_descuenta_saldo) y los pagados por el cliente (paid_by_client), alineándose con el saldo canónico. Elimina adelantos fantasma (ej. David Midgley, Pablo Liberona) cuando provenían de gastos históricos.
+
 ## 2026-06-19 — Login: sello FirmDesk pulido (02 “Desk”, bicolor)
 - El badge “Powered by FirmDesk” usa el sello refinado del manual de marca (versión 02 “Desk”): la F flota sobre un tablero a dos tonos (#17A06B + canto frontal #0F8455), viewBox 100×100, esquinas rx 23.
 

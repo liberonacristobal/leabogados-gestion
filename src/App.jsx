@@ -8018,25 +8018,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
                   {showHistorial?'Historial':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
                 </span>
-                {selectedClient&&onSaveClientFields&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; const pc=cur?personChip(cur):null; return (
-                  <button onClick={()=>setRespPickG(v=>!v)} style={{fontSize:10,background:pc?pc.bg:'#F1EFE8',color:pc?pc.color:C.grisText,borderRadius:10,padding:'2px 9px',fontWeight:600,border:'none',cursor:'pointer'}}>{cur?`${cur} ▾`:'+ responsable ▾'}</button>
-                )})()}
                 {selectedClient&&(()=>{
                   // Deuda efectiva: plata que la oficina YA desembolsó (caja chica + notaría liquidada) por sobre el fondo del cliente.
                   const f=expenses.filter(e=>e.client_id===selectedClient.id)
                   const fondos=f.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-                  const pagados=f.filter(e=>e.type!=='fondo'&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
+                  const pagados=f.filter(e=>e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.paid_by_client&&(e.rendered_at||e.notaria_liquidado_at)).reduce((a,e)=>a+(e.amount||0),0)
                   const porCobrar=Math.max(0,pagados-fondos); if(porCobrar<=0) return null
                   return <span title='La oficina ya pagó esto por sobre el fondo del cliente — deuda efectiva por cobrar' style={{fontSize:10,fontWeight:700,color:C.soonText,background:'#FFF3DC',border:'1px solid #FAC775',borderRadius:10,padding:'2px 9px',whiteSpace:'nowrap'}}>Adelanto {fmt(porCobrar)} por cobrar</span>
                 })()}
               </div>
               {selectedClient&&selEnts.length===1&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{rsDisplay(selEnts[0].name)}{selEnts[0].rut?` · ${selEnts[0].rut}`:''}</div>}
-              {selectedClient&&onSaveClientFields&&respPickG&&(()=>{ const cur=clients.find(c=>String(c.id)===String(selectedClient.id))?.abogado_responsable||selectedClient.abogado_responsable; return (
-                <div style={{marginTop:5,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                  {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>asignarRespG(m)} style={{fontSize:10,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
-                  {cur&&<button onClick={()=>asignarRespG(null)} style={{fontSize:10,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>}
-                </div>
-              )})()}
             </div>
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
