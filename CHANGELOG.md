@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-19 — Dashboard: eliminada la tarjeta KPI “Clientes sin fondos”
+- Se quitó la tarjeta-KPI dedicada “Clientes sin fondos” del Dashboard (se deformaba). La fila de alerta del mismo nombre en el resumen del día se mantiene.
+
 ## 2026-06-19 — Login Google: menos confirmaciones (prompt select_account)
 - En src/supabase.js el OAuth pasa de prompt:consent (forzaba la pantalla de permisos en cada inicio) a prompt:select_account: Google pide permisos solo la primera vez; luego se entra eligiendo la cuenta. Cada usuario debe reentrar una vez tras el cambio.
 
