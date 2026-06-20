@@ -7901,26 +7901,24 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     const rs=showClient?'':rsOfRend(r)
     return (
       <div key={r.id} style={{padding:'10px 0',borderBottom:`1px solid ${C.border}`,opacity:r.anulada_at?0.6:1}}>
-        {timeline ? (
-          <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'flex',gap:12,alignItems:'center',cursor:'pointer'}}>
-            {(()=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div> })()}
+        {(()=>{
+          const d=r.created_at?new Date(r.created_at):null
+          const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+          const proj = r.project ? (r.subproject?`${r.project} · ${r.subproject}`:r.project) : ''
+          return (
+          <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'flex',gap:13,alignItems:'center',cursor:'pointer'}}>
+            <div style={{textAlign:'center',width:40,flexShrink:0}}><div style={{fontSize:17,fontWeight:600,color:C.accent,lineHeight:1}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.done,marginTop:2}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.sent_at&&r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{r.user_name||''}{rs?` · ${rs}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div>
+              {showClient&&<div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Cliente'}</div>}
+              {proj
+                ? <span style={{display:'inline-block',fontSize:9.5,fontWeight:600,color:C.accent,background:C.azulBg,borderRadius:12,padding:'1px 7px',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',verticalAlign:'middle'}}>{proj}</span>
+                : (!showClient&&<span style={{fontSize:13,fontWeight:600,color:C.text}}>Rendición</span>)}
+              <div style={{fontSize:11,color:C.done,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.sent_at&&r.correlativo?<b style={{color:C.muted}}>N° {r.correlativo} · </b>:''}{r.user_name||''}{rs?` · ${rs}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>-{fmt(r.total)}</div><div style={{marginTop:3}}>{estadoBadge(r)}</div></div>
           </div>
-        ) : (
-        <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
-          <div style={{minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.sent_at&&r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
-          </div>
-          <div style={{textAlign:'right',fontSize:13,fontWeight:600,color:C.overdue}}>-{fmt(r.total)}</div>
-          <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
-          <div style={{textAlign:'right'}}>{estadoBadge(r)}</div>
-        </div>
-        )}
+          )
+        })()}
         {expandRend===r.id&&(()=>{
           const gastos=expenses.filter(e=>e.client_render_id===r.id)
           return <div style={{marginTop:8,padding:'8px 11px',background:'#F5F7F9',borderRadius:8}}>
@@ -7936,7 +7934,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             ))}
           </div>
         })()}
-        {(!timeline||expandRend===r.id)&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+        {expandRend===r.id&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
           {r.anulada_at
             ? <span style={{fontSize:10,color:C.overdue,fontWeight:600}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</span>
             : <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.overdue,background:'none',border:`1px solid ${C.overdue}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>}
@@ -7951,14 +7949,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   }
   const renderHistorialTable = (rends,showClient,timeline) => {
     if(!rends.length) return <div style={{color:C.muted,textAlign:'center',padding:24,fontSize:12}}>Sin rendiciones</div>
+    const activas = rends.filter(r=>!r.anulada_at)
+    const anuladas = rends.filter(r=>r.anulada_at)
     return (<>
-      {!timeline&&<div style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,padding:'0 0 6px',borderBottom:`1px solid ${C.border}`}}>
-        <div style={HH}>{showClient?'Cliente / Periodo':'Periodo'}</div>
-        <div style={{...HH,textAlign:'right'}}>Monto</div>
-        <div style={{...HH,textAlign:'center'}}>Gastos</div>
-        <div style={{...HH,textAlign:'right'}}>Estado</div>
-      </div>}
-      {rends.map(r=>renderRendRow(r,showClient,timeline))}
+      {activas.map(r=>renderRendRow(r,showClient,timeline))}
+      {activas.length===0&&<div style={{color:C.muted,textAlign:'center',padding:'14px 0',fontSize:12}}>Sin rendiciones activas</div>}
+      {anuladas.length>0&&<details style={{marginTop:2}}>
+        <summary style={{fontSize:12,color:C.done,cursor:'pointer',padding:'10px 2px',listStyleType:'none'}}>Anuladas · {anuladas.length}</summary>
+        {anuladas.map(r=>renderRendRow(r,showClient,timeline))}
+      </details>}
     </>)
   }
 

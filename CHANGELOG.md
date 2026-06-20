@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Historial de rendiciones rediseñado (timeline)
+- Fila tipo timeline: fecha de emisión día-grande a la izquierda, proyecto en pill chico, N°/usuario/gastos en línea fina, monto + estado a la derecha (en vez del rango de fechas y la grilla).
+- Las anuladas se agrupan plegadas en "Anuladas · N" (se expanden al tocar). Las acciones (Anular/Editar/Ver PDF/Enviar) aparecen al expandir la fila.
+
 ## 2026-06-20 — Firma: tamaño del logo arreglado y responsivo
 - El logo de la firma se veía gigante (el height por CSS no se respeta en correo). Ahora usa atributos width/height en el <img> (180×27) + max-width:100% → tamaño adecuado y responsivo en computador y mobile.
 
