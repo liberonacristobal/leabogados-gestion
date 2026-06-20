@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Cierre del correo cuando hay saldo a favor
+- Saldo a favor: el correo ahora muestra la resta auditable (fondo recibido − gastos rendidos = saldo a favor) y pide la cuenta corriente para devolver el excedente. Antes solo decía el saldo (o, por el bug de cálculo, lo trataba como deuda).
+- Se unifica: todo saldo a favor pide la cuenta para devolver (se elimina la variante "queda para próximos trabajos"). En ES y EN, en la plantilla fija y en "Redactar con IA".
+
 ## 2026-06-20 — Fix saldo de rendición (fondos sin razón social)
 - Bug: si los gastos traían razón social pero los fondos no, el saldo de la rendición ignoraba los fondos y mostraba al cliente como deudor (decía “saldo a su cargo”) aunque tuviera saldo a favor. Caso Agustín Cabañas: $200.000 fondo − $139.400 gastos = $60.600 a favor, salía como deuda de $139.400.
 - Con 1 razón social, todo (incl. fondos sin entity_id) pertenece a esa RS. Corregido en el modal de envío y en el PDF (ambos generadores).
