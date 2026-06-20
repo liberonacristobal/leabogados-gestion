@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-20 — Rendición al cliente: Cc con sugerencias, copia al estudio y aprendizaje
+- El modal “Enviar rendición al cliente” suma un campo Cc con chips (removibles, editables). Precarga los destinatarios aprendidos de la última rendición de ese cliente y sugiere los contactos de su ficha (con email).
+- Toggle “Copia al estudio”: agrega al abogado responsable y a quienes cargaron los gastos de esa rendición (mapeados a su correo del equipo), para que sepan que se rindió.
+- Al enviar, aprende los Cc del cliente (learnings kind=rendicion_cc) para precargarlos la próxima vez.
+
 ## 2026-06-20 — Gasto histórico fuera de Oficina (Por pagar/Pagado) y de reembolsables
 - Los KPIs de la ficha de Oficina (Gastos de oficina / Por pagar / Pagado) y la lista de gastos reembolsables (conciliación → “Devolución de gastos”) ahora excluyen los gastos históricos (no_descuenta_saldo). Cierra los dos últimos lugares donde un gasto histórico inflaba una deuda/“por pagar” inexistente.
 
