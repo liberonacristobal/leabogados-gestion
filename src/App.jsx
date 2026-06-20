@@ -267,34 +267,37 @@ function rsBalances(clientId, expenses, entities){
 // FUENTE ÚNICA del documento de rendición (HTML imprimible). La usan el historial ("Ver PDF")
 // y RendicionModal (al enviar), para que ambos PDFs sean idénticos. Recibe datos ya normalizados.
 // gastos: [{date,concept,category,amount}] · fondos: [{date,concept,amount}]
-function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null, project=null, subproject=null }){
+function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos, fondos, totGastos, totFondos, rendidoAntes=0, rendicionesPrevias=[], correlativo=null, project=null, subproject=null, lang='es' }){
   const A='#003C50', GRAY='#E4E8EB', MUTED='#537281', AZUL3='#99ABB4', TXT='#3D3D3D'
+  const EN = lang==='en'
+  const T = EN ? {title:'Expense Report',outstanding:'Outstanding balance — transfer to Liberona Escala',company:'Company',rut:'Tax ID (RUT)',bank:'Bank',account:'Checking account',confEmail:'Confirmation email',fundSummary:'Fund summary',reportPrev:'Report',previous:'previous',fundsReceived:'Funds received',thisReport:'This report',availBalance:'Available balance',expPeriod:'Expenses (period)',balFavor:'Balance in your favor',balPending:'Outstanding balance',project:'Project',reportNo:'Report No.',period:'Period',issued:'Issued',attn:'Attn',date:'Date',concept:'Description',category:'Category',amount:'Amount',totalExp:'Total expenses',noFunds:'No funds recorded',fundsSection:'Funds received',footerDoc:'Expense report',printBtn:'Print / Save PDF',receiptBadge:'✓ receipt',fundDefault:'Funds received',expW:n=>`${n} expense${n!==1?'s':''}`,withReceipt:(a,b)=>`${a} of ${b} with supporting receipts (available upon request).`}
+    : {title:'Rendición de gastos',outstanding:'Saldo pendiente — transferir a Liberona Escala',company:'Razón social',rut:'RUT',bank:'Banco',account:'N° cuenta corriente',confEmail:'Email confirmación',fundSummary:'Resumen del fondo',reportPrev:'Rendición',previous:'anterior',fundsReceived:'Fondos recibidos',thisReport:'Esta rendición',availBalance:'Saldo disponible',expPeriod:'Gastos del período',balFavor:'Saldo a favor',balPending:'Saldo pendiente',project:'Proyecto',reportNo:'Rendición N°',period:'Período',issued:'Emisión',attn:'Dirigido a',date:'Fecha',concept:'Concepto',category:'Categoría',amount:'Monto',totalExp:'Total gastos',noFunds:'Sin fondos registrados',fundsSection:'Fondos recibidos',footerDoc:'Rendición de gastos',printBtn:'Imprimir / Guardar PDF',receiptBadge:'✓ respaldo',fundDefault:'Fondo recibido',expW:n=>`${n} gasto${n!==1?'s':''}`,withReceipt:(a,b)=>`${a} de ${b} con comprobante de respaldo (disponibles a solicitud).`}
   // Saldo disponible = fondos recibidos − rendido en tandas anteriores − esta rendición.
   const saldo = totFondos - rendidoAntes - totGastos
   const badge = (cat)=>{ const c=(cat||'').toLowerCase(); let bg='#E4E8EB',fg=MUTED; if(c.includes('notar')){bg='#E6F1FB';fg=A} else if(c.includes('transp')){bg='#E1F5EE';fg=C.greenText} return `<span style='display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:${bg};color:${fg}'>${RENDCAT(cat)}</span>` }
-  const filasGastos = gastos.map(e=>`<tr><td style='white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'—'}${e.ot_number?` <span style='font-size:8px;font-weight:700;color:#185FA5;white-space:nowrap'>${String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>`:''}${e.respaldo?` <span style='font-size:8px;font-weight:700;color:#0F6E56;background:#E1F5EE;padding:1px 5px;border-radius:4px;white-space:nowrap'>✓ respaldo</span>`:''}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600;white-space:nowrap'>${fmtN(e.amount)}</td></tr>`).join('')
+  const filasGastos = gastos.map(e=>`<tr><td style='white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'—'}${e.ot_number?` <span style='font-size:8px;font-weight:700;color:#185FA5;white-space:nowrap'>${String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>`:''}${e.respaldo?` <span style='font-size:8px;font-weight:700;color:#0F6E56;background:#E1F5EE;padding:1px 5px;border-radius:4px;white-space:nowrap'>${T.receiptBadge}</span>`:''}</td><td>${badge(e.category)}</td><td style='text-align:right;font-weight:600;white-space:nowrap'>${fmtN(e.amount)}</td></tr>`).join('')
   const conRespaldoN = gastos.filter(e=>e.respaldo).length
-  const filasFondos = fondos.length ? fondos.map(e=>`<tr><td style='width:90px;white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||'Fondo recibido'}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>Sin fondos registrados</td></tr>`
+  const filasFondos = fondos.length ? fondos.map(e=>`<tr><td style='width:90px;white-space:nowrap'>${fmtFechaDMY(e.date)}</td><td>${e.concept||T.fundDefault}</td><td style='text-align:right;font-weight:600;color:#0F6E56'>${fmtN(e.amount)}</td></tr>`).join('') : `<tr><td colspan='3' style='color:${MUTED};text-align:center;padding:10px'>${T.noFunds}</td></tr>`
   let saldoBox=''
   // Solo para saldo EN CONTRA: datos de la cuenta de LEA (útil tenerlos en el documento). La ACCIÓN (devolver / queda
   // para próximos trabajos / transferir) la define el CORREO según el estado del cliente — el PDF no la repite para no contradecir.
-  if(saldo<0){ const row=(l,v)=>`<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F1D4D4;font-size:10px'><span style='color:${MUTED}'>${l}</span><span style='font-weight:600;color:${TXT}'>${v}</span></div>`; saldoBox=`<div class='saldo-box' style='border:1px solid #F7C1C1;background:#FCEBEB;border-radius:8px;padding:14px 18px;margin-top:18px'><div style='font-size:11px;font-weight:700;color:${TXT};margin-bottom:10px'>Saldo pendiente — transferir a Liberona Escala</div>${row('Razón social','Liberona Escala Abogados Limitada')}${row('RUT','77.700.387-9')}${row('Banco','Banco BICE')}${row('N° cuenta corriente','138392-2')}${row('Email confirmación','administracion@leabogados.cl')}</div>` }
+  if(saldo<0){ const row=(l,v)=>`<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F1D4D4;font-size:10px'><span style='color:${MUTED}'>${l}</span><span style='font-weight:600;color:${TXT}'>${v}</span></div>`; saldoBox=`<div class='saldo-box' style='border:1px solid #F7C1C1;background:#FCEBEB;border-radius:8px;padding:14px 18px;margin-top:18px'><div style='font-size:11px;font-weight:700;color:${TXT};margin-bottom:10px'>${T.outstanding}</div>${row(T.company,'Liberona Escala Abogados Limitada')}${row(T.rut,'77.700.387-9')}${row(T.bank,'Banco BICE')}${row(T.account,'138392-2')}${row(T.confEmail,'administracion@leabogados.cl')}</div>` }
   const sep='border-left:1px solid #B9C2C8;margin-left:12px;padding-left:12px'
   // Recuadro "Resumen del fondo": ledger auditable — fondos − (rendiciones previas) − esta rendición = saldo.
   const lrow=(l,v,neg)=>`<div style='display:flex;justify-content:space-between;align-items:baseline;padding:4px 0'><span style='font-size:10px;color:${AZUL3}'>${l}</span><span style='font-size:12px;font-weight:600;color:#fff;white-space:nowrap'>${neg?'−':''}${v}</span></div>`
-  const filasPrevias = (rendicionesPrevias||[]).map(p=>lrow(`Rendición ${p.fecha?fmtFechaDMY(String(p.fecha).slice(0,10)):'anterior'}`, fmtN(p.total), true)).join('')
-  const resumenBox=`<div style='background:${A};border-radius:8px;padding:14px 18px;margin-top:18px;color:#fff'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:8px'>Resumen del fondo${razon?` · ${razon}`:''}</div>${lrow('Fondos recibidos', fmtN(totFondos))}${filasPrevias}${lrow('Esta rendición', fmtN(totGastos), true)}<div style='display:flex;justify-content:space-between;align-items:baseline;padding:9px 0 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.22)'><span style='font-size:11px;font-weight:700;color:#fff'>Saldo disponible</span><span style='font-size:15px;font-weight:700;color:#fff;white-space:nowrap'>${saldo<0?'−':''}${fmtN(saldo)}</span></div></div>`
+  const filasPrevias = (rendicionesPrevias||[]).map(p=>lrow(`${T.reportPrev} ${p.fecha?fmtFechaDMY(String(p.fecha).slice(0,10)):T.previous}`, fmtN(p.total), true)).join('')
+  const resumenBox=`<div style='background:${A};border-radius:8px;padding:14px 18px;margin-top:18px;color:#fff'><div style='font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${AZUL3};margin-bottom:8px'>${T.fundSummary}${razon?` · ${razon}`:''}</div>${lrow(T.fundsReceived, fmtN(totFondos))}${filasPrevias}${lrow(T.thisReport, fmtN(totGastos), true)}<div style='display:flex;justify-content:space-between;align-items:baseline;padding:9px 0 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.22)'><span style='font-size:11px;font-weight:700;color:#fff'>${T.availBalance}</span><span style='font-size:15px;font-weight:700;color:#fff;white-space:nowrap'>${saldo<0?'−':''}${fmtN(saldo)}</span></div></div>`
   // Cabecera ejecutiva (diseño A): 3 cifras clave arriba — Fondos · Gastos del período · Saldo (destacado).
   const saldoPos = saldo>=0
   const kpiCard = (l,v,bg,fg)=>`<div style='background:${bg};padding:12px 16px;flex:1'><div style='font-size:8px;font-weight:600;color:${fg==='#fff'?'rgba(255,255,255,.7)':AZUL3};text-transform:uppercase;letter-spacing:.4px'>${l}</div><div style='font-size:17px;font-weight:700;color:${fg};margin-top:2px;white-space:nowrap'>${v}</div></div>`
-  const kpiRow = `<div style='display:flex;gap:1px;background:${GRAY}'>${kpiCard('Fondos recibidos',fmtN(totFondos),'#fff','#0F6E56')}${kpiCard('Gastos del período',fmtN(totGastos),'#fff',TXT)}${kpiCard(saldoPos?'Saldo a favor':'Saldo pendiente',(saldo<0?'−':'')+fmtN(Math.abs(saldo)),saldoPos?C.greenBg:C.overdueBg,saldoPos?C.greenText:C.overdueText)}</div>`
+  const kpiRow = `<div style='display:flex;gap:1px;background:${GRAY}'>${kpiCard(T.fundsReceived,fmtN(totFondos),'#fff','#0F6E56')}${kpiCard(T.expPeriod,fmtN(totGastos),'#fff',TXT)}${kpiCard(saldoPos?T.balFavor:T.balPending,(saldo<0?'−':'')+fmtN(Math.abs(saldo)),saldoPos?C.greenBg:C.overdueBg,saldoPos?C.greenText:C.overdueText)}</div>`
   const proyTxt = project ? `${project}${subproject?` · ${subproject}`:''}` : ''
-  const proyBar = proyTxt ? `<div style='background:#fff;padding:7px 26px;border-bottom:1px solid ${GRAY};font-size:10px;color:${TXT}'><span style='color:${MUTED};font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:9px'>Proyecto</span><span style='margin-left:10px;font-weight:600'>${proyTxt}</span></div>` : ''
-  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Rendición de gastos — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'>${correlativo?`<span style='font-weight:700'>Rendición N° ${correlativo}</span><span style='${sep}'>`:''}<span ${correlativo?'':"style='font-weight:700'"}>Período: ${periodo}</span><span style='${sep}'>Emisión: ${fechaEmision}</span><span style='${sep}'>${gastos.length} gasto${gastos.length!==1?'s':''}</span></div>${dirigidoA?`<div style='font-weight:600'>Dirigido a: ${dirigidoA}</div>`:''}</div>${kpiRow}${proyBar}<div style='padding:20px 26px 0'><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th style='text-align:right'>Monto</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>Total gastos</span><span>${fmtN(totGastos)}</span></div>${conRespaldoN>0?`<div style='font-size:9px;color:${MUTED};padding:3px 10px 0'>${conRespaldoN} de ${gastos.length} con comprobante de respaldo (disponibles a solicitud).</div>`:''}<div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>Fondos recibidos</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>Rendición de gastos · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
+  const proyBar = proyTxt ? `<div style='background:#fff;padding:7px 26px;border-bottom:1px solid ${GRAY};font-size:10px;color:${TXT}'><span style='color:${MUTED};font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:9px'>${T.project}</span><span style='margin-left:10px;font-weight:600'>${proyTxt}</span></div>` : ''
+  return `<!DOCTYPE html><html><head><meta charset='UTF-8'><title>${T.title} — ${razon}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:10px;background:#fff}.page{max-width:816px;margin:0 auto;padding-bottom:36px}@page{size:letter portrait;margin:14mm 14mm}table{width:100%;border-collapse:collapse;font-size:10px}thead th{padding:7px 10px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:${MUTED};border-bottom:1px solid ${GRAY}}tbody td{padding:7px 10px;border-bottom:1px solid #EFF1F3}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}.saldo-box{page-break-inside:avoid}tr{page-break-inside:avoid}}</style></head><body><div class='page'><div style='background:${A};padding:20px 26px;display:flex;justify-content:space-between;align-items:center'><img src='${logoBlanco}' alt='Liberona Escala Abogados' style='height:30px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:700;color:#fff'>${razon}</div>${rut?`<div style='font-size:11px;color:${AZUL3};margin-top:2px'>${rut}</div>`:''}</div></div><div style='background:${GRAY};padding:8px 26px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${TXT}'><div style='display:flex;align-items:center'>${correlativo?`<span style='font-weight:700'>${T.reportNo} ${correlativo}</span><span style='${sep}'>`:''}<span ${correlativo?'':"style='font-weight:700'"}>${T.period}: ${periodo}</span><span style='${sep}'>${T.issued}: ${fechaEmision}</span><span style='${sep}'>${T.expW(gastos.length)}</span></div>${dirigidoA?`<div style='font-weight:600'>${T.attn}: ${dirigidoA}</div>`:''}</div>${kpiRow}${proyBar}<div style='padding:20px 26px 0'><table><thead><tr><th>${T.date}</th><th>${T.concept}</th><th>${T.category}</th><th style='text-align:right'>${T.amount}</th></tr></thead><tbody>${filasGastos}</tbody></table><div style='display:flex;justify-content:space-between;padding:8px 10px;border-top:1.5px solid ${A};font-weight:700;font-size:11px'><span>${T.totalExp}</span><span>${fmtN(totGastos)}</span></div>${conRespaldoN>0?`<div style='font-size:9px;color:${MUTED};padding:3px 10px 0'>${T.withReceipt(conRespaldoN,gastos.length)}</div>`:''}<div style='font-size:10px;font-weight:700;color:${A};text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px'>${T.fundsSection}</div><table><tbody>${filasFondos}</tbody></table>${rendicionesPrevias.length?resumenBox:''}${saldoBox}</div><div style='display:flex;justify-content:space-between;padding:14px 26px 0;margin-top:22px;border-top:1px solid ${GRAY};font-size:9px;color:${MUTED}'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</span><span>${T.footerDoc} · ${periodo}</span></div></div><button class='print-btn no-print' onclick='window.print()'>${T.printBtn}</button></body></html>`
 }
 
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
-function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet){
+function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='es'){
   const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
   const entId = (gastos.find(e=>e.entity_id)||{}).entity_id
   const ent = entId ? (clientEntities||[]).find(x=>x.id===entId) : null
@@ -306,13 +309,14 @@ function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet){
     razon: (ent&&ent.name) || (client&&client.name) || '—',
     rut: (ent&&ent.rut) || (client&&client.rut) || '',
     periodo: r.periodo || '',
-    fechaEmision: r.created_at ? new Date(r.created_at).toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'}) : '',
+    fechaEmision: r.created_at ? new Date(r.created_at).toLocaleDateString(lang==='en'?'en-GB':'es-CL',{day:'2-digit',month:'long',year:'numeric'}) : '',
     dirigidoA: r.dirigido_a || null,
     gastos, fondos,
     totGastos: gastos.reduce((a,e)=>a+(e.amount||0),0),
     totFondos: fondos.reduce((a,e)=>a+(e.amount||0),0),
     rendidoAntes, rendicionesPrevias: previas, correlativo: r.correlativo,
     project: r.project || null, subproject: r.subproject || null,
+    lang,
   })
 }
 
@@ -10128,6 +10132,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const addCc = em => { const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(prev=>[...prev,e]); setCcInput('') }
   const removeCc = em => setCc(prev=>prev.filter(x=>x!==em))
   const [asunto,setAsunto] = useState(`Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${client?.name||''}`)
+  const [lang,setLang] = useState('es')
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
     const A='#003C50',A2='#537281',A4='#E4E8EB'
@@ -10136,7 +10141,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   }
   // Envuelve el texto del correo (lo que el usuario ve/edita) en HTML con la marca del estudio,
   // para que no llegue plano. Las líneas indentadas (datos de cuenta) se muestran en una caja.
-  const buildEmailHtml = (text) => {
+  const buildEmailHtml = (text, lang='es') => {
     const A='#003C50', A4='#E4E8EB', MUTED='#537281', BG='#F7F9FA'
     const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     const lines = String(text).split('\n')
@@ -10144,13 +10149,34 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     const flush=()=>{ if(box.length){ out+=`<div style="background:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.indexOf(':'); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+1).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
     lines.forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()? `<p style="margin:0 0 10px">${esc(l)}</p>` : '' } })
     flush()
-    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><div style="background:${A};padding:18px 24px;border-radius:8px 8px 0 0"><table width="100%"><tr><td style="vertical-align:middle"><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''}</td></tr></table></div><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}</div><div style="padding:12px 24px;border:1px solid ${A4};border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:${MUTED};text-align:center">Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</div></div>`
+    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><div style="background:${A};padding:18px 24px;border-radius:8px 8px 0 0"><table width="100%"><tr><td style="vertical-align:middle"><img src="${logoBlanco}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}</td></tr></table></div><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}</div><div style="padding:12px 24px;border:1px solid ${A4};border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:${MUTED};text-align:center">Av. Kennedy 7900, Of. 905, Vitacura · Santiago · leabogados.cl</div></div>`
   }
-  const cuerpoCorreo = () => {
+  const saludoCliEn = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
+  const asuntoFor = lang => lang==='en' ? `Expense Report${r.correlativo?` No. ${r.correlativo}`:''} — ${client?.name||''}` : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${client?.name||''}`
+  const cuerpoCorreo = (lang='es') => {
     const abs = fmtN(Math.abs(saldoCliente))
-    const cuentaLEA = `\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Comprobante a: administracion@leabogados.cl`
     const terminado = client?.status==='Terminado'
-    // Cierre según el saldo del fondo (fuente única rendicionSaldo): falta fondos / a favor + terminado / a favor + más proyectos.
+    if(lang==='en'){
+      const cuentaLEA = `\n  Tax ID (RUT): 77.700.387-9\n  Bank: Banco BICE\n  Checking account: 138392-2\n  Confirmation to: administracion@leabogados.cl`
+      let cierre = ''
+      if(saldoCliente < 0){
+        cierre = `\n\nThis report results in a balance of ${abs} payable by you, which we kindly ask you to transfer to the account of Liberona Escala Abogados Limitada:${cuentaLEA}`
+      } else if(saldoCliente > 0 && terminado){
+        cierre = `\n\nThere is a balance of ${abs} in your favor. As the engagement has concluded, please send us your bank account details to administracion@leabogados.cl so that we may refund it to you.`
+      } else if(saldoCliente > 0){
+        cierre = `\n\nThere is a balance of ${abs} in your favor, which we will keep available for the ongoing work.`
+      }
+      return `${saludoCliEn(client?.name)},
+
+Please find attached your expense report${r.correlativo?` No. ${r.correlativo}`:''}${r.project?` for the ${r.project} project${r.subproject?` (${r.subproject})`:''}`:''}, covering the period ${r.periodo||''}. The attached document contains an itemized breakdown of each disbursement.${cierre}
+
+We remain at your disposal for any questions.
+
+Kind regards,
+${user?.name||''}
+Liberona Escala Abogados`
+    }
+    const cuentaLEA = `\n  RUT: 77.700.387-9\n  Banco: Banco BICE\n  Cuenta Corriente: 138392-2\n  Comprobante a: administracion@leabogados.cl`
     let cierre = ''
     if(saldoCliente < 0){
       cierre = `\n\nDe esta rendición resulta un saldo a su cargo de ${abs}, que le agradeceremos transferir a la cuenta de Liberona Escala Abogados Limitada:${cuentaLEA}`
@@ -10169,15 +10195,17 @@ Saludos cordiales,
 ${user?.name||''}
 Liberona Escala Abogados`
   }
-  const [body,setBody] = useState(()=>cuerpoCorreo())
+  const [body,setBody] = useState(()=>cuerpoCorreo('es'))
+  useEffect(()=>{ setBody(cuerpoCorreo(lang)); setAsunto(asuntoFor(lang)) },[lang])  // toggle ES|EN regenera correo + asunto
   const [aiBusy,setAiBusy] = useState(false)
   // La IA redacta el correo, pero las CIFRAS y los DATOS DE CUENTA van fijos (se le pasan y se le prohíbe cambiarlos).
   const redactarIA = async()=>{
     setAiBusy(true)
     const terminado = client?.status==='Terminado'
     const cierreTipo = saldoCliente<0?'falta_fondos':(saldoCliente>0?(terminado?'a_favor_devolver':'a_favor_proximos'):'cubierto')
-    const facts = { saludo: saludoCli(client?.name), cliente: client?.name, correlativo: r.correlativo||null, periodo: r.periodo, proyecto: r.project||null, subproyecto: r.subproject||null, total_rendido: r.total, saldo: saldoCliente, tipo_cierre: cierreTipo, remitente: user?.name||'', cuenta_LEA: cierreTipo==='falta_fondos'?{titular:'Liberona Escala Abogados Limitada',rut:'77.700.387-9',banco:'Banco BICE',cuenta_corriente:'138392-2',correo:'administracion@leabogados.cl'}:null }
-    const prompt = `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un CORREO BREVE (máx 6 líneas) para enviar a un cliente junto al PDF adjunto de su rendición de gastos. Español de Chile, cordial y profesional. REGLAS DURAS: usa el saludo EXACTO "${saludoCli(client?.name)}:"; NO inventes ni cambies cifras ni datos de cuenta, usa SOLO los que te paso (textualmente); menciona que el detalle está en el documento adjunto; si hay "proyecto", menciónalo de forma natural en la primera frase; NO listes los gastos uno a uno. Según "tipo_cierre": falta_fondos → pide transferir el saldo a su cargo a la cuenta indicada (incluye los datos de cuenta tal cual; nombra a "Liberona Escala Abogados Limitada" DENTRO de la frase, NUNCA como etiqueta — está PROHIBIDO usar las palabras "Destinatario" o "Titular"); a_favor_devolver → hay saldo a favor y se concluyó la gestión, pide sus datos de cuenta corriente a administracion@leabogados.cl para reintegrarlo; a_favor_proximos → el saldo a favor queda disponible para los próximos trabajos; cubierto → no menciones saldo. Cierra con "Saludos cordiales," y el remitente. Devuelve SOLO el texto del correo, sin asunto ni markdown. Datos:\n${JSON.stringify(facts,null,2)}`
+    const facts = { saludo: (lang==='en'?saludoCliEn(client?.name):saludoCli(client?.name)), cliente: client?.name, correlativo: r.correlativo||null, periodo: r.periodo, proyecto: r.project||null, subproyecto: r.subproject||null, total_rendido: r.total, saldo: saldoCliente, tipo_cierre: cierreTipo, remitente: user?.name||'', cuenta_LEA: cierreTipo==='falta_fondos'?{titular:'Liberona Escala Abogados Limitada',rut:'77.700.387-9',banco:'Banco BICE',cuenta_corriente:'138392-2',correo:'administracion@leabogados.cl'}:null }
+    const EN = lang==='en'
+    const prompt = EN ? `You are an assistant at the Chilean law firm Liberona Escala Abogados. Write a SHORT email (max 6 lines) in professional English to send to a client together with the attached PDF of their expense report. HARD RULES: use the EXACT greeting "${saludoCliEn(client?.name)},"; do NOT invent or change any figures or bank details, use ONLY the ones provided (verbatim); mention that the breakdown is in the attached document; if there is a "proyecto", mention it naturally in the first sentence; do NOT list the expenses one by one. Based on "tipo_cierre": falta_fondos → ask to transfer the balance payable to the indicated account (include the bank details verbatim; name "Liberona Escala Abogados Limitada" WITHIN the sentence, NEVER as a label — the words "Account holder" or "To" as a heading are FORBIDDEN); a_favor_devolver → there is a balance in their favor and the engagement has concluded, ask for their bank account details at administracion@leabogados.cl to refund it; a_favor_proximos → the balance in their favor remains available for the ongoing work; cubierto → do not mention any balance. Close with "Kind regards," and the sender. Return ONLY the email text, no subject, no markdown. Data:\n${JSON.stringify(facts,null,2)}` : `Eres asistente de la firma de abogados chilena Liberona Escala Abogados. Redacta un CORREO BREVE (máx 6 líneas) para enviar a un cliente junto al PDF adjunto de su rendición de gastos. Español de Chile, cordial y profesional. REGLAS DURAS: usa el saludo EXACTO "${saludoCli(client?.name)}:"; NO inventes ni cambies cifras ni datos de cuenta, usa SOLO los que te paso (textualmente); menciona que el detalle está en el documento adjunto; si hay "proyecto", menciónalo de forma natural en la primera frase; NO listes los gastos uno a uno. Según "tipo_cierre": falta_fondos → pide transferir el saldo a su cargo a la cuenta indicada (incluye los datos de cuenta tal cual; nombra a "Liberona Escala Abogados Limitada" DENTRO de la frase, NUNCA como etiqueta — está PROHIBIDO usar las palabras "Destinatario" o "Titular"); a_favor_devolver → hay saldo a favor y se concluyó la gestión, pide sus datos de cuenta corriente a administracion@leabogados.cl para reintegrarlo; a_favor_proximos → el saldo a favor queda disponible para los próximos trabajos; cubierto → no menciones saldo. Cierra con "Saludos cordiales," y el remitente. Devuelve SOLO el texto del correo, sin asunto ni markdown. Datos:\n${JSON.stringify(facts,null,2)}`
     try{
       const data = await claudeCall({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})
       const txt = (data.content?.[0]?.text||'').trim()
@@ -10188,7 +10216,7 @@ Liberona Escala Abogados`
   }
   const verPDF = () => {
     const w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para ver el PDF.'); return }
-    w.document.write(rendicionPdfHtml(r, client, expenses, clientEntities, attachSet))   // diseño rico A (mismo que "Ver PDF" del historial)
+    w.document.write(rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang))   // diseño rico A (mismo que "Ver PDF" del historial)
     w.document.close()
   }
   const enviar = async() => {
@@ -10203,8 +10231,8 @@ Liberona Escala Abogados`
       const token = await driveToken()
       if(token){
         try{
-          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
-          await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:texto, bodyHtml:buildEmailHtml(texto), pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
+          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
+          await sendGmailWithPdf(token, {to:para.trim(), cc:ccStr, subject:asunto, bodyText:texto, bodyHtml:buildEmailHtml(texto, lang), pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
@@ -10212,15 +10240,15 @@ Liberona Escala Abogados`
         // Fallback robusto: el usuario no tiene permiso gmail.send → enviar IGUAL desde la cuenta de oficina
         // (servidor SMTP) con el PDF adjunto. Solo si el servidor también falla, se descarga y se abre Gmail a mano.
         try{
-          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
-          await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto), text:texto, pdfBase64:pdf, pdfName:`Rendicion ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
+          const pdf = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
+          await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:texto, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.periodo||''}`.trim()+'.pdf'})
           conAdjunto = true
           alert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
         }catch(srvErr){
           // Último recurso: descargar el PDF REAL (jsPDF) y abrir Gmail para adjuntarlo a mano.
           alert('No se pudo enviar automáticamente. Descargamos el PDF y abrimos Gmail para que lo adjuntes.')
           try{
-            const b64 = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli)
+            const b64 = await rendicionPdfBase64(r, client, det, user, debeCliente, Math.abs(saldoCliente), totFondosCli, lang)
             const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
             const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}))
             const a = document.createElement('a'); a.href=url
@@ -10281,11 +10309,16 @@ Liberona Escala Abogados`
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
         <Lbl>Mensaje</Lbl>
-        <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:26,opacity:aiBusy?.6:1}}>{aiBusy?'Redactando…':'Redactar con IA'}</button>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+            {['es','en'].map(l=><button key={l} onClick={()=>setLang(l)} style={{fontSize:10,fontWeight:600,padding:'4px 10px',border:'none',cursor:'pointer',background:lang===l?C.accent:'transparent',color:lang===l?'#fff':C.muted}}>{l.toUpperCase()}</button>)}
+          </div>
+          <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:26,opacity:aiBusy?.6:1}}>{aiBusy?(lang==='en'?'Writing…':'Redactando…'):(lang==='en'?'Draft with AI':'Redactar con IA')}</button>
+        </div>
       </div>
       <textarea value={body} onChange={e=>setBody(e.target.value)} rows={8} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',fontSize:13,lineHeight:1.5,color:C.text,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:6}}/>
       <div style={{fontSize:10,color:C.done,marginBottom:12}}>Las cifras y los datos de cuenta van fijos; la IA solo redacta. Revisa antes de enviar.</div>
-      <details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body)}}/></details>
+      <details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>
       <div style={{display:'flex',gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button onClick={verPDF} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
@@ -11196,13 +11229,14 @@ async function driveToken(){
 //    (agregar a supabase.js cuando esté habilitado en Google Cloud Console). Sin ese scope,
 //    la API devuelve 403 y el modal cae al fallback de Gmail compose (sin adjunto). ──
 // PDF de la rendición (jsPDF) → base64 sin el prefijo dataURL
-async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldoMonto=0, totFondos=0){
+async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldoMonto=0, totFondos=0, lang='es'){
+  const EN = lang==='en'
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const doc = new jsPDF({unit:'pt', format:'letter'})
   const W = doc.internal.pageSize.getWidth()
   doc.setFillColor(0,60,80); doc.rect(0,0,W,74,'F')
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16)
-  doc.text('Rendición de gastos', 40, 34)
+  doc.text(EN?'Expense Report':'Rendición de gastos', 40, 34)
   doc.setFont('helvetica','normal'); doc.setFontSize(10)
   doc.text(`${client?.name||''} · ${r.periodo||''}${r.project?` · ${r.project}${r.subproject?` (${r.subproject})`:''}`:''}`, 40, 54)
   doc.setFont('helvetica','bold'); doc.setFontSize(12)
@@ -11211,13 +11245,13 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
   const saldoSigned = debeCliente ? -saldoMonto : saldoMonto
   const bw=(W-80-12)/3, by=86, bh=42
   const kcard=(i,lbl,val,bg,fg)=>{ const x=40+i*(bw+6); doc.setFillColor(bg[0],bg[1],bg[2]); doc.roundedRect(x,by,bw,bh,4,4,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(7); const lc=fg[0]===255?[255,255,255]:[153,171,180]; doc.setTextColor(lc[0],lc[1],lc[2]); doc.text(lbl.toUpperCase(), x+10, by+16); doc.setFontSize(13); doc.setTextColor(fg[0],fg[1],fg[2]); doc.text(val, x+10, by+34) }
-  kcard(0,'Fondos recibidos',fmtN(totFondos),[245,247,249],[15,110,86])
-  kcard(1,'Gastos del período',fmtN(r.total),[245,247,249],[61,61,61])
+  kcard(0,EN?'Funds received':'Fondos recibidos',fmtN(totFondos),[245,247,249],[15,110,86])
+  kcard(1,EN?'Expenses (period)':'Gastos del período',fmtN(r.total),[245,247,249],[61,61,61])
   const sPos=saldoSigned>=0
-  kcard(2,sPos?'Saldo a favor':'Saldo pendiente',(saldoSigned<0?'-':'')+fmtN(Math.abs(saldoSigned)),sPos?[225,245,238]:[252,235,235],sPos?[15,110,86]:[163,45,45])
+  kcard(2,sPos?(EN?'Balance in your favor':'Saldo a favor'):(EN?'Outstanding balance':'Saldo pendiente'),(saldoSigned<0?'-':'')+fmtN(Math.abs(saldoSigned)),sPos?[225,245,238]:[252,235,235],sPos?[15,110,86]:[163,45,45])
   let y = 160
   doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8.5)
-  doc.text('FECHA', 40, y); doc.text('DETALLE', 135, y); doc.text('MONTO', W-40, y, {align:'right'})
+  doc.text(EN?'DATE':'FECHA', 40, y); doc.text(EN?'DETAIL':'DETALLE', 135, y); doc.text(EN?'AMOUNT':'MONTO', W-40, y, {align:'right'})
   y += 8; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(40,y,W-40,y); y += 18
   ;(det||[]).forEach(e=>{
     doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(61,61,61)
@@ -11231,19 +11265,19 @@ async function rendicionPdfBase64(r, client, det, user, debeCliente=false, saldo
     if(y > 700){ doc.addPage(); y = 60 }
   })
   doc.setDrawColor(83,114,129); doc.setLineWidth(1.5); doc.line(40,y,W-40,y); y += 20
-  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('TOTAL RENDIDO', 40, y)
+  doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(EN?'TOTAL REPORTED':'TOTAL RENDIDO', 40, y)
   doc.setTextColor(226,75,74); doc.text('-'+fmtN(r.total), W-40, y, {align:'right'})
   // Datos bancarios SOLO si el cliente debe al Estudio (saldo a su cargo)
   if(debeCliente){
     y += 36
     doc.setTextColor(61,61,61); doc.setFont('helvetica','bold'); doc.setFontSize(10.5)
-    doc.text(`Saldo a su cargo: ${fmtN(saldoMonto)}`, 40, y); y += 18
-    doc.setFontSize(9.5); doc.text('Transferir a:', 40, y); y += 15
+    doc.text(`${EN?'Balance due':'Saldo a su cargo'}: ${fmtN(saldoMonto)}`, 40, y); y += 18
+    doc.setFontSize(9.5); doc.text(EN?'Transfer to:':'Transferir a:', 40, y); y += 15
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(83,114,129)
-    ;['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl'].forEach(l=>{ doc.text(l,40,y); y += 14 })
+    ;(EN?['Account holder: Liberona Escala Abogados Ltda.','Tax ID (RUT): 77.700.387-9','Bank: Banco BICE','Checking account: 138392-2','Confirmation: administracion@leabogados.cl']:['Titular: Liberona Escala Abogados Ltda.','RUT: 77.700.387-9','Banco: Banco BICE','Cuenta Corriente: 138392-2','Confirmación: administracion@leabogados.cl']).forEach(l=>{ doc.text(l,40,y); y += 14 })
   }
   y += 22; doc.setTextColor(61,61,61); doc.setFont('helvetica','normal'); doc.setFontSize(10)
-  doc.text('Atentamente,', 40, y); y += 15
+  doc.text(EN?'Sincerely,':'Atentamente,', 40, y); y += 15
   doc.setFont('helvetica','bold'); doc.text(user?.name||'', 40, y); y += 14
   doc.setFont('helvetica','normal'); doc.text('Liberona Escala Abogados', 40, y)
   return doc.output('datauristring').split(',')[1]

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-20 — Rendición en inglés (toggle ES | EN)
+- Toggle ES|EN junto a “Redactar con IA” en el modal de envío: traduce de una vez el correo (asunto + cuerpo) y AMBOS PDF (vista previa y adjunto).
+- Cuerpo con los cierres según saldo: el cliente debe → datos bancarios de LEA; saldo a favor con gestión concluida → pide su cuenta para reintegro; a favor en curso → queda para próximos; cero → sin párrafo extra. Igual lógica en inglés.
+- Cifras, RUT y datos bancarios quedan idénticos (no se traducen). “Redactar con IA” respeta el idioma. Saludo inglés: “Dear [Nombre],”.
+
 ## 2026-06-20 — Modal “Enviar rendición” pulido
 - Header “Enviar rendición | Cliente”; “De” en una línea fina; Asunto con label dentro del cuadro.
 - Destinatarios en un solo bloque estilo Gmail: chips Para (navy) + Cc (azul), con sugerencias de la ficha y “Copia al estudio”. Lo que escribes/eliges entra como Para si está vacío, si no como Cc.
