@@ -310,7 +310,7 @@ function firmaCorreoHtml(f){
   return `<table cellpadding="0" cellspacing="0" style="margin-top:24px"><tbody><tr><td style="vertical-align:middle;padding-right:20px"><img src="${logoColor}" alt="Liberona Escala Abogados" style="height:56px;display:block"/></td><td style="vertical-align:middle;border-left:1px solid #B9C2C8;padding-left:20px">${f.nombre?`<div style="font-size:15px;font-weight:700;color:${TXT};text-transform:uppercase;letter-spacing:.4px">${f.nombre}</div>`:''}${f.cargo?`<div style="font-size:12px;color:${MUTED};margin-top:1px">${f.cargo}</div>`:''}${f.telefono?`<div style="font-size:12px;color:${MUTED};margin-top:12px">${f.telefono}</div>`:''}<div style="font-size:12px;color:${MUTED};margin-top:2px">Av. Kennedy Lateral 7900, Of. 905, Vitacura</div><div style="font-size:12px;color:${MUTED};margin-top:2px">Santiago - Chile</div><a href="https://leabogados.cl" style="font-size:12px;color:#5E8088;text-decoration:none;display:inline-block;margin-top:2px">www.leabogados.cl</a></td></tr></tbody></table>`
 }
 function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='es'){
-  const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
+  const gastos = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
   const _entsC = (clientEntities||[]).filter(x=>x.client_id===(client&&client.id))
   const _gEnt = (gastos.find(e=>e.entity_id)||{}).entity_id
   // Scope del saldo: con 1 RS = todo el cliente (incl. fondos sin entity_id); con 2+ RS se acota a la RS de los gastos.
@@ -10120,7 +10120,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
 
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
 function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose}) {
-  const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1)
+  const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const [attachSet,setAttachSet] = useState(new Set())   // gastos de esta rendición con comprobante de respaldo
   useEffect(()=>{ const ids=det.map(e=>e.id); if(!ids.length) return; let alive=true; supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive) setAttachSet(new Set((data||[]).map(x=>String(x.expense_id)))) },()=>{}); return ()=>{alive=false} },[r.id])
   // Saldo del fondo con la MISMA fuente única que el PDF y el modal: fondos − gastos ya rendidos (de la RS).

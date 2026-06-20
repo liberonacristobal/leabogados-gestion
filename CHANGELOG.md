@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Gastos de la rendición ordenados por fecha (antiguo→nuevo)
+- El adjunto y el "Ver PDF" ordenan los gastos por fecha de más antiguo a más nuevo (comparador explícito y robusto, con empates y fechas vacías).
+
 ## 2026-06-20 — PDF de rendición sin cierre "Atentamente"
 - Se quita el cierre "Atentamente, [nombre], Liberona Escala Abogados" del PDF adjunto: el correo ya cierra con la firma del remitente, así no se duplica.
 
