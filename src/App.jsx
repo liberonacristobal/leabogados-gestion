@@ -8057,7 +8057,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {/* Vista cliente seleccionado: KPIs (totales de todas las RS). Oficina = la firma: no hay saldo, sí Gastos / Por pagar / Pagado */}
         {selectedClient&&rb&&(()=>{
           if(esOficina(selectedClient.id)){
-            const gs=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type!=='fondo'&&!e.personal_de)
+            const gs=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
             const total=gs.reduce((a,e)=>a+(e.amount||0),0)
             const pagado=gs.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
             const porPagar=gs.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
@@ -14374,7 +14374,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Gastos pendientes de reembolso del cliente = (gastos − fondos del ledger) − lo ya reembolsado por conciliación.
   const gastoPend = cid => Math.max(0, -saldoCliente(expenses, cid) - (reembGastoByCliente[cid]||0))
   // 3.B — gastos del cliente AÚN no reembolsados (candidatos a marcar en una devolución), del más antiguo al más nuevo.
-  const gastosReembolsables = cid => (expenses||[]).filter(e=> e.type!=='fondo' && String(e.client_id)===String(cid) && !e.reembolso_fondo_id && !e.deleted_at).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
+  const gastosReembolsables = cid => (expenses||[]).filter(e=> e.type!=='fondo' && !e.no_descuenta_saldo && String(e.client_id)===String(cid) && !e.reembolso_fondo_id && !e.deleted_at).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1)
   // Caso "factura + gastos": el abono excede una factura y el exceso ≈ los gastos pendientes del cliente (reembolso junto a honorarios).
   const facturaMasGastos = (mov) => { if(!esConciliable(mov)) return null
     const pend = gastoPend(mov.cliente_id); if(pend<=0) return null
