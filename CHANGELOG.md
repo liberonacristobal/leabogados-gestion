@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Gasto histórico fuera de Oficina (Por pagar/Pagado) y de reembolsables
+- Los KPIs de la ficha de Oficina (Gastos de oficina / Por pagar / Pagado) y la lista de gastos reembolsables (conciliación → “Devolución de gastos”) ahora excluyen los gastos históricos (no_descuenta_saldo). Cierra los dos últimos lugares donde un gasto histórico inflaba una deuda/“por pagar” inexistente.
+
 ## 2026-06-20 — Fix: el gasto histórico ya no aparece como deuda/saldo negativo
 - Tres fórmulas inline reinventaban el saldo del cliente sin excluir los gastos históricos (no_descuenta_saldo): el modal “Registrar fondo” (mostraba deuda fantasma, ej. David Midgley −$10.400), el mapa de saldos del Dashboard y el de la lista de clientes. Se alinean con la fórmula canónica (fgCliente): el modal de fondo usa saldoCliente; los mapas excluyen el histórico. Ahora ningún cliente con gasto histórico muestra saldo negativo por ese motivo.
 
