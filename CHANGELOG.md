@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — PDF de rendición sin cierre "Atentamente"
+- Se quita el cierre "Atentamente, [nombre], Liberona Escala Abogados" del PDF adjunto: el correo ya cierra con la firma del remitente, así no se duplica.
+
 ## 2026-06-20 — Firmas reales con logo a color
 - La firma del correo usa el logo a color de Liberona Escala (formato de Cristóbal: logo · línea · nombre/cargo/teléfono/dirección/web), con datos precargados por usuario (Cristóbal y Erasmo Socio, Martín Abogado, Martina Procuradora).
 - Comuna corregida a Vitacura. Se quitó la dirección duplicada del pie del correo (ahora va solo en la firma). Editable en "Mi firma".
