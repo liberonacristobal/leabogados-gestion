@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Conciliación (pulir) Fase 5: landing mínimo
+- "+ Cargar cartolas" y "Cartolas cargadas" se fusionan en una sola línea (detalle a la izquierda con su desplegable · "+ Cargar" a la derecha que abre la caja de importación). El "N movimientos" sale del header (queda en esa línea).
+- Los 4 KPIs (Abonos/Cargos/Internos/Sin id) se reemplazan por una línea-resumen discreta ("$X abonos · $Y cargos · N internos"); "Sin identificar" ya vive en los chips de estado.
+
 ## 2026-06-20 — Conciliación (pulir) Fase 4: estado en chips livianos
 - El filtro de estado de conciliación deja de ser un select escondido: ahora es una fila de chips que aparece solo en Abonos y solo muestra los estados con pendientes (Por conciliar / Descalces / Sin identificar) con su conteo en vivo; si todo está conciliado, la fila no aparece. Tocar un chip filtra; tocarlo de nuevo (o "Todos") vuelve a ver todo.
 
