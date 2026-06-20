@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20 — Facturación (pulir) Fase 2: KPIs canónicos + header del modal de pago
+- Las 4 tarjetas KPI (Por cobrar/Programado/Vencido/Cobrado) ahora con borde-acento de color (estilo canónico del Dashboard), manteniendo el click-para-filtrar.
+- El modal Registrar pago estrena header "Registrar pago | Cliente" (patrón Acción | Cliente).
+
 ## 2026-06-20 — Facturación (pulir) Fase 1: fila compacta con borde de color
 - La fila de factura (Por cliente / Emitidas) pasa a estado en el borde izquierdo (semáforo: rojo vencida / ámbar por vencer / verde pagada), folio como "Factura N° XX", días mini a la derecha, y las acciones (Registrar pago / Ya emitida / Editar / Deshacer / Reactivar) aparecen al tocar la fila (ya no agrandan la fila). Sin tocar estados ni lógica.
 

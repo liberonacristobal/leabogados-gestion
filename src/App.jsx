@@ -5052,7 +5052,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:9}}>
           {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Programado',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=estadoActivo(fl); return (
-            <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 8px',border:`1.5px solid ${on?col:C.border}`,cursor:'pointer',minWidth:0}}>
+            <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,cursor:'pointer',minWidth:0}}>
               <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
               <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
             </button>
@@ -5103,11 +5103,11 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
         )}
       </div>
 
-      {payingId&&(()=>{ const pb=billing.find(b=>String(b.id)===String(payingId))||{}; return (
+      {payingId&&(()=>{ const pb=billing.find(b=>String(b.id)===String(payingId))||{}; const _cl=clients.find(c=>String(c.id)===String(pb.client_id)); return (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
           <div style={{background:'#fff',borderRadius:16,width:'min(90vw, 340px)',overflow:'hidden'}}>
             <div style={{padding:'18px 20px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <span style={{fontSize:11,fontWeight:600,color:C.done,letterSpacing:'.05em'}}>CONFIRMAR PAGO</span>
+              <span style={{fontSize:14,fontWeight:600}}><span style={{color:C.accent}}>Registrar pago</span>{_cl&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted}}>{_cl.name}</span></>}</span>
               <button onClick={()=>setPayingId(null)} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
                 <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
               </button>
