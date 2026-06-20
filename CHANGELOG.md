@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — PDF adjunto reconstruido para calzar con el "Ver PDF"
+- El PDF que se adjunta/descarga (jsPDF) se rehízo para tener el mismo diseño del "Ver PDF": header con razón social/RUT, franja meta (N°/emisión/gastos/dirigido a), 3 KPIs, barra de proyecto, tabla (fecha/concepto/categoría/monto con OT y respaldo), total, sección Fondos recibidos y Resumen del fondo. Misma fuente de datos que el Ver PDF.
+
 ## 2026-06-20 — Correo: logo por URL (no base64) y diagnóstico de envío
 - La firma y el encabezado del correo usan el logo por URL absoluta (logo a color servido en /le-logo-color.png) en vez de base64 embebido → aliviana el correo (destraba el envío por servidor) y el logo se ve en el correo real.
 - El aviso de fallo de envío ahora muestra el error real (Gmail / Servidor) para diagnosticar.
