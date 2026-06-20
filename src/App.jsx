@@ -6228,6 +6228,9 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const [atencion, setAtencion] = useState(editRend?.dirigido_a||'')
   const [prefilled, setPrefilled] = useState(false)   // "Dirigido a" precargado de rendición anterior
   const [limpiandoIA, setLimpiandoIA] = useState(false)
+  const [atencionEmail, setAtencionEmail] = useState(editRend?.dirigido_email||'')
+  const [showSub, setShowSub] = useState(!!(editRend&&editRend.subproject))
+  const [showFiltroFecha, setShowFiltroFecha] = useState(false)
 
   // Movimientos del cliente, acotados a la(s) razón(es) social(es) seleccionada(s).
   // Con 1 RS todo pertenece a esa RS (incl. sin entity_id); sin selección/sin RS, todos.
@@ -6298,6 +6301,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       if(!alive||!data) return
       setContacts(data)
       if(!esEdicion && data[0]?.nombre){ setAtencion(data[0].nombre); setPrefilled(true) }
+      if(!esEdicion && data[0]?.email){ setAtencionEmail(data[0].email) }
     })
     return ()=>{alive=false}
   },[client.id])
@@ -6360,6 +6364,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const renderId = crypto.randomUUID()
       const now = new Date().toISOString()
       const nowLabel = new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'})
+      const _fs = gastosSel.map(e=>e.date).filter(Boolean).sort(); const _ma = d => new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const _di = d => new Date(d+'T12:00').toLocaleDateString('es-CL'); const periodoSel = _fs.length ? (_ma(_fs[0])===_ma(_fs[_fs.length-1]) ? _ma(_fs[0]) : `${_di(_fs[0])} – ${_di(_fs[_fs.length-1])}`) : nowLabel
       // Registrar la rendición PRIMERO: si falla, no marcamos gastos (evita gastos huérfanos)
       const rendUser = currentUserName || 'admin'
       const otNums = [...new Set(gastosSel.map(e=>e.ot_number).filter(Boolean))].join(', ')   // OT de notaría incluidas (para cruzar con la notaría)
@@ -6367,7 +6372,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         id: renderId,
         user_name: rendUser,
         client_id: client.id,
-        periodo: nowLabel,
+        periodo: periodoSel,
         total: totalSel,
         n_gastos: gastosSel.length,
         n_clientes: 1,
@@ -6388,7 +6393,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId}:e))
-      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:nowLabel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,ot_numbers:otNums||null}
+      const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:periodoSel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,dirigido_email:atencionEmail||null,ot_numbers:otNums||null}
       if(onRendicionComplete) onRendicionComplete(rendObj)
       await guardarDirigido()
       // modo 'pdf': abre el documento imprimible. modo 'enviar': encadena al modal de correo.
@@ -6445,39 +6450,47 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       </div>
       {/* Razón social: 1 → fija; varias → la elige el emisor (acota los gastos) */}
       {entsCli.length>0&&(()=>{
-        const lblS = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
-        const inpS = {width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 10px',fontSize:13,color:C.text,background:'#fff',boxSizing:'border-box'}
+        const flBox = {background:'#F5F7F9',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginBottom:8}
+        const flLbl = {fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5}
+        const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.accent,fontWeight:600,padding:0,height:22,appearance:'none'}
         return (
-        <div style={{marginBottom:12}}>
-          <div style={lblS}>Razón social</div>
+        <div style={flBox}>
+          <div style={flLbl}>Razón social</div>
           {entsCli.length===1
-            ? <div style={{fontSize:14,fontWeight:700,color:C.text}}>{entsCli[0].name}{entsCli[0].rut?<span style={{fontSize:11,fontWeight:500,color:C.done}}> · {entsCli[0].rut}</span>:''}</div>
-            : <><select value={selEnt||''} onChange={e=>setSelEnt(e.target.value||null)} style={{...inpS,borderColor:C.accent,color:C.accent,fontWeight:600}}>{entsCli.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${en.rut}`:''}</option>)}</select><div style={{fontSize:10,color:C.done,marginTop:3}}>El cliente tiene {entsCli.length} razones sociales — elige a cuál corresponde.</div></>}
+            ? <div style={{fontSize:13,fontWeight:600,color:C.text}}>{entsCli[0].name}{entsCli[0].rut?<span style={{fontSize:11,fontWeight:400,color:C.done}}> · {entsCli[0].rut}</span>:''}</div>
+            : <select value={selEnt||''} onChange={e=>setSelEnt(e.target.value||null)} style={flInp}>{entsCli.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${en.rut}`:''}</option>)}</select>}
         </div>
         )
       })()}
 
-      {/* Proyecto (filtra los gastos) con sugerencia + Subproyecto opcional */}
       {(()=>{
-        const lblS = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3}
-        const inpS = {width:'100%',height:38,border:`1px solid ${proyecto?C.accent:C.border}`,borderRadius:8,padding:'0 10px',fontSize:13,color:C.text,background:'#fff',boxSizing:'border-box'}
-        return (
-        <div style={{marginBottom:12}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-            <span style={lblS}>Proyecto</span>
-            {proyectoSugerido&&proyecto!==proyectoSugerido&&<button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button>}
+        const flBox = on => ({background:'#F5F7F9',border:`0.5px solid ${on?C.accent:C.border}`,borderRadius:8,padding:'6px 11px'})
+        const flLbl = {fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.5}
+        const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}
+        const sug = contacts.filter(c=>c.email)
+        return (<>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
+          <div style={flBox(!!proyecto)}>
+            <div style={flLbl}>Proyecto</div>
+            {proyectosDisp.length>0
+              ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={{...flInp,appearance:'none'}}><option value=''>Todos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}{proyConteo[p]?` (${proyConteo[p]})`:(proyToSale[p]?' · venta':'')}</option>)}</select>
+              : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Opcional' style={flInp}/>}
           </div>
-          {proyectosDisp.length>0
-            ? <select value={proyecto} onChange={e=>{setProyecto(e.target.value);setSelected(new Set())}} style={inpS}><option value=''>Todos los proyectos</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}{proyConteo[p]?` (${proyConteo[p]})`:(proyToSale[p]?' · venta':'')}</option>)}</select>
-            : <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Escribe el proyecto (opcional)' style={inpS}/>}
-          {gastosPend.length===0 && <div style={{fontSize:10,color:C.soon,marginTop:3}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
-          <div style={{marginTop:8}}>
-            <div style={{...lblS,marginBottom:4}}>Subproyecto <span style={{textTransform:'none',fontWeight:400,color:C.done}}>(opcional)</span></div>
-            <input value={subproyecto} onChange={e=>setSubproyecto(e.target.value)} placeholder='—' list='rend-subproy' style={{...inpS,borderColor:C.border}}/>
-            <datalist id='rend-subproy'>{[...new Set((rendiciones||[]).filter(r=>String(r.client_id)===String(client.id)&&r.subproject).map(r=>r.subproject))].map(s=><option key={s} value={s}/>)}</datalist>
+          <div style={flBox(false)}>
+            <div style={flLbl}>Dirigido a</div>
+            <input value={atencion} onChange={e=>{setAtencion(e.target.value);setAtencionEmail('');setPrefilled(false)}} placeholder='Persona (opcional)' style={flInp}/>
           </div>
         </div>
-        )
+        {proyectoSugerido&&proyecto!==proyectoSugerido&&<div style={{marginBottom:6}}><button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button></div>}
+        {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:9,color:C.done}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'');setPrefilled(false)}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:14,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
+        {gastosPend.length===0 && <div style={{fontSize:10,color:C.soon,marginBottom:8}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
+        {!showSub && !subproyecto && <div onClick={()=>setShowSub(true)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',marginBottom:12,width:'fit-content'}}>+ Subproyecto</div>}
+        {(showSub||subproyecto)&&<div style={{...flBox(false),marginBottom:12}}>
+          <div style={flLbl}>Subproyecto <span style={{textTransform:'none',fontWeight:400}}>(opcional)</span></div>
+          <input value={subproyecto} onChange={e=>setSubproyecto(e.target.value)} placeholder='—' list='rend-subproy' style={flInp}/>
+          <datalist id='rend-subproy'>{[...new Set((rendiciones||[]).filter(r=>String(r.client_id)===String(client.id)&&r.subproject).map(r=>r.subproject))].map(s=><option key={s} value={s}/>)}</datalist>
+        </div>}
+        </>)
       })()}
 
       {/* KPIs (rectángulos redondeados, labels grises) */}
@@ -6491,36 +6504,27 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
           <div style={{fontSize:13,fontWeight:600,color:C.muted}}>{fmtN(gastosYaRend)}</div>
         </div>
         <div style={{background:sK.bg,borderRadius:10,padding:'10px 12px'}}>
-          <div style={lblG}>Saldo actual</div>
+          <div style={lblG}>Saldo</div>
           <div style={{fontSize:13,fontWeight:600,color:sK.c}}>{saldoActual<0?'−':''}{fmtN(saldoActual)}</div>
         </div>
       </div>
 
-      {/* Filtro por fecha */}
-      <div style={{display:'flex',gap:6,marginBottom:10,alignItems:'center'}}>
-        <input type='date' value={fDesde} onChange={e=>setFDesde(e.target.value)}
-          style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
-        <span style={{fontSize:11,color:C.muted}}>→</span>
-        <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)}
-          style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
-        {(fDesde||fHasta)&&<button onClick={()=>{setFDesde('');setFHasta('')}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>×</button>}
-      </div>
-
-      {/* Dirigido a: se imprime en la rendición y se guarda para reutilizar en próximas */}
-      <div style={{marginBottom:10}}>
-        <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Dirigido a</div>
-        <input value={atencion} onChange={e=>{setAtencion(e.target.value);setPrefilled(false)}} placeholder='Nombre de la persona (opcional)'
-          style={{width:'100%',padding:'7px 9px',borderRadius:7,border:'1px solid #E4E8EB',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
-        {prefilled&&atencion&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Guardado de rendición anterior — puedes editarlo</div>}
-      </div>
-
       {/* Lista de gastos */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-        <div style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles para rendir</div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles</span>
+          <button onClick={()=>setShowFiltroFecha(v=>!v)} style={{fontSize:10,color:(fDesde||fHasta)?C.accent:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Filtrar por fecha{(fDesde||fHasta)?' ·':''} {showFiltroFecha?'▴':'▾'}</button>
+        </div>
         {disponibles.length>0&&<button onClick={toggleAll} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>
           {selected.size===disponibles.length?'Desmarcar todo':'Seleccionar todo'}
         </button>}
       </div>
+      {showFiltroFecha&&<div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+        <input type='date' value={fDesde} onChange={e=>setFDesde(e.target.value)} style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
+        <span style={{fontSize:11,color:C.muted}}>→</span>
+        <input type='date' value={fHasta} onChange={e=>setFHasta(e.target.value)} style={{flex:1,padding:'5px 8px',borderRadius:6,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
+        {(fDesde||fHasta)&&<button onClick={()=>{setFDesde('');setFHasta('')}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>×</button>}
+      </div>}
       {disponibles.length===0&&(gastosPend.length>0&&(proyecto||fDesde||fHasta)
         ? <div style={{textAlign:'center',padding:20,fontSize:12,color:C.muted}}>
             Hay {gastosPend.length} gasto{gastosPend.length!==1?'s':''} pendiente{gastosPend.length!==1?'s':''} de rendir, pero el filtro los está ocultando.
@@ -8536,7 +8540,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div style={{display:'flex',justifyContent:'space-between',marginTop:10,paddingTop:8,borderTop:`1.5px solid ${C.muted}`}}><span style={{fontSize:13,fontWeight:600,color:C.text}}>TOTAL</span><span style={{fontSize:13,fontWeight:600,color:C.overdue}}>-{fmt(tot)}</span></div>
         </Modal>
       )})()}
-      {rendicionClient&&<Modal title={`${rendEdit?'Editar rendición':'Rendición'} — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setEmailRend(r)}}/></Modal>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onClose={()=>setEmailRend(null)}/>}
     </div>
   )
@@ -10106,7 +10110,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   const saldoCliente = _rs.saldo
   const totFondosCli = _rs.totFondos
   const debeCliente = saldoCliente < 0
-  const [para,setPara] = useState(client?.email||'')
+  const [para,setPara] = useState(r?.dirigido_email || client?.email || '')
   // Cc: gente del cliente (con chips, aprendida y editable) + copia al estudio (responsable + quienes cargaron los gastos).
   const EMAIL_BY_NAME = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const toEmail = x => { if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
@@ -10771,7 +10775,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         user={user}
         onRendicionSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))}
       />
-      {rendicionClient&&<Modal title={`${rendEdit?'Editar rendición':'Rendición'} — ${rendicionClient.name}`} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>}
+      {rendicionClient&&<Modal title={<><span style={{color:C.accent}}>{rendEdit?'Editar rendición':'Rendición'}</span>{rendicionClient.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{rendicionClient.name}</span></>}</>} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} closeOnBackdrop={false}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRend(r)}}/></Modal>}
     </>
   )
 
