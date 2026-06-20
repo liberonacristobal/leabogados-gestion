@@ -7879,7 +7879,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     ? <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:C.overdueBg,color:C.overdue,whiteSpace:'nowrap'}}>Anulada</span>
     : r.sent_at
     ? <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>Enviada</span>
-    : <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#FFF8E1',color:C.soon,whiteSpace:'nowrap'}}>Pendiente</span>
+    : <span style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'#FFF8E1',color:C.soon,whiteSpace:'nowrap'}}>Borrador</span>
   const rsOfRend = r => { const g=expenses.find(e=>e.client_render_id===r.id&&e.entity_id); const ent=g?(clientEntities||[]).find(x=>x.id===g.entity_id):null; return (ent&&ent.name)||'' }
   const verPdfRend = r => { const cl=clients.find(c=>c.id===r.client_id); const w=window.open('','_blank'); if(w){ w.document.write(r.pdf_html||rendicionPdfHtml(r,cl,expenses,clientEntities)); w.document.close() } }
   const renderRendRow = (r,showClient,timeline) => {
@@ -7892,7 +7892,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {(()=>{ const d=r.created_at?new Date(r.created_at):null; const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return <div style={{textAlign:'center',width:42,flexShrink:0}}><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{d&&!isNaN(d)?d.getDate():'—'}</div><div style={{fontSize:9,color:C.muted}}>{d&&!isNaN(d)?`${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`:''}</div></div> })()}
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{r.user_name||''}{rs?` · ${rs}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.sent_at&&r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{r.user_name||''}{rs?` · ${rs}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>-{fmt(r.total)}</div><div style={{marginTop:3}}>{estadoBadge(r)}</div></div>
           </div>
@@ -7900,7 +7900,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <div onClick={()=>setExpandRend(expandRend===r.id?null:r.id)} style={{display:'grid',gridTemplateColumns:'1fr 78px 46px 70px',gap:6,alignItems:'start',cursor:'pointer'}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{showClient?(cl?.name||'Cliente'):r.periodo}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.sent_at&&r.correlativo?<b style={{color:C.accent}}>N° {r.correlativo} · </b>:''}{showClient?`${r.periodo} · `:''}{fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}{rs?` · ${rs}`:''}</div>
           </div>
           <div style={{textAlign:'right',fontSize:13,fontWeight:600,color:C.overdue}}>-{fmt(r.total)}</div>
           <div style={{textAlign:'center',fontSize:13,color:C.text}}>{r.n_gastos}</div>
