@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-20 — Firma: tamaño del logo arreglado y responsivo
+- El logo de la firma se veía gigante (el height por CSS no se respeta en correo). Ahora usa atributos width/height en el <img> (180×27) + max-width:100% → tamaño adecuado y responsivo en computador y mobile.
+
 ## 2026-06-20 — Gastos de la rendición ordenados por fecha (antiguo→nuevo)
 - El adjunto y el "Ver PDF" ordenan los gastos por fecha de más antiguo a más nuevo (comparador explícito y robusto, con empates y fechas vacías).
 
