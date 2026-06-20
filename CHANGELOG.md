@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-20 — Rendición: el Proyecto se asigna a los gastos (no los filtra)
+- Al elegir un proyecto en la rendición, ya NO se ocultan los gastos sin asignar: se muestran para poder asociarlos (los gastos de OTRO proyecto sí quedan separados).
+- Al rendir, el proyecto se guarda en cada gasto seleccionado que no lo tenía → la app aprende y no vuelve a pedirlo; la próxima vez aparecen bajo ese proyecto.
+- Asunto del correo: usa el nombre del proyecto en lugar del cliente cuando hay proyecto.
+
 ## 2026-06-20 — Rendición no enviada = Borrador
 - Si cierras una rendición sin enviar el correo, el historial la muestra como "Borrador" (antes "Pendiente") y no le asigna N° hasta enviarla; el botón "Enviar" sigue disponible para retomarla. Nunca aparece como "Enviada" (eso solo ocurre al mandar el correo).
 
