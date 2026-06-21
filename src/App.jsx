@@ -15088,6 +15088,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const facObj=(()=>{ const fc=(concByMov[m.id]||[]).filter(c=>c.tipo_destino==='factura'); return fc.length===1?billing.find(b=>String(b.id)===String(fc[0].factura_id)):null })()
             const cliName=m.cliente_id?cmap[m.cliente_id]:null
             const nomBanco=(m.rut_contraparte&&nameByRut[crNormRut(m.rut_contraparte)])||m.nombre_contraparte||(m.es_interno?'Traspaso interno':tipoMov(m.descripcion))
+            const rsId=(()=>{ if(!cliName) return null; let nm=null,rut=''; if(facObj&&facObj.receptor_name){nm=facObj.receptor_name;rut=facObj.receptor_rut||''} else {const r=rsLabel(m.cliente_id,clients,clientEntities); if(!r.multi&&r.name){nm=r.name;rut=r.rut||''}} return (nm&&nm!==cliName)?{name:nm,rut}:null })()
             const mostrarCli=cliName&&String(cliName).trim().toLowerCase()!==String(nomBanco||'').trim().toLowerCase()   // solo si aporta (≠ nombre del banco)
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:C.grisText}):null
             return (
@@ -15101,7 +15102,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     <span style={{fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue,flexShrink:0}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                    <span title={m.descripcion||''} style={{fontSize:11,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName?`${nomBanco}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}`:(m.rut_contraparte||tipoMov(m.descripcion))}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</span>
+                    <span title={m.descripcion||''} style={{fontSize:11,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName?(rsId?`${rsId.name}${rsId.rut?` · ${rsId.rut}`:''}`:`${nomBanco}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}`):(m.rut_contraparte||tipoMov(m.descripcion))}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:3,padding:'1px 5px'}}>revisar RUT</span>:''}</span>
                     <span onClick={facObj?(e)=>{e.stopPropagation();setFacChip(facChip===m.id?null:m.id)}:undefined} style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:ec.bg,color:ec.c,cursor:facObj?'pointer':'default',flexShrink:0}}>{ec.t}{facObj?(facChip===m.id?' ▴':' ▾'):''}</span>
                   </div>
                   {facObj&&facChip===m.id&&(()=>{ const paid=facObj.status==='Pagado'; return (
