@@ -14531,6 +14531,67 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar combinación: '+e.message) }
     setBusy(null)
   }
+
+  // ── Pago en GRUPO: N transferencias del mismo cliente (cercanas en fecha) que juntas pagan M facturas (suma exacta) ──
+  // Devuelve {transfers,facturas,total} o null. Subset-sum acotado; prefiere menos transferencias y facturas más cercanas/contiguas.
+  const grupoPago = (mov)=>{
+    if(!esConciliable(mov)) return null
+    const W=30*86400000
+    const near = movs.filter(m=> esConciliable(m) && String(m.cliente_id)===String(mov.cliente_id) && m.id!==mov.id && !(concByMov[m.id]?.length) && Math.abs(new Date(m.fecha)-new Date(mov.fecha))<=W)
+    if(!near.length) return null
+    const fsAll = facturasCliente(mov.cliente_id).map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0)
+    if(fsAll.length<2 || fsAll.length>12) return null
+    const pFecha = new Date(mov.fecha).getTime()
+    const facsParaTotal = (target)=>{
+      const n=fsAll.length; let best=null, bestScore=Infinity
+      for(let mask=1; mask<(1<<n); mask++){ let s=0; const pick=[]; for(let i=0;i<n;i++){ if(mask&(1<<i)){ s+=fsAll[i].saldo; pick.push(fsAll[i]) } } if(s!==target) continue
+        const avg = pick.reduce((a,x)=>a+Math.abs(new Date(x.f.issued_at||x.f.due||mov.fecha).getTime()-pFecha),0)/pick.length
+        const score = pick.length*1e15 + avg
+        if(score<bestScore){ bestScore=score; best=pick.map(x=>x.f) } }
+      return best
+    }
+    const others = near.slice().sort((a,b)=>Math.abs(new Date(a.fecha)-pFecha)-Math.abs(new Date(b.fecha)-pFecha)).slice(0,4)
+    // prueba subconjuntos de 'others' (mov siempre incluido), de menor a mayor cantidad de transferencias
+    const masks = []; for(let mask=1; mask<(1<<others.length); mask++) masks.push(mask)
+    masks.sort((a,b)=>{ const pa=a.toString(2).split('1').length, pb=b.toString(2).split('1').length; return pa-pb })
+    for(const mask of masks){
+      const grp=[mov]; let tot=mov.monto||0
+      for(let i=0;i<others.length;i++){ if(mask&(1<<i)){ grp.push(others[i]); tot+=others[i].monto||0 } }
+      const facs = facsParaTotal(tot)
+      if(facs && facs.length>=grp.length){ return { transfers:grp, facturas:facs, total:tot } }
+    }
+    return null
+  }
+  // Distribuye N transferencias entre M facturas (llena cada factura con las transferencias en orden). Crea las conciliaciones.
+  const reconciliarGrupo = async(transfers, facturas)=>{
+    if(busy) return
+    setBusy((transfers[0]&&transfers[0].id)||(facturas[0]&&facturas[0].id))
+    const nuevas=[]
+    try{
+      const ts=[...transfers].sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
+      const fs=[...facturas].sort((a,b)=> (a.issued_at||'')<(b.issued_at||'')?-1:1)
+      const restoMov={}; ts.forEach(t=>restoMov[t.id]=(t.monto||0)-(t.monto_conciliado||0))
+      const aplicLocal={}
+      for(const factura of fs){
+        let saldo = Math.max(0,(factura.amount||0)-((aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)))
+        for(const tr of ts){
+          if(saldo<=0) break
+          const aplicado = Math.max(0, Math.min(restoMov[tr.id]||0, saldo))
+          if(aplicado<=0) continue
+          const aplTot = (aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)+aplicado
+          const ins = await supabase.from('conciliacion').insert({ movimiento_id:tr.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'auto', marco_pago:marcaPago(factura,aplTot) }).select().single()
+          if(ins.error) throw ins.error
+          nuevas.push(ins.data)
+          aplicLocal[factura.id]=(aplicLocal[factura.id]||0)+aplicado; restoMov[tr.id]=(restoMov[tr.id]||0)-aplicado; saldo-=aplicado
+          await persistPagoFactura(factura, aplTot, tr.fecha, tr.n_operacion)
+        }
+      }
+      const ups=[]
+      for(const tr of ts){ const movAplicado=(tr.monto||0)-(restoMov[tr.id]||0); const estado=((tr.monto||0)-movAplicado)<=TOL?'conciliado':'parcial'; const { error:me }=await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',tr.id); if(me) throw me; ups.push({id:tr.id,estado,monto_conciliado:movAplicado}) }
+      setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>{ const u=ups.find(z=>z.id===x.id); return u?{...x,estado:u.estado,monto_conciliado:u.monto_conciliado}:x })); setModalMov(null)
+    }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar el grupo: '+e.message) }
+    setBusy(null)
+  }
   // Concilia "factura + gastos": aplica el saldo a la factura (la marca pagada) y registra el exceso como reembolso de
   // gastos (fila tipo_destino='gasto'). No toca el ledger de gastos todavía (eso es Fase 3 fina); deja la trazabilidad.
   const reconciliarFacturaGastos = async(mov, fg)=>{
@@ -15168,6 +15229,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           <span style={{fontSize:11,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sugerida: <b>Factura N°{folioN(sug.invoice_no)||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}{sug.receptor_name&&sug.receptor_name!==cmap[m.cliente_id]?` · ${String(sug.receptor_name).slice(0,16)}`:''}{saldoFactura(sug)===resto?' (exacto)':''}</span>
                           <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
                         </div>}
+                        {(()=>{ const grp=grupoPago(m); if(!grp) return null; return (
+                          <div style={{background:'#fff',border:`1px solid #BFE3D5`,borderRadius:8,padding:'8px 10px',marginBottom:6}} onClick={e=>e.stopPropagation()}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:5}}>
+                              <span style={{fontSize:11,fontWeight:700,color:C.greenText,minWidth:0}}>✦ Pago en grupo · {grp.transfers.length} transferencias pagan {grp.facturas.length} facturas</span>
+                              <button disabled={busy===m.id} onClick={()=>reconciliarGrupo(grp.transfers,grp.facturas)} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 12px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar grupo</button>
+                            </div>
+                            <div style={{fontSize:10,color:C.muted,lineHeight:1.55}}>{grp.facturas.map(f=>`N°${folioN(f.invoice_no)||'—'} · ${fmtM(saldoFactura(f))}`).join('  +  ')}<span style={{color:C.greenText,fontWeight:600}}>{`  =  ${fmtM(grp.total)} (exacto)`}</span></div>
+                          </div>
+                        ) })()}
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
                           {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
                           {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga varias facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?C.accent:C.azulBg,color:comboFor===m.id?'#fff':C.accent,border:'none'}}>Paga {combo.length} facturas{comboFor===m.id?' ▴':' ▾'}</button>}
