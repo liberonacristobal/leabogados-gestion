@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Fecha día-grande en listas de Rendiciones
+- Las 3 listas de rendiciones (caja chica · mis liquidaciones · notaría) ahora muestran la fecha de liquidación como día-grande a la izquierda (helper bigDate), con el período de protagonista; se sacó la fecha del subtítulo. Uniforma con el resto de la app.
+
 ## 2026-06-21 — Conciliación: flexibilidad manual en el estado de cuenta
 - En el panel del pago, las facturas del cliente (todas las con saldo, sin filtro de monto/fecha) ahora se ordenan por FECHA MÁS CERCANA a la transferencia, y se agrega un buscador (N°/concepto/monto) cuando hay muchas. El humano elige cualquiera y "Conciliar con esta". No toca el auto (sigue exacto monto+fecha, TOL=0); es solo flexibilidad manual.
 
