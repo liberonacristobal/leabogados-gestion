@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: categoría "Pago histórico"
+- Nueva categoría de abono "Pago histórico" para pagos de facturas antiguas no cargadas en el sistema (caso SSIAL): al clasificarlo, el movimiento sale de la bandeja (deja de ser descalce), queda identificado/trazable, sin inventar facturas viejas. Aprende el RUT/nombre para sugerirlo en los siguientes. El selector "Clasificar…" ahora aparece también en abonos identificados sin factura candidata (descalces), y la sugerencia ✦ funciona en ellos.
+
 ## 2026-06-21 — Conciliación: el pool solo considera facturas EMITIDAS (con folio)
 - facturasConSaldo ahora excluye facturas sin folio (invoice_no vacío): un pago bancario se concilia contra una factura emitida, no contra cuotas sin emitir/duplicados sin número. Limpia la lista "Facturas por cobrar del cliente" (ya no salen varias "Factura N°—" idénticas) y afina el matcher/contadores.
 
