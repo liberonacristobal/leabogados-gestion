@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: criterio EXACTO (sin tolerancia UF)
+- Revertida la lógica "aproximada UF" en las sugerencias (era un error de criterio). La conciliación bancaria es 100% exacta: cada pago calza por FECHA + MONTO EXACTO (factura sola, factura+gastos, combo o grupo). Si nada calza exacto, es adelanto / pago histórico (se clasifica, no se aproxima). La tolerancia UF queda solo para programadas↔emitidas, fuera de la cartola.
+
 ## 2026-06-21 — Conciliación: sugerencia robusta (siempre propone)
 - candidatosSuave: ranquea TODAS las facturas del cliente con saldo por CERCANÍA DE FECHA a la transferencia (criterio clave para recurrentes), con bonus por monto exacto y por RS del pagador. La sugerencia del panel deja de aparecer solo con calce exacto: ahora cae a la más cercana (aproximada) cuando no hay exacta, mostrando "Sugerida (aproximada) · difiere $X" + 2-3 alternativas cercanas en 1 toque. El AUTO masivo sigue solo con calce exacto (no se afloja la plata).
 
