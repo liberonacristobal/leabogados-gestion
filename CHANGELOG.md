@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Mis tareas: botones consistentes con Tareas del equipo
+- La tarjeta de "Mis tareas" (TasksOnlyView) cambia el ✓ en cuadro verde por el check cuadrado fino (mismo de Tareas del equipo); 📅 (agendar) y ✎ (editar) pasan a íconos pelados (sin cuadro), alineados a la derecha. El check va al final.
+
 ## 2026-06-21 — Dashboard: sección "Tareas del equipo"
 - Nueva sección colapsable en el Dashboard (admin), tras "Qué atender hoy": todas las tareas activas del equipo agrupadas por persona (color por integrante, conteo + vencidas en rojo). Cada persona despliega sus tareas con fecha día-grande + cliente/proyecto, ordenadas por urgencia; check cuadrado fino para marcar terminada (reusa onCompleteTask) y tap para abrir/editar (onPreviewTask). Una tarea con varios responsables aparece en cada uno.
 

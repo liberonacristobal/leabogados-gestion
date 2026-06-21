@@ -12782,12 +12782,14 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           {!done&&(
             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
               {!t.due&&<span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:8,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>Sin fecha</span>}
-              <div style={{display:'flex',gap:4}}>
-                {onComplete&&<button onClick={(e)=>{e.stopPropagation();onComplete(t)}} title='Terminada' style={{width:26,height:26,borderRadius:5,border:'1px solid #1D9E75',background:C.greenBg,color:C.greenText,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,padding:0}}>&#10003;</button>}
-                <button onClick={(e)=>{e.stopPropagation();agendarTarea(t)}} disabled={!t.due} title={t.due?'Agregar a Google Calendar':'Sin fecha de vencimiento'} style={{width:26,height:26,borderRadius:5,border:`0.5px solid ${t.due?C.done:C.border}`,background:'#fff',color:t.due?C.muted:'#C7D0D5',cursor:t.due?'pointer':'default',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>
+              <div style={{display:'flex',gap:9,alignItems:'center'}}>
+                <button onClick={(e)=>{e.stopPropagation();agendarTarea(t)}} disabled={!t.due} title={t.due?'Agregar a Google Calendar':'Sin fecha de vencimiento'} style={{background:'none',border:'none',padding:0,cursor:t.due?'pointer':'default',color:t.due?C.muted:'#C7D0D5',display:'inline-flex',alignItems:'center'}}>
+                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>
                 </button>
-                <button onClick={(e)=>{e.stopPropagation();onEdit&&onEdit(t)}} title='Editar' style={{width:26,height:26,borderRadius:5,border:`0.5px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:13,padding:0}}>&#9998;</button>
+                <button onClick={(e)=>{e.stopPropagation();onEdit&&onEdit(t)}} title='Editar' style={{background:'none',border:'none',padding:0,cursor:'pointer',color:C.muted,display:'inline-flex',alignItems:'center'}}>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/></svg>
+                </button>
+                {onComplete&&<span onClick={(e)=>{e.stopPropagation();onComplete(t)}} title='Terminada' style={{width:18,height:18,borderRadius:5,border:`1.5px solid #D7DEE3`,cursor:'pointer',flexShrink:0}}/>}
               </div>
             </div>
           )}
