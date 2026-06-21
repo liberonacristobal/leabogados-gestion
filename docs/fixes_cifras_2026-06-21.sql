@@ -82,13 +82,17 @@ ORDER BY copias DESC;
 
 
 -- 5) PROGRAMADAS FANTASMA (≈8, ~$9,46M) — detección -------------------------
--- Programadas en ventas NO recurrentes que ya tienen un Pagado del mismo monto
--- (el cobro ya ocurrió) → inflan el "por cobrar". Revisar y anular las confirmadas.
-
--- 5a. Programadas cuyo mismo sale_id tiene un Pagado por igual monto:
-SELECT p.id, p.client_id, p.sale_id, p.due, p.amount, p.concept
+-- OJO 2026-06-21: la 1ª versión de 5a daba FALSOS POSITIVOS con las ventas
+-- MENSUALES recurrentes (Better/Ovalle/Rendalo): cada cuota futura "calza" con
+-- una pasada del mismo monto. Esas son legítimas, NO se anulan.
+-- 5a (corregida) EXCLUYE las recurrentes (cobro_type='mensual'): solo deja las
+-- programadas colgando en ventas NO recurrentes que ya quedaron pagadas.
+SELECT p.id, p.client_id, p.sale_id, p.due, p.amount, p.concept,
+       s.cobro_type, s.status AS venta_estado, s.title AS venta
 FROM billing p
+JOIN sales s ON s.id = p.sale_id
 WHERE p.status = 'Programada' AND p.deleted_at IS NULL
+  AND coalesce(s.cobro_type,'') <> 'mensual'        -- excluye recurrentes
   AND EXISTS (
     SELECT 1 FROM billing q
     WHERE q.sale_id = p.sale_id AND q.status = 'Pagado'
@@ -96,6 +100,8 @@ WHERE p.status = 'Programada' AND p.deleted_at IS NULL
       AND abs(q.amount - p.amount) < 1000
   )
 ORDER BY p.due;
+-- Programadas SIN venta (sale_id null) que también podrían ser fantasma:
+-- revisar aparte con §5b-bis si aplica.
 
 -- 5b. Anular las confirmadas (revisa 5a primero; anula por id):
 -- UPDATE billing SET status = 'Anulada' WHERE id IN ('<id1>','<id2>', ...);
