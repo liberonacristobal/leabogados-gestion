@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: razón social tras identificar
+- En la fila del movimiento ya identificado, la secundaria deja de mostrar el nombre crudo del banco / "Movimiento bancario" y muestra la RAZÓN SOCIAL: prioriza la de la factura conciliada (receptor_name) y, si no hay factura, usa la RS única del cliente. Si el cliente tiene varias RS y no hay factura que defina cuál, mantiene el nombre del banco (no inventa). El nombre crudo sigue en la Glosa al expandir. Aplica a abonos y cargos (misma fila).
+
 ## 2026-06-21 — Tareas: tarjeta compacta
 - Fuera las etiquetas CLIENTE/PROY./SUB. (solo los valores, cliente en gris oscuro, subproyecto con ›). El encargado pasa de pill en línea propia a chip compacto con su color (personChip) inline al final del meta, con wrap. Ahorra una línea por tarjeta.
 
