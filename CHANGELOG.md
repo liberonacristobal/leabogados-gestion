@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Limpieza: eliminar DashboardTasks (código muerto)
+- Se eliminó la función DashboardTasks (~170 líneas): era una tarjeta de tareas vieja (con etiquetas CLIENTE/PROY./SUB. y ✓ en cuadro) que ya no se renderiza en ningún lado; la reemplazaron "Tareas del equipo" (Dashboard) y TasksOnlyView. Con esto las tarjetas de tareas vivas quedan todas consistentes.
+
 ## 2026-06-21 — Mis tareas: "Tareas que asigné" agrupada por persona
 - La sección "Tareas que asigné" deja de ser lista plana: ahora agrupa por la persona a la que asignaste (color por integrante + conteo + vencidas en rojo), cada una desplegable (default abierta). Dentro, las tarjetas sin el chip de persona (ya lo dice el encabezado del grupo). Mismo patrón que "Tareas del equipo" del Dashboard.
 
