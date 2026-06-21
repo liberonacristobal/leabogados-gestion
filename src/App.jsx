@@ -1184,11 +1184,11 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'0 0 130px'}}>
           {/* Resumen: saldo de caja + total sin liquidar */}
           <div style={{display:'flex',gap:8,padding:'2px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?C.overdueBg:C.greenBg}}>
+            <div style={{...kpiCard,background:saldoCaja<0?C.overdueBg:C.greenBg,borderLeft:`3px solid ${saldoCaja<0?C.overdue:C.normal}`}}>
               <div style={kpiLbl}>Saldo caja</div>
               <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
             </div>
-            <div style={{...kpiCard,background:C.azulBg}}>
+            <div style={{...kpiCard,background:'#fff',borderLeft:`3px solid ${C.accent}`}}>
               <div style={kpiLbl}>Sin liquidar</div>
               <div style={{...kpiVal,color:C.accent}}>{fmtCLP(sinLiquidar)}</div>
             </div>
@@ -1217,18 +1217,19 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             const client=clients.find(cl=>cl.id===e.client_id)
             const isSel=selected.has(e.id)
             const bdg=catBadge(e.category)
+            const _completo=!!e.category&&(!!e.client_id||e.category==='Fondo')
             return (
-              <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',cursor:'pointer',background:isSel?'#F5F7F9':'transparent'}}>
+              <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',borderLeft:`3px solid ${_completo?C.normal:C.soon}`,cursor:'pointer',background:isSel?'#F5F7F9':'transparent'}}>
                 <div style={{width:17,height:17,borderRadius:5,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>
                   {isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                 </div>
                 {bigDate(e.date)}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:10,color:C.done,marginTop:2}}>{client?`${client.name} · `:''}{e.created_by||me}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
+                  <div style={{fontSize:10,color:C.done,marginTop:2}}>{client?<span style={{color:C.muted,fontWeight:600}}>{client.name}</span>:(e.category==='Fondo'?null:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>)}{(client||e.category!=='Fondo')?' · ':''}{e.created_by||me}{!e.category?<span style={{color:C.soon,fontWeight:600}}> · sin categoría</span>:''}</div>
                 </div>
                 <div style={{flexShrink:0,marginLeft:8,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
-                  <span style={{fontSize:13,fontWeight:500,color:C.overdue}}>{fmtCLP(e.amount)}</span>
+                  <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(e.amount)}</span>
                   {e.category&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:3,fontWeight:500,background:bdg.bg,color:bdg.color}}>{catLabel(e.category)}</span>}
                 </div>
               </div>
@@ -1259,7 +1260,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         <div style={{padding:'4px 0 100px'}}>
           {/* KPIs */}
           <div style={{display:'flex',gap:8,padding:'4px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?C.overdueBg:C.greenBg}}>
+            <div style={{...kpiCard,background:saldoCaja<0?C.overdueBg:C.greenBg,borderLeft:`3px solid ${saldoCaja<0?C.overdue:C.normal}`}}>
               <div style={kpiLbl}>Saldo</div>
               <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
               <div style={{...kpiSub,color:saldoCaja<0?C.overdue:C.muted}}>{saldoCaja<0?'Te debemos':'Disponible'}</div>
