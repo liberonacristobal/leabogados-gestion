@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-21 — RS tras identificar: huérfanas (Facturación) + gastos
+- Facturación "Todas": una factura sin cliente pero con receptor del SII deja de decir "Sin cliente" → muestra el receptor (RS) + chip "sin vincular"; al vincularla a un cliente muestra cliente + RS.
+- Gastos: cada fila muestra la razón social asignada (rsLabel con entity_id del gasto) o "Sin cliente" en rojo si falta, para ver a quién pertenece de un vistazo (no aplica a fondos/oficina/personales).
+
 ## 2026-06-21 — Conciliación: razón social tras identificar
 - En la fila del movimiento ya identificado, la secundaria deja de mostrar el nombre crudo del banco / "Movimiento bancario" y muestra la RAZÓN SOCIAL: prioriza la de la factura conciliada (receptor_name) y, si no hay factura, usa la RS única del cliente. Si el cliente tiene varias RS y no hay factura que defina cuál, mantiene el nombre del banco (no inventa). El nombre crudo sigue en la Glosa al expandir. Aplica a abonos y cargos (misma fila).
 
