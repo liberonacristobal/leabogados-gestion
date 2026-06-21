@@ -12721,14 +12721,12 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           {bigDate(t.due,done?C.muted:urgencyColor(t.due,t.status))}
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:done?C.muted:C.text,lineHeight:1.3,textDecoration:done?'line-through':'none'}}>{t.title}</div>
-            {(client||t.project||t.subproject)&&(
-              <div style={{fontSize:10,color:C.muted,marginTop:3}}>
-                {client&&<span><span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Cliente</span>{' '}{client.name}</span>}
-                {t.project&&<span>{client?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Proy.</span>{' '}{t.project}</span>}
-                {t.subproject&&<span>{(client||t.project)?' \u00b7 ':''}<span style={{fontSize:'9px',fontWeight:600,opacity:.65,textTransform:'uppercase',letterSpacing:'.04em'}}>Sub.</span>{' '}{t.subproject}</span>}
+            {(client||t.project||t.subproject||(showWho&&taskAssignees(t).length>0))&&(
+              <div style={{fontSize:10,color:C.done,marginTop:3,display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
+                {(client||t.project||t.subproject)&&<span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client&&<span style={{color:C.muted,fontWeight:600}}>{client.name}</span>}{t.project&&<span>{client?' · ':''}{t.project}</span>}{t.subproject&&<span>{(client||t.project)?' › ':''}{t.subproject}</span>}</span>}
+                {showWho&&taskAssignees(t).map(w=>{const pc=personChip(w);return <span key={w} style={{flexShrink:0,fontSize:10,padding:'1px 8px',borderRadius:10,background:pc.bg,color:pc.color,fontWeight:600}}>{w}</span>})}
               </div>
             )}
-            {showWho&&taskAssignees(t).length>0&&<span style={{display:'inline-flex',gap:4,flexWrap:'wrap',marginTop:3}}>{taskAssignees(t).map(w=>{const pc=personChip(w);return <span key={w} style={{fontSize:10,padding:'2px 7px',borderRadius:10,background:pc.bg,color:pc.color,fontWeight:600}}>{w}</span>})}</span>}
             {(t.delegated_to||[]).length>0&&<div style={{fontSize:10,color:C.soonText,background:C.ambarBg,borderRadius:6,padding:'2px 7px',marginTop:4,display:'inline-block'}}>Delegada a {(t.delegated_to||[]).join(', ')}{t.delegated_due?` · vence ${fmtVenceShort(t.delegated_due)}`:''}</div>}
           </div>
           {!done&&(
