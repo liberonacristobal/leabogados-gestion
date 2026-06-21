@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Ficha cliente: abogado junto al nombre + editar al tocar
+- En el encabezado de la ficha del cliente, el abogado responsable (chip con ▾) pasa al lado del nombre, separado por |. Se elimina el botón Editar: ahora se edita tocando el nombre del cliente (subrayado punteado como pista).
+
 ## 2026-06-21 — Saldo de factura parcial a la vista (+ cuadre de cifras)
 - Helper único global saldoBill(b)=amount−paid_amount (Pagada/Anulada=0), que recoge tanto el abono manual como el saldo que queda tras conciliar transferencias en la cartola.
 - B: "Por cobrar", "Vencido" y el aging (Dashboard, Facturación resumen/interiores, Ficha, Clientes) ahora suman el SALDO, no el monto completo → dejan de inflarse con lo ya transferido/abonado.
