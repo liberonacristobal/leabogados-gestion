@@ -14834,7 +14834,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // ── Re-cuadre por cliente: re-asigna TODOS sus pagos a sus facturas por FECHA + MONTO EXACTO, 1-a-1 (criterio definitivo) ──
   // Regla: pago anterior a la emisión de su candidata = adelanto (no calza auto); fuera de ventana o sin factura exacta = a mano.
   const recuadrePlan = (cid) => {
-    const pagos = movs.filter(m=> String(m.cliente_id)===String(cid) && esConciliable(m)).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?-1:1)
+    const movFondoAnt = new Set(conc.filter(c=> c.tipo_destino!=='factura').map(c=>String(c.movimiento_id)))  // fondo por rendir / anticipo: clasificación distinta, NO se re-calzan
+    const pagos = movs.filter(m=> String(m.cliente_id)===String(cid) && esConciliable(m) && !movFondoAnt.has(String(m.id))).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?-1:1)
     const facs = (billing||[]).filter(b=> String(b.client_id)===String(cid) && !b.deleted_at && (b.amount||0)>0 && String(b.invoice_no||'').trim()!=='' && b.status!=='Anulada')
     const used=new Set(); const out=[]
     for(const p of pagos){
@@ -15021,7 +15022,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
   return (
     <div style={{paddingBottom:80}}>
-      {recuadreFor&&(()=>{ const cid=recuadreFor; const plan=recuadrePlan(cid); const calces=plan.filter(x=>x.factura); const sueltos=plan.filter(x=>!x.factura); return (
+      {recuadreFor&&(()=>{ const cid=recuadreFor; const plan=recuadrePlan(cid); const calces=plan.filter(x=>x.factura); const sueltos=plan.filter(x=>!x.factura); const preserv=movs.filter(mm=> String(mm.cliente_id)===String(cid) && esConciliable(mm) && conc.some(c=>String(c.movimiento_id)===String(mm.id)&&c.tipo_destino!=='factura')); return (
         <div onClick={()=>!busy&&setRecuadreFor(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,maxWidth:560,width:'100%',maxHeight:'85vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
             <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`}}>
@@ -15033,6 +15034,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               {calces.map(({pago,factura})=><div key={pago.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:`1px solid #F2F5F7`}}><span style={{color:C.text}}>{fmtFechaDMY(pago.fecha)} · {fmtM(pago.monto)}</span><span style={{color:C.greenText,fontWeight:600}}>N°{folioN(factura.invoice_no)||'—'} · {mesAbbr(factura.issued_at)}</span></div>)}
               {sueltos.length>0&&<><div style={{fontSize:10,fontWeight:700,color:C.soonText,letterSpacing:.3,margin:'11px 0 5px'}}>SIN FACTURA EXACTA — quedan a mano · {sueltos.length}</div>
               {sueltos.map(({pago})=><div key={pago.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:`1px solid #F2F5F7`,color:C.soonText}}><span>{fmtFechaDMY(pago.fecha)} · {fmtM(pago.monto)}</span><span>adelanto / histórico</span></div>)}</>}
+              {preserv.length>0&&<><div style={{fontSize:10,fontWeight:700,color:C.tealText,letterSpacing:.3,margin:'11px 0 5px'}}>FONDOS POR RENDIR / ANTICIPOS — no se tocan · {preserv.length}</div>
+              {preserv.map(pp=><div key={pp.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:`1px solid #F2F5F7`,color:C.tealText}}><span>{fmtFechaDMY(pp.fecha)} · {fmtM(pp.monto)}</span><span>clasificado</span></div>)}</>}
             </div>
             <div style={{display:'flex',gap:8,padding:'12px 16px',borderTop:`1px solid ${C.border}`}}>
               <button disabled={!!busy||calces.length===0} onClick={()=>aplicarRecuadre(cid)} style={{flex:1,fontSize:12,fontWeight:700,background:busy?C.muted:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'9px',cursor:busy?'default':'pointer'}}>{busy==='recuadre'?'Aplicando…':`Aplicar re-cuadre (${calces.length} calces)`}</button>
