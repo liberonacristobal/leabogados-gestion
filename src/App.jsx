@@ -14406,16 +14406,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(pr){ const r=pool.filter(f=>crNormRut(f.receptor_rut)===pr); if(r.length) pool=r }
     if(pool.length===1) return pool[0]
     const sm=pool.filter(f=>(f.issued_at||'').slice(0,7)===pm); return sm.length===1?sm[0]:null }
-  // Candidatas SUAVES para SUGERIR (no para el auto): TODAS las facturas del cliente con saldo, ranqueadas por
-  // CERCANÍA DE FECHA a la transferencia (criterio clave), con bonus si el monto es exacto y si calza la RS del pagador.
-  const candidatosSuave = (mov, exclude)=>{
-    const resto=(mov.monto||0)-(mov.monto_conciliado||0)
-    const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
-    const pr = crNormRut(mov.rut_contraparte)
-    return facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id))).map(b=>({b,saldo:saldoFactura(b)})).filter(x=>x.saldo>0)
-      .map(x=>{ const ff=x.b.issued_at||x.b.due||null; const dd=(payT&&ff)?Math.abs(payT-new Date(String(ff).slice(0,10)+'T12:00').getTime())/86400000:9999; const diff=Math.abs(x.saldo-resto); const rs=pr&&crNormRut(x.b.receptor_rut)===pr?0:1; const exact=x.saldo===resto; return {...x, dd, diff, exact, score: dd + (exact?-45:0) + rs*8 + Math.min(40,diff/50000) } })
-      .sort((a,b)=>a.score-b.score)
-  }
   const tieneCand = m => esConciliable(m) && candidatos(m).length>0
   // Sugerencia de cliente por MONTO: para abonos sin identificar (depósitos sin RUT), busca una factura de algún
   // cliente cuyo saldo calce EXACTO con el abono y caiga en la ventana de fecha. Solo sugiere si el cliente es ÚNICO.
@@ -15244,7 +15234,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
                   // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
-                  const showPick=myConc.length===0||resto>TOL; const suaves=showPick?candidatosSuave(m,null):[]; const sug=showPick?(mejorCandidato(m)||cands[0]||(suaves[0]&&suaves[0].b)||null):null; const sugAlt=sug?suaves.filter(x=>String(x.b.id)!==String(sug.id)).slice(0,3):[]
+                  const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
@@ -15264,15 +15254,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         </div>
                       )})()}
                       {showPick&&<>
-                        {sug&&(()=>{ const exa=saldoFactura(sug)===resto; return (
-                          <div style={{background:exa?C.azulBg:C.soonBg,borderRadius:8,padding:'6px 9px',marginBottom:6}}>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                              <span style={{fontSize:11,color:exa?C.accent:C.soonText,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sugerida{exa?' (exacto)':' (aproximada)'}: <b>Factura N°{folioN(sug.invoice_no)||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}{!exa?` · difiere ${fmtM(Math.abs(saldoFactura(sug)-resto))}`:''}</span>
-                              <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:exa?C.accent:C.soonText,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
-                            </div>
-                            {sugAlt.length>0&&<div style={{fontSize:10,color:C.muted,marginTop:5,display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}><span>Otras cercanas:</span>{sugAlt.map(x=><button key={x.b.id} disabled={busy===m.id} onClick={()=>reconciliar(m,x.b,'manual')} title='Conciliar con esta' style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',cursor:busy===m.id?'default':'pointer'}}>N°{folioN(x.b.invoice_no)||'—'} · {mesAbbr(x.b.issued_at)} · {fmtM(x.saldo)}</button>)}</div>}
-                          </div>
-                        ) })()}
+                        {sug&&<div style={{background:C.azulBg,borderRadius:8,padding:'6px 9px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
+                          <span style={{fontSize:11,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sugerida: <b>Factura N°{folioN(sug.invoice_no)||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}{sug.receptor_name&&sug.receptor_name!==cmap[m.cliente_id]?` · ${String(sug.receptor_name).slice(0,16)}`:''}</span>
+                          <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
+                        </div>}
                         {(()=>{ const grp=grupoPago(m); if(!grp) return null; return (
                           <div style={{background:'#fff',border:`1px solid #BFE3D5`,borderRadius:8,padding:'8px 10px',marginBottom:6}} onClick={e=>e.stopPropagation()}>
                             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:5}}>
