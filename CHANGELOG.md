@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: Traspaso interno enlaza su espejo
+- Al clasificar un movimiento como "Traspaso interno", la app busca su espejo en la OTRA cuenta (mismo monto exacto, ±7 días, no interno aún) y marca AMBOS como internos en una sola acción. Si no hay espejo, marca solo el movimiento. (espejoInterno reusa la lógica de origenInterno, generalizada.)
+
 ## 2026-06-21 — Conciliación: clasificar sin-identificar (4 categorías que aprenden)
 - Nuevas categorías de abono: Reembolso · Traspaso interno · Intereses · Tercero (con su color). Se asignan a mano desde el selector del movimiento (los abonos sin cliente ahora muestran "Clasificar…").
 - Un abono clasificado SALE de "sin identificar" (Reembolso/Intereses/Tercero por categoría; Traspaso interno reusa es_interno). Así dejan de quedar eternos.
