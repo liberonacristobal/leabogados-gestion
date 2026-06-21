@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: botones minimal (altura 26, sin borde)
+- Familia de controles uniforme y más baja: toggle Abonos/Cargos, Cuenta, Filtros, Fecha y Conciliar auto a 26px, radio 7, relleno gris suave (#F2F5F7) sin borde, fuente 10.5. Cuenta con appearance:none + chevron propio y opciones cortas (Cuenta/Honorarios/Gastos) para no estirarse. Chevron de Filtros/Fecha que rota según estado. Chip provisiones también a 26px, radio 7.
+
 ## 2026-06-21 — Conciliación: header compacto (v2)
 - Totales de abonos/cargos se funden ABREVIADOS en la línea de Cartolas (CARTOLAS · N mov · +$XXXM · −$YYYM); se elimina la línea suelta de números.
 - Filtros colapsables: Mes/Año/Responsable viven en un botón "Filtros ▾" (se pinta + cuenta los activos · N, con "Limpiar"); Cuenta queda fuera (select visible). Fecha pasa a la fila de controles.
