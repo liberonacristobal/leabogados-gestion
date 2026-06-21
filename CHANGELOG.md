@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Fecha día-grande en Gastos, Tareas, Anticipos y Terceros
+- Gastos: día-grande a la izquierda (e.date), sin fecha en línea. Tareas: día-grande con el COLOR DE URGENCIA (rojo vencida / ámbar / verde), el badge queda solo para "Sin fecha". Anticipos: día-grande (a.fecha) + proyecto de protagonista. Terceros/cuentas por pagar: día-grande (pagado_at o created_at) + línea Factura/estado. Rendiciones ya tenía el formato.
+
 ## 2026-06-21 — Fecha día-grande estándar (helper global) + Caja Chica
 - bigDate ahora es helper global (fuente única, con color opcional para urgencia); Facturación usa el global. Aplicado también a Caja Chica (gastos pendientes): fecha día-grande a la izquierda, cliente·persona de secundaria, sin fecha en línea.
 
