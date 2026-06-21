@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación (flujo): auto-aplicar tríos exactos
+- conciliarAuto ahora también resuelve combos de 3 facturas cuyo saldo suma EXACTAMENTE el abono (único, dentro del cliente, límite 45 facturas anti-explosión). Antes solo pares. Sube la tasa de auto-conciliación sin aflojar el monto (sigue exacto, TOL=0).
+
 ## 2026-06-21 — Limpieza: eliminar DashboardTasks (código muerto)
 - Se eliminó la función DashboardTasks (~170 líneas): era una tarjeta de tareas vieja (con etiquetas CLIENTE/PROY./SUB. y ✓ en cuadro) que ya no se renderiza en ningún lado; la reemplazaron "Tareas del equipo" (Dashboard) y TasksOnlyView. Con esto las tarjetas de tareas vivas quedan todas consistentes.
 

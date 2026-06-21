@@ -14453,6 +14453,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const pares=[]
     for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ if(fs[i].saldo+fs[j].saldo===(mov.monto||0)) pares.push([fs[i].f,fs[j].f]) }
     return pares.length===1 ? pares[0] : null }
+  // Combo EXACTO de 3 facturas (suma == monto, único) — para el auto. Límite anti-explosión O(n^3).
+  const comboExacto3 = (mov, exclude) => { if(!esConciliable(mov)) return null
+    const pm=(mov.fecha||'').slice(0,7)
+    const fs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
+      .map(f=>({f,saldo:saldoFactura(f),d:mesDiff((f.issued_at||'').slice(0,7),pm)})).filter(x=>x.saldo>0&&(x.d==null||x.d<=0))
+    if(fs.length>45) return null
+    const trios=[]
+    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++) for(let k=j+1;k<fs.length;k++){ if(fs[i].saldo+fs[j].saldo+fs[k].saldo===(mov.monto||0)) trios.push([fs[i].f,fs[j].f,fs[k].f]) }
+    return trios.length===1 ? trios[0] : null }
   // Gasto ya reembolsado vía conciliación (filas tipo_destino='gasto'), por cliente — para no re-sugerir lo ya cubierto.
   const cidByMov = useMemo(()=>{ const m={}; movs.forEach(x=>m[x.id]=x.cliente_id); return m },[movs])
   const reembGastoByCliente = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.tipo_destino==='gasto'){ const cid=cidByMov[c.movimiento_id]; if(cid) m[cid]=(m[cid]||0)+(c.monto_aplicado||0) } }); return m },[conc,cidByMov])
@@ -14746,11 +14755,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const f=facturasCliente(mov.cliente_id).find(x=>x.id===fid); if(!f) continue
           used.add(fid); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
         // Combo EXACTO único (1 transferencia = 2 facturas, suma exacta) → también automático.
-        const cb=comboExacto(mov, used)
+        const cb=comboExacto(mov, used) || comboExacto3(mov, used)
         if(cb){ cb.forEach(f=>used.add(f.id)); await reconciliarCombo(mov, cb); cmb++; ok++; monto+=mov.monto } }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
-    alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas${cmb?` · ${cmb} pagaron 2 facturas`:''}.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
+    alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas${cmb?` · ${cmb} pagaron varias facturas`:''}.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
