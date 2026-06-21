@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Fecha día-grande estándar (helper global) + Caja Chica
+- bigDate ahora es helper global (fuente única, con color opcional para urgencia); Facturación usa el global. Aplicado también a Caja Chica (gastos pendientes): fecha día-grande a la izquierda, cliente·persona de secundaria, sin fecha en línea.
+
 ## 2026-06-21 — Facturación: fecha día-grande en todas las filas
 - Helper bigDate (día grande navy + "mes año" abajo, como la rendición). Aplicado a las 3 filas de Facturación (fila/Por cliente, filaAll/Todas, renderClientGroup/Emitidas): la fecha relevante (kpiDate: vence si Programada, pago si Pagada, emisión si no) va a la izquierda en grande y se quita la fecha en línea (sin duplicar).
 

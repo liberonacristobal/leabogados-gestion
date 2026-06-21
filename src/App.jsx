@@ -66,6 +66,8 @@ const fechaConAnio = d => { if(!d) return ''; const p=String(d).slice(0,10).spli
 // Monto en CLP en valor absoluto (sin signo): el llamador agrega el +/- cuando corresponde. Fuente única para PDFs/resúmenes.
 const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-MM-AAAA con guiones) en toda la app
+// Fecha destacada (día grande + "mes año") — formato estándar de listas. col opcional (urgencia).
+const bigDate = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:40,flexShrink:0}}/>; return <div style={{width:40,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:16,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:9,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
 const fmtFechaTS = ts => { if(!ts) return '—'; const d=new Date(ts); return isNaN(d)?'—':`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}` }
@@ -1220,9 +1222,10 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 <div style={{width:17,height:17,borderRadius:5,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>
                   {isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                 </div>
+                {bigDate(e.date)}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:10,color:C.done,marginTop:2}}>{e.created_by||me}{e.date?` · ${fmtFechaDMY(e.date)}`:''}{client?` · ${client.name}`:''}</div>
+                  <div style={{fontSize:10,color:C.done,marginTop:2}}>{client?`${client.name} · `:''}{e.created_by||me}</div>
                 </div>
                 <div style={{flexShrink:0,marginLeft:8,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
                   <span style={{fontSize:13,fontWeight:500,color:C.overdue}}>{fmtCLP(e.amount)}</span>
@@ -4803,7 +4806,6 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   // KPIs acotados al año/mes del filtro. Cada estado usa su fecha relevante: Programada→vencimiento, Pagado→pago, resto→emisión.
   const matchYM = dateStr => { if(!fYear&&!fMonth) return true; if(!dateStr) return false; if(fYear&&String(dateStr).slice(0,4)!==fYear) return false; if(fMonth&&String(dateStr).slice(5,7)!==fMonth) return false; return true }
   const kpiDate = b => b.status==='Programada'?b.due:(b.status==='Pagado'?(b.paid_at||b.issued_at):b.issued_at)
-  const bigDate = d => { const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:40,flexShrink:0}}/>; return <div style={{width:40,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:16,fontWeight:700,color:C.accent}}>{+s[2]}</div><div style={{fontSize:9,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{(MESES_ABR[+s[1]-1]||'').toLowerCase()} {s[0].slice(2)}</div></div> }
   // UF en vivo: una programada en UF muestra su CLP recalculado al valor UF del día (display, no toca DB).
   // La UF pactada de la cuota se recupera de su CLP guardado y el uf_value de la venta al generarse.
   const ufInfoDe = b => {
