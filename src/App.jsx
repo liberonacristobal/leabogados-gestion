@@ -14133,7 +14133,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [autoRun,setAutoRun] = useState(false)   // corriendo conciliación automática
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
   const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
-  const [detFor,setDetFor] = useState(null)      // id de la factura con el detalle expandido en el selector "Otra factura"
+  const [detFor,setDetFor] = useState(null)
+  const [facBuscaQ,setFacBuscaQ] = useState('')  // buscador del estado de cuenta del cliente en el panel del pago      // id de la factura con el detalle expandido en el selector "Otra factura"
   const [modalMov,setModalMov] = useState(null)  // id del movimiento abierto en el modal de detalle
   // Salto desde el Estado de cuenta del cliente: limpia filtros, abre el movimiento y hace scroll. Espera a que carguen los movs.
   useEffect(()=>{ if(!focusMovId) return; const m=movs.find(x=>x.id===focusMovId); if(!m) return
@@ -15311,8 +15312,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           </div>) })()}
                         {(()=>{
                           // Estado de cuenta del cliente (siempre visible): agrupado por razón social, montos a la derecha, fila → detalle.
-                          const grupos={}; facsAll.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
+                          const payTms=m.fecha?new Date(m.fecha+'T12:00').getTime():null; const qq=facBuscaQ.trim().toLowerCase()
+                          const facsShow=facsAll.filter(f=> !qq || (`n°${folioN(f.invoice_no)||''} ${f.concept||''} ${f.amount||''}`.toLowerCase().includes(qq))).sort((a,b)=>{ const da=(payTms&&a.issued_at)?Math.abs(payTms-new Date(String(a.issued_at).slice(0,10)+'T12:00').getTime()):9e15; const db=(payTms&&b.issued_at)?Math.abs(payTms-new Date(String(b.issued_at).slice(0,10)+'T12:00').getTime()):9e15; return da-db })
+                          const grupos={}; facsShow.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
                           return (<div style={{borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
+                            {facsAll.length>=8&&<input value={facBuscaQ} onChange={e=>setFacBuscaQ(e.target.value)} onClick={e=>e.stopPropagation()} placeholder='Buscar factura: N°, concepto, monto…' style={{width:'100%',boxSizing:'border-box',fontSize:11,padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,marginBottom:5,outline:'none'}}/>}
                             <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Facturas por cobrar del cliente{facsAll.length?` · ${facsAll.length}`:''}</div>
                             {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas por cobrar — clasifícalo arriba como <b>Saldo a Favor</b> o <b>Fondo por Rendir</b>.</span>}
                             {Object.entries(grupos).map(([rs,fs])=>(
