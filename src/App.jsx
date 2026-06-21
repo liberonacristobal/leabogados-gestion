@@ -1716,7 +1716,7 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
   const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   const data = useMemo(()=>{
     const arr = Array.from({length:12},(_,i)=>({mes:MESES[i], uf:0, clp:0}))
-    const ufConv = ufHoy || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
+    const ufConv = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
     sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada').forEach(s=>{
       const esRec = s.cobro_type==='mensual' && s.status==='Activo'
       // Monto mensual de esta venta en UF y CLP
@@ -1827,13 +1827,13 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
 const esRecurrente = s => s.cobro_type==='mensual' && s.status==='Activo'
 const ventaUF = (s, ufRef) => {
   const factor = esRecurrente(s) ? 12 : 1
-  if(s.moneda==='CLP'){ const clp=(parseFloat(s.amount_clp)||0); const uref=s.uf_value||ufRef; return uref ? (clp*factor)/uref : 0 }   // UF histórica de la venta (congelada); ufRef es solo respaldo
+  if(s.moneda==='CLP'){ const clp=(parseFloat(s.amount_clp)||0); const uref=(s.uf_value>0?s.uf_value:ufRef); return uref ? (clp*factor)/uref : 0 }   // UF histórica de la venta (congelada); ufRef es solo respaldo
   return (parseFloat(s.amount_uf)||0)*factor
 }
 const ventaCLP = (s, ufRef) => {
   const factor = esRecurrente(s) ? 12 : 1
   if(s.moneda==='CLP') return (parseFloat(s.amount_clp)||0)*factor
-  const clp = s.amount_clp || (s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
+  const clp = s.amount_clp || (s.amount_uf&&s.uf_value>0?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
   return (clp||0)*factor
 }
 
@@ -2106,7 +2106,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const ufState = useUF()
   const ufHoy = ufState.uf
 
-  const ufRef = ufHoy || salesYr.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
+  const ufRef = ufHoy || salesYr.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
   // Calculo centralizado: delega a funciones de modulo (single source of truth)
   const esRec = s => esRecurrente(s)
   const ufDeVenta = s => ventaUF(s, ufRef)
@@ -2920,7 +2920,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const [q,setQ] = useState('')
   const ufState = useUF()
   const ufHoy = ufState.uf
-  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
+  const ufRef = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
   const filtered = useMemo(()=>{
     let r = sales
     // Búsqueda libre: si hay texto, busca por título de venta o nombre de cliente e ignora el filtro de estado.
@@ -4757,7 +4757,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [anioLearned,setAnioLearned] = useState({})   // client_id → año aprendido (sugerencia)
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','venta_anio_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=Number(r.value) }); setAnioLearned(m) },()=>{}) },[])
   const saleYrById = useMemo(()=>{ const m={}; sales.forEach(s=>{ if(s.year!=null) m[String(s.id)]=s.year }); return m },[sales])
-  const anioVentaDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:null)
+  const anioVentaDe = b => (b.sale_id&&saleYrById[String(b.sale_id)]!=null)?saleYrById[String(b.sale_id)]:(b.sale_year!=null?b.sale_year:(b.issued_at?+String(b.issued_at).slice(0,4):null))
   const sinAnio = useMemo(()=> bb.filter(b=>b.status==='Pagado'&&anioVentaDe(b)==null).sort((a,b)=>new Date(b.paid_at||0)-new Date(a.paid_at||0)),[bb,saleYrById])
   const yearBtns = useMemo(()=>{ const ys=sales.map(s=>s.year).filter(Boolean); return [...new Set([currentYear,currentYear-1,currentYear-2,currentYear-3,...ys])].sort((a,b)=>b-a).slice(0,6) },[sales])
   // Cuentas por pagar a proveedores ancladas a cada factura (terceros_pagos.billing_id)
@@ -10369,7 +10369,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
   const [respPick,setRespPick] = useState(false)   // asignar/cambiar abogado responsable desde el encabezado
   const ufState = useUF()
-  const ufRef = ufState.uf || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
+  const ufRef = ufState.uf || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
   const clientSales = sales.filter(s=>s.client_id===client.id&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
   const clientBilling = billing.filter(b=>b.client_id===client.id)
   const clientExpenses = expenses.filter(e=>e.client_id===client.id)
@@ -12192,7 +12192,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
 function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
   const {uf:ufHoy} = useUF()
   // Misma fuente de verdad que el Dashboard: ventaUF anualiza recurrentes y convierte CLP→UF.
-  const ufRef = ufHoy || sales.find(s=>s.uf_value)?.uf_value || UF_FALLBACK
+  const ufRef = ufHoy || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
   const esRec = s => esRecurrente(s)
   const costoVentaUF = s => ((parseFloat(s.cost_uf)||0)*(esRec(s)?12:1)) + (s.moneda==='CLP'&&s.cost_clp&&ufRef>0 ? (parseFloat(s.cost_clp)||0)/ufRef*(esRec(s)?12:1) : 0)
   const [sections,setSections] = useState({ventas:true,cobranza:true,gastos:true,tareas:false})
