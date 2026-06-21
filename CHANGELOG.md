@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: internos dentro de "Conciliar auto"
+- "Conciliar auto" ahora también detecta y marca los traspasos internos (cargo↔abono mismo monto exacto, cuentas distintas, ±2 días, par único) en la misma pasada, y lo reporta en el resumen ("N traspasos internos marcados"). Se quitó el botón separado "Detectar internos" y su función. La clasificación manual "Traspaso interno" (con enlace de espejo) se mantiene.
+
 ## 2026-06-21 — Conciliación: auto-match de traspasos internos
 - Botón "Detectar internos" junto a "Conciliar auto": empareja cargo↔abono del mismo monto exacto en cuentas distintas (±2 días, par único, ambos sin identificar/conciliar) y marca AMBOS como internos. Muestra confirm con conteo+total antes (reversible con "Marcarlo como NO interno"). Sin comisiones bancarias en CL → el monto exacto es match confiable.
 
