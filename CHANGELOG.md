@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: aviso proactivo de "Pago en grupo" (Etapa B)
+- gruposDetectados: para clientes con 2+ transferencias sin conciliar cuyo grupo calza facturas (suma exacta), aparece un banner verde arriba de la lista ("✦ Pago en grupo · Cliente · N transferencias pagan M facturas (total) · revisar →"); al tocarlo filtra al cliente y abre la transferencia con la tarjeta de grupo. Así no hay que abrir cada movimiento.
+
 ## 2026-06-21 — Conciliación: "Pago en grupo" (N transferencias → M facturas)
 - Nuevo motor: grupoPago(m) junta las transferencias del MISMO cliente sin conciliar y cercanas en fecha (±30 días) y busca el subconjunto de facturas con saldo que suma EXACTO el total del grupo (prefiere menos transferencias y cuotas más cercanas/contiguas). Cuando calza, el panel muestra la tarjeta "✦ Pago en grupo · N transferencias pagan M facturas · = total (exacto)" con "Conciliar grupo".
 - reconciliarGrupo distribuye: llena cada factura con las transferencias en orden (crea las filas de conciliación, marca las facturas, actualiza cada transferencia). Reversible (Deshacer). No afloja montos (suma exacta).

@@ -14858,6 +14858,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
     return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0),
       descalces:desc.length, fondos:fondos.length, fondosMonto:fondos.reduce((s,m)=>s+(m.monto||0),0) } },[movs,concByMov,billing])
+  // Etapa B — aviso proactivo: clientes con 2+ transferencias sin conciliar cuyo grupo calza facturas (suma exacta).
+  const gruposDetectados = useMemo(()=>{
+    const porCli={}
+    movs.forEach(m=>{ if(esConciliable(m) && !(concByMov[m.id]?.length)) (porCli[m.cliente_id]=porCli[m.cliente_id]||[]).push(m) })
+    const out=[]
+    Object.entries(porCli).forEach(([cid,trs])=>{ if(trs.length<2) return; const g=grupoPago(trs[0]); if(g&&g.transfers.length>=2) out.push({cid, ...g}) })
+    return out
+  },[movs,conc,billing])
 
   // KPIs globales
   const G = useMemo(()=>{
@@ -15084,6 +15092,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         ):null })()}
 
+        {/* Etapa B — avisos proactivos de "pago en grupo" por cliente */}
+        {gruposDetectados.length>0&&(
+          <div style={{marginBottom:8}}>
+            {gruposDetectados.slice(0,4).map(g=>(
+              <div key={g.cid} onClick={()=>{ setSub('abonos'); setQ(cmap[g.cid]||''); setModalMov(g.transfers[0].id) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,background:C.greenBg,border:`1px solid #BFE3D5`,borderRadius:8,padding:'7px 11px',marginBottom:5,cursor:'pointer'}}>
+                <span style={{fontSize:11,color:C.greenText,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>✦ Pago en grupo</b> · {cmap[g.cid]||'Cliente'} · {g.transfers.length} transferencias pagan {g.facturas.length} facturas ({fmtM(g.total)})</span>
+                <span style={{fontSize:10,fontWeight:700,color:C.accent,flexShrink:0}}>revisar →</span>
+              </div>
+            ))}
+          </div>
+        )}
         {/* Lista */}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
           {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>Sin movimientos. Sube una cartola para empezar.</div>}
