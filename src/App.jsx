@@ -14237,6 +14237,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     billing.forEach(b=>{ const k=crNormRut(b.receptor_rut); if(k&&!rec[k]) rec[k]=b.client_id })
     return rut=>{ const k=crNormRut(rut); if(!k) return null; return alias[k]||ent[k]||cli[k]||rec[k]||null }
   },[aliases,clientEntities,clients,billing])
+  // Auto-identificar por NOMBRE al cargar (mismo criterio conservador que `sugerencias`): tokens distintivos + un único cliente. Es identificación reversible, no acción de plata.
+  const resolverNombre = useMemo(()=>{ return (nombre)=>{ if(!nombre) return null; const nt=_toksNom(nombre); if(!nt.length) return null; const hits=new Set(); nombreIdx.forEach(e=>{ const inter=e.t.filter(t=>nt.some(x=> x===t || (x.length>=5&&t.length>=5&&(x.startsWith(t)||t.startsWith(x))))); const fuertes=inter.filter(t=>!_NOM_COMUN.has(t)&&t.length>=5); if(fuertes.length>=1 && (inter.length>=2 || fuertes.some(t=>t.length>=6))) hits.add(e.cid) }); return hits.size===1?[...hits][0]:null } },[nombreIdx])
 
   const onFiles = async(fileList)=>{
     // Solo .xlsx reales: descarta los temporales de Excel "~$..." (archivos de bloqueo, sin datos) y ocultos.
@@ -14253,7 +14255,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const sheet=wb.Sheets[wb.SheetNames[0]]
           const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true})
           const res=parseCartola(aoa,{filename:file.name})
-          const rows=res.movimientos.map(m=>({ ...m, cliente_id: m.es_interno?null:resolver(m.rut_contraparte), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
+          const rows=res.movimientos.map(m=>({ ...m, cliente_id: m.es_interno?null:(resolver(m.rut_contraparte)||resolverNombre(m.nombre_contraparte)), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
           // dedup: cuántos son nuevos vs ya cargados
           let nuevos=rows.length
           if(rows.length){
