@@ -14177,7 +14177,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const nombreIdx = useMemo(()=>{ const idx=[]
     clients.forEach(c=>idx.push({cid:c.id,t:_toksNom(c.name)}))
     const seen=new Set(); billing.forEach(f=>{ if(f.receptor_name&&f.client_id){ const k=f.client_id+'|'+f.receptor_name; if(!seen.has(k)){ seen.add(k); idx.push({cid:f.client_id,t:_toksNom(f.receptor_name)}) } } })
-    return idx },[clients,billing])
+    aliases.forEach(a=>{ if(a.nombre_pagador&&a.cliente_id){ const tk=_toksNom(a.nombre_pagador); if(tk.length) idx.push({cid:a.cliente_id,t:tk}) } })
+    return idx },[clients,billing,aliases])
   const sugerencias = useMemo(()=>{ const out={}
     movs.forEach(mv=>{ if(mv.tipo==='abono'&&!mv.es_interno&&!mv.cliente_id&&mv.nombre_contraparte){
       const nt=_toksNom(mv.nombre_contraparte); if(!nt.length) return
