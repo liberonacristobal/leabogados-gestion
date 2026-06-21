@@ -14146,6 +14146,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [gcCli,setGcCli] = useState(null)        // cliente elegido para el gasto por cuenta de cliente
   const [gcEnt,setGcEnt] = useState(null)        // razón social elegida para ese gasto
   const [cargoCliLearn,setCargoCliLearn] = useState({})  // glosaKey → client_id aprendido (cargo por cuenta de cliente)
+  const [recuadreFor,setRecuadreFor] = useState(null)  // cliente_id con el modal de re-cuadre abierto
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
   const fmtM = fmt
@@ -14830,6 +14831,75 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }catch(e){ alert('Error al deshacer: '+e.message) }
     setBusy(null)
   }
+  // ── Re-cuadre por cliente: re-asigna TODOS sus pagos a sus facturas por FECHA + MONTO EXACTO, 1-a-1 (criterio definitivo) ──
+  // Regla: pago anterior a la emisión de su candidata = adelanto (no calza auto); fuera de ventana o sin factura exacta = a mano.
+  const recuadrePlan = (cid) => {
+    const pagos = movs.filter(m=> String(m.cliente_id)===String(cid) && esConciliable(m)).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?-1:1)
+    const facs = (billing||[]).filter(b=> String(b.client_id)===String(cid) && !b.deleted_at && (b.amount||0)>0 && String(b.invoice_no||'').trim()!=='' && b.status!=='Anulada')
+    const used=new Set(); const out=[]
+    for(const p of pagos){
+      const payT = p.fecha ? new Date(p.fecha+'T12:00').getTime() : null
+      const cand = facs.filter(f=> !used.has(f.id) && (f.amount||0)===(p.monto||0))
+        .map(f=>{ const ft=f.issued_at?new Date(String(f.issued_at).slice(0,10)+'T12:00').getTime():null; const delta=(payT&&ft)?(payT-ft)/86400000:null; return {f,delta} })
+        .filter(x=> x.delta==null || (x.delta>=-3 && x.delta<=90))   // pago entre 3 días antes y 90 días después de emitir
+        .sort((a,b)=> (a.delta==null?9999:Math.abs(a.delta))-(b.delta==null?9999:Math.abs(b.delta)))
+      const mm=cand[0]
+      if(mm){ used.add(mm.f.id); out.push({pago:p, factura:mm.f}) } else out.push({pago:p, factura:null})
+    }
+    return out
+  }
+  // Aplica el re-cuadre: libera las conciliaciones tipo-factura del cliente y las re-crea según el plan. Auto-contenido (no usa los memos stale).
+  const aplicarRecuadre = async(cid) => {
+    if(busy) return
+    setBusy('recuadre')
+    const now=new Date().toISOString()
+    try{
+      const plan = recuadrePlan(cid)
+      const pagos = movs.filter(m=> String(m.cliente_id)===String(cid) && esConciliable(m))
+      const movIds = new Set(pagos.map(p=>String(p.id)))
+      const movConOtros = new Set(conc.filter(c=> movIds.has(String(c.movimiento_id)) && c.tipo_destino!=='factura').map(c=>String(c.movimiento_id)))  // tienen anticipo/fondo: NO tocar
+      const liberar = conc.filter(c=> movIds.has(String(c.movimiento_id)) && c.tipo_destino==='factura' && c.factura_id && !movConOtros.has(String(c.movimiento_id)))
+      const liberarIds = new Set(liberar.map(r=>String(r.id)))
+      const facPatch={}; const facStatus={}
+      const statusOf = fid => { if(!(fid in facStatus)){ const f=billing.find(b=>String(b.id)===String(fid)); facStatus[fid]= f?f.status:null } return facStatus[fid] }
+      // 1) revertir facturas de las filas liberadas (solo si NO les quedan otras filas que no estamos liberando)
+      const porFac={}; liberar.forEach(r=>{ (porFac[r.factura_id]=porFac[r.factura_id]||[]).push(r) })
+      for(const fid in porFac){
+        const otras = conc.filter(c=> c.tipo_destino==='factura' && String(c.factura_id)===String(fid) && !liberarIds.has(String(c.id)))
+        if(otras.length) continue
+        const marco = porFac[fid].some(r=>r.marco_pago)
+        const patch = marco
+          ? { status:'Pendiente', paid:false, paid_at:null, payment_method:null, payment_ref:null, paid_amount:null, reconciled_at:null, updated_at:now }
+          : { reconciled_at:null, paid_amount:null, updated_at:now }
+        const { error } = await supabase.from('billing').update(patch).eq('id',fid); if(error) throw error
+        facPatch[fid]={...(facPatch[fid]||{}),...patch}; if(patch.status) facStatus[fid]=patch.status
+      }
+      for(const r of liberar){ const { error } = await supabase.from('conciliacion').delete().eq('id',r.id); if(error) throw error }
+      const movLib = new Set(liberar.map(r=>String(r.movimiento_id)))
+      for(const mid of movLib){ const { error } = await supabase.from('cartola_movimientos').update({estado:'pendiente',monto_conciliado:0}).eq('id',mid); if(error) throw error }
+      // 2) re-conciliar según el plan
+      const nuevas=[]
+      for(const {pago,factura} of plan){
+        if(!factura || movConOtros.has(String(pago.id))) continue
+        const aplicado = pago.monto||0
+        const marco = statusOf(factura.id)!=='Pagado'
+        const ins = await supabase.from('conciliacion').insert({ movimiento_id:pago.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'recuadre', marco_pago:marco }).select().single()
+        if(ins.error) throw ins.error
+        nuevas.push(ins.data)
+        const patch = marco
+          ? { status:'Pagado', paid:true, paid_at:pago.fecha, payment_date:pago.fecha, payment_method:'Transferencia', payment_ref:pago.n_operacion||null, paid_amount:(factura.amount||0), reconciled_at:now, updated_at:now }
+          : { reconciled_at:now, updated_at:now }
+        const { error } = await supabase.from('billing').update(patch).eq('id',factura.id); if(error) throw error
+        facPatch[factura.id]={...(facPatch[factura.id]||{}),...patch}; facStatus[factura.id]='Pagado'
+        const { error:me } = await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:aplicado}).eq('id',pago.id); if(me) throw me
+      }
+      setBilling&&setBilling(p=>p.map(b=> facPatch[b.id]?{...b,...facPatch[b.id]}:b))
+      await cargar()
+      setRecuadreFor(null)
+      alert((cmap[cid]||'Cliente')+': re-cuadre aplicado · '+nuevas.length+' calces.')
+    }catch(e){ alert('Error en re-cuadre: '+e.message+'. Recargo el estado real.'); await cargar() }
+    setBusy(null)
+  }
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
@@ -14951,6 +15021,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
   return (
     <div style={{paddingBottom:80}}>
+      {recuadreFor&&(()=>{ const cid=recuadreFor; const plan=recuadrePlan(cid); const calces=plan.filter(x=>x.factura); const sueltos=plan.filter(x=>!x.factura); return (
+        <div onClick={()=>!busy&&setRecuadreFor(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,maxWidth:560,width:'100%',maxHeight:'85vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`}}>
+              <div style={{fontSize:15,fontWeight:600,color:C.text}}>Re-cuadrar {cmap[cid]||'cliente'}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>Libera y re-asigna por fecha + monto exacto, una factura un pago. Nada se aproxima.</div>
+            </div>
+            <div style={{padding:'10px 16px',overflow:'auto',flex:1}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.greenText,letterSpacing:.3,marginBottom:5}}>CALCES EXACTOS · {calces.length}</div>
+              {calces.map(({pago,factura})=><div key={pago.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:`1px solid #F2F5F7`}}><span style={{color:C.text}}>{fmtFechaDMY(pago.fecha)} · {fmtM(pago.monto)}</span><span style={{color:C.greenText,fontWeight:600}}>N°{folioN(factura.invoice_no)||'—'} · {mesAbbr(factura.issued_at)}</span></div>)}
+              {sueltos.length>0&&<><div style={{fontSize:10,fontWeight:700,color:C.soonText,letterSpacing:.3,margin:'11px 0 5px'}}>SIN FACTURA EXACTA — quedan a mano · {sueltos.length}</div>
+              {sueltos.map(({pago})=><div key={pago.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'3px 0',borderBottom:`1px solid #F2F5F7`,color:C.soonText}}><span>{fmtFechaDMY(pago.fecha)} · {fmtM(pago.monto)}</span><span>adelanto / histórico</span></div>)}</>}
+            </div>
+            <div style={{display:'flex',gap:8,padding:'12px 16px',borderTop:`1px solid ${C.border}`}}>
+              <button disabled={!!busy||calces.length===0} onClick={()=>aplicarRecuadre(cid)} style={{flex:1,fontSize:12,fontWeight:700,background:busy?C.muted:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'9px',cursor:busy?'default':'pointer'}}>{busy==='recuadre'?'Aplicando…':`Aplicar re-cuadre (${calces.length} calces)`}</button>
+              <button disabled={!!busy} onClick={()=>setRecuadreFor(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 14px',cursor:busy?'default':'pointer'}}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      ) })()}
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
@@ -15176,6 +15266,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         {cliName
                           ? <span onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} title='Tocar para editar / cambiar cliente' style={{fontWeight:500,color:C.muted,border:`1px solid ${C.border}`,borderRadius:3,padding:'1px 8px',background:'#fff',cursor:'pointer'}}>{cliName}</span>
                           : <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:10,color:C.soon,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Identificar</button>}
+                        {cliName&&<button onClick={()=>setRecuadreFor(m.cliente_id)} title='Re-cuadrar TODOS los pagos y facturas de este cliente por fecha + monto exacto (vista previa antes de aplicar)' style={{fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Re-cuadrar cliente</button>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
                         {!cliName&&!sugerencias[m.id]&&(()=>{ const cm=clientePorMonto(m); if(!cm) return null; const nom=cmap[cm.cid]||clients.find(c=>String(c.id)===String(cm.cid))?.name||'cliente'; return <button onClick={async()=>{ await identificar(m,cm.cid,true); await reconciliar({...m,cliente_id:cm.cid}, cm.factura, 'manual') }} title={`Identifica a ${nom} y concilia con la Factura N°${folioN(cm.factura.invoice_no)||'—'} (calce exacto) en un clic`} style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.azulBg,color:C.accent,border:'none',cursor:'pointer'}}>¿{nom}? · Factura N°{folioN(cm.factura.invoice_no)||'—'} →</button> })()}
                         {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: "Re-cuadrar cliente" (piloto)
+- Nueva acción por cliente en el panel del movimiento: re-asigna TODOS sus pagos a sus facturas por FECHA + MONTO EXACTO, una factura un pago. Libera lo mal cuadrado y lo rehace bien (desenreda casos como 28-nov→224 de Schroder). Lo que no calza exacto (adelanto/histórico) y el pago anterior a la emisión quedan a mano. Vista previa obligatoria antes de aplicar; auto-contenido y reversible. Piloto: Eugenia Perry y Schroder.
+
 ## 2026-06-21 — Conciliación: criterio EXACTO (sin tolerancia UF)
 - Revertida la lógica "aproximada UF" en las sugerencias (era un error de criterio). La conciliación bancaria es 100% exacta: cada pago calza por FECHA + MONTO EXACTO (factura sola, factura+gastos, combo o grupo). Si nada calza exacto, es adelanto / pago histórico (se clasifica, no se aproxima). La tolerancia UF queda solo para programadas↔emitidas, fuera de la cartola.
 
