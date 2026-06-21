@@ -2157,6 +2157,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payGroup,setPayGroup] = useState(null)        // varias cuentas del mismo proveedor pagadas juntas
   const [payFecha,setPayFecha] = useState('')
   const [payRef,setPayRef] = useState('')
+  const [verTareasEquipo,setVerTareasEquipo] = useState(false)
+  const [tareaPersOpen,setTareaPersOpen] = useState({})
   const [payDoc,setPayDoc] = useState('')          // N° documento fiscal del proveedor (factura/boleta)
   const [payDocF,setPayDocF] = useState('')        // fecha del documento
   const [payingNow,setPayingNow] = useState(false)
@@ -2473,6 +2475,54 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           </>)}
         </div>
       </div>
+
+      {/* Tareas del equipo — todas las activas agrupadas por persona (colapsable) */}
+      {(()=>{
+        const activas=(tasks||[]).filter(t=>t.status!=='Terminado')
+        if(!activas.length) return null
+        const orden=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+        const porP={}
+        activas.forEach(t=>{ const who=taskAssignees(t); (who.length?who:['Sin asignar']).forEach(w=>{ (porP[w]=porP[w]||[]).push(t) }) })
+        const personas=Object.keys(porP).sort((a,b)=>{ const ia=orden.indexOf(a),ib=orden.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,'es') })
+        const esVenc=t=>{ const d=daysLeft(t.due); return d!=null&&d<0 }
+        const vencTot=activas.filter(esVenc).length
+        return (
+        <div style={{padding:'16px 20px 0'}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+            <button onClick={()=>setVerTareasEquipo(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'12px 16px',background:'none',border:'none',cursor:'pointer',textAlign:'left'}}>
+              <span style={{fontSize:14,fontWeight:600,color:C.text}}>Tareas del equipo <span style={{color:C.done,fontWeight:400}}>· {activas.length} activas</span></span>
+              {vencTot>0&&<span style={{fontSize:10,fontWeight:600,background:C.overdueBg,color:C.overdueText,borderRadius:10,padding:'2px 9px'}}>{vencTot} vencida{vencTot!==1?'s':''}</span>}
+              <span style={{marginLeft:'auto'}}/><Chev open={verTareasEquipo}/>
+            </button>
+            {verTareasEquipo&&personas.map(pn=>{
+              const arr=porP[pn].slice().sort((a,b)=>{ const da=daysLeft(a.due),db=daysLeft(b.due); return (da==null?1e9:da)-(db==null?1e9:db) })
+              const vn=arr.filter(esVenc).length
+              const pc=personChip(pn); const open=!!tareaPersOpen[pn]
+              return (
+                <div key={pn}>
+                  <div onClick={()=>setTareaPersOpen(o=>({...o,[pn]:!o[pn]}))} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 16px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>
+                    <span style={{fontSize:11,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{pn}</span>
+                    <span style={{fontSize:11,color:C.muted}}>{arr.length} activa{arr.length!==1?'s':''}</span>
+                    {vn>0&&<span style={{fontSize:10,fontWeight:600,color:C.overdueText}}>· {vn} vencida{vn!==1?'s':''}</span>}
+                    <span style={{marginLeft:'auto',color:C.done,fontSize:12}}>{open?'▴':'▾'}</span>
+                  </div>
+                  {open&&arr.map(t=>{ const cl=clients.find(c=>String(c.id)===String(t.client_id)); return (
+                    <div key={t.id} onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 16px',borderTop:`1px solid #F2F5F7`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer'}}>
+                      {bigDate(t.due,urgencyColor(t.due,t.status))}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
+                        {(cl||t.project)&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?<span style={{color:C.muted,fontWeight:600}}>{cl.name}</span>:''}{t.project?`${cl?' › ':''}${t.project}`:''}</div>}
+                      </div>
+                      <span onClick={e=>{e.stopPropagation();onCompleteTask&&onCompleteTask(t)}} title='Marcar terminada' style={{width:18,height:18,borderRadius:5,border:`1.5px solid #D7DEE3`,flexShrink:0,cursor:'pointer'}}/>
+                    </div>
+                  )})}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+        )
+      })()}
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
       <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients}/>
