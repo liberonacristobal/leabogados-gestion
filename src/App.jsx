@@ -14217,6 +14217,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [orden,setOrden] = useState('desc')        // orden por fecha: 'desc' | 'asc'
   const [verCartolas,setVerCartolas] = useState(false)   // panel "Cartolas cargadas" desplegado
   const [verCarga,setVerCarga] = useState(false)         // caja de carga de cartolas colapsada (solo se usa al inicio)
+  const [verFiltros,setVerFiltros] = useState(false)     // filtros Mes/Año/Responsable colapsados
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
   const [tagFor,setTagFor] = useState(null)      // id del movimiento con el picker de categoría abierto
   const [splitMov,setSplitMov] = useState(null)  // id del movimiento con el split adelanto/fondo abierto
@@ -14941,7 +14942,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'#F5F7F9'}}>
                 <span onClick={()=>setVerCartolas(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}>
                   <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Cartolas</span>
-                  <span style={{fontSize:11,color:C.muted}}>{cartolas.length} · {movs.length} mov.</span>
+                  <span style={{fontSize:11,color:C.muted}}>{movs.length} mov · <b style={{color:C.greenText}}>+{`${Math.round(G.sumAbo/1e6)}M`}</b> · <b style={{color:C.overdue}}>−{`${Math.round(G.sumCar/1e6)}M`}</b></span>
                   <span style={{fontSize:13,color:C.muted}}>{verCartolas?'▴':'▾'}</span>
                 </span>
                 <button onClick={()=>setVerCarga(v=>!v)} style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>+ Cargar</button>
@@ -15001,72 +15002,69 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         )}
 
-        {/* Resumen en una línea */}
-        <div style={{fontSize:12,color:C.muted,marginBottom:12,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-          <span><b style={{color:C.greenText}}>{fmtM(G.sumAbo)}</b> abonos</span>
-          <span style={{color:C.border}}>·</span>
-          <span><b style={{color:C.overdue}}>{fmtM(G.sumCar)}</b> cargos</span>
-          {G.internos>0&&<><span style={{color:C.border}}>·</span><span>{G.internos} internos</span></>}
-        </div>
-
-        {/* Filtros — una sola línea de controles (tipo + cuenta + mes + año + estado) */}
-        {(()=>{ const selSty={fontSize:11,fontWeight:600,padding:'5px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',outline:'none'}; return (
-        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
-          <span style={{display:'inline-flex',border:`1px solid ${C.accent}`,borderRadius:8,overflow:'hidden'}}>
-            {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
-              <button key={v} onClick={()=>setSub(v)} style={{fontSize:11,fontWeight:600,padding:'5px 11px',border:'none',background:sub===v?C.accent:'#fff',color:sub===v?'#fff':C.muted,cursor:'pointer'}}>{l}</button>
-            ))}
-          </span>
-          <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
-            <option value='ambas'>Cuenta</option>
-            <option value='honorarios'>Cta. Honorarios</option>
-            <option value='gastos'>Cta. Gastos</option>
-          </select>
-          <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selSty}>
-            <option value='todos'>Mes</option>
-            {MESES_ABR.map((nm,i)=>{const mm=String(i+1).padStart(2,'0');return <option key={mm} value={mm}>{nm}</option>})}
-          </select>
-          <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={selSty}>
-            <option value='todos'>Año</option>
-            {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
-          </select>
-          <select value={respF} onChange={e=>setRespF(e.target.value)} style={selSty} title='Filtrar por abogado responsable del cliente'>
-            <option value='todos'>Responsable</option>
-            {respDisp.map(r=><option key={r} value={r}>{r}</option>)}
-            <option value='__sin__'>Sin responsable</option>
-          </select>
-          <span style={{marginLeft:'auto',fontSize:10,color:C.muted}}>{lista.length}{(()=>{const tot=movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length;return tot>lista.length?` de ${tot}`:''})()}</span>
+        {/* Filtros — toggle + Cuenta (fuera) + Filtros colapsable (Mes/Año/Resp) + Fecha */}
+        {(()=>{ const selSty={fontSize:11,fontWeight:600,padding:'5px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',outline:'none'}; const nF=(mesF!=='todos'?1:0)+(anioF!=='todos'?1:0)+(respF!=='todos'?1:0); return (
+        <div style={{marginBottom:8}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+            <span style={{display:'inline-flex',border:`1px solid ${C.accent}`,borderRadius:8,overflow:'hidden'}}>
+              {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
+                <button key={v} onClick={()=>setSub(v)} style={{fontSize:11,fontWeight:600,padding:'5px 11px',border:'none',background:sub===v?C.accent:'#fff',color:sub===v?'#fff':C.muted,cursor:'pointer'}}>{l}</button>
+              ))}
+            </span>
+            <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
+              <option value='ambas'>Cuenta</option>
+              <option value='honorarios'>Cta. Honorarios</option>
+              <option value='gastos'>Cta. Gastos</option>
+            </select>
+            <button onClick={()=>setVerFiltros(v=>!v)} style={{...selSty,color:nF>0?C.accent:C.muted,borderColor:nF>0?C.accent:C.border,background:nF>0?C.azulBg:'#fff',display:'inline-flex',alignItems:'center',gap:5}}>
+              <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={nF>0?C.accent:C.muted} strokeWidth='2' strokeLinecap='round'><path d='M3 5h18M6 12h12M10 19h4'/></svg>Filtros{nF>0?` · ${nF}`:''} {verFiltros?'▴':'▾'}
+            </button>
+            <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{...selSty,marginLeft:'auto'}}>Fecha {orden==='desc'?'↓':'↑'}</button>
+          </div>
+          {verFiltros&&(
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',background:'#F5F7F9',borderRadius:8,padding:8,marginTop:6}}>
+              <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selSty}>
+                <option value='todos'>Mes</option>
+                {MESES_ABR.map((nm,i)=>{const mm=String(i+1).padStart(2,'0');return <option key={mm} value={mm}>{nm}</option>})}
+              </select>
+              <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={selSty}>
+                <option value='todos'>Año</option>
+                {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
+              </select>
+              <select value={respF} onChange={e=>setRespF(e.target.value)} style={selSty} title='Filtrar por abogado responsable del cliente'>
+                <option value='todos'>Responsable</option>
+                {respDisp.map(r=><option key={r} value={r}>{r}</option>)}
+                <option value='__sin__'>Sin responsable</option>
+              </select>
+              {nF>0&&<span onClick={()=>{setMesF('todos');setAnioF('todos');setRespF('todos')}} style={{marginLeft:'auto',fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer'}}>Limpiar</span>}
+            </div>
+          )}
         </div>
         )})()}
 
-        {/* Buscar (RUT / nombre / cliente) + ordenar por fecha */}
-        <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+        {/* Buscar + Mis clientes (estrella) + conteo */}
+        <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
           <div style={{flex:1,display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 9px'}}>
             <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>
             <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar RUT, nombre o cliente…' style={{flex:1,minWidth:0,border:'none',outline:'none',fontSize:12,color:C.text,background:'transparent'}}/>
             {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>✕</button>}
           </div>
-          {/* Atajo "Mis clientes": filtra por el responsable = usuario actual (reusa respF) */}
           {(()=>{ const mio=(user?.name||'').trim(); if(!mio) return null; const on=respF===mio; return (
-            <button onClick={()=>setRespF(on?'todos':mio)} title='Ver solo mis clientes' style={{fontSize:11,fontWeight:700,padding:'6px 11px',borderRadius:8,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5}}>
-              <svg width='12' height='12' viewBox='0 0 24 24' fill={on?'#fff':'none'} stroke={on?'#fff':C.accent} strokeWidth='2' strokeLinejoin='round'><polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/></svg>
-              Mis clientes
+            <button onClick={()=>setRespF(on?'todos':mio)} title='Ver solo mis clientes' style={{background:'none',border:'none',cursor:'pointer',padding:4,display:'inline-flex',alignItems:'center',flexShrink:0}}>
+              <svg width='19' height='19' viewBox='0 0 24 24' fill={on?C.accent:'none'} stroke={C.accent} strokeWidth='2' strokeLinejoin='round'><polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/></svg>
             </button>
           )})()}
-          <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {orden==='desc'?'↓':'↑'}</button>
+          <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',flexShrink:0}}>{lista.length}{(()=>{const tot=movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length;return tot>lista.length?` / ${tot}`:''})()}</span>
         </div>
 
         {/* Conciliación (Fase 2) — solo abonos: acción + resumen (el estado se elige en el filtro de arriba) */}
         {sub==='abonos'&&(
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
-            <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:12,fontWeight:700,padding:'6px 14px',borderRadius:8,border:'none',background:(autoRun||resumenConc.pend===0)?C.done:C.accent,color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer'}}>{autoRun?'Conciliando…':'Conciliar automático'}</button>
+            <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:11,fontWeight:700,padding:'6px 12px',borderRadius:7,border:'none',background:(autoRun||resumenConc.pend===0)?C.done:C.accent,color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer',whiteSpace:'nowrap'}}>{autoRun?'Conciliando…':'Conciliar auto'}</button>
             {resumenConc.total>0&&(()=>{ const pct=Math.round(resumenConc.done/resumenConc.total*100); return (
-              <div style={{flex:1,minWidth:130}}>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:C.muted,marginBottom:3}}><span>{resumenConc.done}/{resumenConc.total} conciliadas</span><span style={{color:C.greenText,fontWeight:600}}>{pct}%</span></div>
-                <div style={{height:5,background:C.greenBg,borderRadius:3,overflow:'hidden'}}><div style={{width:`${pct}%`,height:'100%',background:C.normal}}/></div>
-              </div>
+              <span style={{fontSize:11,color:C.muted}}><b style={{color:C.greenText}}>{pct}%</b> conciliado <span style={{color:C.done}}>· {resumenConc.done}/{resumenConc.total}</span></span>
             )})()}
-            {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones)' style={{fontSize:10,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:14,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{resumenConc.fondos} provisiones →</span>}
+            {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones)' style={{marginLeft:'auto',fontSize:10,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:14,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{resumenConc.fondos} prov →</span>}
           </div>
         )}
 
