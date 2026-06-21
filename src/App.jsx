@@ -14218,9 +14218,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     try{
       // Traspaso interno: reusa el mecanismo de internos (sale de la bandeja de abonos).
       if(cat==='Traspaso interno'){
-        const { error } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno',categoria:null}).eq('id',mov.id)
+        const esp = espejoInterno(mov)   // espejo exacto en la otra cuenta (si existe) → ambos quedan internos
+        const ids = esp ? [mov.id, esp.id] : [mov.id]
+        const { error } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno',categoria:null}).in('id',ids)
         if(error) throw error
-        setMovs(p=>p.map(x=>x.id===mov.id?{...x,es_interno:true,estado:'interno',categoria:null}:x))
+        setMovs(p=>p.map(x=>ids.includes(x.id)?{...x,es_interno:true,estado:'interno',categoria:null}:x))
         if(keyLearn) learnPut('cartola_tipo', keyLearn, cat)
         setTagFor(null); return
       }
@@ -14351,6 +14353,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     cand.sort((a,b)=>(Math.abs(a.monto-mov.monto)-Math.abs(b.monto-mov.monto))||(Math.abs(new Date(a.fecha)-new Date(mov.fecha))-Math.abs(new Date(b.fecha)-new Date(mov.fecha))))
     const c=cand[0]
     return { cand:c, exact:c.monto===mov.monto, diff:c.monto-mov.monto }
+  }
+  const espejoInterno = mov => {
+    const W=7*86400000
+    const cand = movs.filter(x=> x.id!==mov.id && !x.es_interno && x.rol_cuenta!==mov.rol_cuenta && (x.monto||0)===(mov.monto||0) && Math.abs(new Date(x.fecha)-new Date(mov.fecha))<=W)
+    if(!cand.length) return null
+    cand.sort((a,b)=> Math.abs(new Date(a.fecha)-new Date(mov.fecha))-Math.abs(new Date(b.fecha)-new Date(mov.fecha)))
+    return cand[0]
   }
 
   // ─── Motor de conciliación (Fase 2) ───────────────────────────────────────
