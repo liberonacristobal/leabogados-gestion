@@ -612,9 +612,12 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
                   return (
                     <div key={r.id} style={{borderBottom:'1px solid #E4E8EB'}}>
                       <div onClick={()=>setOpenRend(isOpen?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',cursor:'pointer'}}>
-                        <div style={{minWidth:0,flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0,flex:1}}>
+                          {bigDate(r.created_at)}
+                          <div style={{minWidth:0}}>
                           <div style={{fontSize:12,fontWeight:600,color:C.text}}>{r.periodo}</div>
-                          <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}</div>
+                          <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.user_name?` · ${r.user_name}`:''}</div>
+                          </div>
                         </div>
                         <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                           <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>-${(r.total||0).toLocaleString('es-CL')}</div>
@@ -1299,7 +1302,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               return (
               <div key={r.id} style={{borderBottom:'0.5px solid #F5F7F9'}}>
                 <div onClick={()=>setOpenRendicion(isOpen?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',cursor:'pointer'}}>
-                  <div><div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.done,marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div>
+                  <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{bigDate(r.created_at)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.done,marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div></div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:12,fontWeight:500,color:C.muted}}>{fmtCLP(r.total)}</span>
                     <span style={{fontSize:11,color:C.done,transform:isOpen?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▾</span>
@@ -10538,14 +10541,17 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               {rends.map(r=>(
                 <div key={r.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.border}`,opacity:r.anulada_at?0.6:1}}>
                   <div onClick={()=>verPdf(r)} style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',cursor:'pointer'}}>
-                    <div style={{minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'flex-start',gap:10,minWidth:0}}>
+                      {bigDate(r.created_at)}
+                      <div style={{minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div>
-                      <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''} · {fmtFechaTS(r.created_at)}{r.user_name?` · ${r.user_name}`:''}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.user_name?` · ${r.user_name}`:''}</div>
                       {r.anulada_at
                         ? <div style={{fontSize:10,fontWeight:600,color:C.overdue,marginTop:2}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</div>
                         : r.sent_at
                         ? <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:2}}>Enviada {fmtFechaTS(r.sent_at)}</div>
                         : <div style={{fontSize:10,fontWeight:600,color:C.soon,marginTop:2}}>Pendiente de envío</div>}
+                    </div>
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:C.overdue}}>-{fmt(r.total)}</div>
