@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Caja Chica pulida (Liquidar)
+- KPIs con borde-acento (Saldo caja verde/rojo según signo en ambas pestañas; Sin liquidar blanco + navy). Filas de gasto con borde listo/a-revisar: verde = listo para liquidar, ámbar = le falta cliente o categoría (criterio del Asistente IA). La secundaria marca lo que falta ("Sin cliente" rojo, "sin categoría" ámbar). Glosa de protagonista, monto en grafito tabular. No toca selección/IA/liquidación.
+
 ## 2026-06-21 — Gastos landing: lista de saldos más limpia
 - Fuera el círculo con iniciales (no se usan en la app). El estado lo dan el borde semáforo + el color del monto (rojo debe / verde a favor / gris $0). Montos alineados en columna a la derecha (tabular-nums) para escanear cifras. Se mantiene el ícono de archivar y la razón social en la secundaria.
 
