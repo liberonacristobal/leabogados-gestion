@@ -5442,7 +5442,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{cl&&rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}{!cl&&b.receptor_name?<span style={{marginLeft:6,fontSize:9,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:9,padding:'1px 7px'}}>sin vincular</span>:''}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
@@ -7818,6 +7818,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10,padding:'1px 8px',borderRadius:20,background:pc.bg,color:pc.color,fontWeight:700}}>Personal · {e.personal_de}</span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+            {!isFondo&&!e.personal_de&&!esOficina(e.client_id)&&<div style={{fontSize:10,marginTop:2}}>{e.client_id?<span style={{color:C.muted,fontWeight:600}}>{rsDisplay(rsLabel(e.client_id,clients,clientEntities,e.entity_id).name)}</span>:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>}</div>}
             {!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(
               <div style={{marginTop:7}} onClick={stop}>
                 {triageOpen===e.id ? (
