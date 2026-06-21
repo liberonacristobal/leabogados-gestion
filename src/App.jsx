@@ -4731,6 +4731,21 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
     }
     setPagando(false); setPayingId(null)
   }
+  // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
+  const recordarCobro = async(b)=>{
+    const cl=clients.find(c=>String(c.id)===String(b.client_id))
+    const to=(cl?.email||'').trim()
+    if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
+    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
+    const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
+    const venc=b.due?fmtFechaDMY(b.due):''
+    if(!confirm(`¿Enviar recordatorio de cobro a ${to} por ${folio} (${monto})?`)) return
+    const texto=`Estimados,\n\nLes recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.\n\nQuedamos atentos a su confirmación. Saludos cordiales,\nLiberona Escala Abogados`
+    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Les recordamos amablemente el pago pendiente de <b>${esc(folio)}</b>${b.concept?` (${esc(b.concept)})`:''} por <b>${monto}</b>${venc?`, con vencimiento <b>${venc}</b>`:''}.<br><br>Quedamos atentos a su confirmación. Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
+    try{ await sendMailServer({to, subject:`Recordatorio de cobro — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
+    catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
+  }
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
   const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(confirm(msg)) await emitirConRS(b) }
   const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
@@ -5135,6 +5150,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
                 {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>}
+                {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>}
                 {b.status==='Programada'&&conciliable&&<button onClick={()=>onConciliar&&onConciliar(cli)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>⚠ Conciliar</button>}
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
               </div>}
@@ -5351,6 +5367,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
                 {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>}
+                {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>}
                 {b.status==='Programada'&&conc.has(b.id)&&<button onClick={()=>onConciliar&&onConciliar(cl)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>⚠ Conciliar</button>}
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
               </div>}
