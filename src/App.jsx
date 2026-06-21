@@ -14124,6 +14124,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [verFiltros,setVerFiltros] = useState(false)     // filtros Mes/Año/Responsable colapsados
   const [editMov,setEditMov] = useState(null)    // id del movimiento en edición/identificación
   const [tagFor,setTagFor] = useState(null)      // id del movimiento con el picker de categoría abierto
+  const [tipoAprendido,setTipoAprendido] = useState({})  // RUT/nombre → categoría aprendida (cartola_tipo)
   const [splitMov,setSplitMov] = useState(null)  // id del movimiento con el split adelanto/fondo abierto
   const [splitAdel,setSplitAdel] = useState('')  // monto que va a adelanto (el resto a fondo)
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
@@ -14172,6 +14173,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // clientes y razones sociales del receptor de facturas EMITIDAS. Solo sugiere; el usuario confirma (y ahí aprende el RUT).
   const _stripNom = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(spa|ltda|limitada|sa|eirl|sociedad|comercial|servicios|inversiones|cia)\b/g,' ').replace(/\s+/g,' ').trim()
   const _toksNom = s => _stripNom(s).split(' ').filter(t=>t.length>=4)
+  useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cartola_tipo').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setTipoAprendido(m) },()=>{}) },[])
+  // Sugerencia de categoría aprendida (cartola_tipo) para un abono sin identificar: mismo RUT o mismo nombre.
+  const tipoSugerido = m => { if(m.cliente_id||m.es_interno||m.categoria) return null; const k=crNormRut(m.rut_contraparte); if(k&&tipoAprendido[k]) return tipoAprendido[k]; const nk=m.nombre_contraparte?'n:'+_stripNom(m.nombre_contraparte):null; if(nk&&tipoAprendido[nk]) return tipoAprendido[nk]; return null }
   // Nombres de pila comunes: no alcanzan para identificar (dos "José Miguel" distintos no son el mismo cliente).
   const _NOM_COMUN = new Set(['jose','juan','maria','luis','carlos','miguel','francisco','pedro','pablo','jorge','manuel','andres','felipe','cristobal','catalina','daniel','ignacio','antonio','rodrigo','sebastian','alejandro','fernando','gonzalo','ricardo','roberto','eduardo','patricio','claudio','marcelo','rafael','victor','angel','mario','raul','sergio','hernan','ramon'])
   const nombreIdx = useMemo(()=>{ const idx=[]
@@ -14199,23 +14203,37 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(m.tipo==='abono' && m.cliente_id) return 'Cliente'
     return null
   }
-  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:C.azulBg,color:C.accent},'Proveedor':{bg:C.ambarBg,color:C.soonText},'Cliente':{bg:C.greenBg,color:C.greenText},'Gastos Oficina':{bg:C.azulBg,color:C.azulInfo},'Notaría':{bg:'#FAECE7',color:C.coralText},'Impuestos':{bg:C.overdueBg,color:C.overdueText},'Provisión de gastos':{bg:C.tealBg,color:C.tealText},'Otro ingreso':{bg:'#F1EFE8',color:C.grisText},'Devolución':{bg:'#FAECE7',color:C.coralText} }
+  const TAG_STY = { 'Contadora':{bg:'#EEEDFE',color:'#3C3489'},'Equipo':{bg:'#EAF3DE',color:'#3B6D11'},'Socio':{bg:C.azulBg,color:C.accent},'Proveedor':{bg:C.ambarBg,color:C.soonText},'Cliente':{bg:C.greenBg,color:C.greenText},'Gastos Oficina':{bg:C.azulBg,color:C.azulInfo},'Notaría':{bg:'#FAECE7',color:C.coralText},'Impuestos':{bg:C.overdueBg,color:C.overdueText},'Provisión de gastos':{bg:C.tealBg,color:C.tealText},'Otro ingreso':{bg:'#F1EFE8',color:C.grisText},'Devolución':{bg:'#FAECE7',color:C.coralText},'Reembolso':{bg:'#FAECE7',color:C.coralText},'Traspaso interno':{bg:'#F1EFE8',color:C.grisText},'Intereses':{bg:C.ambarBg,color:C.soonText},'Tercero':{bg:'#EEF1F3',color:C.muted} }
   // Categorías distintas por sentido: cargos = a quién le pagas; abonos = solo se clasifican los de la cuenta de
   // Gastos que NO calzan factura (provisión de gastos = ocasional); un abono de honorarios es el pago del cliente.
   const CATS_CARGO = ['Gastos Oficina','Notaría','Proveedor','Equipo','Contadora','Socio','Impuestos','Devolución']
-  const CATS_ABONO = ['Provisión de gastos','Otro ingreso']
+  const CATS_ABONO = ['Reembolso','Traspaso interno','Intereses','Tercero','Provisión de gastos','Otro ingreso']
+  const RESUELTAS_ABO = ['Reembolso','Intereses','Tercero']  // clasificadas = fuera de "sin identificar"
+  const ESTRUCT_ABO = ['Reembolso','Traspaso interno','Intereses','Tercero']  // categoría deducible por RUT/nombre → se aprende
   // Tag manual. CARGOS: aprende por RUT (a un proveedor siempre le pagas igual → todos sus cargos). ABONOS: solo
   // este movimiento (un mismo cliente paga honorarios un mes y subarriendo otro → no se puede deducir por RUT).
   const setCategoria = async(mov,cat)=>{
     const k=crNormRut(mov.rut_contraparte)
-    const learn = !!k && mov.tipo==='cargo'
+    const keyLearn = k || (mov.nombre_contraparte?'n:'+_stripNom(mov.nombre_contraparte):null)
     try{
+      // Traspaso interno: reusa el mecanismo de internos (sale de la bandeja de abonos).
+      if(cat==='Traspaso interno'){
+        const { error } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno',categoria:null}).eq('id',mov.id)
+        if(error) throw error
+        setMovs(p=>p.map(x=>x.id===mov.id?{...x,es_interno:true,estado:'interno',categoria:null}:x))
+        if(keyLearn) learnPut('cartola_tipo', keyLearn, cat)
+        setTagFor(null); return
+      }
+      // CARGOS aprenden por RUT (a un proveedor le pagas siempre igual). ABONOS: solo este movimiento (la sugerencia hace el resto).
+      const learn = !!k && mov.tipo==='cargo'
       const { error } = learn
         ? await supabase.from('cartola_movimientos').update({categoria:cat}).eq('rut_contraparte',mov.rut_contraparte).eq('tipo','cargo')
         : await supabase.from('cartola_movimientos').update({categoria:cat}).eq('id',mov.id)
       if(error) throw error
       if(learn) setMovs(p=>p.map(x=>crNormRut(x.rut_contraparte)===k&&x.tipo==='cargo'?{...x,categoria:cat}:x))
       else      setMovs(p=>p.map(x=>x.id===mov.id?{...x,categoria:cat}:x))
+      // Aprende para sugerir en similares (cargos + abonos estructurales).
+      if(cat && keyLearn && (mov.tipo==='cargo'||ESTRUCT_ABO.includes(cat))) learnPut('cartola_tipo', keyLearn, cat)
       setTagFor(null)
     }catch(e){ alert('Error al clasificar: '+e.message) }
   }
@@ -14773,7 +14791,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const G = useMemo(()=>{
     const abo=movs.filter(m=>m.tipo==='abono'&&!m.es_interno), car=movs.filter(m=>m.tipo==='cargo'&&!m.es_interno)
     return { nMov:movs.length, nAbo:abo.length, sumAbo:abo.reduce((a,m)=>a+m.monto,0), nCar:car.length, sumCar:car.reduce((a,m)=>a+m.monto,0),
-      internos:movs.filter(m=>m.es_interno).length, sinId:abo.filter(m=>!m.cliente_id).length }
+      internos:movs.filter(m=>m.es_interno).length, sinId:abo.filter(m=>!m.cliente_id&&!RESUELTAS_ABO.includes(m.categoria)).length }
   },[movs])
 
   // Cartolas cargadas (derivado): agrupa por cuenta + mes con período, conteo y totales.
@@ -14794,7 +14812,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
     if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
     if(sub==='abonos'){
-      if(concView==='sinid') l=l.filter(m=>!m.es_interno&&!m.cliente_id)
+      if(concView==='sinid') l=l.filter(m=>!m.es_interno&&!m.cliente_id&&!RESUELTAS_ABO.includes(m.categoria))
       else if(concView==='porconciliar') l=l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length))
       else if(concView==='conciliados') l=l.filter(m=>concByMov[m.id]?.length)
       else if(concView==='descalces') l=l.filter(esDescalce)
@@ -15060,14 +15078,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Sugerencia por nombre — confirma para asociar y aprender el RUT' style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}>¿{cmap[sugerencias[m.id]]}?</button>}
                         {!cliName&&!sugerencias[m.id]&&(()=>{ const cm=clientePorMonto(m); if(!cm) return null; const nom=cmap[cm.cid]||clients.find(c=>String(c.id)===String(cm.cid))?.name||'cliente'; return <button onClick={async()=>{ await identificar(m,cm.cid,true); await reconciliar({...m,cliente_id:cm.cid}, cm.factura, 'manual') }} title={`Identifica a ${nom} y concilia con la Factura N°${folioN(cm.factura.invoice_no)||'—'} (calce exacto) en un clic`} style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.azulBg,color:C.accent,border:'none',cursor:'pointer'}}>¿{nom}? · Factura N°{folioN(cm.factura.invoice_no)||'—'} →</button> })()}
                         {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}
-                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id)&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
+                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id||(m.tipo==='abono'&&!m.cliente_id&&!m.es_interno))&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
                           tagFor===m.id
                             ? <>{cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{tagTxt(c)}</button>})}{m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}<button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button></>
                             : m.categoria
                               ? (()=>{ const t=TAG_STY[m.categoria]||{bg:'#F1EFE8',color:C.grisText}; return <button onClick={()=>setTagFor(m.id)} title='Tocar para cambiar categoría' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{tagTxt(m.categoria)}</button> })()
                               : (m.tipo==='cargo'
                                   ? <><button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>Gastos Oficina</button><button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button></>
-                                  : null)
+                                  : (()=>{ const sg=tipoSugerido(m); return <>{sg&&<button onClick={()=>setCategoria(m,sg)} title='Sugerencia aprendida — confirma para aplicar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:C.azulBg,color:C.accent,border:'none'}}>✦ ¿{sg}?</button>}<button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Clasificar…</button></> })())
                         )})()}
                       </div>
                 )}

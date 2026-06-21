@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: clasificar sin-identificar (4 categorías que aprenden)
+- Nuevas categorías de abono: Reembolso · Traspaso interno · Intereses · Tercero (con su color). Se asignan a mano desde el selector del movimiento (los abonos sin cliente ahora muestran "Clasificar…").
+- Un abono clasificado SALE de "sin identificar" (Reembolso/Intereses/Tercero por categoría; Traspaso interno reusa es_interno). Así dejan de quedar eternos.
+- Aprende y sugiere: al clasificar se guarda RUT→categoría (o nombre→categoría) en learnings (kind cartola_tipo); en movimientos similares aparece una sugerencia ✦ "¿Categoría?" para aplicar en 1 toque (nunca auto-aplica, tú confirmas). Sin SQL (categoría es string; learnings es genérica).
+
 ## 2026-06-21 — Conciliación (aprendizaje): el nombre del pagador aprende
 - nombreIdx (índice para match e identificación por nombre) ahora incluye los nombres de pagador ya identificados (cliente_alias.nombre_pagador), no solo los nombres de clientes/receptores. Así cada identificación enseña: la próxima cartola con ese mismo nombre de pagador auto-identifica al cliente (aunque el RUT cambie), y mejora con cada corrección.
 
