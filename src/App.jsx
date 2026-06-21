@@ -1996,6 +1996,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payRef,setPayRef] = useState('')
   const [verTareasEquipo,setVerTareasEquipo] = useState(false)
   const [tareaPersOpen,setTareaPersOpen] = useState({})
+  const [tareasCorte,setTareasCorte] = useState('todas')   // tablero equipo: 'todas' | 'delegaron' | 'delegue'
   const [payDoc,setPayDoc] = useState('')          // N° documento fiscal del proveedor (factura/boleta)
   const [payDocF,setPayDocF] = useState('')        // fecha del documento
   const [payingNow,setPayingNow] = useState(false)
@@ -2318,19 +2319,31 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const activas=(tasks||[]).filter(t=>t.status!=='Terminado')
         if(!activas.length) return null
         const orden=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+        const me=user?.name
+        const corte=tareasCorte
+        const base = corte==='delegaron' ? activas.filter(t=> taskAssignees(t).includes(me) && t.assigned_by && t.assigned_by!==me)
+                   : corte==='delegue'  ? activas.filter(t=> t.assigned_by===me && taskAssignees(t).some(a=>a!==me))
+                   : activas
+        const groupKey = corte==='delegaron' ? (t=>[t.assigned_by||'—'])
+                       : corte==='delegue'  ? (t=> taskAssignees(t).filter(a=>a!==me))
+                       : (t=>{ const w=taskAssignees(t); return w.length?w:['Sin asignar'] })
         const porP={}
-        activas.forEach(t=>{ const who=taskAssignees(t); (who.length?who:['Sin asignar']).forEach(w=>{ (porP[w]=porP[w]||[]).push(t) }) })
+        base.forEach(t=>{ groupKey(t).forEach(w=>{ (porP[w]=porP[w]||[]).push(t) }) })
         const personas=Object.keys(porP).sort((a,b)=>{ const ia=orden.indexOf(a),ib=orden.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,'es') })
         const esVenc=t=>{ const d=daysLeft(t.due); return d!=null&&d<0 }
-        const vencTot=activas.filter(esVenc).length
+        const vencTot=base.filter(esVenc).length
         return (
         <div style={{padding:'16px 20px 0'}}>
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <button onClick={()=>setVerTareasEquipo(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'12px 16px',background:'none',border:'none',cursor:'pointer',textAlign:'left'}}>
-              <span style={{fontSize:14,fontWeight:600,color:C.text}}>Tareas del equipo <span style={{color:C.done,fontWeight:400}}>· {activas.length} activas</span></span>
+              <span style={{fontSize:14,fontWeight:600,color:C.text}}>Tareas del equipo <span style={{color:C.done,fontWeight:400}}>· {base.length} activas</span></span>
               {vencTot>0&&<span style={{fontSize:10,fontWeight:600,background:C.overdueBg,color:C.overdueText,borderRadius:10,padding:'2px 9px'}}>{vencTot} vencida{vencTot!==1?'s':''}</span>}
               <span style={{marginLeft:'auto'}}/><Chev open={verTareasEquipo}/>
             </button>
+            {verTareasEquipo&&me&&<div style={{display:'flex',gap:6,padding:'9px 16px 4px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`}}>
+              {[['todas','Todas'],['delegaron','Me delegaron'],['delegue','Delegué']].map(([v,l])=>{ const on=corte===v; return <button key={v} onClick={()=>setTareasCorte(v)} style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button> })}
+            </div>}
+            {verTareasEquipo&&personas.length===0&&<div style={{padding:'12px 16px',fontSize:11,color:C.muted,background:'#FAFBFC',borderTop:`1px solid ${C.border}`}}>{corte==='delegaron'?'No tienes tareas que te delegaron.':'No has delegado tareas a otros.'}</div>}
             {verTareasEquipo&&personas.map(pn=>{
               const arr=porP[pn].slice().sort((a,b)=>{ const da=daysLeft(a.due),db=daysLeft(b.due); return (da==null?1e9:da)-(db==null?1e9:db) })
               const vn=arr.filter(esVenc).length
