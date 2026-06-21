@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación (flujo): sugerencia por monto en 1 clic
+- La sugerencia azul "¿Cliente? · Factura N°X" (calce por monto exacto) ahora IDENTIFICA y CONCILIA en un solo toque (antes solo identificaba y había que conciliar aparte). Reversible con Deshacer.
+
 ## 2026-06-21 — Conciliación (flujo): auto-aplicar tríos exactos
 - conciliarAuto ahora también resuelve combos de 3 facturas cuyo saldo suma EXACTAMENTE el abono (único, dentro del cliente, límite 45 facturas anti-explosión). Antes solo pares. Sube la tasa de auto-conciliación sin aflojar el monto (sigue exacto, TOL=0).
 
