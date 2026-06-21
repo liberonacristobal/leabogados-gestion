@@ -14370,7 +14370,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Índice memoizado del pool de calce: facturas con saldo por aplicar (Pendiente|Pagado, no anuladas/borradas, amount−Σconciliado>TOL),
   // agrupadas por cliente. Antes cada movimiento re-escaneaba TODO billing (O(movs×facturas) en cada render → congelaba el iPhone
   // con cartolas grandes). Ahora el lookup por cliente es O(1) y la conversión a candidatos solo recorre las facturas de ese cliente.
-  const facturasConSaldo = useMemo(()=> (billing||[]).filter(b=> !b.deleted_at && (b.amount||0)>0 && (b.status==='Pendiente'||b.status==='Pagado') && saldoFactura(b) > TOL), [billing,aplicadoByFactura])
+  const facturasConSaldo = useMemo(()=> (billing||[]).filter(b=> !b.deleted_at && (b.amount||0)>0 && String(b.invoice_no||'').trim()!=='' && (b.status==='Pendiente'||b.status==='Pagado') && saldoFactura(b) > TOL), [billing,aplicadoByFactura])  // solo facturas EMITIDAS (con folio): un pago no se concilia contra una cuota sin emitir
   const facturasPorCliente = useMemo(()=>{ const m={}; facturasConSaldo.forEach(b=>{ (m[b.client_id]=m[b.client_id]||[]).push(b) }); return m },[facturasConSaldo])
   // Abono conciliable contra facturas: identificado a cliente, no interno, y de honorarios (Comisión/Subarriendo/Otro NO calzan).
   const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')

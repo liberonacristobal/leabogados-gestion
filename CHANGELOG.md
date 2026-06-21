@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: el pool solo considera facturas EMITIDAS (con folio)
+- facturasConSaldo ahora excluye facturas sin folio (invoice_no vacío): un pago bancario se concilia contra una factura emitida, no contra cuotas sin emitir/duplicados sin número. Limpia la lista "Facturas por cobrar del cliente" (ya no salen varias "Factura N°—" idénticas) y afina el matcher/contadores.
+
 ## 2026-06-21 — Conciliación: contadores de chips respetan filtros + mensaje vacío
 - Los chips de estado (Por conciliar/Descalces/Sin identificar) cuentan sobre la MISMA base filtrada que la lista (cuenta/mes/año/responsable). Antes mostraban el total global (ej. "88") aunque la vista filtrada (ej. Cuenta=Gastos) estuviera vacía.
 - El mensaje de lista vacía distingue: si hay movimientos cargados pero filtrados, dice "No hay movimientos con estos filtros" + "Ver todos" (limpia cuenta/mes/año/responsable/estado/búsqueda); solo si no hay datos dice "Sube una cartola".
