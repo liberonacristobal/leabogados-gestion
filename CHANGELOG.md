@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación (aprendizaje): el nombre del pagador aprende
+- nombreIdx (índice para match e identificación por nombre) ahora incluye los nombres de pagador ya identificados (cliente_alias.nombre_pagador), no solo los nombres de clientes/receptores. Así cada identificación enseña: la próxima cartola con ese mismo nombre de pagador auto-identifica al cliente (aunque el RUT cambie), y mejora con cada corrección.
+
 ## 2026-06-21 — Conciliación (flujo): auto-identificar por nombre al cargar
 - Al importar una cartola, si el RUT es nuevo (no aprendido) se intenta auto-asignar el cliente por NOMBRE con el mismo criterio conservador de las sugerencias (tokens distintivos + un único cliente). Baja los "sin identificar". Es identificación reversible (no mueve plata); igual conviene revisar.
 
