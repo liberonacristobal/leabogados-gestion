@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Recordar cobro en la Facturación global
+- Botón "Recordar" en las filas de factura Pendiente/Vencida de la Facturación global (Por cliente y Todas), no solo en la Ficha. Manda el correo de recordatorio al cliente desde la cuenta de oficina, con confirmación previa (a quién/folio/monto) y usando el SALDO real. Si el cliente no tiene correo, avisa.
+
 ## 2026-06-21 — Ficha cliente: abogado junto al nombre + editar al tocar
 - En el encabezado de la ficha del cliente, el abogado responsable (chip con ▾) pasa al lado del nombre, separado por |. Se elimina el botón Editar: ahora se edita tocando el nombre del cliente (subrayado punteado como pista).
 
