@@ -5945,7 +5945,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
             {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); const cubreCuotas=billing.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
               <div key={a.id} style={{padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
-                  <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmtD(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}</div>{a.nota&&<div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
+                  {bigDate(a.fecha)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{a.proyecto||'Anticipo'}</div>{a.nota&&<div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>Factura N°{folio}</span>}
                     <span style={{fontSize:13,fontWeight:500,color:disp?C.normal:C.muted}}>{fmtCLP0(a.monto)}</span>
@@ -6219,9 +6219,10 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
               const [el,ec,eb] = estLbl[t.estado]||estLbl.pendiente
               return (
                 <div key={t.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'10px 13px',background:'#fff',borderBottom:`0.5px solid ${C.border}`}}>
+                  {bigDate(t.estado==='pagado'&&t.pagado_at?t.pagado_at:t.created_at)}
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}</div>
-                    <div style={{fontSize:11,color:C.done}}>{fac?.invoice_no?`Factura N°${folioN(fac.invoice_no)} · `:''}{t.estado==='pagado'&&t.pagado_at?`Pagado ${fmtD(String(t.pagado_at).slice(0,10))}`:(t.created_at?fmtD(String(t.created_at).slice(0,10)):'')}</div>
+                    <div style={{fontSize:11,color:C.done}}>{fac?.invoice_no?`Factura N°${folioN(fac.invoice_no)} · `:''}{t.estado==='pagado'?'Pagado':el}</div>
                     {t.estado==='pagado'&&t.factura_numero&&<div style={{fontSize:11,color:C.done}}>Doc {t.factura_numero}{t.factura_fecha?` · ${fmtD(String(t.factura_fecha).slice(0,10))}`:''}</div>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
@@ -7802,6 +7803,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     return (
       <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+          {bigDate(e.date)}
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:C.muted,fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
@@ -7816,7 +7818,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10,padding:'1px 8px',borderRadius:20,background:pc.bg,color:pc.color,fontWeight:700}}>Personal · {e.personal_de}</span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{fmtDate(e.date)}</div>
             {!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(
               <div style={{marginTop:7}} onClick={stop}>
                 {triageOpen===e.id ? (
@@ -12717,6 +12718,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
     return (
       <div onClick={()=>setPreview(t)} style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${done?C.muted:urgencyColor(t.due,t.status)}`,overflow:'hidden',opacity:done?.7:1,cursor:'pointer'}}>
         <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
+          {bigDate(t.due,done?C.muted:urgencyColor(t.due,t.status))}
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:done?C.muted:C.text,lineHeight:1.3,textDecoration:done?'line-through':'none'}}>{t.title}</div>
             {(client||t.project||t.subproject)&&(
@@ -12731,7 +12733,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           </div>
           {!done&&(
             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
-              <span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:8,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>{t.due?'Vence '+fmtVenceShort(t.due):'Sin fecha'}</span>
+              {!t.due&&<span style={{fontSize:10,fontWeight:600,padding:'2px 6px',borderRadius:8,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>Sin fecha</span>}
               <div style={{display:'flex',gap:4}}>
                 {onComplete&&<button onClick={(e)=>{e.stopPropagation();onComplete(t)}} title='Terminada' style={{width:26,height:26,borderRadius:5,border:'1px solid #1D9E75',background:C.greenBg,color:C.greenText,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,padding:0}}>&#10003;</button>}
                 <button onClick={(e)=>{e.stopPropagation();agendarTarea(t)}} disabled={!t.due} title={t.due?'Agregar a Google Calendar':'Sin fecha de vencimiento'} style={{width:26,height:26,borderRadius:5,border:`0.5px solid ${t.due?C.done:C.border}`,background:'#fff',color:t.due?C.muted:'#C7D0D5',cursor:t.due?'pointer':'default',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>
