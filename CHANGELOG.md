@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-21 — Fixes de cifras (código) + SQL preparado
+- Guarda contra uf_value negativo/cero en la fuente única (ventaUF/ventaCLP) y en los 5 respaldos globales de UF: una venta con uf_value<=0 (caso "Análisis tributario") ya no contamina totales ni proyecciones.
+- Facturas "Sin año": la app deriva el año desde issued_at cuando no hay venta ni sale_year (anioVentaDe), así dejan de caer en el grupo "Sin año".
+- Nuevo docs/fixes_cifras_2026-06-21.sql con SELECT de verificación + UPDATE/soft-delete para: persistir sale_year, paid_at typo (F°212/F°221), uf_value negativo, y detección/soft-delete de duplicados y programadas fantasma (a correr a mano en SQL Editor).
+
 ## 2026-06-20 — Conciliación (pulir) Fase 5: landing mínimo
 - "+ Cargar cartolas" y "Cartolas cargadas" se fusionan en una sola línea (detalle a la izquierda con su desplegable · "+ Cargar" a la derecha que abre la caja de importación). El "N movimientos" sale del header (queda en esa línea).
 - Los 4 KPIs (Abonos/Cargos/Internos/Sin id) se reemplazan por una línea-resumen discreta ("$X abonos · $Y cargos · N internos"); "Sin identificar" ya vive en los chips de estado.
