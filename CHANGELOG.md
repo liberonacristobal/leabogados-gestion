@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: auto-match de traspasos internos
+- Botón "Detectar internos" junto a "Conciliar auto": empareja cargo↔abono del mismo monto exacto en cuentas distintas (±2 días, par único, ambos sin identificar/conciliar) y marca AMBOS como internos. Muestra confirm con conteo+total antes (reversible con "Marcarlo como NO interno"). Sin comisiones bancarias en CL → el monto exacto es match confiable.
+
 ## 2026-06-21 — Conciliación: Traspaso interno enlaza su espejo
 - Al clasificar un movimiento como "Traspaso interno", la app busca su espejo en la OTRA cuenta (mismo monto exacto, ±7 días, no interno aún) y marca AMBOS como internos en una sola acción. Si no hay espejo, marca solo el movimiento. (espejoInterno reusa la lógica de origenInterno, generalizada.)
 
