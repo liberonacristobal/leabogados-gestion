@@ -14772,41 +14772,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
-    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0; const used=new Set()
+    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0, nInt=0; const used=new Set()
     try{
-      // AUTO no toca la cuenta de Gastos: un abono ahí casi siempre es fondo, no honorario → revisión manual.
-      // Orden FIFO (más antiguo primero) para que en recurrentes el pago de cada mes calce su factura del mes.
-      const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
-      // Mejor candidato por abono (único o el del mes del pago). Si 2+ abonos apuntan a la MISMA factura → ambiguo, a bandeja.
+      // 1) Traspasos internos: cargo↔abono del mismo monto exacto en cuentas distintas, ±2 días, par único → ambos internos. (Sin comisiones en CL, el monto calza exacto.)
+      const libres = movs.filter(m=> !m.es_interno && !(concByMov[m.id]?.length) && !m.cliente_id && !m.categoria)
+      const W2=2*86400000, usadosI=new Set(); const intSet=new Set()
+      libres.filter(m=>m.tipo==='cargo').forEach(c=>{ const ms=libres.filter(a=> a.tipo==='abono' && !usadosI.has(a.id) && a.rol_cuenta!==c.rol_cuenta && (a.monto||0)===(c.monto||0) && Math.abs(new Date(a.fecha)-new Date(c.fecha))<=W2); if(ms.length===1 && !usadosI.has(c.id)){ usadosI.add(c.id); usadosI.add(ms[0].id); intSet.add(c.id); intSet.add(ms[0].id) } })
+      if(intSet.size){ const idsInt=[...intSet]; const { error:ei } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno'}).in('id',idsInt); if(ei) throw ei; setMovs(p=>p.map(x=>intSet.has(x.id)?{...x,es_interno:true,estado:'interno'}:x)); nInt=idsInt.length/2 }
+      // 2) Conciliación exacta (excluye los recién marcados internos). Gastos no se toca (suele ser fondo). FIFO para recurrentes.
+      const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length) && !intSet.has(m.id)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
       const best={}, facCnt={}
       pend.forEach(m=>{ const f=mejorCandidato(m); if(f){ best[m.id]=f.id; facCnt[f.id]=(facCnt[f.id]||0)+1 } })
       for(const mov of pend){ const fid=best[mov.id]
         if(fid && !used.has(fid) && (facCnt[fid]||0)<=1){
           const f=facturasCliente(mov.cliente_id).find(x=>x.id===fid); if(!f) continue
           used.add(fid); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
-        // Combo EXACTO único (1 transferencia = 2 facturas, suma exacta) → también automático.
         const cb=comboExacto(mov, used) || comboExacto3(mov, used)
         if(cb){ cb.forEach(f=>used.add(f.id)); await reconciliarCombo(mov, cb); cmb++; ok++; monto+=mov.monto } }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
-    alert(ok? `Conciliadas ${ok} automáticamente · ${fmtM(monto)}.\n${marc} marcaron la factura pagada · ${enl} enlazaron facturas ya pagadas${cmb?` · ${cmb} pagaron varias facturas`:''}.` : 'No hubo calces exactos únicos. Revisa "Por conciliar".')
-  }
-  const autoInternos = async()=>{
-    if(autoRun||busy) return
-    const libres = movs.filter(m=> !m.es_interno && !(concByMov[m.id]?.length) && !m.cliente_id && !m.categoria)
-    const W=2*86400000, usados=new Set(), pares=[]
-    libres.filter(m=>m.tipo==='cargo').forEach(c=>{
-      const ms=libres.filter(a=> a.tipo==='abono' && !usados.has(a.id) && a.rol_cuenta!==c.rol_cuenta && (a.monto||0)===(c.monto||0) && Math.abs(new Date(a.fecha)-new Date(c.fecha))<=W)
-      if(ms.length===1 && !usados.has(c.id)){ usados.add(c.id); usados.add(ms[0].id); pares.push([c,ms[0]]) }
-    })
-    if(!pares.length){ alert('No encontré pares de traspaso interno (cargo↔abono, mismo monto, ±2 días, par único).'); return }
-    const total=pares.reduce((s,pr)=>s+(pr[0].monto||0),0)
-    if(!window.confirm(`Encontré ${pares.length} traspaso(s) interno(s): cargo↔abono del mismo monto en cuentas distintas, ±2 días, par único. Total ${fmtM(total)}.\n\nSe marcarán ${pares.length*2} movimientos como internos (reversible). Si alguno fuera un pago real, deshazlo con "Marcarlo como NO interno".\n\n¿Confirmas?`)) return
-    const ids=pares.flat().map(x=>x.id)
-    try{ const { error } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno'}).in('id',ids); if(error) throw error
-      setMovs(p=>p.map(x=>ids.includes(x.id)?{...x,es_interno:true,estado:'interno'}:x))
-      alert(`Marcados ${pares.length} traspasos internos (${pares.length*2} movimientos).`)
-    }catch(e){ alert('Error: '+e.message) }
+    alert((ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nInt?`\n${nInt} traspasos internos marcados`:''}` : 'No hubo calces exactos únicos ni traspasos internos. Revisa "Por conciliar".')
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
@@ -15024,7 +15009,6 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {sub==='abonos'&&(
           <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8,flexWrap:'wrap'}}>
             <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:'none',background:(autoRun||resumenConc.pend===0)?C.done:C.accent,color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer',whiteSpace:'nowrap'}}>{autoRun?'Conciliando…':'Conciliar auto'}</button>
-            <button onClick={autoInternos} disabled={autoRun} title='Detecta traspasos internos: cargo↔abono del mismo monto en cuentas distintas (±2 días)' style={{fontSize:10.5,fontWeight:600,height:26,boxSizing:'border-box',padding:'0 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:autoRun?'default':'pointer',whiteSpace:'nowrap'}}>Detectar internos</button>
             {resumenConc.total>0&&(()=>{ const pct=Math.round(resumenConc.done/resumenConc.total*100); return (
               <span style={{fontSize:10.5,color:C.muted}}><b style={{color:C.greenText}}>{pct}%</b> conciliado <span style={{color:C.done}}>· {resumenConc.done}/{resumenConc.total}</span></span>
             )})()}
