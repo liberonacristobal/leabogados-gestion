@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-21 — Saldo de factura parcial a la vista (+ cuadre de cifras)
+- Helper único global saldoBill(b)=amount−paid_amount (Pagada/Anulada=0), que recoge tanto el abono manual como el saldo que queda tras conciliar transferencias en la cartola.
+- B: "Por cobrar", "Vencido" y el aging (Dashboard, Facturación resumen/interiores, Ficha, Clientes) ahora suman el SALDO, no el monto completo → dejan de inflarse con lo ya transferido/abonado.
+- A: en la fila de factura con abono parcial se muestra el Saldo (Ficha = protagonista; listas globales fila/filaAll = línea "saldo $X", rojo si vencida).
+- Consistencia: al conciliar, paid_amount SUMA sobre el abono manual previo en vez de reemplazarlo (reconciliar manualExtra).
+
 ## 2026-06-21 — Facturación global: pago parcial (abono)
 - El "Registrar pago" de la Facturación global ahora permite ABONO PARCIAL: campo "Monto a registrar" prellenado con el saldo; si registras menos, la factura queda Pendiente con saldo (paid_amount acumulado) y el botón dice "Confirmar abono"; si dejas el total, pago completo como antes (+ lógica de terceros intacta). Reusa el contrato paid_amount de la Ficha, sin SQL.
 
