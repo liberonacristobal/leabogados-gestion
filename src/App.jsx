@@ -14904,6 +14904,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     l=l.slice().sort((a,b)=> orden==='asc' ? ((a.fecha||'')<(b.fecha||'')?-1:1) : ((a.fecha||'')>(b.fecha||'')?-1:1))
     return l.slice(0,400)
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap])
+  // Contadores de los chips de estado sobre la MISMA base filtrada que la lista (cuenta/mes/año/resp) — evita mostrar "88" cuando la vista filtrada está vacía.
+  const chipCounts = useMemo(()=>{
+    if(sub!=='abonos') return {porconciliar:0,descalces:0,sinid:0}
+    let l=movs.filter(m=>m.tipo==='abono')
+    if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
+    if(anioF!=='todos') l=l.filter(m=>(m.fecha||'').slice(0,4)===anioF)
+    if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
+    if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
+    return { porconciliar:l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length)).length, descalces:l.filter(esDescalce).length, sinid:l.filter(m=>!m.es_interno&&!m.cliente_id&&!RESUELTAS_ABO.includes(m.categoria)).length }
+  },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concByMov,billing])
 
   const rolChip = rol => rol==='honorarios'?{bg:C.azulBg,color:C.accent,t:'Cta. Honorarios'}:rol==='gastos'?{bg:C.ambarBg,color:C.soonText,t:'Cta. Gastos'}:{bg:'#F1EFE8',color:C.grisText,t:'—'}
   // Chip de estado definitivo para el landing (un solo chip que informa de verdad qué pasó con el movimiento).
@@ -15085,7 +15095,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         )}
         {/* Estado de conciliación — chips livianos: solo estados con pendientes (>0); tocar filtra, tocar de nuevo = Todos */}
-        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',resumenConc.pend,C.soonText,'#FAC775'],['descalces','Descalces',resumenConc.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',G.sinId,C.soonText,C.border]].filter(c=>c[2]>0); return ch.length>0?(
+        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',chipCounts.porconciliar,C.soonText,'#FAC775'],['descalces','Descalces',chipCounts.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',chipCounts.sinid,C.soonText,C.border]].filter(c=>c[2]>0); return ch.length>0?(
           <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
             {ch.map(([v,l,n,fg,bd])=>{ const on=concView===v; return <span key={v} onClick={()=>setConcView(on?'todos':v)} style={{fontSize:11,fontWeight:600,borderRadius:12,padding:'3px 11px',cursor:'pointer',border:`1px solid ${on?fg:bd}`,background:on?fg:'#fff',color:on?'#fff':fg}}>{l} · {n}</span> })}
             {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{fontSize:10,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Todos</span>}
@@ -15105,7 +15115,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         )}
         {/* Lista */}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-          {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>Sin movimientos. Sube una cartola para empezar.</div>}
+          {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>{movs.length>0?<>No hay movimientos con estos filtros. <span onClick={()=>{setCuentaF('ambas');setMesF('todos');setAnioF('todos');setRespF('todos');setConcView('todos');setQ('')}} style={{color:C.accent,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>Ver todos</span></>:'Sin movimientos. Sube una cartola para empezar.'}</div>}
           {lista.map(m=>{
             const rc=rolChip(m.rol_cuenta); const ec=estadoChip(m); const abierto=modalMov===m.id
             // Factura única conciliada → el chip "→ Factura N°X" se vuelve clickeable y despliega su detalle.

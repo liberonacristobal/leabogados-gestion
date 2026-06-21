@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: contadores de chips respetan filtros + mensaje vacío
+- Los chips de estado (Por conciliar/Descalces/Sin identificar) cuentan sobre la MISMA base filtrada que la lista (cuenta/mes/año/responsable). Antes mostraban el total global (ej. "88") aunque la vista filtrada (ej. Cuenta=Gastos) estuviera vacía.
+- El mensaje de lista vacía distingue: si hay movimientos cargados pero filtrados, dice "No hay movimientos con estos filtros" + "Ver todos" (limpia cuenta/mes/año/responsable/estado/búsqueda); solo si no hay datos dice "Sube una cartola".
+
 ## 2026-06-21 — Conciliación: aviso proactivo de "Pago en grupo" (Etapa B)
 - gruposDetectados: para clientes con 2+ transferencias sin conciliar cuyo grupo calza facturas (suma exacta), aparece un banner verde arriba de la lista ("✦ Pago en grupo · Cliente · N transferencias pagan M facturas (total) · revisar →"); al tocarlo filtra al cliente y abre la transferencia con la tarjeta de grupo. Así no hay que abrir cada movimiento.
 
