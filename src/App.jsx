@@ -12669,6 +12669,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   const [verArchivadas,setVerArchivadas] = useState(false)
   const [openActivas,setOpenActivas] = useState(true)
   const [openAsignadas,setOpenAsignadas] = useState(true)
+  const [asigPersOpen,setAsigPersOpen] = useState({})
   const [preview,setPreview] = useState(null)
   // Popup flotante de detalle (hover en desktop / long-press en móvil) sobre las tareas del calendario
   const [hoverTask,setHoverTask] = useState(null)
@@ -12920,7 +12921,26 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           <>
             <div id='sec-asignadas'/>
             <SubHeader label='Tareas que asigné' count={asignadas.length} open={openAsignadas} onToggle={()=>setOpenAsignadas(o=>!o)}/>
-            {openAsignadas&&porUrgencia(asignadas).map(t=><Card key={t.id} t={t} showWho={true}/>)}
+            {openAsignadas&&(()=>{
+              const grp={}; asignadas.forEach(t=>{ (taskAssignees(t).length?taskAssignees(t):['—']).forEach(pn=>{ (grp[pn]=grp[pn]||[]).push(t) }) })
+              const orden=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+              const personas=Object.keys(grp).sort((a,b)=>{ const ia=orden.indexOf(a),ib=orden.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,'es') })
+              const esVenc=t=>{ const d=daysLeft(t.due); return d!=null&&d<0 }
+              return personas.map(pn=>{
+                const arr=porUrgencia(grp[pn]); const vn=arr.filter(esVenc).length; const pc=personChip(pn); const open=!asigPersOpen[pn]
+                return (
+                  <div key={pn}>
+                    <div onClick={()=>setAsigPersOpen(o=>({...o,[pn]:!o[pn]}))} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 2px',cursor:'pointer'}}>
+                      <span style={{fontSize:11,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{pn}</span>
+                      <span style={{fontSize:11,color:C.muted}}>{arr.length} tarea{arr.length!==1?'s':''}</span>
+                      {vn>0&&<span style={{fontSize:10,fontWeight:600,color:C.overdueText}}>· {vn} vencida{vn!==1?'s':''}</span>}
+                      <span style={{marginLeft:'auto',color:C.done,fontSize:12}}>{open?'▴':'▾'}</span>
+                    </div>
+                    {open&&arr.map(t=><Card key={t.id} t={t} showWho={false}/>)}
+                  </div>
+                )
+              })
+            })()}
           </>
         )}
         {terminadas.length>0&&(

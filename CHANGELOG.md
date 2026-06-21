@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Mis tareas: "Tareas que asigné" agrupada por persona
+- La sección "Tareas que asigné" deja de ser lista plana: ahora agrupa por la persona a la que asignaste (color por integrante + conteo + vencidas en rojo), cada una desplegable (default abierta). Dentro, las tarjetas sin el chip de persona (ya lo dice el encabezado del grupo). Mismo patrón que "Tareas del equipo" del Dashboard.
+
 ## 2026-06-21 — Mis tareas: botones consistentes con Tareas del equipo
 - La tarjeta de "Mis tareas" (TasksOnlyView) cambia el ✓ en cuadro verde por el check cuadrado fino (mismo de Tareas del equipo); 📅 (agendar) y ✎ (editar) pasan a íconos pelados (sin cuadro), alineados a la derecha. El check va al final.
 
