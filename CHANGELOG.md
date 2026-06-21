@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Facturación: fecha día-grande en todas las filas
+- Helper bigDate (día grande navy + "mes año" abajo, como la rendición). Aplicado a las 3 filas de Facturación (fila/Por cliente, filaAll/Todas, renderClientGroup/Emitidas): la fecha relevante (kpiDate: vence si Programada, pago si Pagada, emisión si no) va a la izquierda en grande y se quita la fecha en línea (sin duplicar).
+
 ## 2026-06-21 — Fixes de cifras (código) + SQL preparado
 - Guarda contra uf_value negativo/cero en la fuente única (ventaUF/ventaCLP) y en los 5 respaldos globales de UF: una venta con uf_value<=0 (caso "Análisis tributario") ya no contamina totales ni proyecciones.
 - Facturas "Sin año": la app deriva el año desde issued_at cuando no hay venta ni sale_year (anioVentaDe), así dejan de caer en el grupo "Sin año".
