@@ -15003,35 +15003,38 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         )}
 
         {/* Filtros — toggle + Cuenta (fuera) + Filtros colapsable (Mes/Año/Resp) + Fecha */}
-        {(()=>{ const selSty={fontSize:11,fontWeight:600,padding:'5px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',outline:'none'}; const nF=(mesF!=='todos'?1:0)+(anioF!=='todos'?1:0)+(respF!=='todos'?1:0); return (
+        {(()=>{ const CHV = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2399ABB4' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`; const selSty={fontSize:10.5,fontWeight:600,height:26,boxSizing:'border-box',padding:'0 22px 0 10px',borderRadius:7,border:'none',backgroundColor:'#F2F5F7',color:C.accent,cursor:'pointer',outline:'none',WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:CHV,backgroundRepeat:'no-repeat',backgroundPosition:'right 7px center'}; const btnSty={fontSize:10.5,fontWeight:600,height:26,boxSizing:'border-box',padding:'0 10px',borderRadius:7,border:'none',backgroundColor:'#F2F5F7',color:C.accent,cursor:'pointer',outline:'none',display:'inline-flex',alignItems:'center',gap:5}; const nF=(mesF!=='todos'?1:0)+(anioF!=='todos'?1:0)+(respF!=='todos'?1:0); return (
         <div style={{marginBottom:8}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-            <span style={{display:'inline-flex',border:`1px solid ${C.accent}`,borderRadius:8,overflow:'hidden'}}>
+            <span style={{display:'inline-flex',height:26,borderRadius:7,overflow:'hidden',background:'#EEF1F3'}}>
               {[['abonos','Abonos'],['cargos','Cargos']].map(([v,l])=>(
-                <button key={v} onClick={()=>setSub(v)} style={{fontSize:11,fontWeight:600,padding:'5px 11px',border:'none',background:sub===v?C.accent:'#fff',color:sub===v?'#fff':C.muted,cursor:'pointer'}}>{l}</button>
+                <button key={v} onClick={()=>setSub(v)} style={{fontSize:10.5,fontWeight:600,padding:'0 11px',border:'none',borderRadius:7,background:sub===v?C.accent:'transparent',color:sub===v?'#fff':C.muted,cursor:'pointer'}}>{l}</button>
               ))}
             </span>
             <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
               <option value='ambas'>Cuenta</option>
-              <option value='honorarios'>Cta. Honorarios</option>
-              <option value='gastos'>Cta. Gastos</option>
+              <option value='honorarios'>Honorarios</option>
+              <option value='gastos'>Gastos</option>
             </select>
-            <button onClick={()=>setVerFiltros(v=>!v)} style={{...selSty,color:nF>0?C.accent:C.muted,borderColor:nF>0?C.accent:C.border,background:nF>0?C.azulBg:'#fff',display:'inline-flex',alignItems:'center',gap:5}}>
-              <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={nF>0?C.accent:C.muted} strokeWidth='2' strokeLinecap='round'><path d='M3 5h18M6 12h12M10 19h4'/></svg>Filtros{nF>0?` · ${nF}`:''} {verFiltros?'▴':'▾'}
+            <button onClick={()=>setVerFiltros(v=>!v)} style={{...btnSty,backgroundColor:nF>0?C.azulBg:'#F2F5F7',color:nF>0?C.accent:C.muted}}>
+              <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={nF>0?C.accent:C.muted} strokeWidth='2' strokeLinecap='round'><path d='M3 5h18M6 12h12M10 19h4'/></svg>Filtros{nF>0?` · ${nF}`:''}
+              <svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round' style={{transform:verFiltros?'rotate(180deg)':'none'}}><polyline points='6 9 12 15 18 9'/></svg>
             </button>
-            <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{...selSty,marginLeft:'auto'}}>Fecha {orden==='desc'?'↓':'↑'}</button>
+            <button onClick={()=>setOrden(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{...btnSty,marginLeft:'auto',gap:4}}>Fecha
+              <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:orden==='asc'?'rotate(180deg)':'none'}}><line x1='12' y1='5' x2='12' y2='19'/><polyline points='6 13 12 19 18 13'/></svg>
+            </button>
           </div>
           {verFiltros&&(
             <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',background:'#F5F7F9',borderRadius:8,padding:8,marginTop:6}}>
-              <select value={mesF} onChange={e=>setMesF(e.target.value)} style={selSty}>
+              <select value={mesF} onChange={e=>setMesF(e.target.value)} style={{...selSty,backgroundColor:'#fff'}}>
                 <option value='todos'>Mes</option>
                 {MESES_ABR.map((nm,i)=>{const mm=String(i+1).padStart(2,'0');return <option key={mm} value={mm}>{nm}</option>})}
               </select>
-              <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={selSty}>
+              <select value={anioF} onChange={e=>setAnioF(e.target.value)} style={{...selSty,backgroundColor:'#fff'}}>
                 <option value='todos'>Año</option>
                 {aniosDisp.map(y=><option key={y} value={y}>{y}</option>)}
               </select>
-              <select value={respF} onChange={e=>setRespF(e.target.value)} style={selSty} title='Filtrar por abogado responsable del cliente'>
+              <select value={respF} onChange={e=>setRespF(e.target.value)} style={{...selSty,backgroundColor:'#fff'}} title='Filtrar por abogado responsable del cliente'>
                 <option value='todos'>Responsable</option>
                 {respDisp.map(r=><option key={r} value={r}>{r}</option>)}
                 <option value='__sin__'>Sin responsable</option>
@@ -15044,7 +15047,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
         {/* Buscar + Mis clientes (estrella) + conteo */}
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
-          <div style={{flex:1,display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 9px'}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',gap:6,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 9px'}}>
             <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>
             <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar RUT, nombre o cliente…' style={{flex:1,minWidth:0,border:'none',outline:'none',fontSize:12,color:C.text,background:'transparent'}}/>
             {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>✕</button>}
@@ -15059,15 +15062,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
         {/* Conciliación (Fase 2) — solo abonos: acción + resumen (el estado se elige en el filtro de arriba) */}
         {sub==='abonos'&&(
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
-            <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:11,fontWeight:700,padding:'6px 12px',borderRadius:7,border:'none',background:(autoRun||resumenConc.pend===0)?C.done:C.accent,color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer',whiteSpace:'nowrap'}}>{autoRun?'Conciliando…':'Conciliar auto'}</button>
+          <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8,flexWrap:'wrap'}}>
+            <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:'none',background:(autoRun||resumenConc.pend===0)?C.done:C.accent,color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer',whiteSpace:'nowrap'}}>{autoRun?'Conciliando…':'Conciliar auto'}</button>
             {resumenConc.total>0&&(()=>{ const pct=Math.round(resumenConc.done/resumenConc.total*100); return (
-              <span style={{fontSize:11,color:C.muted}}><b style={{color:C.greenText}}>{pct}%</b> conciliado <span style={{color:C.done}}>· {resumenConc.done}/{resumenConc.total}</span></span>
+              <span style={{fontSize:10.5,color:C.muted}}><b style={{color:C.greenText}}>{pct}%</b> conciliado <span style={{color:C.done}}>· {resumenConc.done}/{resumenConc.total}</span></span>
             )})()}
-            {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones)' style={{marginLeft:'auto',fontSize:10,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:14,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{resumenConc.fondos} prov →</span>}
+            {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones)' style={{marginLeft:'auto',fontSize:10,fontWeight:600,height:26,boxSizing:'border-box',display:'inline-flex',alignItems:'center',backgroundColor:C.soonBg,color:C.soonText,borderRadius:7,padding:'0 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{resumenConc.fondos} prov →</span>}
           </div>
         )}
-
         {/* Estado de conciliación — chips livianos: solo estados con pendientes (>0); tocar filtra, tocar de nuevo = Todos */}
         {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',resumenConc.pend,C.soonText,'#FAC775'],['descalces','Descalces',resumenConc.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',G.sinId,C.soonText,C.border]].filter(c=>c[2]>0); return ch.length>0?(
           <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
