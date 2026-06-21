@@ -68,6 +68,8 @@ const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-MM-AAAA con guiones) en toda la app
 // Fecha destacada (día grande + "mes año") — formato estándar de listas. col opcional (urgencia).
 const bigDate = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:40,flexShrink:0}}/>; return <div style={{width:40,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:16,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:9,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
+// Saldo de una factura = lo que falta cobrar (monto menos lo ya abonado/conciliado). Fuente ÚNICA; Pagada/Anulada = 0.
+const saldoBill = b => (b && !['Pagado','Anulada'].includes(b.status)) ? Math.max(0,(b.amount||0)-(b.paid_amount||0)) : 0
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
 const fmtFechaTS = ts => { if(!ts) return '—'; const d=new Date(ts); return isNaN(d)?'—':`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}` }
@@ -1965,14 +1967,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const tasaCobro = facturado>0 ? Math.min(100,Math.round((cobradoDelFacturado/facturado)*100)) : 0
 
   const porCobrar = bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
-  const totalPorCobrar = porCobrar.reduce((a,b)=>a+(b.amount||0),0)
+  const totalPorCobrar = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
   // KPIs accionables del Dashboard (mismo criterio que Facturación). Tappables → tab Facturación.
   const kpiPendiente = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
   const kpiVencido = bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
   const kpiProgramado = bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
-  const age0_30  = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d>=-30 }).reduce((a,b)=>a+(b.amount||0),0)
-  const age31_60 = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-30&&d>=-60 }).reduce((a,b)=>a+(b.amount||0),0)
-  const age60p   = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-60 }).reduce((a,b)=>a+(b.amount||0),0)
+  const age0_30  = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d>=-30 }).reduce((a,b)=>a+saldoBill(b),0)
+  const age31_60 = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-30&&d>=-60 }).reduce((a,b)=>a+saldoBill(b),0)
+  const age60p   = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-60 }).reduce((a,b)=>a+saldoBill(b),0)
   const top5 = [...porCobrar].sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,5)
 
   const byArea = {}
@@ -4860,7 +4862,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
     const allBills = Object.values(byEntity).flat()
     const clientTotal = allBills.reduce((a,b)=>a+(b.amount||0),0)
     const nDocs = allBills.length
-    const vencidoMonto = allBills.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+    const vencidoMonto = allBills.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
     const isOpen = openClients.has(client.id)
     return (
       <div key={client.id} style={{marginBottom:isOpen?16:8}}>
@@ -5059,8 +5061,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const hoy=new Date().toISOString().slice(0,10)
           const pend=bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
           const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
-          const porCobrar=pend.reduce((a,b)=>a+(b.amount||0),0)
-          const venAll=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+          const porCobrar=pend.reduce((a,b)=>a+saldoBill(b),0)
+          const venAll=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
           const inResYear=(dateStr)=> !fYear || String(dateStr||'').slice(0,4)===fYear
           const cobAll=bb.filter(b=>b.status==='Pagado'&&inResYear(b.paid_at||b.issued_at)).reduce((a,b)=>a+(b.amount||0),0)
           const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
@@ -5129,7 +5131,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?(b.concept||'—'):''}{ui?`${b.invoice_no?' · ':''}${fmtUF(ui.uf)}`:''}</div>
                 </div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
                 {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>}
@@ -5138,8 +5140,8 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
               </div>}
             </div>
           )}
-          const porCobrarTot=rows.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+(b.amount||0),0)
-          const vencidoTot=rows.filter(b=>estadoReal(b)==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+          const porCobrarTot=rows.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0)
+          const vencidoTot=rows.filter(b=>estadoReal(b)==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
           const estChips=[['Programada','Programadas'],['Pendiente','Emitidas'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
           return (<div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
@@ -5345,7 +5347,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{cl&&rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}{!cl&&b.receptor_name?<span style={{marginLeft:6,fontSize:9,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:9,padding:'1px 7px'}}>sin vincular</span>:''}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}</div>
                 </div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
                 {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>{ if(confirm(`¿Marcar pagada ${b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'la factura'} por ${fmt(b.amount)}?`)) onStatusChange&&onStatusChange(b.id,'Pagado',hoy) }} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>}
@@ -9723,7 +9725,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const real = all.filter(b=>b.billing_type!=='reembolso')
   const facturado = real.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
-  const porCobrar = real.filter(b=>['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
+  const porCobrar = real.filter(b=>['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
   const programado = real.filter(b=>b.status==='Programada').reduce((a,b)=>a+(b.amount||0),0)
   const overdueTot = real.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
 
@@ -9864,9 +9866,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`${b.concept||'—'} · `:''}{fmtFechaDMY(kpiDate(b))}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
-                    <div style={{fontSize:9,fontWeight:600,color:STAT[b.status]||C.muted}}>{b.status}</div>
-                    {b.paid_amount>0&&b.status!=='Pagado'&&<div style={{fontSize:9,color:C.soon,fontWeight:600}}>abonado {fmt(b.paid_amount)}</div>}
+                    {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
+                      ? <><div style={{fontSize:9,color:C.done}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdueText:C.accent,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>{b.status} · abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
+                      : <><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:STAT[b.status]||C.muted}}>{b.status}</div></> })()}
                   </div>
                 </div>
                 {['Pendiente','Vencido'].includes(b.status)&&<div style={{display:'flex',gap:6,marginTop:7}}>
@@ -10288,7 +10290,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const facturado = clientBilling.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
   const porCobrar = clientBilling.filter(b=>['Pendiente','Vencido'].includes(b.status))
-  const totalPorCobrar = porCobrar.reduce((a,b)=>a+(b.amount||0),0)
+  const totalPorCobrar = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
   // Saldo del cliente: fuente única (fgCliente) — mismo criterio (todo lo no-fondo es gasto) que la lista de Gastos y el Dashboard.
   const {fondos, gastos, saldo:saldoFondos} = fgCliente(expenses, client.id)
 
@@ -14474,7 +14476,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
       if(aplicado<=0){ setBusy(null); return }   // INV-7: monto_aplicado siempre > 0
-      const aplTot = (aplicadoByFactura[factura.id]||0)+aplicado
+      const manualExtra = Math.max(0, (factura.paid_amount||0) - (aplicadoByFactura[factura.id]||0))  // abono manual fuera de las filas de conciliación: súmalo, no lo reemplaces
+      const aplTot = (aplicadoByFactura[factura.id]||0)+aplicado+manualExtra
       const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen, marco_pago:marcaPago(factura,aplTot) }).select().single()
       if(ins.error) throw ins.error
       cr=ins.data
