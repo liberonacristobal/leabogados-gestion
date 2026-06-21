@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Dashboard: tablero del equipo con cortes Me delegaron / Delegué
+- El tablero "Tareas del equipo" del Dashboard ahora tiene toggle Todas · Me delegaron · Delegué. Me delegaron = tareas que otros me asignaron; Delegué = las que yo asigné (assigned_by=yo), agrupadas por a quién. El conteo del encabezado se ajusta al corte. Sin pantallas nuevas.
+
 ## 2026-06-21 — Recordar cobro en la Facturación global
 - Botón "Recordar" en las filas de factura Pendiente/Vencida de la Facturación global (Por cliente y Todas), no solo en la Ficha. Manda el correo de recordatorio al cliente desde la cuenta de oficina, con confirmación previa (a quién/folio/monto) y usando el SALDO real. Si el cliente no tiene correo, avisa.
 
