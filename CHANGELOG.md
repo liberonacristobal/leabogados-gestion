@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Gastos landing: lista de saldos más limpia
+- Fuera el círculo con iniciales (no se usan en la app). El estado lo dan el borde semáforo + el color del monto (rojo debe / verde a favor / gris $0). Montos alineados en columna a la derecha (tabular-nums) para escanear cifras. Se mantiene el ícono de archivar y la razón social en la secundaria.
+
 ## 2026-06-21 — RS tras identificar: huérfanas (Facturación) + gastos
 - Facturación "Todas": una factura sin cliente pero con receptor del SII deja de decir "Sin cliente" → muestra el receptor (RS) + chip "sin vincular"; al vincularla a un cliente muestra cliente + RS.
 - Gastos: cada fila muestra la razón social asignada (rsLabel con entity_id del gasto) o "Sin cliente" en rojo si falta, para ver a quién pertenece de un vistazo (no aplica a fondos/oficina/personales).
