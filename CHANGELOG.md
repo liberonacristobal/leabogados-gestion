@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: header compacto (v2)
+- Totales de abonos/cargos se funden ABREVIADOS en la línea de Cartolas (CARTOLAS · N mov · +$XXXM · −$YYYM); se elimina la línea suelta de números.
+- Filtros colapsables: Mes/Año/Responsable viven en un botón "Filtros ▾" (se pinta + cuenta los activos · N, con "Limpiar"); Cuenta queda fuera (select visible). Fecha pasa a la fila de controles.
+- Buscador: "Mis clientes" pasa a estrella sin recuadro; el conteo (N/total) se reubica al lado del buscador.
+- Auto bar sin barra de progreso: botón "Conciliar auto" + "69% conciliado · 206/297" + chip provisiones. Más compacto.
+
 ## 2026-06-21 — Caja Chica pulida (Liquidar)
 - KPIs con borde-acento (Saldo caja verde/rojo según signo en ambas pestañas; Sin liquidar blanco + navy). Filas de gasto con borde listo/a-revisar: verde = listo para liquidar, ámbar = le falta cliente o categoría (criterio del Asistente IA). La secundaria marca lo que falta ("Sin cliente" rojo, "sin categoría" ámbar). Glosa de protagonista, monto en grafito tabular. No toca selección/IA/liquidación.
 
