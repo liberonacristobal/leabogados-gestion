@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación (flujo): auto-identificar por nombre al cargar
+- Al importar una cartola, si el RUT es nuevo (no aprendido) se intenta auto-asignar el cliente por NOMBRE con el mismo criterio conservador de las sugerencias (tokens distintivos + un único cliente). Baja los "sin identificar". Es identificación reversible (no mueve plata); igual conviene revisar.
+
 ## 2026-06-21 — Conciliación (flujo): sugerencia por monto en 1 clic
 - La sugerencia azul "¿Cliente? · Factura N°X" (calce por monto exacto) ahora IDENTIFICA y CONCILIA en un solo toque (antes solo identificaba y había que conciliar aparte). Reversible con Deshacer.
 
