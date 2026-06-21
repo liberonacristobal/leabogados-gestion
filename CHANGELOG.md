@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Conciliación: flexibilidad manual en el estado de cuenta
+- En el panel del pago, las facturas del cliente (todas las con saldo, sin filtro de monto/fecha) ahora se ordenan por FECHA MÁS CERCANA a la transferencia, y se agrega un buscador (N°/concepto/monto) cuando hay muchas. El humano elige cualquiera y "Conciliar con esta". No toca el auto (sigue exacto monto+fecha, TOL=0); es solo flexibilidad manual.
+
 ## 2026-06-21 — Conciliación: criterio EXACTO (sin tolerancia UF)
 - Revertida la lógica "aproximada UF" en las sugerencias (era un error de criterio). La conciliación bancaria es 100% exacta: cada pago calza por FECHA + MONTO EXACTO (factura sola, factura+gastos, combo o grupo). Si nada calza exacto, es adelanto / pago histórico (se clasifica, no se aproxima). La tolerancia UF queda solo para programadas↔emitidas, fuera de la cartola.
 
