@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Facturación global: pago parcial (abono)
+- El "Registrar pago" de la Facturación global ahora permite ABONO PARCIAL: campo "Monto a registrar" prellenado con el saldo; si registras menos, la factura queda Pendiente con saldo (paid_amount acumulado) y el botón dice "Confirmar abono"; si dejas el total, pago completo como antes (+ lógica de terceros intacta). Reusa el contrato paid_amount de la Ficha, sin SQL.
+
 ## 2026-06-21 — Fecha día-grande en listas de Rendiciones
 - Las 3 listas de rendiciones (caja chica · mis liquidaciones · notaría) ahora muestran la fecha de liquidación como día-grande a la izquierda (helper bigDate), con el período de protagonista; se sacó la fecha del subtítulo. Uniforma con el resto de la app.
 

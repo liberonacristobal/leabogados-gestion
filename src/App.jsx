@@ -4624,6 +4624,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const [pagando,setPagando] = useState(false)
   const [payDate,setPayDate] = useState('')
   const [inclTerceros,setInclTerceros] = useState(true)   // al pagar la factura ancla: ¿el pago incluyó los terceros?
+  const [payMonto,setPayMonto] = useState('')   // monto a registrar; si < saldo deja la factura Pendiente con abono (paid_amount)
   const fmtDMY = fmtFechaDMY   // delega al helper global (evita la copia local divergente)
   const [openClients,setOpenClients] = useState(()=>new Set())
   const toggleClient = id => setOpenClients(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
@@ -4714,13 +4715,20 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
 
   const confirmPago = async() => {
     if(pagando) return   // evita doble submit
+    const pb = billing.find(b=>String(b.id)===String(payingId))||{}
+    const total=pb.amount||0, ya=pb.paid_amount||0
+    const monto=Math.max(0, parseInt(String(payMonto).replace(/[^\d]/g,''))||0)
+    if(monto<=0){ alert('Ingresa un monto mayor a 0.'); return }
     setPagando(true)
-    const pend = (terceros||[]).filter(t=>String(t.billing_id)===String(payingId)&&t.estado==='pendiente')
-    await onStatusChange(payingId,'Pagado',payDate)
-    if(pend.length&&inclTerceros&&onConciliarTerceros) await onConciliarTerceros(payingId)
+    if(ya+monto>=total){   // pago completo → Pagado (limpia abono parcial)
+      const pend = (terceros||[]).filter(t=>String(t.billing_id)===String(payingId)&&t.estado==='pendiente')
+      await onStatusChange(payingId,'Pagado',payDate,{paid_amount:null})
+      if(pend.length&&inclTerceros&&onConciliarTerceros) await onConciliarTerceros(payingId)
+    } else {   // abono parcial → la factura sigue en su estado, con saldo (paid_amount acumulado)
+      await onStatusChange(payingId, pb.status, undefined, {paid_amount: ya+monto})
+    }
     setPagando(false); setPayingId(null)
   }
-  // Unificado a "convertir": la cuota programada pasa a emitida (Pendiente de cobro), no se borra.
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
   const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(confirm(msg)) await emitirConRS(b) }
   const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
@@ -4902,7 +4910,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   {prog ? (
                     <button onClick={()=>marcarEmitida(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Ya emitida</button>
                   ):(!anulada&&!pagado&&!anticipada)?(
-                    <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true)}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Registrar pago</button>
+                    <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true);setPayMonto(String(Math.max(0,(b.amount||0)-(b.paid_amount||0))))}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Registrar pago</button>
                   ):(pagado&&onRevertirPago)?(
                     <button onClick={()=>{ if(confirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Deshacer pago</button>
                   ):(anulada&&onReactivar)&&(
@@ -5004,12 +5012,18 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             </div>
             <div style={{padding:'12px 20px 16px',borderBottom:`0.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:26,fontWeight:500,color:C.text,letterSpacing:'-.5px'}}>{fmt(pb.amount)}</div>
-                <div style={{fontSize:12,color:C.done,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pb.concept||'—'}{pb.invoice_no?` · Factura N°${folioN(pb.invoice_no)}`:''}</div>
+                <div style={{fontSize:11,color:C.done}}>Saldo</div>
+                <div style={{fontSize:26,fontWeight:500,color:C.text,letterSpacing:'-.5px'}}>{fmt(Math.max(0,(pb.amount||0)-(pb.paid_amount||0)))}</div>
+                <div style={{fontSize:12,color:C.done,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pb.concept||'—'}{pb.invoice_no?` · Factura N°${folioN(pb.invoice_no)}`:''}{(pb.paid_amount||0)>0?` · ya abonado ${fmt(pb.paid_amount)}`:''}</div>
               </div>
               <div style={{width:40,height:40,borderRadius:12,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
               </div>
+            </div>
+            <div style={{padding:'14px 20px 0'}}>
+              <label style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',marginBottom:6,display:'block'}}>MONTO A REGISTRAR</label>
+              <input inputMode='numeric' value={payMonto} onChange={e=>setPayMonto(e.target.value.replace(/[^\d]/g,''))} style={{width:'100%',border:`1.5px solid ${C.accent}`,borderRadius:8,fontSize:15,fontWeight:600,padding:'9px 11px',color:C.accent,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+              {(()=>{ const total=pb.amount||0, ya=pb.paid_amount||0, saldo=Math.max(0,total-ya); const monto=parseInt(String(payMonto).replace(/[^\d]/g,''))||0; return (monto>0&&ya+monto<total)?<div style={{fontSize:11,color:C.soonText,background:C.soonBg,borderRadius:7,padding:'5px 9px',marginTop:6}}>Abono — queda <b>{fmt(saldo-monto)}</b> de saldo (sigue Pendiente)</div>:null })()}
             </div>
             <div style={{padding:'14px 20px 10px'}}>
               <label style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',marginBottom:6,display:'block'}}>FECHA DE PAGO</label>
@@ -5034,7 +5048,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             })()}
             <div style={{padding:'14px 20px 20px',display:'flex',gap:8}}>
               <button onClick={()=>setPayingId(null)} style={{flex:1,height:40,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={confirmPago} disabled={pagando} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:pagando?'default':'pointer',opacity:pagando?.6:1}}>{pagando?'Guardando…':'Confirmar pago'}</button>
+              <button onClick={confirmPago} disabled={pagando} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:pagando?'default':'pointer',opacity:pagando?.6:1}}>{pagando?'Guardando…':(()=>{ const total=pb.amount||0, ya=pb.paid_amount||0; const monto=parseInt(String(payMonto).replace(/[^\d]/g,''))||0; return (monto>0&&ya+monto<total)?'Confirmar abono':'Confirmar pago' })()}</button>
             </div>
           </div>
         </div>
