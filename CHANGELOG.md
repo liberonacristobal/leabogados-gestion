@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Dashboard: sección "Tareas del equipo"
+- Nueva sección colapsable en el Dashboard (admin), tras "Qué atender hoy": todas las tareas activas del equipo agrupadas por persona (color por integrante, conteo + vencidas en rojo). Cada persona despliega sus tareas con fecha día-grande + cliente/proyecto, ordenadas por urgencia; check cuadrado fino para marcar terminada (reusa onCompleteTask) y tap para abrir/editar (onPreviewTask). Una tarea con varios responsables aparece en cada uno.
+
 ## 2026-06-21 — Conciliación: botones minimal (altura 26, sin borde)
 - Familia de controles uniforme y más baja: toggle Abonos/Cargos, Cuenta, Filtros, Fecha y Conciliar auto a 26px, radio 7, relleno gris suave (#F2F5F7) sin borde, fuente 10.5. Cuenta con appearance:none + chevron propio y opciones cortas (Cuenta/Honorarios/Gastos) para no estirarse. Chevron de Filtros/Fecha que rota según estado. Chip provisiones también a 26px, radio 7.
 
