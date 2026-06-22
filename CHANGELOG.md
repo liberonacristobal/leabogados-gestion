@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Anticipos: el panel suma "Cubrir cuotas programadas"
+- El panel del anticipo (que abre "Asignar") ahora incluye la acción **Cubrir cuotas programadas** conectada (CubrirCuotasModal a nivel App), restituyendo la funcionalidad que estaba en la fila y que se había quitado prematuramente. Las demás acciones (pagar factura emitida, emitir 1 factura que anula programadas, reclasificar a Fondo) quedan marcadas como próximas en el panel. El badge "Verificado en banco" + el bloqueo de monto/fecha aplican solo a anticipos de conciliación bancaria (no a los manuales).
+
 ## 2026-06-22 — Anticipos: fila rediseñada (Asignar abre el panel)
 - En la lista de Anticipos se quita el botón ancho "Aplicar a cuotas programadas". El bloque derecho ahora es: **chip de estado delgado** (DISPONIBLE / EN CUOTAS / CONSUMIDO, mayúsculas) a la izquierda + **monto justificado a la derecha**, y un botón **Asignar** chico (poco alto) debajo que abre el panel del anticipo (donde viven todas las acciones). Fila más densa y limpia.
 
