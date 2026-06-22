@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Landings: buscador unificado, vista limited y responsive mobile
+- Ventas: el buscador pasa de pill en el título a barra full-width (ChipSearch), igual que Clientes y Gastos, liberando la fila de título. La vista de clientes "limited" (Martín/Martina/Rodrigo) suma la firma "Clientes · N clientes". Encabezados de los 4 landings + limited con flexWrap, para que en iPhone los chips bajen de línea en vez de desbordar. Chips compactos y centrados (chipBtn, height 24). Sin cambios de lógica ni de cifras.
+
 ## 2026-06-22 — Landings: encabezado unificado (canon) en los 4
 - Armonización de los landings Clientes, Gastos y Fondos, Facturación y Ventas: encabezado con la misma firma "título · N" (conteo en gris claro inline; Clientes pasa de línea aparte a inline liberando una línea). Facturación suma el botón "ojo + Por cliente" fijo en el header (navega al detalle por cliente) y elimina el botón full-width "Ver detalle por cliente"; el conteo es total de facturas no borradas. Ventas y Gastos suman el conteo (Ventas = Activo+Terminado; Gastos = clientes con movimientos, solo en el landing). Cada vista mantiene sus filtros propios (pills donde hay pocos estados, dropdowns donde hay muchos). Sin cambios de lógica ni de cifras.
 

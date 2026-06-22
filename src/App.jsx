@@ -683,8 +683,8 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:'#F5F7F9',zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</span><span style={{fontSize:12,color:C.done,fontWeight:400}}>· {clients.filter(c=>!c.is_internal).length} clientes</span></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <button onClick={onImportDrive} title='Importar desde Drive' style={driveBtn}><DriveIcon size={20}/></button>
             <button onClick={onAdd} style={chipBtn('primary')}>+ Cliente</button>
@@ -2936,19 +2936,15 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</span><span style={{fontSize:12,color:C.done,fontWeight:400}}>· {(sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)).length} ventas</span></div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <div style={{position:'relative',display:'flex',alignItems:'center'}}>
-              <span style={{position:'absolute',left:9,color:C.muted,fontSize:12,pointerEvents:'none'}}>⌕</span>
-              <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{width:q?140:96,padding:'6px 22px 6px 22px',borderRadius:20,border:`1px solid ${q?C.accent:C.border}`,background:'#F5F7F9',color:C.text,fontSize:12,outline:'none',transition:'width .15s',boxSizing:'border-box'}}/>
-              {q&&<button onClick={()=>setQ('')} aria-label='Limpiar' style={{position:'absolute',right:6,background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer',lineHeight:1}}>×</button>}
-            </div>
             <button onClick={onAdd} style={chipBtn('soft')}>Nueva venta</button>
             <button onClick={onAddPropuesta} style={chipBtn('primary')}>Nueva propuesta</button>
           </div>
         </div>
-        <div style={{display:'flex',gap:6,marginBottom:8,marginTop:10,flexWrap:'wrap'}}>
+        <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar venta...' style={{marginTop:10,marginBottom:8}}/>
+        <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
           <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{flex:1,minWidth:90,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:12}}>
             <option value=''>Todos</option>
             {['Activo','Propuesta','Borrador','Rechazada','Terminado','Pausado'].map(s=><option key={s} value={s}>{s}</option>)}
@@ -4997,7 +4993,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   return (
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</span><span style={{fontSize:12,color:C.done,fontWeight:400}}>· {(billing||[]).filter(b=>!b.deleted_at).length} facturas</span></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {filter==='resumen'&&<button onClick={()=>{setFilter('clientes');clearSel&&clearSel()}} title='Detalle por cliente' style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:'0.5px solid '+C.accent,background:'#fff',color:C.accent}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>Por cliente</button>}
@@ -8008,7 +8004,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             {(selectedClient||showOrphans||showNotaria||showHistorial)&&(
               <button onClick={()=>{setSelectedClient(null);setShowOrphans(false);setShowNotaria(false);setShowHistorial(false)}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
@@ -10831,7 +10827,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   return (
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</span><span style={{fontSize:12,color:C.done,fontWeight:400}}>· {cl.length} {cl.length===1?'cliente':'clientes'}</span></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <button onClick={onImportDrive} title='Importar desde Drive' style={driveBtn}><DriveIcon size={20}/></button>
