@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Ventas: tarjetas de grupo al canon KPI (como Facturación)
+- Las tarjetas "Todas las ventas / abogado / área" adoptan la tarjeta KPI canónica de Facturación: mismo chasis (borde 1px + borde-izquierdo 3px + radio 10, padding 11×13), label uppercase gris y cifra coloreada por grupo (persona/área). Antes usaban borde 0.5px con radio "0 10 10 0" (marca de color distinta) y nombre en navy. Solo estética.
+
 ## 2026-06-22 — Facturación: pulido fino del resumen
 - Pills de año (Total/2027/2026/2025) suben de fontSize 9 a 10 (radio/padding al estilo de las pills de estado) para mejor legibilidad y tap. La etiqueta del hero "Por cobrar" rima con la de Ventas (fontSize 11, weight 500, letterSpacing .04em). Solo estética.
 
