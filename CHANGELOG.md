@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Integridad: eliminar cliente ahora archiva (reversible)
+- "Eliminar cliente" dejaba huérfanos (expenses/anticipos/terceros/rendiciones/conciliación) y era irreversible. Ahora: si el cliente tiene movimientos (ventas/facturas/gastos/anticipos) se **ARCHIVA** (status Terminado, reactivable desde el filtro Terminados); solo se borra de verdad si está completamente vacío. Botón del formulario: "Archivar / eliminar".
+
 ## 2026-06-22 — Inteligencia de Negocios: MVP Stage 1 (Oportunidades)
 - Nueva vista `IntelligenceView` (solo admin), accesible desde la tarjeta-puente "Inteligencia de negocios" en el Dashboard. Header con 3 KPIs sólidos (Vendido YTD en UF, Por cobrar, Cobrado YTD) y 5 **Oportunidades** expandibles calculadas con helpers fuente única: clientes dormidos (Activo 9+ meses sin actividad), cobranza vencida por cliente, cross-sell (una sola área), top sin recurrencia, win-back (terminados ≤18m). Cada fila abre la ficha del cliente. Helpers nuevos `ventaHistoricaUF` y `ultimaActividad`. El Resumen IA (`claudeCall`) y las secciones Cartera/Margen/Tendencias/Precios + el cruce con el Radar SII vienen en etapas siguientes.
 
