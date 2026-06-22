@@ -1974,9 +1974,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const kpiPendiente = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
   const kpiVencido = bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
   const kpiProgramado = bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
-  const age0_30  = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d>=-30 }).reduce((a,b)=>a+saldoBill(b),0)
-  const age31_60 = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-30&&d>=-60 }).reduce((a,b)=>a+saldoBill(b),0)
-  const age60p   = porCobrar.filter(b=>{ const d=daysLeft(b.due); return d!==null&&d<-60 }).reduce((a,b)=>a+saldoBill(b),0)
   const top5 = [...porCobrar].sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,5)
 
   const byArea = {}
@@ -14889,7 +14886,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const fondoExistente = (mov, monto) => {
     const cid = mov.cliente_id; if(!cid) return null
     const linked = new Set(conc.filter(c=>c.tipo_destino==='fondo'&&c.gasto_id).map(c=>String(c.gasto_id)))
-    return (expenses||[]).find(e=> e.type==='fondo' && String(e.client_id)===String(cid) && Math.abs((e.amount||0)-monto)<=TOL && !linked.has(String(e.id)) && !/conciliaci[oó]n bancaria/i.test(e.concept||'')) || null
+    return (expenses||[]).find(e=> e.type==='fondo' && String(e.client_id)===String(cid) && Math.abs((e.amount||0)-monto)<=TOL && !linked.has(String(e.id)) && !/conciliaci[oó]n/i.test(e.concept||'')) || null
   }
   // Vincula un fondo YA existente (sin respaldo) a este movimiento, sin crear uno nuevo.
   const vincularFondo = async(mov, fondoId, monto) => {
@@ -15000,7 +14997,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             setExpenses&&setExpenses(p=>p.map(x=>marcados.includes(x.id)?{...x,reembolso_fondo_id:null}:x)) }
           // 'gasto' (3.D) y los 'fondo' CREADOS por conciliación se borran. Un fondo VINCULADO (manual preexistente, #4) solo se desenlaza.
           const exp=(expenses||[]).find(x=>String(x.id)===String(r.gasto_id))
-          const creadoAqui = r.tipo_destino==='gasto' || (exp && /conciliaci[oó]n bancaria/i.test(exp.concept||''))
+          const creadoAqui = r.tipo_destino==='gasto' || (exp && /conciliaci[oó]n/i.test(exp.concept||''))
           if(creadoAqui){ const { error:fe } = await supabase.from('expenses').delete().eq('id',r.gasto_id); if(fe) throw fe
             setExpenses&&setExpenses(p=>p.filter(x=>String(x.id)!==String(r.gasto_id))) }
         }

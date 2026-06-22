@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-22 — Cifras (auditoría): QW4–QW5
+- **QW4 — Regex de origen en conciliación:** se ensancha de `/conciliaci[oó]n bancaria/i` a `/conciliaci[oó]n/i` (deshacer conciliación + buscar fondo a vincular), como prevención ante cambios de redacción del concepto. (Hoy todos los fondos de conciliación ya contienen "conciliación bancaria", así que es preventivo; el arreglo robusto sería un flag de origen, pendiente.)
+- **QW5 — Borrado de aging muerto:** se eliminan `age0_30/age31_60/age60p` del Dashboard (no se usaban; `computeAgingCartera` es la fuente única).
+
 ## 2026-06-22 — Cifras (auditoría): QW1–QW3
 - **QW1 — Anticipo parcial abona la factura:** al aplicar anticipos que NO cubren la factura, ahora se refleja el consumo en `paid_amount` (antes el anticipo quedaba "consumido" pero la factura mostraba el saldo completo → plata desaparecía). Además el cálculo de "cubre" considera abonos previos (`paid_amount`) y al cubrir totalmente fija `paid_amount = amount`.
 - **QW2 — Cash flow con saldo real:** CashflowProjection usa `saldoBill(b)` en meses futuros (emitido/vencido/programado) en vez del monto bruto, para no inflar la caja proyectada con lo ya abonado.
