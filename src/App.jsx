@@ -4701,7 +4701,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
@@ -5131,7 +5131,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             </div>
           </div>
         </div>}
-        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt} onFusionar={onFusionarAnticipos}/>}
+        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt} onFusionar={onFusionarAnticipos} onAbrir={onAbrirAnticipo}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&filter!=='sinanio'&&filter!=='resumen'&&<>
@@ -5951,7 +5951,68 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
   )
 }
 
-function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar,onFusionar}) {
+// Panel de gestión de un anticipo (Etapa 1: editar proyecto/RS/nota + liberar). Monto/fecha bloqueados si viene del banco.
+function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],onSave,onLiberar,onClose}){
+  const a=anticipo
+  const esBanco=/conciliaci[oó]n/i.test(a.nota||'')
+  const cliName=clients.find(c=>String(c.id)===String(a.client_id))?.name||'Cliente'
+  const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(a.client_id))
+  const ventas=(sales||[]).filter(s=>String(s.client_id)===String(a.client_id)).slice().sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||'')))
+  const sugProy=ventas[0]?.title||''
+  const proyectosCli=[...new Set(ventas.map(s=>s.title).filter(Boolean))]
+  const [proyecto,setProyecto]=useState(a.proyecto||'')
+  const [entityId,setEntityId]=useState(a.entity_id||'')
+  const [nota,setNota]=useState(a.nota||'')
+  const [monto,setMonto]=useState(a.monto||0)
+  const [fecha,setFecha]=useState((a.fecha||'').slice(0,10))
+  const [busy,setBusy]=useState(false)
+  const fmtCLP0=n=>'$'+(n||0).toLocaleString('es-CL')
+  const dispo=a.estado==='disponible'
+  const dirty=proyecto!==(a.proyecto||'')||String(entityId||'')!==String(a.entity_id||'')||nota!==(a.nota||'')||(!esBanco&&(String(monto)!==String(a.monto||0)||fecha!==(a.fecha||'').slice(0,10)))
+  const inp={flex:1,fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 9px',outline:'none',background:'#fff',fontFamily:'inherit',minWidth:0,boxSizing:'border-box'}
+  const lbl={fontSize:11,color:C.muted,width:62,flexShrink:0}
+  const guardar=async()=>{ setBusy(true); const fields={proyecto:proyecto||null,entity_id:entityId||null,nota:nota||null}; if(!esBanco){ fields.monto=parseInt(String(monto).replace(/[^\d]/g,''))||0; fields.fecha=fecha||null } await onSave(a,fields); setBusy(false); onClose() }
+  return (
+    <Modal title={<><span style={{color:C.accent}}>Anticipo</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+        {bigDate(a.fecha)}
+        <div style={{flex:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',minWidth:0}}>
+          <span style={{fontSize:9,fontWeight:600,letterSpacing:'.04em',padding:'3px 8px',borderRadius:20,background:dispo?C.greenBg:'#F5F7F9',color:dispo?C.greenText:C.muted}}>{dispo?'DISPONIBLE':'CONSUMIDO'}</span>
+          {esBanco&&<span title='Verificado en banco' style={{width:22,height:22,borderRadius:'50%',background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18'/><path d='M5 21V10l7-5 7 5v11'/><path d='M9 21v-6h6v6'/></svg></span>}
+        </div>
+        <div style={{fontSize:20,fontWeight:600,color:dispo?C.normal:C.muted,letterSpacing:'-.5px',flexShrink:0}}>{fmtCLP0(a.monto)}</div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+        <span style={lbl}>Proyecto</span>
+        {proyectosCli.length?(
+          <select value={proyecto} onChange={e=>setProyecto(e.target.value)} style={inp}><option value=''>—</option>{proyectosCli.map(p=><option key={p} value={p}>{p}</option>)}{proyecto&&!proyectosCli.includes(proyecto)&&<option value={proyecto}>{proyecto}</option>}</select>
+        ):(
+          <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Proyecto...' style={inp}/>
+        )}
+        {!proyecto&&sugProy&&<span onClick={()=>setProyecto(sugProy)} title={sugProy} style={{fontSize:10,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>✦ usar</span>}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+        <span style={lbl}>Razón soc.</span>
+        <select value={entityId} onChange={e=>setEntityId(e.target.value)} style={inp}><option value=''>—</option>{ents.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:esBanco?7:8}}>
+        <span style={lbl}>Nota</span>
+        <input value={nota} onChange={e=>setNota(e.target.value)} placeholder='Nota...' style={inp}/>
+      </div>
+      {!esBanco&&(
+        <div style={{display:'flex',gap:8,marginBottom:7}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><span style={lbl}>Monto</span><input value={monto} onChange={e=>setMonto(e.target.value)} style={inp}/></div>
+          <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><span style={{fontSize:11,color:C.muted}}>Fecha</span><input type='date' value={fecha} onChange={e=>setFecha(e.target.value)} style={inp}/></div>
+        </div>
+      )}
+      {esBanco&&<div style={{fontSize:10,color:C.done,display:'flex',alignItems:'center',gap:5,marginBottom:7}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2'><rect x='5' y='11' width='14' height='9' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>Monto y fecha del banco</div>}
+      <button disabled={busy||!dirty} onClick={guardar} style={{width:'100%',height:40,borderRadius:9,border:'none',background:(dirty&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(dirty&&!busy)?'pointer':'default',marginTop:4}}>{busy?'Guardando…':'Guardar'}</button>
+      {dispo&&onLiberar&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}><button onClick={()=>{ if(confirm('¿Liberar (eliminar) este anticipo disponible?')){ onLiberar(a); onClose() } }} style={{fontSize:11,fontWeight:600,color:C.overdue,background:'#fff',border:`1px solid ${C.overdue}`,borderRadius:20,padding:'4px 13px',cursor:'pointer'}}>Liberar</button></div>}
+    </Modal>
+  )
+}
+
+function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar,onFusionar,onAbrir}) {
   const [fil,setFil] = useState('disponible')
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
@@ -6011,7 +6072,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
               )}) })()}
             {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); const cubreCuotas=billing.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
               <div key={a.id} style={{padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+                <div onClick={()=>onAbrir&&onAbrir(a)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,cursor:onAbrir?'pointer':'default'}}>
                   {bigDate(a.fecha)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{a.proyecto||'Anticipo'}</div>{a.nota&&<div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>Factura N°{folio}</span>}
@@ -16393,6 +16454,33 @@ export default function App() {
   },[user])
 
   // Anticipos (PP-15 commit 3): aplicar anticipos a una factura → consumidos + factura Pagada
+  const [anticipoPanel,setAnticipoPanel]=useState(null)
+  // Editar un anticipo: proyecto/RS/nota siempre; monto/fecha solo si NO viene del banco (fuente de verdad).
+  const handleUpdateAnticipo=useCallback(async(a,fields)=>{
+    try{
+      const esBanco=/conciliaci[oó]n/i.test(a.nota||'')
+      const patch={}
+      ;['proyecto','entity_id','nota'].forEach(k=>{ if(k in fields) patch[k]=fields[k] })
+      if(!esBanco){ if('monto' in fields) patch.monto=fields.monto; if('fecha' in fields) patch.fecha=fields.fecha }
+      const {error}=await supabase.from('anticipos').update(patch).eq('id',a.id); if(error) throw error
+      setAnticipos(p=>p.map(x=>String(x.id)===String(a.id)?{...x,...patch}:x))
+    }catch(e){alert('No se pudo guardar: '+e.message)}
+  },[])
+  // Liberar (eliminar) un anticipo disponible; si vino de conciliación, revierte el movimiento y borra el enlace.
+  const handleLiberarAnticipo=useCallback(async(a)=>{
+    if(a.estado!=='disponible'){ alert('Solo se pueden liberar anticipos disponibles.'); return }
+    try{
+      const {data:concRows}=await supabase.from('conciliacion').select('id,movimiento_id').eq('anticipo_id',a.id)
+      if(concRows&&concRows.length){
+        const movIds=[...new Set(concRows.map(c=>c.movimiento_id))]
+        await supabase.from('conciliacion').delete().eq('anticipo_id',a.id)
+        for(const mid of movIds){ await supabase.from('cartola_movimientos').update({estado:'pendiente',monto_conciliado:0}).eq('id',mid) }
+      }
+      const {error}=await supabase.from('anticipos').delete().eq('id',a.id); if(error) throw error
+      setAnticipos(p=>p.filter(x=>String(x.id)!==String(a.id)))
+    }catch(e){alert('No se pudo liberar: '+e.message)}
+  },[])
+
   // Fusionar dos anticipos duplicados (manual + conciliación bancaria): conserva el "keep" (el verificado en banco) y le pasa proyecto/sale_id/entity_id del "drop"; borra el drop.
   const handleFusionarAnticipos=useCallback(async(keep,drop)=>{
     if(!keep||!drop||String(keep.id)===String(drop.id)) return
@@ -16892,7 +16980,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields}/>}
@@ -16910,6 +16998,7 @@ export default function App() {
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onClose={()=>setModal(null)}/></Modal>}
+        {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onClose={()=>setAnticipoPanel(null)}/>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
