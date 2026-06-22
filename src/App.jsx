@@ -11600,8 +11600,8 @@ async function driveAdjuntosFolders(token){
   let gastos=localStorage.getItem('drive_folder_gastos')
   if(!tareas){ tareas=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Tareas'); localStorage.setItem('drive_folder_tareas',tareas) }
   if(!gastos){ gastos=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Gastos'); localStorage.setItem('drive_folder_gastos',gastos) }
-  let facturas=localStorage.getItem('drive_folder_facturas')
-  if(!facturas){ facturas=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Facturas'); localStorage.setItem('drive_folder_facturas',facturas) }
+  let facturas=localStorage.getItem('drive_folder_facturas_beta')
+  if(!facturas){ facturas=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Facturas BETA (en pruebas)'); localStorage.setItem('drive_folder_facturas_beta',facturas) }
   return {tareas,gastos,facturas}
 }
 // Sube un File con upload resumable (aguanta 15 MB). Devuelve {id,name,webViewLink}.
