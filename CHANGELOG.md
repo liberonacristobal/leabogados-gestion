@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Inteligencia de Negocios: MVP Stage 1 (Oportunidades)
+- Nueva vista `IntelligenceView` (solo admin), accesible desde la tarjeta-puente "Inteligencia de negocios" en el Dashboard. Header con 3 KPIs sólidos (Vendido YTD en UF, Por cobrar, Cobrado YTD) y 5 **Oportunidades** expandibles calculadas con helpers fuente única: clientes dormidos (Activo 9+ meses sin actividad), cobranza vencida por cliente, cross-sell (una sola área), top sin recurrencia, win-back (terminados ≤18m). Cada fila abre la ficha del cliente. Helpers nuevos `ventaHistoricaUF` y `ultimaActividad`. El Resumen IA (`claudeCall`) y las secciones Cartera/Margen/Tendencias/Precios + el cruce con el Radar SII vienen en etapas siguientes.
+
 ## 2026-06-22 — Conciliación: candado anti-adelanto duplicado
 - `saldoAFavor` y `splitAdelantoFondo` ahora abortan si el movimiento ya tiene una conciliación con `tipo_destino='anticipo'` (idempotencia): no se puede crear un segundo adelanto para la misma transferencia. Complementar con índice único en BD `conciliacion(movimiento_id, tipo_destino)` para garantía dura.
 
