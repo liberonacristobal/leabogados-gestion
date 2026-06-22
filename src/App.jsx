@@ -1847,6 +1847,16 @@ const ventaCLP = (s, ufRef) => {
   const clp = s.amount_clp || (s.amount_uf&&s.uf_value>0?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
   return (clp||0)*factor
 }
+// Venta histórica del cliente (Activo+Terminado) en UF — fuente única ventaUF (UF congelada).
+const ventaHistoricaUF = (clientId, sales, ufRef) => (sales||[]).filter(s=>String(s.client_id)===String(clientId)&&['Activo','Terminado'].includes(s.status)&&!s.deleted_at).reduce((a,s)=>a+ventaUF(s,ufRef),0)
+// Última actividad del cliente: fecha más reciente entre ventas, facturas (no anuladas) y gastos.
+const ultimaActividad = (clientId, sales, billing, expenses) => {
+  const ds=[]
+  ;(sales||[]).filter(s=>String(s.client_id)===String(clientId)).forEach(s=>{ const d=s.activated_at||s.created_at||(s.year?`${s.year}-${String(s.month||1).padStart(2,'0')}-01`:null); if(d) ds.push(String(d).slice(0,10)) })
+  ;(billing||[]).filter(b=>String(b.client_id)===String(clientId)&&b.status!=='Anulada'&&!b.deleted_at).forEach(b=>{ const d=b.paid_at||b.issued_at||b.due; if(d) ds.push(String(d).slice(0,10)) })
+  ;(expenses||[]).filter(e=>String(e.client_id)===String(clientId)).forEach(e=>{ if(e.date) ds.push(String(e.date).slice(0,10)) })
+  return ds.length ? ds.sort().slice(-1)[0] : null
+}
 
 // ─── UF EN VIVO (fuente única) ────────────────────────────────────────────────
 // Valor UF del día desde mindicador.cl, con caché diario en localStorage.
@@ -2159,6 +2169,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               <button key={v} onClick={()=>setDashMoneda(v)} style={{padding:'3px 10px',borderRadius:6,border:on?`1.5px solid ${C.accent}`:'0.5px solid #E4E8EB',background:'#fff',color:on?C.accent:C.muted,fontSize:11,fontWeight:on?600:500,cursor:'pointer'}}>{v}</button>
             )})}
           </div>
+        </div>
+        <div onClick={()=>setTab&&setTab('inteligencia')} style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'11px 13px',marginBottom:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+          <div><div style={{fontSize:11,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:'.04em'}}>Inteligencia de negocios</div><div style={{fontSize:12,color:C.muted,marginTop:1}}>Oportunidades y resumen del estudio</div></div>
+          <span style={{fontSize:15,color:C.accent}}>→</span>
         </div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
           {/* Bloque único: izquierda velocímetro de meta · derecha desglose financiero */}
@@ -2816,6 +2830,85 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
 // ─── SALES VIEW ───────────────────────────────────────────────────────────────
+// ─── INTELIGENCIA DE NEGOCIOS (MVP) ───────────────────────────────────────────
+// Solo admin. KPIs sólidos + Oportunidades accionables calculadas con helpers fuente única.
+// El código calcula; el Resumen IA (claudeCall) se suma en una etapa siguiente.
+function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha}){
+  const [openOpp,setOpenOpp] = useState(null)
+  const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
+  const yr = currentYear
+  const hoy = new Date().toISOString().slice(0,10)
+  const mesesDesde = d => { if(!d) return 999; const a=new Date(hoy), b=new Date(String(d).slice(0,10)); if(isNaN(b.getTime())) return 999; return (a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()) }
+
+  const {kpis, opp} = useMemo(()=>{
+    const reales = (clients||[]).filter(c=>!c.is_internal&&!c.is_occasional)
+    const vh = id => ventaHistoricaUF(id, sales, ufRef)
+    const ult = id => ultimaActividad(id, sales, billing, expenses)
+    const areasDe = id => [...new Set((sales||[]).filter(s=>String(s.client_id)===String(id)&&['Activo','Terminado'].includes(s.status)).map(s=>s.area).filter(Boolean))]
+    const tieneRec = id => (sales||[]).some(s=>String(s.client_id)===String(id)&&esRecurrente(s))
+
+    const dormidos = reales.filter(c=>(c.status||'Activo')==='Activo'&&mesesDesde(ult(c.id))>=9&&vh(c.id)>=20).map(c=>({c,uf:vh(c.id),meses:mesesDesde(ult(c.id))})).sort((a,b)=>b.uf-a.uf)
+    const venc={}; (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.status==='Vencido').forEach(b=>{ venc[b.client_id]=(venc[b.client_id]||0)+saldoBill(b) })
+    const cobranza = Object.entries(venc).map(([cid,monto])=>({c:(clients||[]).find(x=>String(x.id)===String(cid))||{id:cid,name:'Sin cliente'},monto})).filter(x=>x.monto>0).sort((a,b)=>b.monto-a.monto)
+    const crossSell = reales.filter(c=>(c.status||'Activo')==='Activo'&&areasDe(c.id).length===1&&vh(c.id)>=30).map(c=>({c,uf:vh(c.id),area:areasDe(c.id)[0]})).sort((a,b)=>b.uf-a.uf)
+    const sinRec = reales.filter(c=>(c.status||'Activo')==='Activo'&&!tieneRec(c.id)&&vh(c.id)>=50).map(c=>({c,uf:vh(c.id)})).sort((a,b)=>b.uf-a.uf)
+    const winback = reales.filter(c=>c.status==='Terminado'&&vh(c.id)>=30&&mesesDesde(ult(c.id))<=18).map(c=>({c,uf:vh(c.id),meses:mesesDesde(ult(c.id))})).sort((a,b)=>b.uf-a.uf)
+
+    const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr).reduce((a,s)=>a+ventaUF(s,ufRef),0)
+    const porCobrar = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
+    const cobradoYTD = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.status==='Pagado'&&String(b.paid_at||'').slice(0,4)===String(yr)).reduce((a,b)=>a+(b.amount||0),0)
+    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}}
+  },[sales,billing,clients,expenses,ufRef,yr])
+
+  const OPPS = [
+    {k:'dormidos', col:C.soonText, t:'Clientes dormidos', sub:'Activos 9+ meses sin actividad', rows:opp.dormidos, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`},
+    {k:'cobranza', col:C.overdue, t:'Cobranza vencida', sub:'Saldo vencido por cliente', rows:opp.cobranza, metric:x=>fmt(x.monto)},
+    {k:'cross', col:C.accent, t:'Cross-sell', sub:'Una sola área de servicio', rows:opp.crossSell, metric:x=>`${fmtUFk(x.uf)} · ${x.area}`},
+    {k:'sinrec', col:C.azulInfo, t:'Top sin recurrencia', sub:'Valiosos sin plan mensual', rows:opp.sinRec, metric:x=>fmtUFk(x.uf)},
+    {k:'winback', col:C.normal, t:'Win-back', sub:'Terminados recuperables (≤18m)', rows:opp.winback, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`},
+  ]
+  const kpiCard = (label,val,col) => (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'8px 10px'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div><div style={{fontSize:16,fontWeight:600,color:col}}>{val}</div></div>)
+
+  return (
+    <div>
+      <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Inteligencia</div>
+          <button onClick={()=>setTab&&setTab('dashboard')} style={chipBtn('soft')}>← Inicio</button>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+          {kpiCard('Vendido '+yr, fmtUFk(kpis.vendidoYTD), C.accent)}
+          {kpiCard('Por cobrar', fmt(kpis.porCobrar), C.overdue)}
+          {kpiCard('Cobrado '+yr, fmt(kpis.cobradoYTD), C.normal)}
+        </div>
+      </div>
+      <div style={{padding:'10px 20px 100px'}}>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Oportunidades</div>
+        <div style={{display:'flex',flexDirection:'column',gap:7}}>
+          {OPPS.map(o=>{ const open=openOpp===o.k; const n=o.rows.length; return (
+            <div key={o.k} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${o.col}`,borderRadius:10,overflow:'hidden'}}>
+              <div onClick={()=>n&&setOpenOpp(open?null:o.k)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 11px',cursor:n?'pointer':'default'}}>
+                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{o.t}</div><div style={{fontSize:10,color:C.muted}}>{o.sub}</div></div>
+                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:14,fontWeight:600,color:n?o.col:C.done}}>{n}</span>{n>0&&<span style={{fontSize:12,color:C.done}}>{open?'▴':'▾'}</span>}</div>
+              </div>
+              {open&&<div>
+                {o.rows.slice(0,12).map(x=>(
+                  <div key={x.c.id} onClick={()=>x.c.id&&onOpenClientFicha&&onOpenClientFicha(x.c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 11px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+                    <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</span>
+                    <span style={{fontSize:11,fontWeight:600,color:o.col,flexShrink:0}}>{o.metric(x)}</span>
+                  </div>
+                ))}
+                {o.rows.length>12&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'6px'}}>+{o.rows.length-12} más</div>}
+              </div>}
+            </div>
+          )})}
+        </div>
+        <div style={{marginTop:11,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · pronto la IA narra y prioriza · tú decides.</div>
+      </div>
+    </div>
+  )
+}
+
 function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar}) {
   const [fYear,setFYear] = useState(String(currentYear))
   const [fArea,setFArea] = useState('')
@@ -16758,6 +16851,7 @@ export default function App() {
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
