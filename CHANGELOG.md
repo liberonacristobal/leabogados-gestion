@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Anticipos: detectar y fusionar duplicados (manual + conciliación)
+- El panel de Anticipos detecta **posibles duplicados** dentro de un cliente (mismo monto + fechas dentro de ±7 días, ambos disponibles) — el caso típico: un anticipo ingresado a mano y el mismo que aparece por conciliación bancaria. Muestra un **banner** con acción **Fusionar**: conserva el verificado en banco (fuente real) y le traspasa el **proyecto/datos del manual**, elimina el duplicado → queda 1 anticipo verificado y con proyecto. Compuerta humana (confirmación). Pendiente: editor de proyecto para cualquier anticipo y eliminación individual.
+
 ## 2026-06-22 — Conciliación: auto-identificar por monto sube la tasa
 - `conciliarAuto` ahora **auto-identifica** los abonos sin cliente cuando una sola factura de un único cliente calza el monto EXACTO dentro de la ventana de fecha (reusa `clientePorMonto`), y el paso de calce exacto los concilia. Mantiene TOL=0, la ventana (−3 a +60 días) y la unicidad; no aprende alias (la id por monto no se propaga a otros movimientos); reversible con Deshacer. Sube la tasa para depósitos sin RUT que calzan una única factura abierta.
 
