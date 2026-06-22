@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Facturación: badge de respaldo bancario (trazabilidad de pagos)
+- Cada factura **Pagada** muestra debajo un badge de respaldo (fuente única `facturaRespaldo`): **Verificada en banco** · **Respaldo parcial · falta $X** · **Pendiente conciliar → Próxima Cartola** (pago posterior a la última cartola cargada) · **Sin conciliación** (dentro de período cargado pero sin match) · **Pago manual** (anterior al 06-02-2025, sin cartola). Visible en **Facturación** y en la **ficha del cliente → Financiero**. La conciliación (`conciliacion`) y la cobertura de cartola (`max(fecha)` de `cartola_movimientos`) se cargan a nivel app; el umbral pendiente↔sin-conciliación es en vivo, así al importar la próxima cartola los "pendiente" se reevalúan solos. (El badge se refresca al recargar tras conciliar.)
+
 ## 2026-06-22 — Anticipos: panel Etapa 3 (consolidar + reclasificar)
 - **"Asignar a 1 factura"**: abre un modal que consolida las **cuotas programadas** seleccionadas en 1 factura — con N°/fecha (la que emitiste en el SII), crea **1 factura Pagada** por el total, **anula** las programadas y aplica **este anticipo + otros disponibles del cliente (FIFO)** hasta cubrir (sobrante → disponible). **"Reclasificar a Fondo por rendir"**: convierte el anticipo en un **fondo** para gastos del cliente (re-apunta la conciliación al fondo si venía del banco) y elimina el anticipo. Con esto el panel de anticipos queda completo (editar/auto-save · asignar a factura emitida · cubrir cuotas · consolidar+anular · reclasificar · eliminar).
 
