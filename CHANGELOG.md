@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Conciliación: auto-identificar por monto sube la tasa
+- `conciliarAuto` ahora **auto-identifica** los abonos sin cliente cuando una sola factura de un único cliente calza el monto EXACTO dentro de la ventana de fecha (reusa `clientePorMonto`), y el paso de calce exacto los concilia. Mantiene TOL=0, la ventana (−3 a +60 días) y la unicidad; no aprende alias (la id por monto no se propaga a otros movimientos); reversible con Deshacer. Sube la tasa para depósitos sin RUT que calzan una única factura abierta.
+
 ## 2026-06-22 — Integridad: triagePersonal y folios borrados (sii-sync)
 - `triagePersonal` (marcar gasto como personal) ahora **se bloquea si el gasto ya está rendido/liquidado** (`rendered_at`/`client_rendered_at`/`notaria_liquidado_at`) — antes descuadraba el total de esa rendición. Pide desvincular primero.
 - `sii-sync/match.ts`: las 3 consultas de `billing` (candidatas + folios) excluyen borradas (`.is('deleted_at', null)`), para que una factura borrada no bloquee una reimportación legítima ni se sugiera. (Requiere desplegar la edge function.)

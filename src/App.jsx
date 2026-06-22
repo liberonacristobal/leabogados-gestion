@@ -15113,8 +15113,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const W2=2*86400000, usadosI=new Set(); const intSet=new Set()
       libres.filter(m=>m.tipo==='cargo').forEach(c=>{ const ms=libres.filter(a=> a.tipo==='abono' && !usadosI.has(a.id) && a.rol_cuenta!==c.rol_cuenta && (a.monto||0)===(c.monto||0) && Math.abs(new Date(a.fecha)-new Date(c.fecha))<=W2); if(ms.length===1 && !usadosI.has(c.id)){ usadosI.add(c.id); usadosI.add(ms[0].id); intSet.add(c.id); intSet.add(ms[0].id) } })
       if(intSet.size){ const idsInt=[...intSet]; const { error:ei } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno'}).in('id',idsInt); if(ei) throw ei; setMovs(p=>p.map(x=>intSet.has(x.id)?{...x,es_interno:true,estado:'interno'}:x)); nInt=idsInt.length/2 }
-      // 2) Conciliación exacta (excluye los recién marcados internos). Gastos no se toca (suele ser fondo). FIFO para recurrentes.
-      const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length) && !intSet.has(m.id)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
+      // 1.5) Auto-identificar abonos sin cliente cuando UNA sola factura (de un único cliente) calza el monto EXACTO en la ventana de fecha (clientePorMonto, mismo criterio que la sugerencia manual). No aprende alias: la id por monto no se propaga a otros movimientos. El paso 2 los concilia.
+      const idMap={}
+      movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&!m.cliente_id&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&!intSet.has(m.id)).forEach(m=>{ const cm=clientePorMonto(m); if(cm) idMap[m.id]=String(cm.cid) })
+      const idIds=Object.keys(idMap)
+      if(idIds.length){ for(const mid of idIds){ const { error:ie } = await supabase.from('cartola_movimientos').update({cliente_id:idMap[mid]}).eq('id',mid); if(ie) throw ie } setMovs(p=>p.map(x=> idMap[x.id]?{...x,cliente_id:idMap[x.id]}:x)) }
+      // 2) Conciliación exacta (excluye los recién marcados internos; incluye los recién identificados por monto). Gastos no se toca (suele ser fondo). FIFO para recurrentes.
+      const movsV = idIds.length ? movs.map(m=> idMap[m.id]?{...m,cliente_id:idMap[m.id]}:m) : movs
+      const pend = movsV.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length) && !intSet.has(m.id)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
       const best={}, facCnt={}
       pend.forEach(m=>{ const f=mejorCandidato(m); if(f){ best[m.id]=f.id; facCnt[f.id]=(facCnt[f.id]||0)+1 } })
       for(const mov of pend){ const fid=best[mov.id]
