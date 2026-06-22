@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-22 — Badge colores + fusión de anticipos con detalle comparativo
+- Badge de respaldo: **Verificada en banco** pasa a **azul** (cuadra con el chip de Anticipos), **Pendiente conciliar → Próxima Cartola** a **verde**.
+- **Fusionar anticipos duplicados**: en vez de un `confirm` a ciegas, ahora abre un **modal comparativo** (`FusionAnticiposModal`) — muestra los dos lado a lado (*Se conserva* el verificado en banco / *Se elimina* el manual, con monto/fecha/proyecto/RS de cada uno) y el **resultado final** que queda, antes de confirmar.
+
 ## 2026-06-22 — Facturación: badge de respaldo bancario (trazabilidad de pagos)
 - Cada factura **Pagada** muestra debajo un badge de respaldo (fuente única `facturaRespaldo`): **Verificada en banco** · **Respaldo parcial · falta $X** · **Pendiente conciliar → Próxima Cartola** (pago posterior a la última cartola cargada) · **Sin conciliación** (dentro de período cargado pero sin match) · **Pago manual** (anterior al 06-02-2025, sin cartola). Visible en **Facturación** y en la **ficha del cliente → Financiero**. La conciliación (`conciliacion`) y la cobertura de cartola (`max(fecha)` de `cartola_movimientos`) se cargan a nivel app; el umbral pendiente↔sin-conciliación es en vivo, así al importar la próxima cartola los "pendiente" se reevalúan solos. (El badge se refresca al recargar tras conciliar.)
 

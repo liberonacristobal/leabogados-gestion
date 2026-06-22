@@ -80,11 +80,11 @@ function facturaRespaldo(b, respaldoMap={}, cartolaHasta=null){
   if((b.billing_type||'')==='reembolso') return null
   const monto = b.amount||0
   const aplicado = respaldoMap[b.id]||0
-  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Verificada en banco', bg:C.greenBg, fg:C.greenText}
+  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Verificada en banco', bg:C.azulBg, fg:C.accent}
   if(aplicado>0) return {key:'parcial', label:`Respaldo parcial · falta ${fmt(monto-aplicado)}`, bg:C.ambarBg, fg:C.soonText}
   const fechaPago = String(b.paid_at||b.issued_at||'').slice(0,10)
   if(fechaPago && fechaPago < RESPALDO_CUTOFF) return {key:'manual', label:'Pago manual · anterior a la cartola', bg:C.border, fg:C.grisText}
-  if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pendiente conciliar → Próxima Cartola', bg:C.azulBg, fg:C.azulInfo}
+  if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pendiente conciliar → Próxima Cartola', bg:C.greenBg, fg:C.greenText}
   return {key:'sin', label:'Sin conciliación', bg:C.overdueBg, fg:C.overdueText}
 }
 function RespaldoBadge({b, respaldoMap, cartolaHasta}){
@@ -6113,7 +6113,47 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
   )
 }
 
+// Detalle comparativo antes de fusionar dos anticipos duplicados — para no fusionar a ciegas.
+function FusionAnticiposModal({bank, manual, clients=[], sales=[], clientEntities=[], onConfirm, onClose}){
+  const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
+  const cliName = clients.find(c=>String(c.id)===String(bank.client_id))?.name||'Cliente'
+  const esBanco = a => /conciliaci[oó]n/i.test(a.nota||'')
+  const proyDe = a => a.proyecto || sales.find(s=>String(s.id)===String(a.sale_id))?.title || '—'
+  const rsDe = a => clientEntities.find(x=>String(x.id)===String(a.entity_id))?.name || '—'
+  const resProyTxt = bank.proyecto || manual.proyecto || sales.find(s=>String(s.id)===String(bank.sale_id||manual.sale_id))?.title || '—'
+  const resRSTxt = clientEntities.find(x=>String(x.id)===String(bank.entity_id||manual.entity_id))?.name || '—'
+  const card = (a,keep)=>(
+    <div style={{flex:1,minWidth:0,border:`1px solid ${keep?C.normal:C.border}`,borderRadius:10,padding:'10px 12px',background:keep?C.greenBg:'#fff'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6,marginBottom:6}}>
+        <span style={{fontSize:9,fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase',color:keep?C.greenText:C.overdueText}}>{keep?'Se conserva':'Se elimina'}</span>
+        <span style={{fontSize:9,fontWeight:600,padding:'1px 7px',borderRadius:6,background:esBanco(a)?C.azulBg:C.border,color:esBanco(a)?C.accent:C.grisText,whiteSpace:'nowrap'}}>{esBanco(a)?'Verificado en banco':'Manual'}</span>
+      </div>
+      <div style={{fontSize:15,fontWeight:700,color:C.text}}>{fmtCLP0(a.monto)}</div>
+      <div style={{fontSize:11,color:C.muted,marginTop:1}}>{fmtFechaDMY(a.fecha)}</div>
+      <div style={{marginTop:7,fontSize:11,color:C.muted,lineHeight:1.55}}>
+        <div><span style={{color:C.done}}>Proyecto:</span> {proyDe(a)}</div>
+        <div><span style={{color:C.done}}>RS:</span> {rsDe(a)}</div>
+      </div>
+    </div>
+  )
+  return (
+    <Modal title={<><span style={{color:C.accent}}>Fusionar anticipos</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false}>
+      <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'stretch'}}>{card(bank,true)}{card(manual,false)}</div>
+      <div style={{background:'#F5F7F9',borderRadius:10,padding:'10px 12px',marginBottom:14}}>
+        <div style={{fontSize:9,fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase',color:C.done,marginBottom:6}}>Queda un solo anticipo</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:14,fontWeight:700,color:C.text}}>{fmtCLP0(bank.monto)}</span><span style={{fontSize:9,fontWeight:600,padding:'1px 7px',borderRadius:6,background:C.azulBg,color:C.accent}}>Verificado en banco</span></div>
+        <div style={{fontSize:11,color:C.muted,marginTop:6,lineHeight:1.55}}>Proyecto: {resProyTxt} · RS: {resRSTxt}</div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={()=>{onConfirm();onClose()}} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Fusionar</button>
+      </div>
+    </Modal>
+  )
+}
+
 function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar,onFusionar,onAbrir}) {
+  const [fusionPair,setFusionPair] = useState(null)
   const [fil,setFil] = useState('disponible')
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
@@ -6168,7 +6208,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
               return pairs.map(([x,y],k)=>{ const bank=/conciliaci[oó]n/i.test(x.nota||'')?x:(/conciliaci[oó]n/i.test(y.nota||'')?y:x); const manual=bank===x?y:x; const distintos=bank!==manual; return (
                 <div key={'dup'+k} style={{background:C.ambarBg,borderBottom:`0.5px solid ${C.border}`,padding:'8px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
                   <div style={{fontSize:11,color:C.soonText,lineHeight:1.4,minWidth:0}}><b>Posible anticipo duplicado:</b> {fmtCLP0(x.monto)} en {fmtD(x.fecha)} y {fmtD(y.fecha)}.{distintos?' Al fusionar se conserva el verificado en banco con el proyecto del manual.':''}</div>
-                  {onFusionar&&<button onClick={()=>{ if(confirm(`¿Fusionar los dos anticipos de ${fmtCLP0(x.monto)}? Se conserva uno (el verificado en banco) con el proyecto del manual y se elimina el duplicado.`)) onFusionar(bank,manual) }} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Fusionar</button>}
+                  {onFusionar&&<button onClick={()=>setFusionPair({bank,manual})} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Fusionar</button>}
                 </div>
               )}) })()}
             {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); const cubreCuotas=billing.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
@@ -6200,6 +6240,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
           </div>
         )
       })}
+      {fusionPair&&<FusionAnticiposModal bank={fusionPair.bank} manual={fusionPair.manual} clients={clients} sales={sales} clientEntities={clientEntities} onConfirm={()=>onFusionar&&onFusionar(fusionPair.bank,fusionPair.manual)} onClose={()=>setFusionPair(null)}/>}
     </div>
   )
 }
