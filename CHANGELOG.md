@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Facturación: retira el FAB flotante "Nueva factura"
+- Se quita el botón flotante "+" (Nueva factura) de la vista Facturación. El alta manual de cobros queda en la ficha del cliente → Financiero ("+ Nueva factura"). Los cobros nacen principalmente desde Ventas/SII.
+
 ## 2026-06-22 — Ventas: tarjetas de grupo al canon KPI (como Facturación)
 - Las tarjetas "Todas las ventas / abogado / área" adoptan la tarjeta KPI canónica de Facturación: mismo chasis (borde 1px + borde-izquierdo 3px + radio 10, padding 11×13), label uppercase gris y cifra coloreada por grupo (persona/área). Antes usaban borde 0.5px con radio "0 10 10 0" (marca de color distinta) y nombre en navy. Solo estética.
 
