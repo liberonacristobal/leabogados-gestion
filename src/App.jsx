@@ -3018,15 +3018,15 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         ) : (<>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {(()=>{ const totUF=grupos.reduce((a,g)=>a+g.uf,0); const on=selGroup==='__todas__'; return (
-              <div onClick={()=>setSelGroup(on?null:'__todas__')} style={{background:'#fff',border:`0.5px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:'0 10px 10px 0',padding:'8px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent}`:undefined}}>
-                <div style={{fontSize:12,fontWeight:500,color:C.accent}}>Todas las ventas</div>
-                <div style={{display:'flex',alignItems:'baseline',gap:5,marginTop:2,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(totUF)}</span><span style={{fontSize:10,color:C.done}}>· {filtered.length}</span></div>
+              <div onClick={()=>setSelGroup(on?null:'__todas__')} style={{textAlign:'left',background:'#fff',border:`1px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'11px 13px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent}`:undefined}}>
+                <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Todas las ventas</div>
+                <div style={{display:'flex',alignItems:'baseline',gap:5,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(totUF)}</span><span style={{fontSize:10,color:C.done}}>· {filtered.length}</span></div>
               </div>
             )})()}
             {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; return (
-              <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{background:sin?'#FBF7EF':'#fff',border:`0.5px solid ${on?col:(sin?C.ambarBg:C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:'0 10px 10px 0',padding:'8px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
-                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:500,color:C.accent}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
-                <div style={{display:'flex',alignItems:'baseline',gap:5,marginTop:2,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(g.uf)}</span><span style={{fontSize:10,color:C.done}}>· {g.count}</span></div>
+              <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{textAlign:'left',background:sin?'#FBF7EF':'#fff',border:`1px solid ${on?col:(sin?C.ambarBg:C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
+                <div style={{display:'flex',alignItems:'baseline',gap:5,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:col}}>{fmtUFk(g.uf)}</span><span style={{fontSize:10,color:C.done}}>· {g.count}</span></div>
               </div>
             )})}
           </div>
