@@ -5979,19 +5979,17 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
   const [monto,setMonto]=useState(a.monto||0)
   const [fecha,setFecha]=useState((a.fecha||'').slice(0,10))
   const [selFac,setSelFac]=useState(calza?String(calza.id):null)
-  const [saved,setSaved]=useState(false)
   const [busy,setBusy]=useState(false)
   const fmtCLP0=n=>'$'+(n||0).toLocaleString('es-CL')
   const dispo=a.estado==='disponible'
-  const flash=()=>{ setSaved(true); setTimeout(()=>setSaved(false),1400) }
-  const save=(patch)=>{ onSave&&onSave(a,patch); flash() }
+  const save=(patch)=>{ onSave&&onSave(a,patch) }
   const asignar=async()=>{ if(!selFac||!onAsignarFactura) return; setBusy(true); await onAsignarFactura(a,selFac); setBusy(false); onClose() }
   const inp={flex:1,fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 9px',outline:'none',background:'#fff',fontFamily:'inherit',minWidth:0,boxSizing:'border-box'}
   const lbl={fontSize:11,color:C.muted,width:62,flexShrink:0}
   const papelera=(dispo&&onLiberar)?<button title='Eliminar anticipo' onClick={()=>{ if(confirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{background:'none',border:'none',cursor:'pointer',color:C.overdue,display:'inline-flex',alignItems:'center',padding:2}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'/></svg></button>:null
   return (
     <Modal title={<><span style={{color:C.accent}}>Anticipo</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false} titleRight={papelera}>
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:5}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
         {bigDate(a.fecha)}
         <div style={{flex:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',minWidth:0}}>
           <span style={{fontSize:9,fontWeight:600,letterSpacing:'.04em',padding:'3px 8px',borderRadius:20,background:dispo?C.greenBg:'#F5F7F9',color:dispo?C.greenText:C.muted}}>{dispo?'DISPONIBLE':'CONSUMIDO'}</span>
@@ -5999,7 +5997,6 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
         </div>
         <div style={{fontSize:20,fontWeight:600,color:dispo?C.normal:C.muted,letterSpacing:'-.5px',flexShrink:0}}>{fmtCLP0(a.monto)}</div>
       </div>
-      <div style={{height:13,display:'flex',justifyContent:'flex-end',alignItems:'center',marginBottom:4}}>{saved&&<span style={{fontSize:10,color:C.normal,display:'flex',alignItems:'center',gap:3}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={C.normal} strokeWidth='3'><polyline points='20 6 9 17 4 12'/></svg>Guardado</span>}</div>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
         <span style={lbl}>Proyecto</span>
         {proyectosCli.length?(
