@@ -14837,6 +14837,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Deja el resto del abono como saldo a favor del cliente (anticipo disponible, reutiliza la feature Anticipos).
   const saldoAFavor = async(mov)=>{
     if(busy) return
+    if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ alert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
     setBusy(mov.id)
     let ant=null, cr=null
     try{
@@ -14857,6 +14858,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const splitAdelantoFondo = async(mov, adelMonto)=>{
     if(busy) return
     if(!mov.cliente_id){ alert('Identifica el cliente primero.'); return }
+    if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ alert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
     const resto = (mov.monto||0) - (mov.monto_conciliado||0)
     const adel = Math.max(0, Math.min(adelMonto||0, resto)); const fond = resto - adel
     setBusy(mov.id)
