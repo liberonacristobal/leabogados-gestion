@@ -283,7 +283,23 @@
       "Bash(sips -s format png \"Factura 355 - INTERMEC CHILE SPA.pdf\" --out /tmp/dtepdf/chk355.png)",
       "Bash(sed -e 's#scale:3, eclevel:5#scale:2, eclevel:5#' -e 's#new jsPDF\\({unit:'\\\\''mm'\\\\'',format:'\\\\''letter'\\\\''}\\)#new jsPDF\\({unit:'\\\\''mm'\\\\'',format:'\\\\''letter'\\\\'',compress:true}\\)#' gen_all.js)",
       "Bash(sed -e 's#const docs=\\\\[...xml.matchAll\\(/<Documento\\\\[\\\\\\\\s\\\\\\\\S\\\\]\\\\*?<\\\\\\\\/Documento>/g\\)\\\\].map\\(m=>m\\\\[0\\\\]\\);#const docs=[xml.match\\(/<Documento[\\\\\\\\s\\\\\\\\S]*?<\\\\\\\\/Documento>/\\)[0]];#' -e 's#process.env.HOME+'\\\\''/Downloads/Facturas_PDF_respaldo'\\\\''#'\\\\''/tmp/dtepdf/optchk2'\\\\''#' gen_all_v2.js)",
-      "Bash(sips -s format png /tmp/dtepdf/optchk2/*.pdf --out /tmp/dtepdf/opt2.png)"
+      "Bash(sips -s format png /tmp/dtepdf/optchk2/*.pdf --out /tmp/dtepdf/opt2.png)",
+      "Bash(textutil -convert docx /tmp/dtepdf/plan_bi.html -output ~/Downloads/Plan_Inteligencia_Negocios.docx)",
+      "Bash(cupsfilter /tmp/dtepdf/plan_bi.html)",
+      "Bash(brew install *)",
+      "Bash(pip3 install *)",
+      "Bash(brew list *)",
+      "Bash(command -v pdftotext)",
+      "Bash(break)",
+      "Bash(pdftotext -v)",
+      "Bash(pdftotext -layout /Users/cristobal.liberona/.claude/projects/-Users-cristobal-liberona-Downloads-leabogados-gestion/7ddacddf-f325-424b-aea4-ffaf948bd6d0/tool-results/webfetch-1782093726450-cw3m54.pdf -)",
+      "Bash(pdftotext -layout \"/Users/cristobal.liberona/.claude/projects/-Users-cristobal-liberona-Downloads-leabogados-gestion/7ddacddf-f325-424b-aea4-ffaf948bd6d0/tool-results/webfetch-1782093722687-0cm5fu.pdf\" circ23.txt)",
+      "WebFetch(domain:www4.sii.cl)",
+      "WebFetch(domain:www.hacienda.cl)",
+      "Bash(Error:)",
+      "Bash('Error ')",
+      "WebFetch(domain:www.ey.com)",
+      "Bash(cp \"/Users/cristobal.liberona/.claude/projects/-Users-cristobal-liberona-Downloads-leabogados-gestion/7ddacddf-f325-424b-aea4-ffaf948bd6d0/tool-results/webfetch-1782125768347-5z872f.bin\" /tmp/oficio207_2026.pdf && file /tmp/oficio207_2026.pdf)"
     ]
   }
 }

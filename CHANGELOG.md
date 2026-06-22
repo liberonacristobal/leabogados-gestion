@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Landings: encabezado unificado (canon) en los 4
+- Armonización de los landings Clientes, Gastos y Fondos, Facturación y Ventas: encabezado con la misma firma "título · N" (conteo en gris claro inline; Clientes pasa de línea aparte a inline liberando una línea). Facturación suma el botón "ojo + Por cliente" fijo en el header (navega al detalle por cliente) y elimina el botón full-width "Ver detalle por cliente"; el conteo es total de facturas no borradas. Ventas y Gastos suman el conteo (Ventas = Activo+Terminado; Gastos = clientes con movimientos, solo en el landing). Cada vista mantiene sus filtros propios (pills donde hay pocos estados, dropdowns donde hay muchos). Sin cambios de lógica ni de cifras.
+
 ## 2026-06-21 — Facturación: respaldo PDF adjuntado por folio (Etapa 2)
 - "Respaldo PDF" (menú Importar) ahora casa cada DTE del Archivo Respaldo por FOLIO con su factura (billing.invoice_no), genera la representación impresa y la ADJUNTA a la ficha de la factura en Drive (billing_attachments, carpeta Facturas), con dedupe y reporte (adjuntadas/ya tenían/sin factura). El respaldo PDF queda permanente por factura.
 
