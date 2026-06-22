@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Anticipos: panel de gestión (Etapa 1 — editar)
+- Tocar un anticipo abre un panel (header canónico "Anticipo | Cliente") con fila día-grande · chips · monto a la derecha, para **editar proyecto** (con sugerencia ✦ de la venta más reciente), **razón social** y **nota**. Monto y fecha quedan **bloqueados** si el anticipo viene de conciliación bancaria (fuente de verdad). **Liberar** (chip rojo/blanco) elimina un anticipo disponible, revirtiendo el movimiento bancario si lo tenía. Próximas etapas: pagar factura emitida (varios→una) + "calza con", emitir 1 factura (anula programadas) y reclasificar a Fondo.
+
 ## 2026-06-22 — Anticipos: detectar y fusionar duplicados (manual + conciliación)
 - El panel de Anticipos detecta **posibles duplicados** dentro de un cliente (mismo monto + fechas dentro de ±7 días, ambos disponibles) — el caso típico: un anticipo ingresado a mano y el mismo que aparece por conciliación bancaria. Muestra un **banner** con acción **Fusionar**: conserva el verificado en banco (fuente real) y le traspasa el **proyecto/datos del manual**, elimina el duplicado → queda 1 anticipo verificado y con proyecto. Compuerta humana (confirmación). Pendiente: editor de proyecto para cualquier anticipo y eliminación individual.
 
