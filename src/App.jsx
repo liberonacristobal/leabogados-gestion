@@ -5445,7 +5445,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           </>
         )}
       </div>
-      {onAdd&&<button onClick={()=>onAdd()} title='Nueva factura' aria-label='Nueva factura' style={{position:'fixed',right:18,bottom:82,width:52,height:52,borderRadius:'50%',background:C.accent,color:'#fff',border:'none',fontSize:30,fontWeight:300,lineHeight:1,boxShadow:'0 3px 12px rgba(0,0,0,.22)',cursor:'pointer',zIndex:50,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>}
+      {/* FAB "Nueva factura" retirado a pedido del usuario (alta manual de cobros queda en la ficha del cliente → Financiero) */}
     </div>
   )
 }
