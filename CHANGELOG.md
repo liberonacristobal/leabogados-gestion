@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Anticipos: fila rediseñada (Asignar abre el panel)
+- En la lista de Anticipos se quita el botón ancho "Aplicar a cuotas programadas". El bloque derecho ahora es: **chip de estado delgado** (DISPONIBLE / EN CUOTAS / CONSUMIDO, mayúsculas) a la izquierda + **monto justificado a la derecha**, y un botón **Asignar** chico (poco alto) debajo que abre el panel del anticipo (donde viven todas las acciones). Fila más densa y limpia.
+
 ## 2026-06-22 — Cash flow: filtro por abogado
 - La tarjeta de Cash flow del Dashboard suma un toggle **Todos · [abogados]** que filtra la proyección por **responsable** (derivado de la venta `sale.responsible`, o del cliente `abogado_responsable` si falta). La proyección ya incluía las cuotas **programadas** tanto de ventas puntuales como de asesorías recurrentes — ahora se puede ver por abogado. Colores de persona en el toggle. No afloja ningún criterio, solo filtra.
 
