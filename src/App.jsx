@@ -5963,7 +5963,7 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
 }
 
 // Panel de gestión de un anticipo (Etapa 1: editar proyecto/RS/nota + liberar). Monto/fecha bloqueados si viene del banco.
-function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],onSave,onLiberar,onCubrir,onClose}){
+function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[],onSave,onLiberar,onCubrir,onAsignarFactura,onClose}){
   const a=anticipo
   const esBanco=/conciliaci[oó]n/i.test(a.nota||'')
   const cliName=clients.find(c=>String(c.id)===String(a.client_id))?.name||'Cliente'
@@ -5971,21 +5971,27 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],onSave,on
   const ventas=(sales||[]).filter(s=>String(s.client_id)===String(a.client_id)).slice().sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||'')))
   const sugProy=ventas[0]?.title||''
   const proyectosCli=[...new Set(ventas.map(s=>s.title).filter(Boolean))]
+  const facturasAbiertas=(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(a.client_id)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0).sort((x,y)=>String(y.issued_at||'').localeCompare(String(x.issued_at||'')))
+  const calza=facturasAbiertas.find(b=>saldoBill(b)===(a.monto||0))
   const [proyecto,setProyecto]=useState(a.proyecto||'')
   const [entityId,setEntityId]=useState(a.entity_id||'')
   const [nota,setNota]=useState(a.nota||'')
   const [monto,setMonto]=useState(a.monto||0)
   const [fecha,setFecha]=useState((a.fecha||'').slice(0,10))
+  const [selFac,setSelFac]=useState(calza?String(calza.id):null)
+  const [saved,setSaved]=useState(false)
   const [busy,setBusy]=useState(false)
   const fmtCLP0=n=>'$'+(n||0).toLocaleString('es-CL')
   const dispo=a.estado==='disponible'
-  const dirty=proyecto!==(a.proyecto||'')||String(entityId||'')!==String(a.entity_id||'')||nota!==(a.nota||'')||(!esBanco&&(String(monto)!==String(a.monto||0)||fecha!==(a.fecha||'').slice(0,10)))
+  const flash=()=>{ setSaved(true); setTimeout(()=>setSaved(false),1400) }
+  const save=(patch)=>{ onSave&&onSave(a,patch); flash() }
+  const asignar=async()=>{ if(!selFac||!onAsignarFactura) return; setBusy(true); await onAsignarFactura(a,selFac); setBusy(false); onClose() }
   const inp={flex:1,fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 9px',outline:'none',background:'#fff',fontFamily:'inherit',minWidth:0,boxSizing:'border-box'}
   const lbl={fontSize:11,color:C.muted,width:62,flexShrink:0}
-  const guardar=async()=>{ setBusy(true); const fields={proyecto:proyecto||null,entity_id:entityId||null,nota:nota||null}; if(!esBanco){ fields.monto=parseInt(String(monto).replace(/[^\d]/g,''))||0; fields.fecha=fecha||null } await onSave(a,fields); setBusy(false); onClose() }
+  const papelera=(dispo&&onLiberar)?<button title='Eliminar anticipo' onClick={()=>{ if(confirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{background:'none',border:'none',cursor:'pointer',color:C.overdue,display:'inline-flex',alignItems:'center',padding:2}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'/></svg></button>:null
   return (
-    <Modal title={<><span style={{color:C.accent}}>Anticipo</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false}>
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+    <Modal title={<><span style={{color:C.accent}}>Anticipo</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false} titleRight={papelera}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:5}}>
         {bigDate(a.fecha)}
         <div style={{flex:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',minWidth:0}}>
           <span style={{fontSize:9,fontWeight:600,letterSpacing:'.04em',padding:'3px 8px',borderRadius:20,background:dispo?C.greenBg:'#F5F7F9',color:dispo?C.greenText:C.muted}}>{dispo?'DISPONIBLE':'CONSUMIDO'}</span>
@@ -5993,35 +5999,49 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],onSave,on
         </div>
         <div style={{fontSize:20,fontWeight:600,color:dispo?C.normal:C.muted,letterSpacing:'-.5px',flexShrink:0}}>{fmtCLP0(a.monto)}</div>
       </div>
+      <div style={{height:13,display:'flex',justifyContent:'flex-end',alignItems:'center',marginBottom:4}}>{saved&&<span style={{fontSize:10,color:C.normal,display:'flex',alignItems:'center',gap:3}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={C.normal} strokeWidth='3'><polyline points='20 6 9 17 4 12'/></svg>Guardado</span>}</div>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
         <span style={lbl}>Proyecto</span>
         {proyectosCli.length?(
-          <select value={proyecto} onChange={e=>setProyecto(e.target.value)} style={inp}><option value=''>—</option>{proyectosCli.map(p=><option key={p} value={p}>{p}</option>)}{proyecto&&!proyectosCli.includes(proyecto)&&<option value={proyecto}>{proyecto}</option>}</select>
+          <select value={proyecto} onChange={e=>{setProyecto(e.target.value);save({proyecto:e.target.value||null})}} style={inp}><option value=''>—</option>{proyectosCli.map(p=><option key={p} value={p}>{p}</option>)}{proyecto&&!proyectosCli.includes(proyecto)&&<option value={proyecto}>{proyecto}</option>}</select>
         ):(
-          <input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder='Proyecto...' style={inp}/>
+          <input value={proyecto} onChange={e=>setProyecto(e.target.value)} onBlur={()=>{ if(proyecto!==(a.proyecto||'')) save({proyecto:proyecto||null}) }} placeholder='Proyecto...' style={inp}/>
         )}
-        {!proyecto&&sugProy&&<span onClick={()=>setProyecto(sugProy)} title={sugProy} style={{fontSize:10,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>✦ usar</span>}
+        {!proyecto&&sugProy&&<span onClick={()=>{setProyecto(sugProy);save({proyecto:sugProy})}} title={sugProy} style={{fontSize:10,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>✦ usar</span>}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
         <span style={lbl}>Razón soc.</span>
-        <select value={entityId} onChange={e=>setEntityId(e.target.value)} style={inp}><option value=''>—</option>{ents.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select>
+        <select value={entityId} onChange={e=>{setEntityId(e.target.value);save({entity_id:e.target.value||null})}} style={inp}><option value=''>—</option>{ents.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:esBanco?7:8}}>
         <span style={lbl}>Nota</span>
-        <input value={nota} onChange={e=>setNota(e.target.value)} placeholder='Nota...' style={inp}/>
+        <input value={nota} onChange={e=>setNota(e.target.value)} onBlur={()=>{ if(nota!==(a.nota||'')) save({nota:nota||null}) }} placeholder='Nota...' style={inp}/>
       </div>
       {!esBanco&&(
         <div style={{display:'flex',gap:8,marginBottom:7}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><span style={lbl}>Monto</span><input value={monto} onChange={e=>setMonto(e.target.value)} style={inp}/></div>
-          <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><span style={{fontSize:11,color:C.muted}}>Fecha</span><input type='date' value={fecha} onChange={e=>setFecha(e.target.value)} style={inp}/></div>
+          <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><span style={lbl}>Monto</span><input value={monto} onChange={e=>setMonto(e.target.value)} onBlur={()=>{ const m=parseInt(String(monto).replace(/[^\d]/g,''))||0; if(m!==(a.monto||0)) save({monto:m}) }} style={inp}/></div>
+          <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><span style={{fontSize:11,color:C.muted}}>Fecha</span><input type='date' value={fecha} onChange={e=>{setFecha(e.target.value);save({fecha:e.target.value||null})}} style={inp}/></div>
         </div>
       )}
       {esBanco&&<div style={{fontSize:10,color:C.done,display:'flex',alignItems:'center',gap:5,marginBottom:7}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2'><rect x='5' y='11' width='14' height='9' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>Monto y fecha del banco</div>}
-      <button disabled={busy||!dirty} onClick={guardar} style={{width:'100%',height:40,borderRadius:9,border:'none',background:(dirty&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(dirty&&!busy)?'pointer':'default',marginTop:4}}>{busy?'Guardando…':'Guardar'}</button>
-      {dispo&&onCubrir&&<><div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'14px 0 8px'}}>Asignar a</div>
-      <div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.azulInfo}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:10.5,color:C.done}}>marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>
-      <div style={{fontSize:10,color:C.done,marginTop:6,lineHeight:1.4}}>Próximamente en el panel: pagar una factura emitida (varios→una), emitir 1 factura (anula programadas) y reclasificar a Fondo.</div></>}
-      {dispo&&onLiberar&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}><button onClick={()=>{ if(confirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{fontSize:11,fontWeight:600,color:C.overdue,background:'#fff',border:`1px solid ${C.overdue}`,borderRadius:20,padding:'4px 13px',cursor:'pointer'}}>Eliminar</button></div>}
+      {dispo&&<>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'14px 0 8px'}}>Asignar a</div>
+        {facturasAbiertas.length>0?(
+          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:8}}>
+            {facturasAbiertas.slice(0,5).map(b=>{ const on=String(selFac)===String(b.id); const cz=calza&&String(calza.id)===String(b.id); return (
+              <div key={b.id} onClick={()=>setSelFac(on?null:String(b.id))} style={{border:on?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,background:on?C.azulBg:'#fff',borderRadius:8,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
+                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>Factura N°{folioN(b.invoice_no)}{cz&&<span style={{color:C.azulInfo,fontWeight:600}}> · ✦ calza</span>}</div><div style={{fontSize:10.5,color:C.done}}>saldo {fmtCLP0(saldoBill(b))}</div></div>
+                <span style={{width:17,height:17,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:on?`1.5px solid ${C.accent}`:`1.5px solid ${C.border}`,background:on?C.accent:'#fff'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+              </div>
+            )})}
+          </div>
+        ):(
+          <div style={{fontSize:11,color:C.done,marginBottom:8}}>Este cliente no tiene facturas emitidas abiertas para asignar.</div>
+        )}
+        {onCubrir&&<div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.azulInfo}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:10.5,color:C.done}}>marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>}
+        {facturasAbiertas.length>0&&<button disabled={!selFac||busy} onClick={asignar} style={{width:'100%',height:40,borderRadius:9,border:'none',background:(selFac&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFac&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':'Guardar asignación'}</button>}
+        <div style={{fontSize:10,color:C.done,marginTop:7,lineHeight:1.4}}>Próximamente: emitir 1 factura por el total (anula programadas) y reclasificar a Fondo.</div>
+      </>}
     </Modal>
   )
 }
@@ -17015,7 +17035,7 @@ export default function App() {
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onClose={()=>setModal(null)}/></Modal>}
-        {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onClose={()=>setAnticipoPanel(null)}/>}
+        {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}

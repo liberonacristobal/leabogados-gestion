@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Anticipos: panel assign-first (Etapa 2)
+- El panel del anticipo pasa de "editar primero" a "asignar primero". La metadata (proyecto/RS/nota; monto/fecha si es manual) se **auto-guarda** al salir del campo (con indicador "Guardado"), sin botón Guardar. **Eliminar** se mueve al header como **papelera** discreta. La sección "Asignar a" lista las **facturas emitidas abiertas** del cliente (seleccionables, con la que **calza** por monto preseleccionada ✦) + "Cubrir cuotas programadas"; el botón primario es **"Guardar asignación"**, que aplica el anticipo a la factura elegida (handleConsumeAnticipos; aplicando varios al mismo folio se acumulan). Próximo: emitir 1 factura por el total (anula programadas) y reclasificar a Fondo.
+
 ## 2026-06-22 — Anticipos: el panel suma "Cubrir cuotas programadas"
 - El panel del anticipo (que abre "Asignar") ahora incluye la acción **Cubrir cuotas programadas** conectada (CubrirCuotasModal a nivel App), restituyendo la funcionalidad que estaba en la fila y que se había quitado prematuramente. Las demás acciones (pagar factura emitida, emitir 1 factura que anula programadas, reclasificar a Fondo) quedan marcadas como próximas en el panel. El badge "Verificado en banco" + el bloqueo de monto/fecha aplican solo a anticipos de conciliación bancaria (no a los manuales).
 
