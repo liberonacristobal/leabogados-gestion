@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Anticipos: panel Etapa 3 (consolidar + reclasificar)
+- **"Asignar a 1 factura"**: abre un modal que consolida las **cuotas programadas** seleccionadas en 1 factura — con N°/fecha (la que emitiste en el SII), crea **1 factura Pagada** por el total, **anula** las programadas y aplica **este anticipo + otros disponibles del cliente (FIFO)** hasta cubrir (sobrante → disponible). **"Reclasificar a Fondo por rendir"**: convierte el anticipo en un **fondo** para gastos del cliente (re-apunta la conciliación al fondo si venía del banco) y elimina el anticipo. Con esto el panel de anticipos queda completo (editar/auto-save · asignar a factura emitida · cubrir cuotas · consolidar+anular · reclasificar · eliminar).
+
 ## 2026-06-22 — Anticipos: panel assign-first (Etapa 2)
 - El panel del anticipo pasa de "editar primero" a "asignar primero". La metadata (proyecto/RS/nota; monto/fecha si es manual) se **auto-guarda** al salir del campo (con indicador "Guardado"), sin botón Guardar. **Eliminar** se mueve al header como **papelera** discreta. La sección "Asignar a" lista las **facturas emitidas abiertas** del cliente (seleccionables, con la que **calza** por monto preseleccionada ✦) + "Cubrir cuotas programadas"; el botón primario es **"Guardar asignación"**, que aplica el anticipo a la factura elegida (handleConsumeAnticipos; aplicando varios al mismo folio se acumulan). Próximo: emitir 1 factura por el total (anula programadas) y reclasificar a Fondo.
 
