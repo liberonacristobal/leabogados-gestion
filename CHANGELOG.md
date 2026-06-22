@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Conciliación: candado anti-adelanto duplicado
+- `saldoAFavor` y `splitAdelantoFondo` ahora abortan si el movimiento ya tiene una conciliación con `tipo_destino='anticipo'` (idempotencia): no se puede crear un segundo adelanto para la misma transferencia. Complementar con índice único en BD `conciliacion(movimiento_id, tipo_destino)` para garantía dura.
+
 ## 2026-06-22 — Cifras (auditoría): QW4–QW5
 - **QW4 — Regex de origen en conciliación:** se ensancha de `/conciliaci[oó]n bancaria/i` a `/conciliaci[oó]n/i` (deshacer conciliación + buscar fondo a vincular), como prevención ante cambios de redacción del concepto. (Hoy todos los fondos de conciliación ya contienen "conciliación bancaria", así que es preventivo; el arreglo robusto sería un flag de origen, pendiente.)
 - **QW5 — Borrado de aging muerto:** se eliminan `age0_30/age31_60/age60p` del Dashboard (no se usaban; `computeAgingCartera` es la fuente única).
