@@ -2937,7 +2937,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</span><span style={{fontSize:12,color:C.done,fontWeight:400}}>· {(sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)).length} ventas</span></div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
             <div style={{position:'relative',display:'flex',alignItems:'center'}}>
               <span style={{position:'absolute',left:9,color:C.muted,fontSize:12,pointerEvents:'none'}}>⌕</span>
@@ -4998,8 +4998,9 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</span><span style={{fontSize:12,color:C.done,fontWeight:400}}>· {(billing||[]).filter(b=>!b.deleted_at).length} facturas</span></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {filter==='resumen'&&<button onClick={()=>{setFilter('clientes');clearSel&&clearSel()}} title='Detalle por cliente' style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:'0.5px solid '+C.accent,background:'#fff',color:C.accent}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>Por cliente</button>}
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
@@ -5149,7 +5150,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                 <span style={{color:C.muted,fontWeight:600}}>Al día {fmt(porCobrar-venAll)}</span>
               </div>
             </div>
-            <button onClick={()=>go('clientes')} style={{width:'100%',padding:'11px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:16}}>Ver detalle por cliente →</button>
+            {/* "Ver detalle por cliente" ahora vive en el header (ojo + Por cliente) */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7,gap:8,flexWrap:'wrap'}}>
               <span style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Estados</span>
               <div style={{display:'flex',gap:4}}>
@@ -8017,6 +8018,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
                   {showHistorial?'Historial':showNotaria?'Notaría — liquidación':showOrphans?'Sin cliente · por asignar':selectedClient?selectedClient.name:'Gastos y Fondos'}
                 </span>
+                {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<span style={{fontSize:12,color:C.done,fontWeight:400}}>· {clientsWithMovs.filter(c=>c.status!=='Terminado').length} clientes</span>}
                 {selectedClient&&(()=>{
                   // Deuda efectiva: plata que la oficina YA desembolsó (caja chica + notaría liquidada) por sobre el fondo del cliente.
                   const f=expenses.filter(e=>e.client_id===selectedClient.id)
@@ -10829,15 +10831,14 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   return (
     <div>
       <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:7}}><span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clientes</span><span style={{fontSize:12,color:C.done,fontWeight:400}}>· {cl.length} {cl.length===1?'cliente':'clientes'}</span></div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <button onClick={onImportDrive} title='Importar desde Drive' style={driveBtn}><DriveIcon size={20}/></button>
             <button onClick={onAdd} style={chipBtn('soft')}>+ Cliente</button>
             <button onClick={()=>onAddTask(null)} style={chipBtn('primary')}>+ Tarea</button>
           </div>
         </div>
-        <div style={{fontSize:12,color:C.muted,margin:'4px 0 10px'}}>{cl.length} {cl.length===1?'cliente':'clientes'}</div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'stretch'}}>
           <ChipSearch value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente...' style={{flex:1}}/>
           <button onClick={()=>setVerProv(true)} style={{...chipBtn('soft'),flexShrink:0,height:32,color:C.accent}}>Mis Proveedores</button>
