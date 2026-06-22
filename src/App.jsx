@@ -5989,7 +5989,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],onSave,on
         {bigDate(a.fecha)}
         <div style={{flex:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',minWidth:0}}>
           <span style={{fontSize:9,fontWeight:600,letterSpacing:'.04em',padding:'3px 8px',borderRadius:20,background:dispo?C.greenBg:'#F5F7F9',color:dispo?C.greenText:C.muted}}>{dispo?'DISPONIBLE':'CONSUMIDO'}</span>
-          {esBanco&&<span title='Verificado en banco' style={{width:22,height:22,borderRadius:'50%',background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18'/><path d='M5 21V10l7-5 7 5v11'/><path d='M9 21v-6h6v6'/></svg></span>}
+          {esBanco&&<span style={{fontSize:9,fontWeight:600,letterSpacing:'.03em',padding:'1px 8px',borderRadius:20,background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>✓ VERIFICADO EN BANCO</span>}
         </div>
         <div style={{fontSize:20,fontWeight:600,color:dispo?C.normal:C.muted,letterSpacing:'-.5px',flexShrink:0}}>{fmtCLP0(a.monto)}</div>
       </div>
@@ -6018,10 +6018,10 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],onSave,on
       )}
       {esBanco&&<div style={{fontSize:10,color:C.done,display:'flex',alignItems:'center',gap:5,marginBottom:7}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2'><rect x='5' y='11' width='14' height='9' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>Monto y fecha del banco</div>}
       <button disabled={busy||!dirty} onClick={guardar} style={{width:'100%',height:40,borderRadius:9,border:'none',background:(dirty&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(dirty&&!busy)?'pointer':'default',marginTop:4}}>{busy?'Guardando…':'Guardar'}</button>
-      {dispo&&onCubrir&&<><div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'14px 0 8px'}}>Aplicar a</div>
+      {dispo&&onCubrir&&<><div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'14px 0 8px'}}>Asignar a</div>
       <div onClick={()=>onCubrir(a)} style={{border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.azulInfo}`,borderRadius:8,padding:'9px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}}><div><div style={{fontSize:12,fontWeight:500,color:C.text}}>Cubrir cuotas programadas</div><div style={{fontSize:10.5,color:C.done}}>marca cuotas futuras como anticipadas</div></div><span style={{color:C.done}}>→</span></div>
       <div style={{fontSize:10,color:C.done,marginTop:6,lineHeight:1.4}}>Próximamente en el panel: pagar una factura emitida (varios→una), emitir 1 factura (anula programadas) y reclasificar a Fondo.</div></>}
-      {dispo&&onLiberar&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}><button onClick={()=>{ if(confirm('¿Liberar (eliminar) este anticipo disponible?')){ onLiberar(a); onClose() } }} style={{fontSize:11,fontWeight:600,color:C.overdue,background:'#fff',border:`1px solid ${C.overdue}`,borderRadius:20,padding:'4px 13px',cursor:'pointer'}}>Liberar</button></div>}
+      {dispo&&onLiberar&&<div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}><button onClick={()=>{ if(confirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{fontSize:11,fontWeight:600,color:C.overdue,background:'#fff',border:`1px solid ${C.overdue}`,borderRadius:20,padding:'4px 13px',cursor:'pointer'}}>Eliminar</button></div>}
     </Modal>
   )
 }
