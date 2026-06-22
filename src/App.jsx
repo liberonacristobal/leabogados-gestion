@@ -4701,7 +4701,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha}) {
+function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros=[],onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
@@ -5131,7 +5131,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             </div>
           </div>
         </div>}
-        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt}/>}
+        {filter==='anticipos'&&<AnticiposPanel anticipos={anticipos} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} onNuevo={onNuevoAnticipo} onCubrir={setCubrirAnt} onDescubrir={onDescubrirCuotas} onDeshacerConsumo={onDeshacerConsumo} onFacturar={setFacturarAnt} onFusionar={onFusionarAnticipos}/>}
         {cubrirAnt&&<CubrirCuotasModal anticipo={cubrirAnt} sales={sales} billing={billing} clients={clients} onConfirm={ids=>{onCubrirCuotas&&onCubrirCuotas(cubrirAnt.id,ids);setCubrirAnt(null)}} onClose={()=>setCubrirAnt(null)}/>}
         {facturarAnt&&<FacturarBloqueModal anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>}
         {filter!=='checklist'&&filter!=='anticipos'&&filter!=='sinanio'&&filter!=='resumen'&&<>
@@ -5951,7 +5951,7 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
   )
 }
 
-function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar}) {
+function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sales=[],onNuevo,onCubrir,onDescubrir,onDeshacerConsumo,onFacturar,onFusionar}) {
   const [fil,setFil] = useState('disponible')
   const fmtCLP0 = n => '$'+(n||0).toLocaleString('es-CL')
   const disponibles = anticipos.filter(a=>a.estado==='disponible')
@@ -6000,6 +6000,15 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
               <div><div style={{fontSize:12,fontWeight:600,color:C.accent}}>{cliName(cid)}</div>{rs&&<div style={{fontSize:11,color:C.done}}>{rs}</div>}</div>
               <div style={{textAlign:'right'}}><div style={flabel}>Disponible</div><div style={{fontSize:14,fontWeight:600,color:C.normal}}>{fmtCLP0(totCli)}</div></div>
             </div>
+            {(()=>{ const disp=arr.filter(a=>a.estado==='disponible'); const pairs=[]
+              for(let i=0;i<disp.length;i++) for(let j=i+1;j<disp.length;j++){ const a=disp[i],b=disp[j]; const dd=Math.abs((new Date(a.fecha+'T12:00')-new Date(b.fecha+'T12:00'))/86400000); if((a.monto||0)===(b.monto||0)&&dd<=7) pairs.push([a,b]) }
+              if(!pairs.length) return null
+              return pairs.map(([x,y],k)=>{ const bank=/conciliaci[oó]n/i.test(x.nota||'')?x:(/conciliaci[oó]n/i.test(y.nota||'')?y:x); const manual=bank===x?y:x; const distintos=bank!==manual; return (
+                <div key={'dup'+k} style={{background:C.ambarBg,borderBottom:`0.5px solid ${C.border}`,padding:'8px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
+                  <div style={{fontSize:11,color:C.soonText,lineHeight:1.4,minWidth:0}}><b>Posible anticipo duplicado:</b> {fmtCLP0(x.monto)} en {fmtD(x.fecha)} y {fmtD(y.fecha)}.{distintos?' Al fusionar se conserva el verificado en banco con el proyecto del manual.':''}</div>
+                  {onFusionar&&<button onClick={()=>{ if(confirm(`¿Fusionar los dos anticipos de ${fmtCLP0(x.monto)}? Se conserva uno (el verificado en banco) con el proyecto del manual y se elimina el duplicado.`)) onFusionar(bank,manual) }} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Fusionar</button>}
+                </div>
+              )}) })()}
             {arr.map(a=>{ const disp=a.estado==='disponible'; const folio=folioDe(a); const cubreCuotas=billing.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
               <div key={a.id} style={{padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
@@ -16384,6 +16393,18 @@ export default function App() {
   },[user])
 
   // Anticipos (PP-15 commit 3): aplicar anticipos a una factura → consumidos + factura Pagada
+  // Fusionar dos anticipos duplicados (manual + conciliación bancaria): conserva el "keep" (el verificado en banco) y le pasa proyecto/sale_id/entity_id del "drop"; borra el drop.
+  const handleFusionarAnticipos=useCallback(async(keep,drop)=>{
+    if(!keep||!drop||String(keep.id)===String(drop.id)) return
+    if(keep.estado!=='disponible'||drop.estado!=='disponible'){ alert('Solo se pueden fusionar anticipos disponibles.'); return }
+    try{
+      const merged={ proyecto: keep.proyecto||drop.proyecto||null, sale_id: keep.sale_id||drop.sale_id||null, entity_id: keep.entity_id||drop.entity_id||null, nota: keep.nota||drop.nota||null }
+      const {error:ue}=await supabase.from('anticipos').update(merged).eq('id',keep.id); if(ue) throw ue
+      const {error:de}=await supabase.from('anticipos').delete().eq('id',drop.id); if(de) throw de
+      setAnticipos(p=>p.filter(a=>String(a.id)!==String(drop.id)).map(a=>String(a.id)===String(keep.id)?{...a,...merged}:a))
+    }catch(e){alert('No se pudo fusionar: '+e.message)}
+  },[])
+
   const handleConsumeAnticipos=useCallback(async(ids,billingId)=>{
     if(!ids?.length) return
     try{
@@ -16871,7 +16892,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} onClose={()=>setTab('dashboard')}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c)=>setModal({type:'fondo',data:c||null})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields}/>}
