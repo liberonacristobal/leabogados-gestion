@@ -6085,13 +6085,15 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
               <div key={a.id} style={{padding:'10px 14px',borderBottom:`0.5px solid ${C.border}`}}>
                 <div onClick={()=>onAbrir&&onAbrir(a)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,cursor:onAbrir?'pointer':'default'}}>
                   {bigDate(a.fecha)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{a.proyecto||'Anticipo'}</div>{a.nota&&<div style={{fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nota}</div>}</div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>Factura N°{folio}</span>}
-                    <span style={{fontSize:13,fontWeight:500,color:disp?C.normal:C.muted}}>{fmtCLP0(a.monto)}</span>
-                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:disp?C.greenBg:cubreCuotas?C.azulBg:'#F5F7F9',color:disp?C.normal:cubreCuotas?C.accent:C.done}}>{disp?'Disponible':cubreCuotas?'En cuotas':'Consumido'}</span>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>Factura N°{folio}</span>}
+                      <span style={{fontSize:9,fontWeight:600,letterSpacing:'.03em',padding:'1px 7px',borderRadius:20,background:disp?C.greenBg:cubreCuotas?C.azulBg:'#F5F7F9',color:disp?C.greenText:cubreCuotas?C.accent:C.done}}>{disp?'DISPONIBLE':cubreCuotas?'EN CUOTAS':'CONSUMIDO'}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:disp?C.normal:C.muted}}>{fmtCLP0(a.monto)}</span>
+                    </div>
+                    {disp&&onAbrir&&<button onClick={e=>{e.stopPropagation();onAbrir(a)}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:20,padding:'1px 11px',cursor:'pointer',lineHeight:1.6}}>Asignar</button>}
                   </div>
                 </div>
-                {disp&&onCubrir&&<button onClick={()=>onCubrir(a)} style={{marginTop:7,fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Aplicar a cuotas programadas</button>}
                 {!disp&&cubreCuotas&&(
                   <div style={{display:'flex',gap:7,marginTop:7,flexWrap:'wrap'}}>
                     {!a.billing_id&&onFacturar&&<button onClick={()=>onFacturar(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Emitir una factura</button>}
