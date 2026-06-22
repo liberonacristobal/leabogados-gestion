@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Cash flow: filtro por abogado
+- La tarjeta de Cash flow del Dashboard suma un toggle **Todos · [abogados]** que filtra la proyección por **responsable** (derivado de la venta `sale.responsible`, o del cliente `abogado_responsable` si falta). La proyección ya incluía las cuotas **programadas** tanto de ventas puntuales como de asesorías recurrentes — ahora se puede ver por abogado. Colores de persona en el toggle. No afloja ningún criterio, solo filtra.
+
 ## 2026-06-22 — Anticipos: panel de gestión (Etapa 1 — editar)
 - Tocar un anticipo abre un panel (header canónico "Anticipo | Cliente") con fila día-grande · chips · monto a la derecha, para **editar proyecto** (con sugerencia ✦ de la venta más reciente), **razón social** y **nota**. Monto y fecha quedan **bloqueados** si el anticipo viene de conciliación bancaria (fuente de verdad). **Liberar** (chip rojo/blanco) elimina un anticipo disponible, revirtiendo el movimiento bancario si lo tenía. Próximas etapas: pagar factura emitida (varios→una) + "calza con", emitir 1 factura (anula programadas) y reclasificar a Fondo.
 

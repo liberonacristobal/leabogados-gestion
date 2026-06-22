@@ -1566,13 +1566,19 @@ function TasksByPerson({tasks,clients}) {
 const META_UF = 9800
 const META_CLP = 400000000
 
-function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[]}) {
+function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[]}) {
   const [horizon,setHorizon] = useState(6)
   const [activePoint,setActivePoint] = useState(null)
+  const [respF,setRespF] = useState('todos')
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
-  const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due&&b.billing_type!=='reembolso')
-  const programadas = billing.filter(b=>b.status==='Programada'&&b.due&&b.billing_type!=='reembolso')
-  const pagadas = billing.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.paid_at)
+  const respByClient = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
+  const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
+  const respDe = b => (b.sale_id&&respBySale[String(b.sale_id)])||respByClient[String(b.client_id)]||null
+  const respList = useMemo(()=>{ const s=new Set(); (billing||[]).forEach(b=>{ const r=respDe(b); if(r) s.add(r) }); return [...s].sort((a,b)=>a.localeCompare(b,'es')) },[billing,respBySale,respByClient])
+  const okResp = b => respF==='todos' || respDe(b)===respF
+  const pending = billing.filter(b=>['Pendiente','Vencido'].includes(b.status)&&b.due&&b.billing_type!=='reembolso'&&okResp(b))
+  const programadas = billing.filter(b=>b.status==='Programada'&&b.due&&b.billing_type!=='reembolso'&&okResp(b))
+  const pagadas = billing.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.paid_at&&okResp(b))
 
   const pastN = horizon<=3?2:horizon<=6?3:6   // meses pasados (cobrado real) que se muestran a la izquierda de Hoy
   const months = useMemo(()=>{
@@ -1595,7 +1601,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[]}) {
       }
     }
     return result
-  },[billing,horizon,pastN])
+  },[billing,horizon,pastN,respF])
 
   const firstFut = pastN   // índice del mes actual (i=0) dentro de months
   const future = months.filter(m=>!m.past)
@@ -1646,6 +1652,11 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[]}) {
           ))}
         </div>
       </div>
+      {respList.length>1&&<div style={{display:'flex',gap:5,marginBottom:8,flexWrap:'wrap'}}>
+        {['todos',...respList].map(r=>{ const on=respF===r; const pc=r==='todos'?{bg:C.azulBg,color:C.accent}:personChip(r); return (
+          <button key={r} onClick={()=>{setRespF(r);setActivePoint(null)}} style={{padding:'3px 11px',borderRadius:20,border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'transparent',color:on?pc.color:C.done,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r==='todos'?'Todos':r}</button>
+        )})}
+      </div>}
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:10}}>
@@ -2388,7 +2399,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       })()}
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
-      <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients}/>
+      <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales}/>
 
       {/* Cobrado del año por AÑO DE VENTA — controla ingresos de este año que vienen de ventas anteriores */}
       {ingresosPorAnioVenta.total>0&&(()=>{
