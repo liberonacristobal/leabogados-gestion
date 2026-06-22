@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Facturación: generador de representación impresa (Etapa 1)
+- Generador en el front de la representación impresa (PDF) de facturas exentas desde el DTE XML: facturaDtePdfBase64 (jsPDF + bwip-js para el PDF417 del TED) + splitSetDTE, con el diseño validado y el logo embebido (src/assets/logoFacturaB64.js). Opción "Respaldo PDF" en el menú Importar de Facturación: sube el Archivo Respaldo (XML) y genera/descarga los PDF. Es la base para casar por folio + adjuntar (Etapa 2) y enviar al cliente (Etapa 3).
+
 ## 2026-06-21 — Dashboard: tablero del equipo con cortes Me delegaron / Delegué
 - El tablero "Tareas del equipo" del Dashboard ahora tiene toggle Todas · Me delegaron · Delegué. Me delegaron = tareas que otros me asignaron; Delegué = las que yo asigné (assigned_by=yo), agrupadas por a quién. El conteo del encabezado se ajusta al corte. Sin pantallas nuevas.
 
