@@ -5068,7 +5068,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   ):(pagado&&onRevertirPago)?(
                     <button onClick={()=>{ if(confirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Deshacer pago</button>
                   ):(anulada&&onReactivar)&&(
-                    <button onClick={()=>{ if(confirm('¿Reactivar esta factura anulada? Vuelve a Pendiente y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Reactivar</button>
+                    <button onClick={()=>{ if(confirm('¿Reactivar esta factura anulada? Vuelve a su estado previo y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Reactivar</button>
                   )}
                   <button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Editar</button>
                 </div>}
@@ -16700,13 +16700,21 @@ export default function App() {
       const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
       if(error) throw error
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
+      // Liberar anticipos consumidos contra esta factura (no dejar plata atada a una factura anulada). Los terceros se mantienen (el proveedor igual trabajó).
+      const antLig=(anticipos||[]).filter(a=>String(a.billing_id)===String(bill.id))
+      if(antLig.length){ const ids=antLig.map(a=>a.id); const {error:ae}=await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',ids); if(!ae) setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
     }catch(e){alert('No se pudo dar de baja: '+e.message)}
-  },[user])
+  },[user,anticipos])
 
   // Reactivar una factura anulada por error: vuelve a Pendiente y borra el registro de baja.
   const handleReactivarFactura=useCallback(async(bill)=>{
     try{
-      const patch={status:'Pendiente', motivo_baja:null, anulada_por:null, anulada_at:null, updated_at:new Date().toISOString()}
+      // Inferir el estado real previo en vez de forzar Pendiente.
+      const nuevo = (bill.paid_at && (bill.paid_amount||0)>=(bill.amount||0)) ? 'Pagado'
+        : bill.prepaid_anticipo_id ? 'Anticipada'
+        : (!bill.issued_at && !bill.invoice_no) ? 'Programada'
+        : 'Pendiente'
+      const patch={status:nuevo, motivo_baja:null, anulada_por:null, anulada_at:null, updated_at:new Date().toISOString()}
       const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
       if(error) throw error
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
