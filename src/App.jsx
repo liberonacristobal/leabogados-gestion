@@ -1587,10 +1587,10 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[]}) {
         const cobrado = pagadas.filter(b=>b.paid_at?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
         result.push({key,label,labelFull,past:true,cobrado,emitido:0,programado:0,overdue:0,total:cobrado})
       } else {
-        const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
-        const overdue = i===0 ? pending.filter(b=>b.due<key.slice(0,7)+'-01').reduce((a,b)=>a+(b.amount||0),0) : 0
+        const emitidoMes = pending.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+saldoBill(b),0)
+        const overdue = i===0 ? pending.filter(b=>b.due<key.slice(0,7)+'-01').reduce((a,b)=>a+saldoBill(b),0) : 0
         const emitido = emitidoMes+overdue
-        const programado = programadas.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+(b.amount||0),0)
+        const programado = programadas.filter(b=>b.due?.startsWith(key)).reduce((a,b)=>a+saldoBill(b),0)
         result.push({key,label,labelFull,past:false,cobrado:0,emitido,programado,overdue,total:emitido+programado})
       }
     }
@@ -1730,12 +1730,13 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
     sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada').forEach(s=>{
       const esRec = s.cobro_type==='mensual' && s.status==='Activo'
       // Monto mensual de esta venta en UF y CLP
+      const uref = s.uf_value>0 ? s.uf_value : ufConv   // UF congelada de la venta; ufConv (hoy) solo respaldo
       const uf = s.moneda==='CLP'
-        ? (ufConv ? (parseFloat(s.amount_clp)||0)/ufConv : 0)
+        ? (uref ? (parseFloat(s.amount_clp)||0)/uref : 0)
         : (parseFloat(s.amount_uf)||0)
       const clp = s.moneda==='CLP'
         ? (parseFloat(s.amount_clp)||0)
-        : (s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufConv)))
+        : (s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*uref)))
       if(esRec){
         // recurrente: suma su monto mensual en los 12 meses
         for(let m=0;m<12;m++){ arr[m].uf += uf; arr[m].clp += clp }
@@ -1753,8 +1754,8 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
   const totalCLP = data.reduce((a,m)=>a+m.clp,0)
   // Ingreso recurrente: ventas mensuales recurrentes activas
   const recurrentes = sales.filter(s=>s.cobro_type==='mensual'&&s.status==='Activo')
-  const recUF = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||UF_FALLBACK; const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0); return a+uf },0)
-  const recCLP = recurrentes.reduce((a,s)=>{ const uref=ufHoy||s.uf_value||UF_FALLBACK; const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref); return a+clp },0)
+  const recUF = recurrentes.reduce((a,s)=>{ const uref=s.uf_value>0?s.uf_value:(ufHoy||UF_FALLBACK); const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0); return a+uf },0)
+  const recCLP = recurrentes.reduce((a,s)=>{ const uref=s.uf_value>0?s.uf_value:(ufHoy||UF_FALLBACK); const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref); return a+clp },0)
   const [sel,setSel] = useState(null)
   // Formato compacto para la etiqueta sobre cada barra
   const compact = m => {
@@ -16288,9 +16289,10 @@ export default function App() {
       const antList = (anticipos||[]).filter(a=>ids.includes(a.id))
       const consumido = antList.reduce((s,a)=>s+(a.monto||0),0)
       const fac = billing.find(b=>String(b.id)===String(billingId))
-      const cubre = !fac || consumido >= (fac.amount||0)
-      // Si los anticipos superan la factura, el excedente NO se pierde: se reduce el último anticipo y el sobrante vuelve como anticipo disponible (igual que handleCubrirCuotas).
-      const surplus = (cubre && fac) ? Math.max(0, consumido-(fac.amount||0)) : 0
+      const yaPagado = fac ? (fac.paid_amount||0) : 0
+      const cubre = !fac || (yaPagado+consumido) >= (fac.amount||0)
+      // Si los anticipos superan el saldo de la factura, el excedente NO se pierde: se reduce el último anticipo y el sobrante vuelve como anticipo disponible (igual que handleCubrirCuotas).
+      const surplus = (cubre && fac) ? Math.max(0, (yaPagado+consumido)-(fac.amount||0)) : 0
       const { error } = await supabase.from('anticipos').update({estado:'consumido',billing_id:billingId}).in('id',ids)
       if(error)throw error
       setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'consumido',billing_id:billingId}:a))
@@ -16304,13 +16306,18 @@ export default function App() {
         setAnticipos(p=>{ let n=p.map(a=>a.id===base.id?{...a,monto:reduced}:a); if(saldoRow) n=[saldoRow,...n]; return n })
       }
       if(cubre){
-        const { data, error:be } = await supabase.from('billing').update({status:'Pagado',updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
+        const upd = fac ? {status:'Pagado',paid_amount:fac.amount,updated_at:new Date().toISOString()} : {status:'Pagado',updated_at:new Date().toISOString()}
+        const { data, error:be } = await supabase.from('billing').update(upd).eq('id',billingId).select().single()
         if(be)throw be
         setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
         if(surplus>0) alert(`Factura pagada. El excedente de ${fmt(surplus)} quedó como anticipo disponible.`)
       } else {
-        const resta = (fac.amount||0)-consumido
-        alert(`Abono aplicado: ${fmt(consumido)}. La factura queda pendiente por ${fmt(resta)} (no se marcó pagada).`)
+        // Abono parcial: reflejar el anticipo consumido en paid_amount para que el saldo de la factura baje (QW1).
+        const nuevoPagado = yaPagado+consumido
+        const { data, error:be } = await supabase.from('billing').update({paid_amount:nuevoPagado,updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
+        if(be)throw be
+        setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
+        alert(`Abono aplicado: ${fmt(consumido)}. La factura queda pendiente por ${fmt((fac.amount||0)-nuevoPagado)} (no se marcó pagada).`)
       }
     }catch(e){alert('Error: '+e.message)}
   },[clients,billing,anticipos])
