@@ -45,11 +45,11 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   )
 
   const [progRes, cliRes, entRes, emitRes, folioRes] = await Promise.all([
-    supabase.from('billing').select('id,client_id,entity_id,amount,due,status,receptor_rut,concept,invoice_no').eq('status', 'Programada'),
+    supabase.from('billing').select('id,client_id,entity_id,amount,due,status,receptor_rut,concept,invoice_no').eq('status', 'Programada').is('deleted_at', null),
     supabase.from('clients').select('id,name,rut'),
     supabase.from('client_entities').select('id,client_id,name,rut'),
-    supabase.from('billing').select('id,client_id,entity_id,amount,status,receptor_rut,concept,invoice_no,issued_at').in('status', ['Pendiente', 'Vencido']),
-    supabase.from('billing').select('invoice_no').not('invoice_no', 'is', null),
+    supabase.from('billing').select('id,client_id,entity_id,amount,status,receptor_rut,concept,invoice_no,issued_at').in('status', ['Pendiente', 'Vencido']).is('deleted_at', null),
+    supabase.from('billing').select('invoice_no').not('invoice_no', 'is', null).is('deleted_at', null),
   ])
   const err = progRes.error || cliRes.error || entRes.error || emitRes.error || folioRes.error
   if (err) throw new Error('Error leyendo la base: ' + err.message)
