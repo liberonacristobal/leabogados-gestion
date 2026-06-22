@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-22 — Integridad: triagePersonal y folios borrados (sii-sync)
+- `triagePersonal` (marcar gasto como personal) ahora **se bloquea si el gasto ya está rendido/liquidado** (`rendered_at`/`client_rendered_at`/`notaria_liquidado_at`) — antes descuadraba el total de esa rendición. Pide desvincular primero.
+- `sii-sync/match.ts`: las 3 consultas de `billing` (candidatas + folios) excluyen borradas (`.is('deleted_at', null)`), para que una factura borrada no bloquee una reimportación legítima ni se sugiera. (Requiere desplegar la edge function.)
+
 ## 2026-06-22 — Integridad: anular/reactivar factura coherente
 - Al **anular** una factura ahora se **liberan los anticipos** consumidos contra ella (vuelven a disponible, billing_id null) — no quedan atados a una factura muerta. Los terceros se mantienen (el proveedor igual trabajó). Al **reactivar** se **infiere el estado real previo** (Pagado / Anticipada / Programada / Pendiente) en vez de forzar Pendiente; texto del confirm actualizado.
 
