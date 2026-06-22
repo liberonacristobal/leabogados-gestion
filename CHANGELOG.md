@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Facturación: pulido fino del resumen
+- Pills de año (Total/2027/2026/2025) suben de fontSize 9 a 10 (radio/padding al estilo de las pills de estado) para mejor legibilidad y tap. La etiqueta del hero "Por cobrar" rima con la de Ventas (fontSize 11, weight 500, letterSpacing .04em). Solo estética.
+
 ## 2026-06-22 — Landings: buscador unificado, vista limited y responsive mobile
 - Ventas: el buscador pasa de pill en el título a barra full-width (ChipSearch), igual que Clientes y Gastos, liberando la fila de título. La vista de clientes "limited" (Martín/Martina/Rodrigo) suma la firma "Clientes · N clientes". Encabezados de los 4 landings + limited con flexWrap, para que en iPhone los chips bajen de línea en vez de desbordar. Chips compactos y centrados (chipBtn, height 24). Sin cambios de lógica ni de cifras.
 
