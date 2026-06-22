@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-22 — Cifras (auditoría): QW1–QW3
+- **QW1 — Anticipo parcial abona la factura:** al aplicar anticipos que NO cubren la factura, ahora se refleja el consumo en `paid_amount` (antes el anticipo quedaba "consumido" pero la factura mostraba el saldo completo → plata desaparecía). Además el cálculo de "cubre" considera abonos previos (`paid_amount`) y al cubrir totalmente fija `paid_amount = amount`.
+- **QW2 — Cash flow con saldo real:** CashflowProjection usa `saldoBill(b)` en meses futuros (emitido/vencido/programado) en vez del monto bruto, para no inflar la caja proyectada con lo ya abonado.
+- **QW3 — Ventas/mes con UF congelada:** VentasPorMes y el ingreso recurrente usan la UF histórica de la venta (`s.uf_value`) y la UF de hoy solo como respaldo (antes al revés → la cifra cambiaba sola cada día).
+
+## 2026-06-22 — Landings: quita los conteos del encabezado (responsive mobile)
+- Los "· N clientes/ventas/facturas" hacían wrap a otra fila en iPhone; se retiran de los 5 encabezados. Se conservan búsqueda full-width en Ventas, FAB retirado y tarjetas al canon.
+
 ## 2026-06-22 — Facturación: retira el FAB flotante "Nueva factura"
 - Se quita el botón flotante "+" (Nueva factura) de la vista Facturación. El alta manual de cobros queda en la ficha del cliente → Financiero ("+ Nueva factura"). Los cobros nacen principalmente desde Ventas/SII.
 
