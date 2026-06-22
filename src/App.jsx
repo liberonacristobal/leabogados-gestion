@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
+import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
 import mammoth from 'mammoth'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
@@ -4626,6 +4627,29 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
   const irAEstado = fl => { setFilter('clientes'); setEstSel(new Set(ESTADO_MAP[fl]||[])) }
   const estadoActivo = fl => filter==='clientes' && [...estSel].sort().join(',')===(ESTADO_MAP[fl]||[]).slice().sort().join(',') && estSel.size>0
   const [impOpen,setImpOpen] = useState(false)
+  const respaldoRef = useRef(null)
+  const [procResp,setProcResp] = useState(false)
+  // Sube el "Archivo Respaldo" (SetDTE XML de MIPYME) y genera/descarga la representación impresa de cada factura.
+  const procesarRespaldoSII = async(file)=>{
+    if(!file) return
+    setProcResp(true)
+    try{
+      const xml = await file.text()
+      const docs = splitSetDTE(xml)
+      if(!docs.length){ alert('No encontré facturas en ese archivo. Sube el "Archivo Respaldo" (XML) de MIPYME.'); setProcResp(false); return }
+      let n=0
+      for(const d of docs){
+        const r = await facturaDtePdfBase64(d)
+        const a = document.createElement('a')
+        a.href = 'data:application/pdf;base64,'+r.base64
+        a.download = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
+        document.body.appendChild(a); a.click(); a.remove()
+        n++; await new Promise(res=>setTimeout(res,350))
+      }
+      alert('Generé '+n+' factura(s) PDF — revisa tus descargas.')
+    }catch(e){ alert('Error generando los PDF: '+e.message) }
+    setProcResp(false)
+  }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
@@ -4966,10 +4990,11 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
+              <input ref={respaldoRef} type='file' accept='.xml,text/xml' style={{display:'none'}} onChange={e=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; procesarRespaldoSII(f) }}/>
               {impOpen&&<>
                 <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
                 <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
-                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['SII',()=>setSiiOpen(true)]].map(([l,fn])=>(
+                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['SII',()=>setSiiOpen(true)],[procResp?'Generando…':'Respaldo PDF',()=>respaldoRef.current&&respaldoRef.current.click()]].map(([l,fn])=>(
                     <div key={l} onClick={()=>{setImpOpen(false);fn()}} style={{padding:'10px 14px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{l}</div>
                   ))}
                 </div>
@@ -11200,6 +11225,95 @@ async function driveToken(){
 //    (agregar a supabase.js cuando esté habilitado en Google Cloud Console). Sin ese scope,
 //    la API devuelve 403 y el modal cae al fallback de Gmail compose (sin adjunto). ──
 // PDF de la rendición (jsPDF) → base64 sin el prefijo dataURL
+// ── Representación impresa (PDF) de una factura electrónica desde su DTE XML (diseño validado) ──
+let _bwipP=null
+function _loadBwip(){
+  if(typeof window!=='undefined' && window.bwipjs) return Promise.resolve(window.bwipjs)
+  if(_bwipP) return _bwipP
+  _bwipP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/bwip-js@4.5.1/dist/bwip-js-min.js'; s.onload=()=>res(window.bwipjs); s.onerror=()=>rej(new Error('No se pudo cargar bwip-js (PDF417)')); document.head.appendChild(s) })
+  return _bwipP
+}
+// Recibe el string de UN <Documento> (factura exenta tipo 34). Devuelve {base64,folio,rznR,rutR,total}.
+async function facturaDtePdfBase64(docXml){
+  const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
+  const bwip = await _loadBwip()
+  const g=(t,s=docXml)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?m[1].trim():'' }
+  const ted=(docXml.match(/<TED[\s\S]*?<\/TED>/)||[''])[0]
+  const idDoc=(docXml.match(/<IdDoc>[\s\S]*?<\/IdDoc>/)||[''])[0], emi=(docXml.match(/<Emisor>[\s\S]*?<\/Emisor>/)||[''])[0], rec=(docXml.match(/<Receptor>[\s\S]*?<\/Receptor>/)||[''])[0], tot=(docXml.match(/<Totales>[\s\S]*?<\/Totales>/)||[''])[0]
+  const detalles=[...docXml.matchAll(/<Detalle>[\s\S]*?<\/Detalle>/g)].map(m=>m[0])
+  const D={ folio:g('Folio',idDoc), fch:g('FchEmis',idDoc), fma:g('FmaPago',idDoc), rutE:g('RUTEmisor',emi),
+    rutR:g('RUTRecep',rec), rznR:g('RznSocRecep',rec), giroR:g('GiroRecep',rec), dirR:g('DirRecep',rec), cmnaR:g('CmnaRecep',rec), ciuR:g('CiudadRecep',rec),
+    exe:+g('MntExe',tot), total:+g('MntTotal',tot),
+    items:detalles.map(d=>({nmb:g('NmbItem',d), dsc:g('DscItem',d), qty:g('QtyItem',d), prc:+g('PrcItem',d), mnt:+g('MontoItem',d)})) }
+  const fmtRut=r=>{ const a=String(r||'').split('-'); return (a[0]||'').replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(a[1]?'-'+a[1]:'') }
+  const fmtN=n=>(n||0).toLocaleString('es-CL')
+  const MES=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const fchL=iso=>{ const a=String(iso||'').split('-'); return a.length<3?'':`${+a[2]} de ${MES[+a[1]]} de ${a[0]}` }
+  const fma={'1':'Contado','2':'Crédito','3':'Sin costo'}[D.fma]||''
+  const logo=LOGO_FACTURA_B64
+  const NAVY=[0,60,80], GRAF=[61,61,61], MUT=[83,114,129], BORD=[210,216,221], RED=[192,11,11], REDLT=[196,125,125]
+  const cv=document.createElement('canvas'); bwip.toCanvas(cv,{ bcid:'pdf417', text:ted, scale:2, eclevel:5, includetext:false }); const bc=cv.toDataURL('image/png')
+  const p=new jsPDF({unit:'mm',format:'letter',compress:true}); const W=215.9, M=15
+  p.setDrawColor(...BORD); p.setLineWidth(0.4); p.roundedRect(11,12,W-22,261,2.5,2.5)
+  p.addImage(logo,'PNG',M,16,80,20.8)
+  const bw=54, bx=W-M-bw, by=16, bh=32
+  p.setDrawColor(...RED); p.setLineWidth(0.8); p.roundedRect(bx,by,bw,bh,2,2)
+  p.setTextColor(...RED); p.setFont('helvetica','bold')
+  p.setFontSize(11); p.text('R.U.T. '+fmtRut(D.rutE),bx+bw/2,by+6.5,{align:'center'})
+  p.setFontSize(9); p.text('FACTURA NO AFECTA O',bx+bw/2,by+13,{align:'center'}); p.text('EXENTA ELECTRÓNICA',bx+bw/2,by+17,{align:'center'})
+  p.setFontSize(16.5); p.text('N° '+D.folio,bx+bw/2,by+25,{align:'center'})
+  p.setFont('helvetica','normal'); p.setFontSize(6.5); p.setTextColor(...REDLT); p.text('S.I.I. - SANTIAGO ORIENTE',bx+bw/2,by+30,{align:'center'})
+  const fy=by+bh+6; p.setFont('helvetica','normal'); p.setFontSize(8); p.setTextColor(...MUT)
+  p.text('Fecha de emisión:',bx,fy); const flw=p.getTextWidth('Fecha de emisión:  ')
+  p.setFont('helvetica','bold'); p.setTextColor(...GRAF); p.text(fchL(D.fch),bx+flw,fy)
+  let ye=43; p.setFontSize(8.5)
+  const inl=(lab,val,vcol)=>{ p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text(lab,M,ye); const w=p.getTextWidth(lab+'  '); p.setFont('helvetica','normal'); p.setTextColor(...(vcol||GRAF)); p.text(val,M+w,ye); ye+=4.7 }
+  inl('Giro:','Prestación de servicios y asesorías profesionales')
+  inl('Dirección:','Cam. Las Hualtatas 4901, C. 11, Lo Barnechea, Santiago')
+  p.setFontSize(8.5)
+  p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Email:',M,ye); let cx=M+p.getTextWidth('Email:  ')
+  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text('contacto@leabogados.cl',cx,ye); cx+=p.getTextWidth('contacto@leabogados.cl')
+  p.setTextColor(...MUT); p.text('     ·     ',cx,ye); cx+=p.getTextWidth('     ·     ')
+  p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Teléfono:',cx,ye); cx+=p.getTextWidth('Teléfono:  ')
+  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text('+56991556769',cx,ye); ye+=6
+  p.setFont('helvetica','bold'); p.setFontSize(9); p.setTextColor(...NAVY); p.text('VENTA DEL GIRO',M,ye)
+  p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,ye+5,W-M,ye+5)
+  let y=ye+9; const rh=32
+  p.setFillColor(247,249,250); p.setDrawColor(...BORD); p.setLineWidth(0.3); p.roundedRect(M,y,W-2*M,rh,1.5,1.5,'FD')
+  p.setFontSize(8.5); const VX=M+30; let yr=y+7
+  const lbl=(t,x,yy)=>{ p.setTextColor(...NAVY); p.setFont('helvetica','bold'); p.text(t,x,yy) }
+  const val=(t,x,yy,mw)=>{ p.setTextColor(...GRAF); p.setFont('helvetica','normal'); p.text(t,x,yy,mw?{maxWidth:mw}:undefined) }
+  lbl('Señor(es):',M+3,yr); val(D.rznR,VX,yr,150); yr+=5.4
+  lbl('R.U.T.:',M+3,yr); val(fmtRut(D.rutR),VX,yr); yr+=5.4
+  lbl('Giro:',M+3,yr); val(D.giroR,VX,yr,150); yr+=5.4
+  lbl('Dirección:',M+3,yr); val(D.dirR,VX,yr,150); yr+=5.4
+  lbl('Comuna:',M+3,yr); val(D.cmnaR,VX,yr); lbl('Ciudad:',M+98,yr); val(D.ciuR,M+114,yr)
+  y+=rh+9
+  p.setFillColor(...NAVY); p.rect(M,y,W-2*M,7.5,'F'); p.setTextColor(255,255,255); p.setFont('helvetica','bold'); p.setFontSize(8)
+  const cD=M+3, cQ=128, cP=158, cV=W-M-3
+  p.text('DESCRIPCIÓN',cD,y+5); p.text('CANT.',cQ,y+5,{align:'center'}); p.text('PRECIO UNIT.',cP,y+5,{align:'right'}); p.text('VALOR',cV,y+5,{align:'right'})
+  y+=7.5
+  D.items.forEach(it=>{ y+=5.5; p.setTextColor(...GRAF); p.setFont('helvetica','bold'); p.setFontSize(8.5); p.text(String(it.nmb||''),cD,y)
+    p.text(String(+it.qty||''),cQ,y,{align:'center'}); p.setFont('helvetica','normal'); p.text(fmtN(it.prc),cP,y,{align:'right'}); p.text(fmtN(it.mnt),cV,y,{align:'right'})
+    if(it.dsc){ p.setFontSize(7.5); p.setTextColor(...MUT); String(it.dsc).split('\n').forEach(l=>{ y+=3.6; p.text(l,cD+1,y) }) } y+=2.5 })
+  p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,y,W-M,y)
+  y+=6; p.setTextColor(...NAVY); p.setFont('helvetica','bold'); p.setFontSize(8.5); p.text('Forma de pago: ',M,y); p.setTextColor(...GRAF); p.setFont('helvetica','normal'); p.text(fma,M+24,y)
+  const ty=240
+  p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,ty-8,W-M,ty-8)
+  p.addImage(bc,'PNG',M,ty,44,15.4)
+  p.setTextColor(...MUT); p.setFont('helvetica','normal'); p.setFontSize(7)
+  p.text('Timbre Electrónico SII',M,ty+19); p.text('Res. 99 de 2014 · Verifique documento: www.sii.cl',M,ty+22.3)
+  p.setFontSize(9); p.setTextColor(...GRAF); p.setFont('helvetica','normal')
+  p.text('Impuesto adicional',138,ty+1); p.text('$ '+fmtN(0),W-M,ty+1,{align:'right'})
+  p.text('Monto exento',138,ty+7.5); p.text('$ '+fmtN(D.exe),W-M,ty+7.5,{align:'right'})
+  p.setDrawColor(...NAVY); p.setLineWidth(0.5); p.line(138,ty+10.5,W-M,ty+10.5)
+  p.setFont('helvetica','bold'); p.setFontSize(12); p.setTextColor(...NAVY); p.text('TOTAL',138,ty+16.5); p.text('$ '+fmtN(D.total),W-M,ty+16.5,{align:'right'})
+  p.setTextColor(...MUT); p.setFontSize(7); p.text('leabogados.cl',W/2,270,{align:'center'})
+  return { base64: p.output('datauristring').split(',')[1], folio:D.folio, rznR:D.rznR, rutR:D.rutR, total:D.total }
+}
+// Parte un SetDTE/EnvioDTE en sus <Documento> individuales.
+function splitSetDTE(xml){ return [...String(xml||'').matchAll(/<Documento[\s\S]*?<\/Documento>/g)].map(m=>m[0]) }
+
 async function rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang='es'){
   const EN = lang==='en'
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
