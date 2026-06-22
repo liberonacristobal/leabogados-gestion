@@ -4636,18 +4636,31 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
     try{
       const xml = await file.text()
       const docs = splitSetDTE(xml)
-      if(!docs.length){ alert('No encontré facturas en ese archivo. Sube el "Archivo Respaldo" (XML) de MIPYME.'); setProcResp(false); return }
-      let n=0
+      if(!docs.length){ alert('No encontré facturas (<DTE>) en ese archivo. Sube el "Archivo Respaldo" (XML) de MIPYME.'); setProcResp(false); return }
+      const token = await driveToken()
+      if(!token){ if(confirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
+      const folders = await driveAdjuntosFolders(token)
+      let adj=0, dup=0, sin=0; const sinList=[]
       for(const d of docs){
+        const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
+        const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioM)
+        if(!b){ sin++; if(folioM) sinList.push(folioM); continue }
         const r = await facturaDtePdfBase64(d)
-        const a = document.createElement('a')
-        a.href = 'data:application/pdf;base64,'+r.base64
-        a.download = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
-        document.body.appendChild(a); a.click(); a.remove()
-        n++; await new Promise(res=>setTimeout(res,350))
+        const fname = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
+        const { data:ex } = await supabase.from('billing_attachments').select('id,name').eq('billing_id',b.id)
+        if((ex||[]).some(a=>a.name===fname || /respaldo SII/i.test(a.uploaded_by||''))){ dup++; continue }
+        const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
+        const fileObj = new File([u8], fname, {type:'application/pdf'})
+        const up = await driveUpload(token, folders.facturas, fileObj, fname)
+        await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:'Respaldo SII' })
+        adj++
       }
-      alert('Generé '+n+' factura(s) PDF — revisa tus descargas.')
-    }catch(e){ alert('Error generando los PDF: '+e.message) }
+      let msg='Respaldo: '+adj+' factura(s) adjuntada(s) a su ficha (Drive)'
+      if(dup) msg+=', '+dup+' ya tenían respaldo'
+      if(sin) msg+=', '+sin+' sin factura en el sistema (folios: '+sinList.slice(0,10).join(', ')+(sinList.length>10?'…':'')+')'
+      alert(msg+'.')
+      onRefresh&&onRefresh()
+    }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ alert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else alert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
   }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
@@ -11587,7 +11600,9 @@ async function driveAdjuntosFolders(token){
   let gastos=localStorage.getItem('drive_folder_gastos')
   if(!tareas){ tareas=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Tareas'); localStorage.setItem('drive_folder_tareas',tareas) }
   if(!gastos){ gastos=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Gastos'); localStorage.setItem('drive_folder_gastos',gastos) }
-  return {tareas,gastos}
+  let facturas=localStorage.getItem('drive_folder_facturas')
+  if(!facturas){ facturas=await driveFindOrCreateFolder(token,ADJUNTOS_ROOT,'Facturas'); localStorage.setItem('drive_folder_facturas',facturas) }
+  return {tareas,gastos,facturas}
 }
 // Sube un File con upload resumable (aguanta 15 MB). Devuelve {id,name,webViewLink}.
 async function driveUpload(token, folderId, file, name){

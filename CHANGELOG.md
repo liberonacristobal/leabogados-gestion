@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-21 — Facturación: respaldo PDF adjuntado por folio (Etapa 2)
+- "Respaldo PDF" (menú Importar) ahora casa cada DTE del Archivo Respaldo por FOLIO con su factura (billing.invoice_no), genera la representación impresa y la ADJUNTA a la ficha de la factura en Drive (billing_attachments, carpeta Facturas), con dedupe y reporte (adjuntadas/ya tenían/sin factura). El respaldo PDF queda permanente por factura.
+
 ## 2026-06-21 — Facturación: generador de representación impresa (Etapa 1)
 - Generador en el front de la representación impresa (PDF) de facturas exentas desde el DTE XML: facturaDtePdfBase64 (jsPDF + bwip-js para el PDF417 del TED) + splitSetDTE, con el diseño validado y el logo embebido (src/assets/logoFacturaB64.js). Opción "Respaldo PDF" en el menú Importar de Facturación: sube el Archivo Respaldo (XML) y genera/descarga los PDF. Es la base para casar por folio + adjuntar (Etapa 2) y enviar al cliente (Etapa 3).
 
