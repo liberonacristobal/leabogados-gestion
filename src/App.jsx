@@ -11236,7 +11236,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
         </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
-        {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
+        {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Archivar / eliminar</button>}
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={saving||!f.name?.trim()} onClick={()=>onSave({...f, _rsIni: client?.id?undefined:(rsIni.name?.trim()||rsIni.rut?.trim()?rsIni:undefined)})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!f.name?.trim()?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
@@ -16291,22 +16291,26 @@ export default function App() {
     return data
   },[])
 
+  // Eliminar = ARCHIVAR si tiene movimientos (reversible, sin huérfanos); borrar de verdad solo si el cliente está vacío.
   const handleDeleteClient=useCallback(async(id)=>{
-    if(!confirm('Eliminar este cliente y todos sus datos?')) return
+    const nMov = (sales||[]).filter(s=>String(s.client_id)===String(id)).length
+      + (billing||[]).filter(b=>String(b.client_id)===String(id)).length
+      + (expenses||[]).filter(e=>String(e.client_id)===String(id)).length
+      + (anticipos||[]).filter(a=>String(a.client_id)===String(id)).length
     try{
-      // Salvaguarda: avisar si el cliente tiene facturas emitidas (con folio)
-      const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('client_id',id)
-      const emitidas = (cuotas||[]).filter(b=>b.invoice_no)
-      if(emitidas.length>0 && !confirm(`Este cliente tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar el cliente y TODOS sus datos igual?`)) return
-      // Borrar cuotas y ventas del cliente, luego el cliente
-      await supabase.from('billing').delete().eq('client_id',id)
-      await supabase.from('sales').delete().eq('client_id',id)
-      await dbDeleteClient(id)
-      setClients(p=>p.filter(x=>x.id!==id));setSales(p=>p.filter(s=>s.client_id!==id))
-      setBilling(p=>p.filter(b=>b.client_id!==id));setExpenses(p=>p.filter(e=>e.client_id!==id))
+      if(nMov===0){
+        if(!confirm('Este cliente no tiene movimientos. ¿Eliminarlo definitivamente?')) return
+        await dbDeleteClient(id)
+        setClients(p=>p.filter(x=>x.id!==id))
+      } else {
+        if(!confirm(`Este cliente tiene ${nMov} movimiento(s) entre ventas, facturas, gastos y anticipos.\n\nNo se puede borrar sin dejar datos huérfanos, así que se ARCHIVA: pasa a Terminado y lo reactivas cuando quieras desde el filtro Terminados.\n\n¿Archivar?`)) return
+        const {error} = await supabase.from('clients').update({status:'Terminado',updated_at:new Date().toISOString()}).eq('id',id)
+        if(error) throw error
+        setClients(p=>p.map(x=>String(x.id)===String(id)?{...x,status:'Terminado'}:x))
+      }
       setModal(null)
     }catch(e){alert('Error: '+e.message)}
-  },[])
+  },[sales,billing,expenses,anticipos])
 
   const handleSaveBilling=useCallback(async(f)=>{
     setSaving(true)
