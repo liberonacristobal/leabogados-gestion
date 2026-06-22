@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Integridad: anular/reactivar factura coherente
+- Al **anular** una factura ahora se **liberan los anticipos** consumidos contra ella (vuelven a disponible, billing_id null) — no quedan atados a una factura muerta. Los terceros se mantienen (el proveedor igual trabajó). Al **reactivar** se **infiere el estado real previo** (Pagado / Anticipada / Programada / Pendiente) en vez de forzar Pendiente; texto del confirm actualizado.
+
 ## 2026-06-22 — Integridad: eliminar cliente ahora archiva (reversible)
 - "Eliminar cliente" dejaba huérfanos (expenses/anticipos/terceros/rendiciones/conciliación) y era irreversible. Ahora: si el cliente tiene movimientos (ventas/facturas/gastos/anticipos) se **ARCHIVA** (status Terminado, reactivable desde el filtro Terminados); solo se borra de verdad si está completamente vacío. Botón del formulario: "Archivar / eliminar".
 
