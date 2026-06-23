@@ -10167,7 +10167,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   </div>)
 }
 
-function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar, onAssignSeries, onStatusChange}) {
+function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar, onAssignSeries, onStatusChange, onOpenSale}) {
   // Cockpit de facturas: TODAS las del cliente — buscador + tabs por año + agrupación Proyecto → Razón social → Factura con orden por fecha.
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
@@ -10370,7 +10370,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
               return (
                 <div key={sid} style={{border:`1px solid ${pen>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
                   <div onClick={()=>toggleProj(String(sid))} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s?.title||'Proyecto'} {open?'▾':'▸'}</span><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{cuotasCob}/{rows.length} cobradas</span></div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s?.title||'Proyecto'} {open?'▾':'▸'}</span><span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>{s&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(s)}} title='Abrir la venta' style={{fontSize:10,color:C.accent,fontWeight:700,cursor:'pointer'}}>ver venta ↗</span>}<span style={{fontSize:10,color:C.muted}}>{cuotasCob}/{rows.length} cobradas</span></span></div>
                     <div style={{fontSize:10,color:C.muted,marginTop:3}}>Facturado {fmt(fac)} · Cobrado {fmt(cob)} · <b style={{color:pen>0?C.soon:C.muted}}>Pendiente {fmt(pen)}</b></div>
                     <div style={{height:4,background:C.border,borderRadius:2,marginTop:6,overflow:'hidden'}}><div style={{height:'100%',width:`${fac>0?Math.min(100,Math.round(cob/fac*100)):0}%`,background:C.normal,borderRadius:2}}/></div>
                   </div>
@@ -11122,7 +11122,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
-      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange}/>}
+      {ftab==='financiero'&&<FinancieroTab client={client} clientBilling={clientBilling} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} billing={billing} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(client)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(client)} onConciliar={()=>onConciliar&&onConciliar(client)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange} onOpenSale={onOpenSale}/>}
       {ftab==='documentos'&&<EstadoCuentaTab client={client} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===client.id)} expenses={expenses} clientEntities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onOpenConciliacion={onOpenConciliacion} onAjuste={onAjuste}/>}
       {emailRend&&<RendicionEmailModal r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onClose={()=>setEmailRend(null)}/>}
     </div>
