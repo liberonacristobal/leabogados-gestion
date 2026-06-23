@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Ficha Financiero: fila de factura redibujada
+- Cada factura muestra **fecha día-grande**, **se quita el botón Pagar** (no más pagos manuales; solo por conciliación) y queda **solo Recordar (verde)**. Toggle de orden por fecha **↓ Nueva / ↑ Antigua** (default nueva). Una factura **Pagada y conciliada es clickeable** → despliega el **movimiento bancario** (fecha, monto, N° operación, glosa) + "Ver en conciliación →". FinancieroTab carga `conciliacion` + `cartola_movimientos` del cliente para esto.
+
 ## 2026-06-22 — Ficha Financiero: Proyecto → Razón social → Factura
 - El cockpit del Financiero pasa de agrupar **RS → Proyecto** (por `sale.entity_id`) a **Proyecto → Razón social → Factura** (la RS sale del `entity_id` de cada factura, con respaldo en `receptor_rut` cuando viene null). Así un proyecto que se factura a **varias razones sociales** (ej. Donaciones a 3 RUT) aparece en **un solo bloque**, con sub-grupos por RS. La **RS con deuda se abre primero** (las al día, plegadas), los **proyectos con pendiente van arriba**, y las facturas se ordenan **nueva→antigua** (toggle Fecha/N°). Para proyectos de una sola RS no se muestra sub-encabezado (lista directa). Además, **"Asignar a proyecto"** ahora ofrece **todos los proyectos del cliente** (no solo los del mismo año de la factura).
 
