@@ -15862,8 +15862,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     <span style={{fontSize:10,fontWeight:700,color:C.azulInfo,background:C.azulBg,borderRadius:20,padding:'2px 9px'}}>→ Costo de oficina · {ge.category||'—'} · {fmtM(gc.monto_aplicado)}</span>
                     <button disabled={busy===m.id} onClick={()=>deshacer(m)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:busy===m.id?'default':'pointer'}}>Deshacer</button></div>)
                   if((concByMov[m.id]||[]).length) return null
-                  if(ofiFor!==m.id) return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                    <button onClick={()=>{setGcFor(null);setOfiFor(m.id)}} title='Costo operativo de la firma (arriendo, contadora, servicios…); no es de un cliente' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>Costo de oficina…</button></div>)
+                  if(ofiFor!==m.id){
+                    const NO_OFI=['Socio','Proveedor','Notaría','Devolución','Cliente','Gastos Oficina']   // etiquetas que NO son costo de oficina (o son genéricas → piden categoría específica)
+                    const catYa = m.categoria && !NO_OFI.includes(m.categoria) && !CATS_LEGALES.includes(String(m.categoria).trim().toLowerCase())   // ya marcado con una categoría de oficina (Contadora, Impuestos, Equipo…) → un toque la registra, sin volver a preguntar
+                    return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+                      <button disabled={busy===m.id} onClick={()=> catYa ? costoOficina(m,m.categoria) : (setGcFor(null),setOfiFor(m.id))} title={catYa?`Registrar como costo de oficina · ${m.categoria}`:'Costo operativo de la firma (arriendo, contadora, servicios…); no es de un cliente'} style={{fontSize:10,fontWeight:catYa?700:600,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{catYa?`→ Costo de oficina · ${m.categoria}`:'Costo de oficina…'}</button></div>)
+                  }
                   const monto=(m.monto||0)-(m.monto_conciliado||0)
                   return (<div style={{marginTop:6,padding:'8px 9px',background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8}} onClick={e=>e.stopPropagation()}>
                     <div style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginBottom:6}}>Costo de oficina · {fmtM(monto)} — elige categoría:</div>
