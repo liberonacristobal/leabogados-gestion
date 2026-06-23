@@ -127,17 +127,19 @@ function parseCuota(concept){
   return ''
 }
 // Al cargar/emitir una factura: si existe EXACTAMENTE UNA programada equivalente del mismo cliente,
-// mismo monto y con vencimiento <= la emisión, se elimina para no duplicar en "Por facturar".
-// Criterio conservador: si hay 0 o >1 candidatas, no toca nada (queda el botón manual "Ya emitida").
+// monto con TOLERANCIA (±5%) y vencimiento dentro de la ventana, se elimina para no duplicar en "Por facturar".
+// La tolerancia es clave para las recurrentes en UF: la programada se genera al UF de la venta y la factura
+// real se emite al UF del mes → casi nunca calzan al peso. Sin tolerancia, cada mes quedaba un duplicado.
+// Criterio conservador: si hay 0 o >1 candidatas (empate temporal), no toca nada (queda el botón manual "Ya emitida").
 async function reconcileProgramada(clientId, amount, issuedAt){
   try{
-    if(!clientId || !amount) return
-    const {data} = await supabase.from('billing').select('id,due').eq('client_id',clientId).eq('amount',amount).eq('status','Programada')
+    if(!clientId || !amount || !issuedAt) return
+    const {data} = await supabase.from('billing').select('id,due,amount').eq('client_id',clientId).eq('status','Programada')
     if(!data || !data.length) return
-    // Solo cuotas con due dentro de ±45 días de la emisión: evita borrar una programada lejana
-    // de otra venta del mismo cliente que casualmente tiene el mismo monto.
-    if(!issuedAt) return
-    const cands = data.filter(b=>b.due && Math.abs(new Date(b.due)-new Date(issuedAt))/86400000 <= 45)
+    // Monto con tolerancia ±5% (piso $1.000) + due dentro de ±45 días de la emisión: evita borrar una programada
+    // lejana de otra venta del mismo cliente. La ventana temporal + el candado de empate hacen seguro el match difuso.
+    const tol = Math.max(amount*0.05, 1000)
+    const cands = data.filter(b=> b.due && Math.abs((b.amount||0)-amount) <= tol && Math.abs(new Date(b.due)-new Date(issuedAt))/86400000 <= 45)
       .map(b=>({...b, d:Math.abs(new Date(b.due)-new Date(issuedAt))/86400000})).sort((a,b)=>a.d-b.d)
     if(!cands.length) return
     // Empate temporal: si dos candidatas quedan casi igual de cerca (±7 días), es ambiguo → no tocar nada (queda el botón manual "Ya emitida").
