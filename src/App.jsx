@@ -10167,7 +10167,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
 }
 
 function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onConciliar, onAssignSeries, onStatusChange}) {
-  // Cockpit de facturas: TODAS las del cliente, con buscar + filtros combinables (proyecto=venta, estado, año).
+  // Cockpit de facturas: TODAS las del cliente — buscador + tabs por año + agrupación Proyecto → Razón social → Factura con orden por fecha.
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
   const real = all.filter(b=>b.billing_type!=='reembolso')
@@ -10185,9 +10185,6 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const projCounts = {}; all.forEach(b=>{ const k=b.sale_id?String(b.sale_id):'sin'; projCounts[k]=(projCounts[k]||0)+1 })
 
   const [q,setQ] = useState('')
-  const [fProj,setFProj] = useState('all')      // 'all' | sale_id | 'sin'
-  const [fEstado,setFEstado] = useState('all')  // 'all' | 'Programada' | 'porcobrar' | 'Pagado' | 'Anulada'
-  const [fAnio,setFAnio] = useState('all')
   // Jerarquía Año → Proyecto → Factura (cockpit v2). Año sincronizado con Facturación (localStorage 'fac_year').
   const pickYear = () => { try{ const g=localStorage.getItem('fac_year'); if(g && aniosList.includes(g)) return g }catch(e){} return aniosList[0]||'' }
   const [selYear,setSelYear] = useState(pickYear)
@@ -10237,20 +10234,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     else onStatusChange&&onStatusChange(b.id, b.status, undefined, {paid_amount: ya+monto})
   }
 
-  const matchEstado = b => fEstado==='all' ? b.status!=='Anulada' : fEstado==='porcobrar' ? ['Pendiente','Vencido'].includes(b.status) : b.status===fEstado
-  const facturas = all.filter(b=>{
-    if(fProj!=='all'){ if(fProj==='sin'){ if(b.sale_id) return false } else if(String(b.sale_id)!==String(fProj)) return false }
-    if(!matchEstado(b)) return false
-    if(fAnio!=='all' && anioDe(b)!==fAnio) return false
-    if(q.trim()){ const s=q.toLowerCase().trim(); const hay=`${b.concept||''} ${folioN(b.invoice_no)} ${b.amount||''} ${fmtFechaDMY(kpiDate(b))} ${saleTitle(b.sale_id)||''}`.toLowerCase(); if(!hay.includes(s)) return false }
-    return true
-  }).sort((a,b)=>(kpiDate(b)||'').localeCompare(kpiDate(a)||''))
-
-  const STAT = {'Pagado':C.normal,'Pendiente':C.soon,'Vencido':C.overdue,'Programada':C.muted,'Anticipada':C.accent,'Anulada':C.muted,'Propuesta':C.muted}
   const borde = b => b.status==='Pagado'?C.normal : b.status==='Vencido'?C.overdue : ['Pendiente'].includes(b.status)?C.soon : b.status==='Anticipada'?C.accent : C.muted
-  const estChip = (key,label,n) => (
-    <span onClick={()=>setFEstado(key)} style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',cursor:'pointer',border:`1px solid ${fEstado===key?C.accent:C.border}`,background:fEstado===key?C.azulBg:'#fff',color:fEstado===key?C.accent:C.muted}}>{label}{n!=null?` ${n}`:''}</span>
-  )
 
   const fields = ['abogado_responsable','notas_internas']
   const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
