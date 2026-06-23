@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Ficha Financiero: Proyecto → Razón social → Factura
+- El cockpit del Financiero pasa de agrupar **RS → Proyecto** (por `sale.entity_id`) a **Proyecto → Razón social → Factura** (la RS sale del `entity_id` de cada factura, con respaldo en `receptor_rut` cuando viene null). Así un proyecto que se factura a **varias razones sociales** (ej. Donaciones a 3 RUT) aparece en **un solo bloque**, con sub-grupos por RS. La **RS con deuda se abre primero** (las al día, plegadas), los **proyectos con pendiente van arriba**, y las facturas se ordenan **nueva→antigua** (toggle Fecha/N°). Para proyectos de una sola RS no se muestra sub-encabezado (lista directa). Además, **"Asignar a proyecto"** ahora ofrece **todos los proyectos del cliente** (no solo los del mismo año de la factura).
+
 ## 2026-06-22 — Detalle de factura al tocarla (Conciliación + Facturación)
 - **Conciliación:** al tocar una factura en "Facturas por cobrar del cliente" se despliega su ficha enriquecida: estado unificado, concepto, razón social, emisión/vencimiento, monto/saldo, y **respaldo bancario** (cuánto del banco la respalda + fecha y monto del/los movimiento(s) que la conciliaron, o "sin movimiento — marcada a mano").
 - **Facturación:** al expandir una factura, además de las acciones ahora muestra su ficha (concepto, RS, emisión/vence/pagada, monto/saldo) y el **respaldo banco** (monto conciliado o "sin movimiento — marcada a mano").
