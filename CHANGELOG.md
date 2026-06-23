@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Estado de factura unificado (pago + conciliación)
+- Reemplaza el ambiguo **"Pagada"** por un estado que dice **pago Y conciliación a la vez**: **Pagada y conciliada** · **Pagada · parcial · falta $X** · **Pagada sin conciliar** · **Pagada (histórica)** · **Pagada · pendiente cartola** · **Sin pago**. Fuente única (`facturaRespaldo` + `estadoFacturaLabel`). Aplicado en **Conciliación** (lista "Facturas por cobrar del cliente" + detalles de factura), **Facturación** y **ficha → Financiero** (el badge se renombró a la misma taxonomía). Mata el "Pagada" que no decía qué lo respaldaba.
+
 ## 2026-06-22 — Badge colores + fusión de anticipos con detalle comparativo
 - Badge de respaldo: **Verificada en banco** pasa a **azul** (cuadra con el chip de Anticipos), **Pendiente conciliar → Próxima Cartola** a **verde**.
 - **Fusionar anticipos duplicados**: en vez de un `confirm` a ciegas, ahora abre un **modal comparativo** (`FusionAnticiposModal`) — muestra los dos lado a lado (*Se conserva* el verificado en banco / *Se elimina* el manual, con monto/fecha/proyecto/RS de cada uno) y el **resultado final** que queda, antes de confirmar.
