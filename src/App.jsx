@@ -9514,9 +9514,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
           <Fld label='Responsables'>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
               {WHO.map(w=>{ const on=(f.assignees||[]).includes(w); const pc=personChip(w); return (
-                <button key={w} onClick={()=>toggleResp(w)} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:on?700:500,padding:'5px 11px 5px 5px',borderRadius:20,border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'#F5F7F9',color:on?pc.color:C.muted,cursor:'pointer'}}>
-                  <span style={{width:22,height:22,borderRadius:'50%',background:pc.color,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[w]||w.slice(0,2).toUpperCase()}</span>{w}
-                </button>
+                <button key={w} onClick={()=>toggleResp(w)} style={{fontSize:12,fontWeight:on?700:500,padding:'5px 13px',borderRadius:20,border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted,cursor:'pointer'}}>{w}</button>
               )})}
             </div>
           </Fld>
