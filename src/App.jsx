@@ -16098,19 +16098,20 @@ export default function App() {
           })
         }
       }
-      // A) Venta NUEVA: crear las cuotas directamente
-      if(cobros&&cobros.length>0&&!f.id){
+      // REGLA: una PROPUESTA nunca genera facturación; solo una venta ACEPTADA (status 'Activo') crea programadas.
+      // A) Venta NUEVA: crear las cuotas directamente — solo si nace Activa
+      if(cobros&&cobros.length>0&&!f.id&&data.status==='Activo'){
         await insertarCuotas()
       }
-      // A2) Propuesta/Borrador editada o activada: regenerar las cuotas (todas son Programadas sin emitir → reemplazo seguro, sin confirmación)
+      // A2) Propuesta/Borrador editada o activada: se LIMPIAN las programadas previas; se REGENERAN solo si quedó Activa (al activar). Si sigue Propuesta, quedan sin cuotas.
       if(f.id&&_regenProg){
         const {data:actuales}=await supabase.from('billing').select('id,invoice_no,status,billing_type').eq('sale_id',data.id)
         const aBorrar=(actuales||[]).filter(b=>b.status==='Programada'&&!b.invoice_no&&b.billing_type!=='reembolso')
         if(aBorrar.length) await supabase.from('billing').delete().in('id',aBorrar.map(b=>b.id))
-        if(cobros&&cobros.length>0) await insertarCuotas()
+        if(cobros&&cobros.length>0&&data.status==='Activo') await insertarCuotas()
       }
-      // B) Venta EDITADA con "Actualizar forma de pago": regeneración segura
-      if(f.id&&_actualizarPago&&cobros&&cobros.length>0){
+      // B) Venta EDITADA con "Actualizar forma de pago": regeneración segura — solo en ventas Activas
+      if(f.id&&_actualizarPago&&cobros&&cobros.length>0&&data.status==='Activo'){
         const {data:actuales} = await supabase.from('billing').select('id,invoice_no,status,amount').eq('sale_id',data.id)
         const programadas = (actuales||[]).filter(b=>b.status==='Programada'&&!b.invoice_no)
         const conservadas = (actuales||[]).filter(b=>!(b.status==='Programada'&&!b.invoice_no))
