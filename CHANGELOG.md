@@ -1,5 +1,6 @@
 # Changelog
 
+- 2026-06-23 — Conciliar facturas: rediseño a estructura colapsable (4 categorías → grupos por cliente → ítem que se Revisa/despliega). Tarjetas conserva/elimina, Opción A (checkbox + barra: asignar todas o de a una) en Sin proyecto, taxonomía única de estados, día grande, orden por fecha, todo tocable (cliente→ficha, factura→detalle). Misma lógica de detección.
 - 2026-06-23 — Reglas: se incorporan a CLAUDE.md como permanentes el cross-linking/nada-rígido (nombre de cliente → ficha en toda vista; factura→venta, movimiento→factura, anticipo→cuotas, KPI→lista), el refuerzo de fuente única de fórmulas (no .reduce inline; excluir no_descuenta_saldo/paid_by_client) y la migración gradual de hex sueltos a tokens de C (+ agregar grises faltantes).
 - 2026-06-22 — Costos de Oficina: categorías editables que aprenden (Pieza 1), panel mensual por categoría con neto costos−recuperos (Pieza 2) y hook en conciliación: un cargo se registra como costo de oficina con categoría, al cliente interno, reversible (Pieza 3). Además: una propuesta ya nunca genera facturación (solo al aceptarse).
 ## 2026-06-22 — Conciliación: ver TODAS las facturas del cliente + liberar calce
