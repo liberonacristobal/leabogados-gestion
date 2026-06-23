@@ -10309,8 +10309,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     <div style={{height:4,background:C.border,borderRadius:2,marginTop:6,overflow:'hidden'}}><div style={{height:'100%',width:`${fac>0?Math.min(100,Math.round(cob/fac*100)):0}%`,background:C.normal,borderRadius:2}}/></div>
                   </div>
                   {open&&<div style={{padding:'0 11px 9px'}}>{(()=>{
-                    const rsKeyOf=b=> b.entity_id?('e:'+b.entity_id):(b.receptor_rut?('r:'+b.receptor_rut):'sin')
-                    const rsNameOf=b=>{ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e) return e.name+(e.rut?(' · '+e.rut):''); return b.receptor_name?(b.receptor_name+(b.receptor_rut?(' · '+b.receptor_rut):'')):'Sin razón social' }
+                    const rutOf=b=>{ if(b.entity_id){ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e&&e.rut) return String(e.rut).trim() } return String(b.receptor_rut||'').trim() }
+                    const rsKeyOf=b=>{ const r=rutOf(b); return r?('rut:'+r):(b.receptor_name?('n:'+String(b.receptor_name).trim().toLowerCase()):'sin') }
+                    const rsNameOf=b=>{ const r=rutOf(b); const e=entities.find(x=>String(x.id)===String(b.entity_id))||entities.find(x=>x.rut&&String(x.rut).trim()===r); if(e) return e.name+(e.rut?(' · '+e.rut):''); return b.receptor_name?(b.receptor_name+(r?(' · '+r):'')):'Sin razón social' }
                     const sortFac=arr=> facSort==='folio'
                       ? [...arr].sort((a,b)=>(folioN(b.invoice_no)||0)-(folioN(a.invoice_no)||0))
                       : [...arr].sort((a,b)=>(kpiDate(b)||'').localeCompare(kpiDate(a)||''))
