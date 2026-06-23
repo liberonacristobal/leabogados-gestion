@@ -10135,6 +10135,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const [selYear,setSelYear] = useState(pickYear)
   const setYearSync = y => { setSelYear(y); try{ localStorage.setItem('fac_year', y||'') }catch(e){} }
   const [openProj,setOpenProj] = useState(()=>new Set())
+  const [subRSOpen,setSubRSOpen] = useState({})   // colapso por RS dentro de un proyecto (key: saleId|rsKey); default abierto si tiene deuda
+  const [facSort,setFacSort] = useState('fecha')   // orden de facturas dentro de cada RS: 'fecha' (nueva→antigua) | 'folio'
   useEffect(()=>{ setSelYear(pickYear()) },[client.id])
   const toggleProj = id => setOpenProj(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Al abrir un año, expandir solo los proyectos con algo vencido (lo accionable visible sin clics).
@@ -10229,8 +10231,14 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar Factura N°, concepto, monto…' style={{flex:1,border:'none',background:'transparent',fontSize:13,color:C.text,outline:'none'}}/>
           {q&&<span onClick={()=>setQ('')} style={{fontSize:14,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>}
         </div>
-        {aniosList.length>0&&<div style={{display:'flex',gap:6,marginBottom:11,overflowX:'auto',scrollbarWidth:'none'}}>
-          {aniosList.map(y=>(<span key={y} onClick={()=>setYearSync(y)} style={{flexShrink:0,fontSize:12,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:selYear===y?C.accent:'#fff',color:selYear===y?'#fff':C.muted,border:`1px solid ${selYear===y?C.accent:C.border}`}}>{y}</span>))}
+        {aniosList.length>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:11}}>
+          <div style={{display:'flex',gap:6,overflowX:'auto',scrollbarWidth:'none'}}>
+            {aniosList.map(y=>(<span key={y} onClick={()=>setYearSync(y)} style={{flexShrink:0,fontSize:12,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:selYear===y?C.accent:'#fff',color:selYear===y?'#fff':C.muted,border:`1px solid ${selYear===y?C.accent:C.border}`}}>{y}</span>))}
+          </div>
+          <div style={{display:'flex',gap:5,alignItems:'center',flexShrink:0,fontSize:10}}>
+            <span style={{color:C.done}}>Ordenar</span>
+            {[['fecha','Fecha'],['folio','N°']].map(([v,l])=><span key={v} onClick={()=>setFacSort(v)} style={{fontWeight:facSort===v?700:600,color:facSort===v?C.accent:C.muted,cursor:'pointer'}}>{l}</span>)}
+          </div>
         </div>}
         {(()=>{
           if(!aniosList.length) return <div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Este cliente no tiene facturas todavía.</div>
@@ -10244,10 +10252,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const money = (rows,fn)=>rows.filter(fn).reduce((a,b)=>a+(b.amount||0),0)
           const lblFolio = b => b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:(b.concept||'—')
           const renderFactura = (b,assignable)=>{
-            // Solo se puede asignar a ventas del MISMO año de emisión de la factura (no cruzar años).
-            const fy = (b.issued_at||b.due||'').slice(0,4)
-            const ventasYear = clientSales.filter(s=>String(s.year)===fy)
-            const sug = assignable?sugSaleFor(b,ventasYear):null
+            // Asignable a CUALQUIER proyecto del cliente (un proyecto puede cruzar años y razones sociales).
+            const ventasAsig = clientSales
+            const sug = assignable?sugSaleFor(b,ventasAsig):null
             return (
               <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${borde(b)}`,borderRadius:'0 8px 8px 0',padding:'8px 10px',marginBottom:5}}>
                 <div onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
@@ -10268,12 +10275,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                 </div>}
                 {assignable&&<div style={{display:'flex',gap:6,alignItems:'center',marginTop:7,flexWrap:'wrap'}}>
                   {sug&&<button onClick={()=>onAssignSeries&&onAssignSeries(sug.id,[b.id])} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'3px 10px',fontWeight:600,cursor:'pointer'}}>✦ {sug.title}</button>}
-                  {ventasYear.length>0
+                  {ventasAsig.length>0
                     ? <select defaultValue='' onChange={e=>{ if(e.target.value&&onAssignSeries) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:10,padding:'3px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}>
                         <option value=''>+ Asignar a proyecto…</option>
-                        {ventasYear.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+                        {ventasAsig.map(s=><option key={s.id} value={s.id}>{s.title}{s.year?` · ${s.year}`:''}</option>)}
                       </select>
-                    : <span style={{fontSize:10,color:C.muted}}>No hay venta de {fy||'ese año'} para este cliente</span>}
+                    : <span style={{fontSize:10,color:C.muted}}>Este cliente no tiene proyectos</span>}
                 </div>}
               </div>
             )
@@ -10286,7 +10293,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
             const sub=(label,arr)=>arr.length?<><div key={label} style={{fontSize:8,color:C.muted,textTransform:'uppercase',fontWeight:700,letterSpacing:.4,margin:'7px 0 4px'}}>{label}</div>{arr.map(b=>renderFactura(b,false))}</>:null
             return <>{sub('Pendientes / vencidas',pend)}{sub('Programadas',prog)}{sub('Pagadas',pag)}{otros.map(b=>renderFactura(b,false))}</>
           }
-          const saleIds = Object.keys(bySale).sort((a,b)=>(saleTitle(a)||'').localeCompare(saleTitle(b)||'','es'))
+          const saleIds = Object.keys(bySale).sort((a,b)=>{ const pa=bySale[a].some(x=>['Pendiente','Vencido'].includes(x.status))?1:0; const pb=bySale[b].some(x=>['Pendiente','Vencido'].includes(x.status))?1:0; return pb-pa || (saleTitle(a)||'').localeCompare(saleTitle(b)||'','es') })
           const nada = !saleIds.length && !container.length && !sinP.length
           return (<>
             {nada&&<div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Sin facturas en {selYear}{q?' con esa búsqueda':''}.</div>}
@@ -10301,19 +10308,28 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     <div style={{fontSize:10,color:C.muted,marginTop:3}}>Facturado {fmt(fac)} · Cobrado {fmt(cob)} · <b style={{color:pen>0?C.soon:C.muted}}>Pendiente {fmt(pen)}</b></div>
                     <div style={{height:4,background:C.border,borderRadius:2,marginTop:6,overflow:'hidden'}}><div style={{height:'100%',width:`${fac>0?Math.min(100,Math.round(cob/fac*100)):0}%`,background:C.normal,borderRadius:2}}/></div>
                   </div>
-                  {open&&<div style={{padding:'0 11px 9px'}}>{renderGroupRows(rows)}</div>}
+                  {open&&<div style={{padding:'0 11px 9px'}}>{(()=>{
+                    const rsKeyOf=b=> b.entity_id?('e:'+b.entity_id):(b.receptor_rut?('r:'+b.receptor_rut):'sin')
+                    const rsNameOf=b=>{ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e) return e.name+(e.rut?(' · '+e.rut):''); return b.receptor_name?(b.receptor_name+(b.receptor_rut?(' · '+b.receptor_rut):'')):'Sin razón social' }
+                    const sortFac=arr=> facSort==='folio'
+                      ? [...arr].sort((a,b)=>(folioN(b.invoice_no)||0)-(folioN(a.invoice_no)||0))
+                      : [...arr].sort((a,b)=>(kpiDate(b)||'').localeCompare(kpiDate(a)||''))
+                    const gmap={}; rows.forEach(b=>{ const k=rsKeyOf(b); (gmap[k]=gmap[k]||{name:rsNameOf(b),facs:[]}).facs.push(b) })
+                    const grps=Object.entries(gmap).map(([k,g])=>{ const pend=g.facs.reduce((s,b)=>s+(['Pendiente','Vencido'].includes(b.status)?Math.max(0,(b.amount||0)-(b.paid_amount||0)):0),0); const cob=g.facs.filter(b=>['Pagado','Anticipada'].includes(b.status)).length; return {k,name:g.name,facs:g.facs,pend,cob,total:g.facs.length} })
+                    if(grps.length<=1) return sortFac(rows).map(b=>renderFactura(b,false))
+                    grps.sort((a,b)=> (b.pend>0?1:0)-(a.pend>0?1:0) || (b.pend-a.pend) || a.name.localeCompare(b.name,'es'))
+                    return grps.map(g=>{ const key=String(sid)+'|'+g.k; const so=(key in subRSOpen)?subRSOpen[key]:(g.pend>0); return (
+                      <div key={g.k} style={{marginBottom:6}}>
+                        <div onClick={()=>setSubRSOpen(p=>({...p,[key]:!so}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,background:g.pend>0?C.overdueBg:'#F5F7F9',borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>
+                          <span style={{fontSize:11,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name} {so?'▾':'▸'}</span>
+                          <span style={{fontSize:10,fontWeight:600,color:g.pend>0?C.overdueText:C.greenText,flexShrink:0}}>{g.pend>0?`Pendiente ${fmt(g.pend)}`:`${g.cob}/${g.total} pagadas`}</span>
+                        </div>
+                        {so&&<div style={{marginTop:5}}>{sortFac(g.facs).map(b=>renderFactura(b,false))}</div>}
+                      </div>
+                    )})
+                  })()}</div>}
                 </div>
               )
-            }
-            if(entities.length>=2){
-              const sByRS={}; saleIds.forEach(sid=>{ const s2=clientSales.find(x=>String(x.id)===String(sid)); const k=s2&&s2.entity_id?String(s2.entity_id):'sin'; (sByRS[k]=sByRS[k]||[]).push(sid) })
-              const order=[...entities.map(e=>String(e.id)),'sin'].filter(k=>sByRS[k]&&sByRS[k].length)
-              return order.map(k=>{ const ent=entities.find(e=>String(e.id)===k); const rsName=ent?(ent.name+(ent.rut?(' · '+ent.rut):'')):'Sin razón social'; return (
-                <div key={'rs'+k} style={{marginBottom:8}}>
-                  <div style={{background:k==='sin'?'#FFF8E1':C.azulBg,borderRadius:7,padding:'5px 9px',marginBottom:6}}><span style={{fontSize:11,fontWeight:700,color:k==='sin'?C.soonText:C.accent}}>{rsName}</span></div>
-                  {sByRS[k].map(renderProyecto)}
-                </div>
-              )})
             }
             return saleIds.map(renderProyecto)
             })()}
