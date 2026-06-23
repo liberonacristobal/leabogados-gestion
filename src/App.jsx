@@ -14998,7 +14998,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const saldo = saldoFactura(factura)
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
-      if(aplicado<=0){ setBusy(null); return }   // INV-7: monto_aplicado siempre > 0
+      if(aplicado<=0){ setBusy(null); alert(saldo<=0 ? `La Factura N°${folioN(factura.invoice_no)||'—'} ya está conciliada (sin saldo). Usa "Liberar calce" para soltarla y poder reasignar este pago.` : 'Este pago ya quedó completamente conciliado.'); return }   // INV-7: monto_aplicado siempre > 0; avisa por qué no se aplicó
       const manualExtra = Math.max(0, (factura.paid_amount||0) - (aplicadoByFactura[factura.id]||0))  // abono manual fuera de las filas de conciliación: súmalo, no lo reemplaces
       const aplTot = (aplicadoByFactura[factura.id]||0)+aplicado+manualExtra
       const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen, marco_pago:marcaPago(factura,aplTot) }).select().single()
