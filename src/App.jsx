@@ -16043,6 +16043,54 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 }
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
+// Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
+const VIEWS_PALETTE = {
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
+  limited:[['tasks','Tareas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
+}
+function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=[],expenses=[],anticipos=[],recents=[],onSelect}){
+  const [q,setQ]=useState('')
+  const inputRef=useRef(null)
+  useEffect(()=>{ if(open){ setQ(''); const t=setTimeout(()=>{ try{inputRef.current&&inputRef.current.focus()}catch(_){}}, 60); return ()=>clearTimeout(t) } },[open])
+  useEffect(()=>{ if(!open) return; const h=e=>{ if(e.key==='Escape'){ e.preventDefault(); onClose() } }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[open,onClose])
+  if(!open) return null
+  const s=q.trim().toLowerCase(), nz=t=>String(t||'').toLowerCase()
+  const cname=id=>clients.find(c=>String(c.id)===String(id))?.name||''
+  const views=(VIEWS_PALETTE[role]||VIEWS_PALETTE.admin).filter(([id,l])=>!s||nz(l).includes(s))
+  const cli=s?clients.filter(c=>!c.is_internal&&nz(c.name).includes(s)).slice(0,6):[]
+  const fac=s?billing.filter(b=>!b.deleted_at&&b.invoice_no&&(nz(folioN(b.invoice_no)).includes(s)||nz(b.concept).includes(s))).slice(0,6):[]
+  const ven=s?sales.filter(v=>!v.deleted_at&&nz(v.title).includes(s)).slice(0,6):[]
+  const tar=s?tasks.filter(t=>t.status!=='Terminado'&&nz(t.title).includes(s)).slice(0,6):[]
+  const gas=s?expenses.filter(e=>nz(e.concept).includes(s)).slice(0,5):[]
+  const ant=s?(anticipos||[]).filter(a=>nz(a.proyecto).includes(s)||nz(a.nota).includes(s)).slice(0,5):[]
+  const hay=views.length||cli.length||fac.length||ven.length||tar.length||gas.length||ant.length
+  const Hdr=t=><div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',margin:'11px 4px 3px'}}>{t}</div>
+  const Row=({label,sub,right,onClick})=>(<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>{sub&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}</div>
+    {right&&<span style={{fontSize:11,fontWeight:600,color:C.muted,flexShrink:0,whiteSpace:'nowrap'}}>{right}</span>}</div>)
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:200,background:'rgba(20,30,35,0.4)',display:'flex',justifyContent:'center',alignItems:'flex-start',padding:'68px 16px 16px'}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:560,background:'#fff',borderRadius:14,boxShadow:'0 16px 48px rgba(0,0,0,0.22)',overflow:'hidden',maxHeight:'78vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,padding:'12px 14px',borderBottom:`1px solid ${C.border}`}}>
+          <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar o ir a…' style={{flex:1,border:'none',outline:'none',fontSize:15,color:C.text,background:'none'}}/>
+          <span onClick={onClose} style={{fontSize:11,color:C.muted,border:`1px solid ${C.border}`,borderRadius:5,padding:'1px 6px',cursor:'pointer'}}>esc</span>
+        </div>
+        <div style={{overflowY:'auto',padding:'4px 6px 10px'}}>
+          {views.length>0&&<>{Hdr('IR A')}<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'2px 4px'}}>{views.map(([id,l])=><span key={id} onClick={()=>onSelect({type:'view',id,label:l})} style={{fontSize:12,color:C.accent,background:'#F5F7F9',borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>{l}</span>)}</div></>}
+          {!s&&recents.length>0&&<>{Hdr('RECIENTES')}{recents.map((r,i)=><Row key={i} label={r.label} onClick={()=>onSelect(r)}/>)}</>}
+          {cli.length>0&&<>{Hdr('CLIENTES')}{cli.map(c=><Row key={c.id} label={c.name} onClick={()=>onSelect({type:'cliente',id:c.id,label:c.name})}/>)}</>}
+          {fac.length>0&&<>{Hdr('FACTURAS')}{fac.map(b=><Row key={b.id} label={`Factura N°${folioN(b.invoice_no)}`} sub={cname(b.client_id)} right={fmt(b.amount)} onClick={()=>onSelect({type:'factura',id:b.id,label:`Factura N°${folioN(b.invoice_no)}`})}/>)}</>}
+          {ven.length>0&&<>{Hdr('VENTAS')}{ven.map(v=><Row key={v.id} label={v.title||'Venta'} sub={cname(v.client_id)} onClick={()=>onSelect({type:'venta',id:v.id,label:v.title||'Venta'})}/>)}</>}
+          {tar.length>0&&<>{Hdr('TAREAS')}{tar.map(t=><Row key={t.id} label={t.title||'Tarea'} sub={cname(t.client_id)} onClick={()=>onSelect({type:'tarea',id:t.id,label:t.title||'Tarea'})}/>)}</>}
+          {gas.length>0&&<>{Hdr('GASTOS')}{gas.map(e=><Row key={e.id} label={e.concept||'Gasto'} sub={cname(e.client_id)} right={fmt(e.amount)} onClick={()=>onSelect({type:'gasto',id:e.id,label:e.concept||'Gasto'})}/>)}</>}
+          {ant.length>0&&<>{Hdr('ANTICIPOS')}{ant.map(a=><Row key={a.id} label={a.proyecto||'Anticipo'} sub={cname(a.client_id)} right={fmt(a.monto)} onClick={()=>onSelect({type:'anticipo',id:a.id,label:a.proyecto||'Anticipo'})}/>)}</>}
+          {s&&!hay&&<div style={{fontSize:12,color:C.muted,padding:'14px 10px',textAlign:'center'}}>Sin resultados para "{q}"</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
 export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
@@ -16072,9 +16120,23 @@ export default function App() {
   const [modal,setModal]=useState(null)
   const [openFichaId,setOpenFichaId]=useState(null)   // abrir la Ficha→Financiero de un cliente desde otra vista (ej. Facturación)
   const handleOpenClientFicha=useCallback((cid)=>{ if(cid){ setOpenFichaId(cid); setTab('clients') } },[])
+  const recordRecent=useCallback((item)=>{ if(!item||!item.id||item.type==='view') return; setNavRecents(p=>{ const next=[{type:item.type,id:item.id,label:item.label},...p.filter(x=>!(x.type===item.type&&String(x.id)===String(item.id)))].slice(0,6); try{localStorage.setItem('nav_recents',JSON.stringify(next))}catch(_){} return next }) },[])
+  const handlePaletteSelect=(item)=>{
+    setPaletteOpen(false); recordRecent(item)
+    if(item.type==='view'){ setTab(item.id); return }
+    if(item.type==='cliente'){ handleOpenClientFicha(item.id); return }
+    if(item.type==='factura'){ const b=billing.find(x=>String(x.id)===String(item.id)); if(b) setModal({type:'billing',data:b}); else alert('Esa factura ya no está disponible.'); return }
+    if(item.type==='venta'){ const v=sales.find(x=>String(x.id)===String(item.id)); if(v) setModal({type:'sale',data:v}); return }
+    if(item.type==='tarea'){ const t=tasks.find(x=>String(x.id)===String(item.id)); if(t) setModal({type:'task',data:t}); return }
+    if(item.type==='gasto'){ const e=expenses.find(x=>String(x.id)===String(item.id)); if(e) setModal({type:'expenseEdit',data:e}); return }
+    if(item.type==='anticipo'){ const a=(anticipos||[]).find(x=>String(x.id)===String(item.id)); if(a) setAnticipoPanel(a); return }
+  }
+  useEffect(()=>{ const h=e=>{ if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); setPaletteOpen(o=>!o) } }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[])
   const [concFocus,setConcFocus]=useState(null)       // saltar a un movimiento puntual en Conciliación desde el Estado de cuenta del cliente
   const handleOpenConciliacion=useCallback((movId)=>{ setConcFocus(movId||null); setTab('conciliacion') },[])
   const [menuOpen,setMenuOpen]=useState(false)
+  const [paletteOpen,setPaletteOpen]=useState(false)
+  const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
   const [undoToast,setUndoToast]=useState(null)   // {msg, onUndo} — eliminar reversible al toque (soft-delete)
   useEffect(()=>{ if(undoToast){ const t=setTimeout(()=>setUndoToast(null),6000); return ()=>clearTimeout(t) } },[undoToast])
   useEffect(()=>{ const handler=()=>setMenuOpen(false); document.addEventListener('click',handler); return ()=>document.removeEventListener('click',handler) },[])
@@ -17276,6 +17338,9 @@ export default function App() {
                 <span className='fecha-full' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaFull}</span>
                 <span className='fecha-short' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaShort}</span>
                 <div style={{width:1,height:18,background:C.border,flexShrink:0}}/>
+                <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+                </button>
                 <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
                 </button>
@@ -17363,6 +17428,7 @@ export default function App() {
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onClose={()=>setModal(null)}/></Modal>}
+        <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
