@@ -15784,7 +15784,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
                 {sub==='abonos'&&esConciliable(m)&&(()=>{
                   const myConc=concByMov[m.id]||[]; const resto=(m.monto||0)-(m.monto_conciliado||0)
-                  const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=facturasCliente(m.cliente_id)
+                  const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(m.cliente_id)&&b.invoice_no&&(b.billing_type||'')!=='reembolso')
                   const combo=(myConc.length===0&&cands.length===0)?combos(m):null
                   const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
@@ -15867,12 +15867,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         {(()=>{
                           // Estado de cuenta del cliente (siempre visible): agrupado por razón social, montos a la derecha, fila → detalle.
                           const payTms=m.fecha?new Date(m.fecha+'T12:00').getTime():null; const qq=facBuscaQ.trim().toLowerCase()
-                          const facsShow=facsAll.filter(f=> !qq || (`n°${folioN(f.invoice_no)||''} ${f.concept||''} ${f.amount||''}`.toLowerCase().includes(qq))).sort((a,b)=>{ const da=(payTms&&a.issued_at)?Math.abs(payTms-new Date(String(a.issued_at).slice(0,10)+'T12:00').getTime()):9e15; const db=(payTms&&b.issued_at)?Math.abs(payTms-new Date(String(b.issued_at).slice(0,10)+'T12:00').getTime()):9e15; return da-db })
+                          const facsShow=facsAll.filter(f=> !qq || (`n°${folioN(f.invoice_no)||''} ${f.concept||''} ${f.amount||''}`.toLowerCase().includes(qq))).sort((a,b)=>(b.issued_at||'').localeCompare(a.issued_at||''))
                           const grupos={}; facsShow.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
                           return (<div style={{borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
                             {facsAll.length>=8&&<input value={facBuscaQ} onChange={e=>setFacBuscaQ(e.target.value)} onClick={e=>e.stopPropagation()} placeholder='Buscar factura: N°, concepto, monto…' style={{width:'100%',boxSizing:'border-box',fontSize:11,padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,marginBottom:5,outline:'none'}}/>}
-                            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Facturas por cobrar del cliente{facsAll.length?` · ${facsAll.length}`:''}</div>
-                            {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Sin facturas por cobrar — clasifícalo arriba como <b>Saldo a Favor</b> o <b>Fondo por Rendir</b>.</span>}
+                            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Facturas del cliente{facsAll.length?` · ${facsAll.length}`:''} <span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>· nueva→antigua</span></div>
+                            {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Este cliente no tiene facturas emitidas — clasifícalo arriba como <b>Saldo a Favor</b> o <b>Fondo por Rendir</b>.</span>}
                             {Object.entries(grupos).map(([rs,fs])=>(
                               <div key={rs} style={{marginBottom:5}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
@@ -15890,7 +15890,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                       <div>Emisión: {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
                                       <div>Monto: {fmtM(f.amount)} · Saldo: {fmtM(saldoFactura(f))}</div>
                                       {f.status==='Pagado'&&<div>Respaldo banco: <b style={{color:ap>0?C.greenText:C.overdueText}}>{ap>0?`${fmtM(ap)}${ap<(f.amount||0)?` de ${fmtM(f.amount)}`:''}`:'sin movimiento (marcada a mano)'}</b>{movsF.length?` · ${movsF.join(', ')}`:''}</div>}
-                                      <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{marginTop:6,fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:C.accent,color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
+                                      <div style={{display:'flex',gap:8,alignItems:'center',marginTop:6,flexWrap:'wrap'}}>
+                                        <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:C.accent,color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
+                                        {ap>0&&(()=>{ const cr=(conc||[]).find(c=>String(c.factura_id)===String(f.id)&&c.tipo_destino==='factura'); const mm=cr&&(movs||[]).find(x=>String(x.id)===String(cr.movimiento_id)); return mm?<button disabled={busy===m.id} onClick={()=>{ if(confirm(`¿Liberar el calce de la Factura N°${folioN(f.invoice_no)}? El pago vuelve a "por conciliar" para reasignarlo.`)){ setDetFor(null); deshacer(mm) } }} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'1px solid #F0997B',background:'#fff',color:C.overdueText,cursor:busy===m.id?'default':'pointer'}}>Liberar calce</button>:null })()}
+                                      </div>
                                     </div>) })()}
                                   </div>) })}
                               </div>

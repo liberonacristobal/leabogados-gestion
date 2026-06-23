@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Conciliación: ver TODAS las facturas del cliente + liberar calce
+- La lista del movimiento ahora muestra **todas las facturas del cliente** (emitidas, no solo las "por cobrar"), ordenadas **nueva→antigua**, con buscador. Así aparecen las pagadas/conciliadas (ej. F273 de Pablo Liberona) para poder revisarlas. En el detalle de una factura **conciliada** se agrega **"Liberar calce"** → deshace el calce y el pago vuelve a "por conciliar" para reasignarlo (corregir asignaciones con error).
+
 ## 2026-06-22 — Ficha Financiero: fila de factura redibujada
 - Cada factura muestra **fecha día-grande**, **se quita el botón Pagar** (no más pagos manuales; solo por conciliación) y queda **solo Recordar (verde)**. Toggle de orden por fecha **↓ Nueva / ↑ Antigua** (default nueva). Una factura **Pagada y conciliada es clickeable** → despliega el **movimiento bancario** (fecha, monto, N° operación, glosa) + "Ver en conciliación →". FinancieroTab carga `conciliacion` + `cartola_movimientos` del cliente para esto.
 
