@@ -15836,11 +15836,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             {Object.entries(grupos).map(([rs,fs])=>(
                               <div key={rs} style={{marginBottom:5}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
-                                {fs.map(f=>{ const open=detFor===f.id; const estCol=f.status==='Pagado'?C.greenText:C.soon; return (
+                                {fs.map(f=>{ const open=detFor===f.id; return (
                                   <div key={f.id}>
                                     <div onClick={()=>setDetFor(open?null:f.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
                                       <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(f.invoice_no)||'—'}</b> · {(f.concept||'sin concepto').slice(0,26)} <span style={{color:C.done}}>· {fmtFechaDMY(f.issued_at)}</span></span>
-                                      <span style={{textAlign:'right'}}><b style={{whiteSpace:'nowrap'}}>{fmtM(f.amount)}</b><br/>{f.status==='Pagado'?(()=>{ const e=facturaRespaldo(f,aplicadoByFactura,cartolaHasta); return <span style={{fontSize:9,fontWeight:600,color:(e&&e.fg)||C.greenText}}>{(e&&e.label)||'Pagada'}</span> })():<span style={{fontSize:9,color:estCol,whiteSpace:'nowrap'}}>saldo {fmtM(saldoFactura(f))}</span>}</span>
+                                      <span style={{textAlign:'right'}}><b style={{whiteSpace:'nowrap'}}>{fmtM(f.amount)}</b><br/>{(()=>{ const e=estadoFacturaLabel(f,aplicadoByFactura[f.id]||0,cartolaHasta); const sld=['Pendiente','Vencido'].includes(f.status); return <span style={{fontSize:9,fontWeight:600,color:(e&&e.fg)||C.muted}}>{(e&&e.label)||f.status}{sld?` · saldo ${fmtM(saldoFactura(f))}`:''}</span> })()}</span>
                                     </div>
                                     {open&&(()=>{ const ap=aplicadoByFactura[f.id]||0; const est=estadoFacturaLabel(f,ap,cartolaHasta); const movsF=(conc||[]).filter(c=>String(c.factura_id)===String(f.id)&&c.tipo_destino==='factura').map(c=>{ const mm=(movs||[]).find(x=>String(x.id)===String(c.movimiento_id)); return mm?`${fmtFechaDMY(mm.fecha)} · ${fmtM(c.monto_aplicado)}`:null }).filter(Boolean); return (
                                     <div style={{padding:'7px 9px 8px',background:'#F5F7F9',borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 4px'}}>
