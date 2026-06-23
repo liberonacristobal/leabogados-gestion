@@ -10275,14 +10275,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
-                      ? <><div style={{fontSize:9,color:C.done}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdueText:C.accent,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
-                      : <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div> })()}
+                      ? <><div style={{fontSize:9,color:C.done}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:C.overdueText,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
+                      : <div style={{fontSize:13,fontWeight:600,color:pend?C.overdueText:C.text}}>{fmt(b.amount)}</div> })()}
+                    {pend&&<button onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer',marginTop:5}}>Recordar</button>}
                   </div>
                 </div>
-                <div style={{marginTop:6,marginLeft:49,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                  {e&&<span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap'}}>{e.label}{conciliada?' ›':''}</span>}
-                  {pend&&<button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>}
-                </div>
+                {e&&<div style={{marginTop:6,marginLeft:49}}><span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap',display:'inline-block'}}>{e.label}{conciliada?' ›':''}</span></div>}
                 {conciliada&&detOpen&&(()=>{ const cs=fConcByFac[b.id]||[]; const mv=fMovById[cs[0]?.movimiento_id]; return (
                   <div style={{marginTop:8,marginLeft:49,background:'#F0F7F4',border:`1px solid #CFE9DD`,borderRadius:8,padding:'8px 10px'}}>
                     <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Movimiento bancario</div>
