@@ -80,12 +80,23 @@ function facturaRespaldo(b, respaldoMap={}, cartolaHasta=null){
   if((b.billing_type||'')==='reembolso') return null
   const monto = b.amount||0
   const aplicado = respaldoMap[b.id]||0
-  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Verificada en banco', bg:C.azulBg, fg:C.accent}
-  if(aplicado>0) return {key:'parcial', label:`Respaldo parcial · falta ${fmt(monto-aplicado)}`, bg:C.ambarBg, fg:C.soonText}
+  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Pagada y conciliada', bg:C.azulBg, fg:C.accent}
+  if(aplicado>0) return {key:'parcial', label:`Pagada · parcial · falta ${fmt(monto-aplicado)}`, bg:C.ambarBg, fg:C.soonText}
   const fechaPago = String(b.paid_at||b.issued_at||'').slice(0,10)
-  if(fechaPago && fechaPago < RESPALDO_CUTOFF) return {key:'manual', label:'Pago manual · anterior a la cartola', bg:C.border, fg:C.grisText}
-  if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pendiente conciliar → Próxima Cartola', bg:C.greenBg, fg:C.greenText}
-  return {key:'sin', label:'Sin conciliación', bg:C.overdueBg, fg:C.overdueText}
+  if(fechaPago && fechaPago < RESPALDO_CUTOFF) return {key:'manual', label:'Pagada (histórica)', bg:C.border, fg:C.grisText}
+  if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pagada · pendiente cartola', bg:C.greenBg, fg:C.greenText}
+  return {key:'sin', label:'Pagada sin conciliar', bg:C.overdueBg, fg:C.overdueText}
+}
+// Estado unificado para mostrar (cualquier status, no solo Pagada) — fuente única del rótulo en Conciliación/Facturación/ficha.
+function estadoFacturaLabel(b, aplicado=0, cartolaHasta=null){
+  if(!b) return null
+  const r = facturaRespaldo(b, {[b.id]:aplicado}, cartolaHasta)
+  if(r) return r
+  if(b.status==='Anulada') return {key:'anulada', label:'Anulada', bg:C.border, fg:C.grisText}
+  if(b.status==='Anticipada') return {key:'anticipada', label:'Anticipada', bg:C.greenBg, fg:C.greenText}
+  if(b.status==='Programada') return {key:'programada', label:'Programada', bg:C.border, fg:C.muted}
+  if(['Pendiente','Vencido'].includes(b.status)) return {key:'sinpago', label:'Sin pago', bg:C.soonBg, fg:C.soonText}
+  return {key:'otro', label:b.status||'', bg:C.border, fg:C.muted}
 }
 function RespaldoBadge({b, respaldoMap, cartolaHasta}){
   const r = facturaRespaldo(b, respaldoMap, cartolaHasta)
@@ -5084,7 +5095,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   {bigDate(kpiDate(b))}
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:anulada?'line-through':'none'}}>{b.concept||'—'}{b.billing_type==='reembolso'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:'#F2E9DE',color:C.soon,fontWeight:600,marginLeft:6}}>Reembolso</span>}{anticipada&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:C.greenBg,color:C.greenText,fontWeight:600,marginLeft:6}}>Anticipada</span>}{tercerosByBilling.has(b.id)&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:10,background:C.azulBg,color:C.accent,fontWeight:600,marginLeft:6}}>Proveedores</span>}</div>
-                    <div style={{fontSize:11,color:C.done,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{prog?'Programada':`Factura N° ${folioN(b.invoice_no)||'—'}`}{pagado?' · Pagada':''}</div>
+                    <div style={{fontSize:11,color:C.done,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{prog?'Programada':`Factura N° ${folioN(b.invoice_no)||'—'}`}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     <div style={{fontSize:15,fontWeight:700,color:(dl!=null&&dl<0&&!pagado&&!anticipada)?C.overdue:C.text,whiteSpace:'nowrap'}}>{fmt(b.amount)}</div>
@@ -14852,6 +14863,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // ─── Motor de conciliación (Fase 2) ───────────────────────────────────────
   // Σ aplicado por factura (de la tabla conciliacion) y conciliaciones por movimiento.
   const aplicadoByFactura = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) }); return m },[conc])
+  const cartolaHasta = useMemo(()=>{ let mx=''; for(const x of (movs||[])){ const f=String(x.fecha||'').slice(0,10); if(f>mx) mx=f } return mx||null },[movs])
   const concByMov = useMemo(()=>{ const m={}; conc.forEach(c=>{ (m[c.movimiento_id]=m[c.movimiento_id]||[]).push(c) }); return m },[conc])
   const saldoFactura = b => Math.max(0,(b.amount||0) - (aplicadoByFactura[b.id]||0))
   // Índice memoizado del pool de calce: facturas con saldo por aplicar (Pendiente|Pagado, no anuladas/borradas, amount−Σconciliado>TOL),
@@ -15637,7 +15649,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   </div>
                   {facObj&&facChip===m.id&&(()=>{ const paid=facObj.status==='Pagado'; return (
                     <div onClick={e=>e.stopPropagation()} style={{marginTop:6,background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 11px'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>Factura N°{folioN(facObj.invoice_no)||'—'}</span>{paid&&<span style={{fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 8px',background:C.greenBg,color:C.greenText}}>Pagada</span>}</div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>Factura N°{folioN(facObj.invoice_no)||'—'}</span>{(()=>{ const e=facturaRespaldo(facObj,aplicadoByFactura,cartolaHasta); return e?<span style={{fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 8px',background:e.bg,color:e.fg,whiteSpace:'nowrap'}}>{e.label}</span>:null })()}</div>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.done}}>Concepto</span><span style={{color:C.text,fontWeight:600,maxWidth:'62%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{facObj.concept||'—'}</span></div>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.done}}>Emisión</span><span style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(facObj.issued_at)}{facObj.due?` · vence ${fmtFechaDMY(facObj.due)}`:''}</span></div>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.done}}>Monto</span><span style={{color:C.text,fontWeight:600}}>{fmtM(facObj.amount)}</span></div>
@@ -15742,7 +15754,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       </div>}
                       {myConc.length>0&&facMyc&&myConc.some(r=>String(r.factura_id)===String(facMyc))&&(()=>{ const f=billing.find(b=>String(b.id)===String(facMyc)); if(!f) return null; const paid=f.status==='Pagado'; return (
                         <div style={{marginBottom:6,background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 11px'}}>
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>Factura N°{folioN(f.invoice_no)||'—'}</span>{paid&&<span style={{fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 8px',background:C.greenBg,color:C.greenText}}>Pagada</span>}</div>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>Factura N°{folioN(f.invoice_no)||'—'}</span>{(()=>{ const e=facturaRespaldo(f,aplicadoByFactura,cartolaHasta); return e?<span style={{fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 8px',background:e.bg,color:e.fg,whiteSpace:'nowrap'}}>{e.label}</span>:null })()}</div>
                           <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.done}}>Concepto</span><span style={{color:C.text,fontWeight:600,maxWidth:'62%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.concept||'—'}</span></div>
                           <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.done}}>Emisión</span><span style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</span></div>
                           <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'2px 0'}}><span style={{color:C.done}}>Monto</span><span style={{color:C.text,fontWeight:600}}>{fmtM(f.amount)}</span></div>
@@ -15821,7 +15833,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                   <div key={f.id}>
                                     <div onClick={()=>setDetFor(open?null:f.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
                                       <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(f.invoice_no)||'—'}</b> · {(f.concept||'sin concepto').slice(0,26)} <span style={{color:C.done}}>· {fmtFechaDMY(f.issued_at)}</span></span>
-                                      <span style={{textAlign:'right',whiteSpace:'nowrap'}}><b>{fmtM(f.amount)}</b><br/><span style={{fontSize:9,color:estCol}}>{f.status==='Pagado'?'Pagada':`saldo ${fmtM(saldoFactura(f))}`}</span></span>
+                                      <span style={{textAlign:'right'}}><b style={{whiteSpace:'nowrap'}}>{fmtM(f.amount)}</b><br/>{f.status==='Pagado'?(()=>{ const e=facturaRespaldo(f,aplicadoByFactura,cartolaHasta); return <span style={{fontSize:9,fontWeight:600,color:(e&&e.fg)||C.greenText}}>{(e&&e.label)||'Pagada'}</span> })():<span style={{fontSize:9,color:estCol,whiteSpace:'nowrap'}}>saldo {fmtM(saldoFactura(f))}</span>}</span>
                                     </div>
                                     {open&&<div style={{padding:'6px 8px 7px',background:'#F5F7F9',borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 4px'}}>
                                       <div>Razón social: <b style={{color:C.text}}>{f.receptor_name||'—'}</b>{f.receptor_rut?` · ${f.receptor_rut}`:''}</div>
