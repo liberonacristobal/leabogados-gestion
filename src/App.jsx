@@ -554,9 +554,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     const effTab = (esResp||ftab==='resumen'||ftab==='contacto') ? ftab : 'resumen'
     const clientBilling = (billing||[]).filter(b=>b.client_id===cl.id)
     const clientExpenses = expenses.filter(e=>e.client_id===cl.id).sort((a,b)=>b.date>a.date?1:-1)
-    const fondos = clientExpenses.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-    const gastos = clientExpenses.filter(e=>e.type!=='fondo'&&!e.no_descuenta_saldo).reduce((a,e)=>a+(e.amount||0),0)
-    const saldo = fondos - gastos
+    const {fondos,gastos,saldo} = fgCliente(expenses, cl.id)   // fuente única (no duplicar la fórmula de saldo inline)
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
     const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':C.greenBg,'Otro':'#F5F7F9'}
@@ -2146,11 +2144,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const iniciales = (name) => (name||'?').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()
   const datosCliente = (c) => {
     const evs = expenses.filter(e=>e.client_id===c.id)
-    const fondos = evs.filter(e=>e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
-    const gastos = evs.filter(e=>e.type==='gasto').reduce((a,e)=>a+(e.amount||0),0)
+    const {fondos,gastos,saldo} = fgCliente(expenses, c.id)   // fuente única: excluye no_descuenta_saldo (antes el saldo del Dashboard contaba gastos históricos → divergía)
     const movs = [...evs].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,3)
     const rs = clientEntities.filter(e=>e.client_id===c.id)
-    return {fondos,gastos,saldo:fondos-gastos,movs,rs}
+    return {fondos,gastos,saldo,movs,rs}
   }
 
   // --- Qué atender hoy: junta lo urgente de todas las áreas, priorizado (determinista). ---
