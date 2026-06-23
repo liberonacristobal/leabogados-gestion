@@ -9743,11 +9743,18 @@ function ContactoTab({client, entities, onSaveFields}) {
 // Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
 // razones sociales, datos de facturación y relación con el estudio (edición inline)
 // Asistente de conciliación: 3 pasos con compuerta humana. (1) duplicados determinista, (2) sin proyecto agrupado por serie con sugerencia, (3) programada↔real por venta+mes+tolerancia. Nada se borra/asigna solo.
-function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, onResolveDup, onAssignSeries, onReplaceProgramada, onReplaceMatch, onClose}) {
+function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=[], clientId=null, respaldoMap=null, cartolaHasta=null, onResolveDup, onAssignSeries, onReplaceProgramada, onReplaceMatch, onEditBilling, onOpenClientFicha, onClose}) {
   const [dismissedMatch,setDismissedMatch] = useState(()=>new Set())   // matches B descartados en esta sesión ("No es match")
   const mes = d => (d||'').slice(0,7)
   // Período: 'todo' (ordenar el histórico) o 'mes' (revisión del mes corriente: emitidas por issued_at, programadas por due).
   const [periodo,setPeriodo] = useState('todo')
+  const [orden,setOrden] = useState('desc')                 // fecha: desc=nueva→antigua
+  const [openCat,setOpenCat] = useState(()=>new Set(['copias','dup']))   // categorías desplegadas
+  const [openCli,setOpenCli] = useState(()=>new Set())      // grupos de cliente desplegados (key: cat|cid)
+  const [expItem,setExpItem] = useState(()=>new Set())      // ítems en modo "Revisar" (detalle)
+  const [sel,setSel] = useState(()=>new Set())              // facturas seleccionadas (opción A) para asignar en lote
+  const fEstado = b => onEditBilling ? estadoFacturaLabel(b,(respaldoMap&&respaldoMap[b.id])||0,cartolaHasta) : null
+  const abrirFac = b => { if(onEditBilling&&b) onEditBilling(b) }
   const curMes = new Date().toISOString().slice(0,7)
   const inPeriodo = b => periodo==='todo' ? true : (b.status==='Programada' ? mes(b.due)===curMes : mes(b.issued_at||b.due)===curMes)
   const act = (scope||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.status!=='Anulado').filter(inPeriodo)
@@ -9875,6 +9882,28 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
     </div>
   )
 
+  // ── Estructura colapsable: categoría → cliente → ítem (Revisar despliega el detalle) ──
+  const toggle = (setter,k) => setter(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
+  const byCli = (items, getCid, getDate) => {
+    const g={}
+    items.forEach((it,i)=>{ const cid=String(getCid(it)); if(!g[cid]) g[cid]={cid,name:cName(getCid(it)),items:[],_d:''}; g[cid].items.push({it,i}); const d=getDate(it)||''; if(d>g[cid]._d) g[cid]._d=d })
+    const arr=Object.values(g)
+    arr.forEach(grp=> grp.items.sort((a,b)=>{ const da=getDate(a.it)||'',db=getDate(b.it)||''; return orden==='desc'?db.localeCompare(da):da.localeCompare(db) }))
+    return arr.sort((a,b)=> orden==='desc'?b._d.localeCompare(a._d):a._d.localeCompare(b._d))
+  }
+  const btnP = {fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 13px',cursor:'pointer'}
+  const btnS = {fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 13px',cursor:'pointer'}
+  const estadoChip = b => { const e=fEstado(b); if(!e) return null; return <span style={{fontSize:9,fontWeight:600,borderRadius:9,padding:'1px 7px',background:e.bg,color:e.fg,whiteSpace:'nowrap',flexShrink:0}}>{e.short||e.label}</span> }
+  const rowConserva = (b,label) => <div onClick={()=>abrirFac(b)} style={{display:'flex',alignItems:'center',gap:8,background:C.greenBg,borderRadius:9,padding:'7px 10px',marginBottom:6,cursor:onEditBilling?'pointer':'default'}}><span style={{color:C.greenText,fontWeight:700,fontSize:13}}>✓</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:9.5,color:C.greenText,fontWeight:600}}>SE CONSERVA</div><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div></div>{estadoChip(b)}{onEditBilling&&<span style={{color:C.muted,fontSize:11}}>↗</span>}</div>
+  const rowElimina = (label,b,tag) => <div onClick={()=>b&&abrirFac(b)} style={{display:'flex',alignItems:'center',gap:8,background:C.overdueBg,borderRadius:9,padding:'7px 10px',marginBottom:8,cursor:onEditBilling&&b?'pointer':'default'}}><span style={{color:C.overdueText,fontWeight:700,fontSize:13}}>✕</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:9.5,color:C.overdueText,fontWeight:600}}>{tag||'SE ELIMINA'}</div><div style={{fontSize:12,color:C.overdueText,textDecoration:'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div></div>{onEditBilling&&b&&<span style={{color:C.muted,fontSize:11}}>↗</span>}</div>
+  const itemHead = (k,fecha,titulo,sub) => <div onClick={()=>toggle(setExpItem,k)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 9px',cursor:'pointer'}}>{bigDate(fecha)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titulo}</div><div style={{fontSize:10,color:C.muted}}>{sub}</div></div><span style={{fontSize:11,color:C.accent,fontWeight:600,flexShrink:0}}>{expItem.has(k)?'▾':'Revisar ▸'}</span></div>
+  const itemBox = (k,inner) => <div key={k} style={{border:`0.5px solid ${C.border}`,borderRadius:9,marginBottom:5,overflow:'hidden'}}>{inner}</div>
+  const renderCopia = (x) => { const k='copia|'+x.g.id; const ex=expItem.has(k); return itemBox(k,<>{itemHead(k,x.g.issued_at||x.g.due,x.g.concept||'—',`${fmt(x.g.amount)} · copia sin folio`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(x.real,`Factura N°${folioN(x.real.invoice_no)} · ${fmt(x.real.amount)}`)}{rowElimina(`copia sin folio · ${fmt(x.g.amount)}`,x.g)}<div style={{display:'flex',gap:8}}><button onClick={()=>onReplaceProgramada&&onReplaceProgramada(x.g.id)} style={btnP}>Eliminar copia</button><button onClick={()=>marcarLegit(x.g.id)} style={btnS}>No es copia</button></div></div>}</>) }
+  const renderDup = (g) => { const keep=g.rows.find(r=>r.id===g.keepId); const drop=g.rows.filter(r=>r.id!==g.keepId); const k='dup|'+g.keepId; const ex=expItem.has(k); const lbl=b=>b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'copia sin folio'; return itemBox(k,<>{itemHead(k,keep.issued_at||keep.due,keep.concept||'—',`${fmt(keep.amount)} · ${g.rows.length} copias`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(keep,`${lbl(keep)} · ${fmt(keep.amount)}`)}{drop.map(d=><span key={d.id}>{rowElimina(`${lbl(d)} · ${fmt(d.amount)}`,d)}</span>)}<div style={{display:'flex',gap:8}}><button onClick={()=>onResolveDup&&onResolveDup(g.keepId,drop.map(r=>r.id))} style={btnP}>Eliminar {drop.length} copia{drop.length!==1?'s':''}</button><button onClick={()=>toggle(setExpItem,k)} style={btnS}>No tocar</button></div></div>}</>) }
+  const renderSerie = (g,i) => { const k='serie|'+i; const ex=expItem.has(k); const eff=g.sug||aiSug[i]; const ia=!g.sug&&aiSug[i]; const ids=g.rows.map(r=>r.id); const selIds=ids.filter(id=>sel.has(id)); const toAssign=selIds.length?selIds:ids; return itemBox(k,<>{itemHead(k,g.rows[0].due||g.rows[0].issued_at,g.rows[0].concept||'—',`${g.rows.length} facturas`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{eff?<div style={{fontSize:10.5,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 9px',marginBottom:8}}>✦ {ia?'(IA) ':''}Sugerida: <b style={{color:C.accent}}>{eff.title}</b></div>:<div style={{fontSize:10.5,color:C.muted,marginBottom:8}}>Elige la venta para estas facturas.</div>}{g.rows.map(r=>{ const on=sel.has(r.id); return (<div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderTop:`0.5px solid ${C.border}`}}><span onClick={()=>toggle(setSel,r.id)} style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',color:'#fff',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>{on?'✓':''}</span>{bigDate(r.due||r.issued_at)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{fmt(r.amount)}</div></div>{estadoChip(r)}{onEditBilling&&<span onClick={()=>abrirFac(r)} style={{color:C.muted,fontSize:11,cursor:'pointer'}}>↗</span>}</div>) })}<div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap',alignItems:'center'}}>{eff&&<button onClick={()=>onAssignSeries&&onAssignSeries(eff.id,toAssign)} style={btnP}>Asignar {selIds.length||g.rows.length} a {eff.title}</button>}{!eff&&<button onClick={()=>sugerirIA(g,i)} disabled={aiBusy===i} style={{...btnS,color:C.accent,background:C.azulBg,border:'none'}}>{aiBusy===i?'Consultando…':'✦ Sugerir con IA'}</button>}<select onChange={e=>{ if(e.target.value) onAssignSeries&&onAssignSeries(e.target.value,toAssign) }} defaultValue='' style={{fontSize:10,padding:'5px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}><option value=''>otra venta…</option>{g.sales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}</select></div></div>}</>) }
+  const renderProg = (m) => { const k='prog|'+m.prog.id; const ex=expItem.has(k); const dif=(m.real.amount||0)-(m.prog.amount||0); return itemBox(k,<>{itemHead(k,m.prog.due||m.prog.issued_at,m.prog.concept||'—',`${fmt(m.prog.amount)} · programada`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(m.real,`${m.real.invoice_no?`Factura N°${folioN(m.real.invoice_no)}`:'emitida'} · ${fmt(m.real.amount)}`)}{rowElimina(`programada · ${fmt(m.prog.amount)}`,null,'SE DA DE BAJA')}<div style={{fontSize:10,color:'#0C447C',background:C.azulBg,borderRadius:7,padding:'5px 8px',marginBottom:8}}>Diferencia {dif>=0?'+':'−'}{fmt(Math.abs(dif))} — por la UF del día.</div><div style={{display:'flex',gap:8}}><button onClick={()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id)} style={btnP}>Reemplazar por la emitida</button><button onClick={()=>setDismissedMatch(p=>new Set([...p,m.prog.id]))} style={btnS}>No es match</button></div></div>}</>) }
+  const catBlock = (key,dot,name,items,getCid,getDate,renderRow) => { if(!items.length) return null; const open=openCat.has(key); return <div key={key} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}><div onClick={()=>toggle(setOpenCat,key)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',cursor:'pointer',background:open?'#F5F7F9':'#fff'}}><span style={{color:C.muted,fontSize:12,width:10}}>{open?'▾':'▸'}</span><span style={{width:7,height:7,borderRadius:'50%',background:dot,flexShrink:0}}/><span style={{flex:1,fontSize:13,fontWeight:500,color:C.text}}>{name}</span><span style={{fontSize:11,color:C.muted}}>{items.length}</span></div>{open&&<div style={{padding:'4px 8px 8px'}}>{byCli(items,getCid,getDate).map(grp=>{ const ck=key+'|'+grp.cid; const co=openCli.has(ck); return (<div key={grp.cid} style={{marginBottom:5}}><div onClick={()=>toggle(setOpenCli,ck)} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 8px',background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,cursor:'pointer'}}><span style={{color:C.muted,fontSize:11,width:9}}>{co?'▾':'▸'}</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.name}</span><span style={{fontSize:10,color:C.muted}}>{grp.items.length}</span>{onOpenClientFicha&&grp.cid&&grp.cid!=='null'&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(grp.cid)}} title='Ver ficha' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer'}}>↗</span>}</div>{co&&<div style={{marginTop:4,paddingLeft:2}}>{grp.items.map(({it,i})=>renderRow(it,i))}</div>}</div>) })}</div>}</div> }
+
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
@@ -9884,80 +9913,20 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientId=null, 
         </button>
       </div>
       <div className='qt-body' style={{display:'flex',flexDirection:'column',gap:18}}>
-        <div style={{display:'flex',gap:6}}>
-          {[['todo','Histórico'],['mes','Mes corriente']].map(([v,l])=>(
-            <span key={v} onClick={()=>setPeriodo(v)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:periodo===v?C.accent:'#fff',color:periodo===v?'#fff':C.muted,border:`1px solid ${periodo===v?C.accent:C.border}`}}>{l}</span>
-          ))}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+          <div style={{display:'flex',gap:6}}>
+            {[['todo','Histórico'],['mes','Mes corriente']].map(([v,l])=>(
+              <span key={v} onClick={()=>setPeriodo(v)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:periodo===v?C.accent:'#fff',color:periodo===v?'#fff':C.muted,border:`1px solid ${periodo===v?C.accent:C.border}`}}>{l}</span>
+            ))}
+          </div>
+          <span style={{fontSize:10,color:C.muted}}>Fecha{[['desc','↓ nueva'],['asc','↑ antigua']].map(([v,l])=><span key={v} onClick={()=>setOrden(v)} style={{cursor:'pointer',marginLeft:6,fontWeight:orden===v?700:400,color:orden===v?C.accent:C.muted}}>{l}</span>)}</span>
         </div>
         {ghosts.length+dupGroups.length+serieGroups.length+progMatches.length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>{periodo==='mes'?'Nada que conciliar este mes.':'Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.'}</div>}
 
-        {ghosts.length>0&&<div>
-          {sect(0,C.overdue,'Pagadas sin folio (posible copia)','determinista',ghosts.length)}
-          {ghosts.map((x,i)=>(
-            <div key={i} style={{background:'#fff',border:`1px solid #F09595`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
-              <div style={{fontSize:13,fontWeight:600}}>{x.g.concept||'—'} · {fmt(x.g.amount)}</div>
-              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(x.g.client_id)} · pagada SIN número. Parece copia de Factura N°{folioN(x.real.invoice_no)} ({fmt(x.real.amount)}){x.razones&&x.razones.length?` — porque: ${x.razones.join(' · ')}`:''}.</div>
-              <div style={{display:'flex',gap:6}}>
-                <button onClick={()=>onReplaceProgramada&&onReplaceProgramada(x.g.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Dar de baja la copia</button>
-                <button onClick={()=>marcarLegit(x.g.id)} style={{fontSize:10,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>No es duplicado</button>
-              </div>
-            </div>
-          ))}
-        </div>}
-
-        {dupGroups.length>0&&<div>
-          {sect(1,C.overdue,'Duplicados','determinista',dupGroups.length+' grupos')}
-          {dupGroups.map((g,i)=>{ const drop=g.rows.filter(r=>r.id!==g.keepId); const keep=g.rows.find(r=>r.id===g.keepId); const lbl=b=>b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'copia sin número'; const keepLbl=lbl(keep); return (
-            <div key={i} style={{background:'#fff',border:`1px solid #F09595`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
-              <div style={{fontSize:13,fontWeight:600}}>{keep.concept||'—'} · {fmt(keep.amount)}</div>
-              <div style={{fontSize:10,color:C.overdue,margin:'2px 0 7px'}}>{cName(keep.client_id)} · {g.rows.length} copias — {g.motivo}. Conservo <b style={{color:C.greenText}}>{keepLbl}</b>{keep.status==='Pagado'?' (pagada)':''}; elimino: {drop.map(lbl).join(', ')}.</div>
-              <button onClick={()=>onResolveDup&&onResolveDup(g.keepId, drop.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Conservar {keepLbl} · eliminar {drop.length}</button>
-            </div>
-          )})}
-        </div>}
-
-        {serieGroups.length>0&&<div>
-          {sect(2,C.soon,'Sin proyecto','✦ IA sugiere',serieGroups.length+' series')}
-          {serieGroups.map((g,i)=>{ const eff=g.sug||aiSug[i]; const ia=!g.sug&&aiSug[i]; return (
-            <div key={i} style={{background:'#fff',border:`1px solid #FAC775`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:13,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.rows[0].concept||'—'}</span><span style={{fontSize:10,background:C.ambarBg,color:C.soonText,borderRadius:10,padding:'1px 8px',fontWeight:600,flexShrink:0,marginLeft:6}}>{g.rows.length} fact.</span></div>
-              <div style={{fontSize:10,color:C.muted,marginBottom:7}}>{cName(g.cid)}{eff?<> · ✦ Sugerida{ia?' (IA)':''}: <b style={{color:C.accent}}>{eff.title}</b></>:' · elige la venta'}</div>
-              {g.sug&&g.razones&&g.razones.length>0&&<div style={{fontSize:10,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'5px 9px',marginBottom:7,lineHeight:1.45}}>Porque: {g.razones.join(' · ')}.</div>}
-              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                {eff&&<button onClick={()=>onAssignSeries&&onAssignSeries(eff.id, g.rows.map(r=>r.id))} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>Asignar las {g.rows.length} a {eff.title}</button>}
-                {!eff&&<button onClick={()=>sugerirIA(g,i)} disabled={aiBusy===i} style={{fontSize:10,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer',opacity:aiBusy===i?.6:1}}>{aiBusy===i?'Consultando…':'✦ Sugerir con IA'}</button>}
-                <select onChange={e=>{ if(e.target.value) onAssignSeries&&onAssignSeries(e.target.value, g.rows.map(r=>r.id)) }} defaultValue='' style={{fontSize:10,padding:'4px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}>
-                  <option value=''>{eff?'otra venta…':'asignar a venta…'}</option>
-                  {g.sales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
-                </select>
-              </div>
-            </div>
-          )})}
-        </div>}
-
-        {(()=>{ const visM=progMatches.filter(m=>!dismissedMatch.has(m.prog.id)); if(!visM.length) return null; return <div>
-          {sect(3,C.accent,'Programada ↔ emitida','venta+mes+UF tolerancia',visM.length)}
-          {visM.map((m,i)=>{
-            const s=(sales||[]).find(x=>String(x.id)===String(m.prog.sale_id)); const ufv=(s&&s.moneda!=='CLP'&&s.uf_value)?s.uf_value:null
-            const ufP=ufv?(m.prog.amount/ufv):null, ufR=ufv?(m.real.amount/ufv):null
-            const dif=(m.real.amount||0)-(m.prog.amount||0)
-            const uf=x=>x.toLocaleString('es-CL',{maximumFractionDigits:2})
-            return (
-            <div key={i} style={{background:'#fff',border:`1px solid #B5D4F4`,borderRadius:10,padding:'10px 12px',marginBottom:7}}>
-              <div style={{fontSize:12,fontWeight:600,marginBottom:7,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.prog.concept||'—'}</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7,marginBottom:8}}>
-                <div style={{background:'#F5F7F9',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 9px'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',fontWeight:700,marginBottom:4}}>Programada</div><div style={{fontSize:11,lineHeight:1.5}}>{ufP?<b>{uf(ufP)} UF</b>:'—'}<br/>{fmt(m.prog.amount)}<br/><span style={{color:C.muted}}>UF estimada</span></div></div>
-                <div style={{background:C.azulBg,border:`1px solid #B5D4F4`,borderRadius:8,padding:'8px 9px'}}><div style={{fontSize:9,color:C.azulInfo,textTransform:'uppercase',fontWeight:700,marginBottom:4}}>Emitida</div><div style={{fontSize:11,lineHeight:1.5}}><b>{m.real.invoice_no?`Factura N°${folioN(m.real.invoice_no)}`:'real'}</b><br/>{ufR?<>{uf(ufR)} UF · </>:''}{fmt(m.real.amount)}<br/><span style={{color:C.muted}}>{m.real.status}</span></div></div>
-              </div>
-              <div style={{fontSize:11,color:'#0C447C',background:C.azulBg,borderRadius:8,padding:'6px 9px',marginBottom:6}}>Diferencia {dif>=0?'+':'−'}{fmt(Math.abs(dif))}{ufv?' — solo por la UF del día (mismas UF)':''}</div>
-              <div style={{fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 9px',marginBottom:8}}>Sugiero el match porque: {m.razones?m.razones.join(' · '):'mismo cliente, mes y monto'}.</div>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                <button onClick={()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id)} style={{fontSize:10,background:C.normal,color:'#fff',border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Aprobar · reemplazar programada</button>
-                <button onClick={()=>setDismissedMatch(p=>new Set([...p,m.prog.id]))} style={{fontSize:10,color:C.overdue,background:'#fff',border:`1px solid #F09595`,borderRadius:8,padding:'4px 11px',fontWeight:600,cursor:'pointer'}}>No es match</button>
-              </div>
-            </div>
-          )})}
-        </div> })()}
+        {catBlock('copias',C.overdue,'Posibles copias',ghosts,x=>x.g.client_id,x=>x.g.issued_at||x.g.due,(it)=>renderCopia(it))}
+        {catBlock('dup',C.overdue,'Facturas duplicadas',dupGroups,g=>g.rows[0].client_id,g=>{const keep=g.rows.find(r=>r.id===g.keepId);return keep?(keep.issued_at||keep.due):''},(it)=>renderDup(it))}
+        {catBlock('serie',C.soon,'Sin proyecto asignado',serieGroups,g=>g.cid,g=>g.rows[0].due||g.rows[0].issued_at,(it,i)=>renderSerie(it,i))}
+        {catBlock('prog',C.azulInfo,'Programadas ya emitidas',progMatches.filter(m=>!dismissedMatch.has(m.prog.id)),m=>m.prog.client_id,m=>m.prog.due||m.prog.issued_at,(it)=>renderProg(it))}
       </div>
     </>
   )
@@ -17438,7 +17407,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
-        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
