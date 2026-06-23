@@ -6244,6 +6244,12 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
                     {disp&&onAbrir&&<button onClick={e=>{e.stopPropagation();onAbrir(a)}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:20,padding:'1px 11px',cursor:'pointer',lineHeight:1.6}}>Asignar</button>}
                   </div>
                 </div>
+                {!disp&&cubreCuotas&&(()=>{ const cu=(billing||[]).filter(b=>String(b.prepaid_anticipo_id)===String(a.id)); if(!cu.length) return null; return (
+                  <div style={{marginTop:7,background:'#FAFBFC',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'6px 9px'}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.03em',marginBottom:3}}>Cubre {cu.length} cuota{cu.length!==1?'s':''}</div>
+                    {cu.map(b=><div key={b.id} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'2px 0'}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||(b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'Cuota')}</span><span style={{color:C.muted,fontWeight:600,flexShrink:0}}>{fmtCLP0(b.amount)}</span></div>)}
+                  </div>
+                )})()}
                 {!disp&&cubreCuotas&&(
                   <div style={{display:'flex',gap:7,marginTop:7,flexWrap:'wrap'}}>
                     {!a.billing_id&&onFacturar&&<button onClick={()=>onFacturar(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Emitir una factura</button>}
