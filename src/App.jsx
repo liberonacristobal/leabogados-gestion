@@ -7659,6 +7659,51 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 // Categorías base de COSTOS DE OFICINA (la firma). Editable/aprende: el catálogo = estas + las que ya se usaron en gastos de la oficina + "Nueva categoría".
 const CATS_OFICINA_BASE = ['Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Sueldos','Otros']
 const CATS_LEGALES = ['notaria','cbr','diario oficial','registro civil','fondo','otro']
+const _mesLabelOf = m => { const [y,mm]=m.split('-'); const nm=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(mm)]||mm; return `${nm} ${y}` }
+// Pieza 2: panel mensual de Costos de Oficina, por categoría, con NETO = costos (gasto) − recuperos (fondo).
+function OficinaCostPanel({expenses, clientId}){
+  const office = useMemo(()=>(expenses||[]).filter(e=>String(e.client_id)===String(clientId)&&!e.personal_de), [expenses,clientId])
+  const meses = useMemo(()=>{ const cur=`${currentYear}-${String(currentMonth).padStart(2,'0')}`; const s=[...new Set([cur,...office.map(e=>(e.date||'').slice(0,7)).filter(Boolean)])].sort().reverse(); return s }, [office])
+  const [mes,setMes] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
+  const idx = meses.indexOf(mes)
+  const cats = useMemo(()=>{
+    const byCat={}
+    office.filter(e=>(e.date||'').slice(0,7)===mes).forEach(e=>{
+      const cat=(e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase()))?e.category:'Sin categoría'
+      if(!byCat[cat]) byCat[cat]={costo:0,recupero:0}
+      if(e.type==='fondo') byCat[cat].recupero+=(e.amount||0)
+      else if(!e.no_descuenta_saldo) byCat[cat].costo+=(e.amount||0)
+    })
+    return Object.entries(byCat).map(([cat,v])=>({cat,...v,neto:v.costo-v.recupero})).sort((a,b)=>b.neto-a.neto)
+  }, [office,mes])
+  const totNeto = cats.reduce((a,c)=>a+c.neto,0)
+  return (
+    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginTop:10}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+        <span style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina · por categoría</span>
+        <div style={{display:'flex',alignItems:'center',gap:2}}>
+          <button onClick={()=>idx<meses.length-1&&setMes(meses[idx+1])} disabled={idx>=meses.length-1} style={{background:'none',border:'none',color:idx>=meses.length-1?C.border:C.muted,cursor:idx>=meses.length-1?'default':'pointer',fontSize:18,padding:'0 4px',lineHeight:1}}>‹</button>
+          <span style={{fontSize:12,fontWeight:600,color:C.accent,minWidth:62,textAlign:'center'}}>{_mesLabelOf(mes)}</span>
+          <button onClick={()=>idx>0&&setMes(meses[idx-1])} disabled={idx<=0} style={{background:'none',border:'none',color:idx<=0?C.border:C.muted,cursor:idx<=0?'default':'pointer',fontSize:18,padding:'0 4px',lineHeight:1}}>›</button>
+        </div>
+      </div>
+      {cats.length===0 ? (
+        <div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin costos registrados en {_mesLabelOf(mes)}.</div>
+      ) : (<>
+        {cats.map(c=>(
+          <div key={c.cat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`0.5px solid ${C.border}`}}>
+            <span style={{fontSize:12.5,color:C.text,fontWeight:500}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
+            <span style={{fontSize:13,fontWeight:700,color:c.neto<0?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(c.neto)}</span>
+          </div>
+        ))}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:8,marginTop:2}}>
+          <span style={{fontSize:12.5,fontWeight:700,color:C.muted}}>Total neto del mes</span>
+          <span style={{fontSize:15,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(totNeto)}</span>
+        </div>
+      </>)}
+    </div>
+  )
+}
 function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields}) {
   const [catMenu,setCatMenu] = useState(null)   // id del gasto de oficina con el menú de categoría abierto
   const [selectedClient,setSelectedClient] = useState(null)
@@ -8391,7 +8436,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const total=gs.reduce((a,e)=>a+(e.amount||0),0)
             const pagado=gs.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
             const porPagar=gs.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
-            return <KpiRow oficina={{total,porPagar,pagado}}/>
+            return <><KpiRow oficina={{total,porPagar,pagado}}/><OficinaCostPanel expenses={expenses} clientId={selectedClient.id}/></>
           }
           return <KpiRow bal={rb.total}/>
         })()}
