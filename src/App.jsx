@@ -9384,7 +9384,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
   // Plazos rápidos (fecha local YYYY-MM-DD)
   const di = n => { const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
-  const presets = [['Hoy',di(0)],['Mañana',di(1)],['En 7 días',di(7)]]
+  const presets = [['Mañana',di(1)],['3 días',di(3)],['7 días',di(7)]]
   const isCustomDue = f.due && !presets.some(p=>p[1]===f.due)
 
   // Clientes recientes (por última tarea creada) y conteo de tareas activas, para el paso de elección.
@@ -9513,9 +9513,9 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
           <Fld label='Responsables'>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              {WHO.map(w=>{ const on=(f.assignees||[]).includes(w); return (
-                <button key={w} onClick={()=>toggleResp(w)} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:on?600:500,padding:'5px 11px 5px 5px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#F5F7F9',color:on?C.accent:C.muted,cursor:'pointer'}}>
-                  <span style={{width:22,height:22,borderRadius:'50%',background:on?C.accent:C.done,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[w]||w.slice(0,2).toUpperCase()}</span>{w}
+              {WHO.map(w=>{ const on=(f.assignees||[]).includes(w); const pc=personChip(w); return (
+                <button key={w} onClick={()=>toggleResp(w)} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:on?700:500,padding:'5px 11px 5px 5px',borderRadius:20,border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'#F5F7F9',color:on?pc.color:C.muted,cursor:'pointer'}}>
+                  <span style={{width:22,height:22,borderRadius:'50%',background:pc.color,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[w]||w.slice(0,2).toUpperCase()}</span>{w}
                 </button>
               )})}
             </div>
@@ -17338,7 +17338,7 @@ export default function App() {
               <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
               <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
                 {userRole==='admin'&&tab==='dashboard'&&(
-                  <button onClick={()=>setTab('tasks')} title='Ver tareas del equipo' style={{display:'flex',alignItems:'center',gap:5,height:32,padding:'0 11px',borderRadius:8,background:'#fff',border:`0.5px solid ${C.border}`,color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+                  <button onClick={()=>setTab('tasks')} title='Ver tareas del equipo' style={{display:'flex',alignItems:'center',gap:4,height:24,padding:'0 9px',borderRadius:7,background:'#fff',border:`0.5px solid ${C.border}`,color:C.muted,fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
                     <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
                     Tareas
                   </button>
