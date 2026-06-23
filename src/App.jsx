@@ -9814,38 +9814,43 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
 
   // (3) Programada ↔ real: programada con venta, busca real del mismo cliente, mismo mes (±1) y monto con tolerancia ±15%.
   const progMatches = useMemo(()=>{
-    // 1:1 (cada emitida se usa una vez). Calce por SCORE de confianza: período de la glosa (eje) + mes emisión + venta +
-    // cuota + glosa + razón social + monto (tolerancia escalada por UF) + cercanía emisión/pago. Solo sugiere score≥6.
-    const progs = act.filter(b=>b.status==='Programada').slice().sort((a,b)=>(a.due||'')<(b.due||'')?-1:1)
-    // Una emitida REAL tiene FOLIO (invoice_no). Sin folio no está emitida (es otra programada/placeholder) → NO califica para reemplazar.
-    const reals = act.filter(b=>b.issued_at && b.invoice_no && b.status!=='Programada')
-    const usados=new Set(); const out=[]; const noSet=matchNo||new Set()
-    const mIdx = s => parseInt(s.slice(0,4))*12+parseInt(s.slice(5,7))
-    progs.forEach(p=>{
-      const pm=mes(p.due||p.issued_at); const a=p.amount||0; if(!a||!pm) return
-      const pcc=concPeriodo(p.concept); const pCu=cuotaNM(p.concept); const pRut=(p.receptor_rut||'').trim()
-      let best=null, bestScore=0, bestRaz=null
-      for(const x of reals){
-        if(usados.has(x.id)||String(x.client_id)!==String(p.client_id)) continue
-        if(noSet.has(`${p.id}|${x.id}`)) continue                          // descartado a mano antes → no reaparece (aprendido)
-        const xm=mes(x.issued_at||x.due); if(!xm) continue
-        const xcc=concPeriodo(x.concept); const dMes=Math.abs(mIdx(pm)-mIdx(xm))
-        if(pcc&&xcc&&pcc!==xcc) continue                                   // glosas de meses distintos → NO es el mismo servicio
-        if(dMes>2) continue                                                // emitida muy lejana de la programada → descartar
-        const dMonto=Math.abs((x.amount||0)-a)/a; const tol=Math.max(0.02, dMes*0.05)   // ±2% mismo mes; afloja por la UF según distancia
-        if(dMonto>tol) continue
-        let sc=0; const raz=[]
-        if(pcc&&xcc&&pcc===xcc){ sc+=5; raz.push(`mismo período (${pcc.slice(5)}-${pcc.slice(0,4)})`) }
-        else if(dMes===0){ sc+=3; raz.push('mismo mes de emisión') } else { raz.push('mes adyacente') }
-        if(p.sale_id&&x.sale_id&&String(p.sale_id)===String(x.sale_id)){ sc+=4; raz.push('misma venta') }
-        const xCu=cuotaNM(x.concept); if(pCu&&xCu&&pCu.n===xCu.n&&pCu.tot===xCu.tot){ sc+=3; raz.push(`cuota ${pCu.n}/${pCu.tot}`) }
-        if(simTexto(p.concept,x.concept)>=0.3){ sc+=2; raz.push('glosa parecida') }
-        if((p.entity_id&&x.entity_id&&String(p.entity_id)===String(x.entity_id))||(pRut&&(x.receptor_rut||'').trim()===pRut)){ sc+=1; raz.push('misma razón social') }
-        if(dMonto<=0.01){ sc+=2; raz.push('mismo monto') } else if(dMonto<=0.03){ sc+=1; raz.push(`monto a ${(dMonto*100).toFixed(1).replace(/\.0$/,'')}%`) }
-        const ref=x.paid_at||x.issued_at; if(ref&&p.due&&Math.abs(new Date(ref)-new Date(p.due))/86400000<=40){ sc+=1; raz.push('emisión/pago cercano') }
-        if(sc>bestScore){ best=x; bestScore=sc; bestRaz=raz }
-      }
-      if(best && bestScore>=6){ usados.add(best.id); out.push({prog:p, real:best, razones:bestRaz, score:bestScore}) }
+    // REGLA de asignación. (1) Emitida REAL = FOLIO con dígitos (nunca sin folio ni placeholder). (2) Identifica la CUOTA por
+    // número (N/M) o por PERÍODO de la glosa — NUNCA por monto+mes suelto (eso ofrecía períodos aún no facturados). (3) FIFO por
+    // cliente: la programada más antigua toma la emitida más antigua que calza; 1:1. Monto/fecha similares = apoyo y desempate.
+    const noSet=matchNo||new Set()
+    const emisAll = act.filter(b=> b.issued_at && b.status!=='Programada' && /\d/.test(folioN(b.invoice_no||'')))
+    const out=[]; const usados=new Set()
+    const cids=[...new Set(act.filter(b=>b.status==='Programada'&&b.amount).map(b=>String(b.client_id)))]
+    cids.forEach(cid=>{
+      const progs = act.filter(b=>b.status==='Programada'&&b.amount&&String(b.client_id)===cid)
+        .map(p=>({p,cu:cuotaNM(p.concept),per:concPeriodo(p.concept)}))
+        .sort((a,b)=>(a.p.due||a.p.issued_at||'').localeCompare(b.p.due||b.p.issued_at||''))     // FIFO: programada más antigua primero
+      const emis = emisAll.filter(b=>String(b.client_id)===cid)
+        .map(x=>({x,cu:cuotaNM(x.concept),per:concPeriodo(x.concept)}))
+        .sort((a,b)=>(a.x.issued_at||a.x.due||'').localeCompare(b.x.issued_at||b.x.due||''))      // emitida más antigua primero
+      progs.forEach(({p,cu,per})=>{
+        const a=p.amount||0; const pd=p.due||p.issued_at||''
+        let best=null,bestRank=null
+        for(const e of emis){
+          if(usados.has(e.x.id) || noSet.has(`${p.id}|${e.x.id}`)) continue
+          const sameCu = !!(cu&&e.cu&&cu.n===e.cu.n)
+          const samePer = !!(per&&e.per&&per===e.per)
+          if(!sameCu&&!samePer) continue                                   // sin clave de cuota/período → NO calza
+          const dMonto=a?Math.abs((e.x.amount||0)-a)/a:1
+          if(dMonto > (sameCu?0.25:0.06)) continue                          // cuota exacta tolera la corrida de UF; período solo, monto estricto
+          const ed=e.x.issued_at||e.x.due||''
+          const rank=[sameCu?0:1, samePer?0:1, dMonto, Math.abs(new Date(ed||0)-new Date(pd||0))]   // cuota › período › monto › fecha (emis ya FIFO)
+          if(!best || rank[0]<bestRank[0] || (rank[0]===bestRank[0]&&(rank[1]<bestRank[1] || (rank[1]===bestRank[1]&&(rank[2]<bestRank[2] || (rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank }
+        }
+        if(best){
+          usados.add(best.x.id)
+          const dM=a?Math.abs((best.x.amount||0)-a)/a:0; const raz=[]
+          if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`)
+          if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`)
+          raz.push(dM<0.01?'mismo monto':`monto a ${(dM*100).toFixed(1).replace(/\.0$/,'')}%`)
+          out.push({prog:p, real:best.x, razones:raz})
+        }
+      })
     })
     return out
   },[scope,periodo,matchNo])
