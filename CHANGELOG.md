@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-22 — Conciliación: detalle de factura al tocarla
+- Al tocar una factura en la lista "Facturas por cobrar del cliente" se despliega su ficha enriquecida: estado unificado, concepto, razón social, emisión/vencimiento, monto/saldo, y **respaldo bancario** (cuánto del banco la respalda + fecha y monto del/los movimiento(s) que la conciliaron, o "sin movimiento — marcada a mano").
+
 ## 2026-06-22 — Estado de factura unificado (pago + conciliación)
 - Reemplaza el ambiguo **"Pagada"** por un estado que dice **pago Y conciliación a la vez**: **Pagada y conciliada** · **Pagada · parcial · falta $X** · **Pagada sin conciliar** · **Pagada (histórica)** · **Pagada · pendiente cartola** · **Sin pago**. Fuente única (`facturaRespaldo` + `estadoFacturaLabel`). Aplicado en **Conciliación** (lista "Facturas por cobrar del cliente" + detalles de factura), **Facturación** y **ficha → Financiero** (el badge se renombró a la misma taxonomía). Mata el "Pagada" que no decía qué lo respaldaba.
 
