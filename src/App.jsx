@@ -10136,7 +10136,13 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const setYearSync = y => { setSelYear(y); try{ localStorage.setItem('fac_year', y||'') }catch(e){} }
   const [openProj,setOpenProj] = useState(()=>new Set())
   const [subRSOpen,setSubRSOpen] = useState({})   // colapso por RS dentro de un proyecto (key: saleId|rsKey); default abierto si tiene deuda
-  const [facSort,setFacSort] = useState('fecha')   // orden de facturas dentro de cada RS: 'fecha' (nueva→antigua) | 'folio'
+  const [facDir,setFacDir] = useState('desc')   // orden por fecha de las facturas: 'desc' (nueva→antigua) | 'asc'
+  const [detFac,setDetFac] = useState(()=>new Set())   // facturas con detalle/movimiento bancario expandido
+  const [fConc,setFConc] = useState([]); const [fMovs,setFMovs] = useState([])   // conciliación del cliente para ver el movimiento de una factura conciliada
+  useEffect(()=>{ if(!client?.id) return; let ok=true; Promise.all([supabase.from('conciliacion').select('factura_id,movimiento_id,tipo_destino,monto_aplicado'), supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,descripcion').eq('cliente_id',client.id)]).then(([a,b])=>{ if(ok){ setFConc(a.data||[]); setFMovs(b.data||[]) } }).catch(()=>{}); return ()=>{ ok=false } },[client?.id])
+  const fConcByFac = useMemo(()=>{ const m={}; fConc.forEach(c=>{ if(c.factura_id&&c.tipo_destino==='factura') (m[c.factura_id]=m[c.factura_id]||[]).push(c) }); return m },[fConc])
+  const fMovById = useMemo(()=>{ const m={}; fMovs.forEach(x=>m[x.id]=x); return m },[fMovs])
+  const toggleDet = id => setDetFac(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   useEffect(()=>{ setSelYear(pickYear()) },[client.id])
   const toggleProj = id => setOpenProj(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Al abrir un año, expandir solo los proyectos con algo vencido (lo accionable visible sin clics).
@@ -10235,9 +10241,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           <div style={{display:'flex',gap:6,overflowX:'auto',scrollbarWidth:'none'}}>
             {aniosList.map(y=>(<span key={y} onClick={()=>setYearSync(y)} style={{flexShrink:0,fontSize:12,fontWeight:600,borderRadius:8,padding:'5px 13px',cursor:'pointer',background:selYear===y?C.accent:'#fff',color:selYear===y?'#fff':C.muted,border:`1px solid ${selYear===y?C.accent:C.border}`}}>{y}</span>))}
           </div>
-          <div style={{display:'flex',gap:5,alignItems:'center',flexShrink:0,fontSize:10}}>
-            <span style={{color:C.done}}>Ordenar</span>
-            {[['fecha','Fecha'],['folio','N°']].map(([v,l])=><span key={v} onClick={()=>setFacSort(v)} style={{fontWeight:facSort===v?700:600,color:facSort===v?C.accent:C.muted,cursor:'pointer'}}>{l}</span>)}
+          <div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0,fontSize:10}}>
+            <span style={{color:C.done}}>Fecha</span>
+            {[['desc','↓ Nueva'],['asc','↑ Antigua']].map(([v,l])=><span key={v} onClick={()=>setFacDir(v)} style={{fontWeight:facDir===v?700:600,color:facDir===v?C.accent:C.muted,cursor:'pointer'}}>{l}</span>)}
           </div>
         </div>}
         {(()=>{
@@ -10255,25 +10261,44 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
             // Asignable a CUALQUIER proyecto del cliente (un proyecto puede cruzar años y razones sociales).
             const ventasAsig = clientSales
             const sug = assignable?sugSaleFor(b,ventasAsig):null
+            const conciliada = b.status==='Pagado' && (fConcByFac[b.id]||[]).length>0
+            const detOpen = detFac.has(b.id)
+            const e = estadoFacturaLabel(b,(respaldoMap&&respaldoMap[b.id])||0,cartolaHasta)
+            const pend = ['Pendiente','Vencido'].includes(b.status)
             return (
               <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${borde(b)}`,borderRadius:'0 8px 8px 0',padding:'8px 10px',marginBottom:5}}>
-                <div onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
+                <div onClick={()=> conciliada ? toggleDet(b.id) : (onEditBilling&&onEditBilling(b))} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer'}}>
+                  {bigDate(kpiDate(b))}
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{b.billing_type==='reembolso'&&<span style={{fontSize:9,color:C.muted,marginLeft:5}}>reembolso</span>}</div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`${b.concept||'—'} · `:''}{fmtFechaDMY(kpiDate(b))}</div>
+                    {b.invoice_no&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>}
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
-                      ? <><div style={{fontSize:9,color:C.done}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdueText:C.accent,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>{b.status} · abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
+                      ? <><div style={{fontSize:9,color:C.done}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdueText:C.accent,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
                       : <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div> })()}
                   </div>
                 </div>
-                {(()=>{ const e=estadoFacturaLabel(b,(respaldoMap&&respaldoMap[b.id])||0,cartolaHasta); return e?<div style={{marginTop:6}}><span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap',display:'inline-block'}}>{e.label}</span></div>:null })()}
-                {['Pendiente','Vencido'].includes(b.status)&&<div style={{display:'flex',gap:6,marginTop:7}}>
-                  <button onClick={()=>pagar(b)} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>
-                  <button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>
-                </div>}
-                {assignable&&<div style={{display:'flex',gap:6,alignItems:'center',marginTop:7,flexWrap:'wrap'}}>
+                <div style={{marginTop:6,marginLeft:49,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                  {e&&<span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap'}}>{e.label}{conciliada?' ›':''}</span>}
+                  {pend&&<button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>}
+                </div>
+                {conciliada&&detOpen&&(()=>{ const cs=fConcByFac[b.id]||[]; const mv=fMovById[cs[0]?.movimiento_id]; return (
+                  <div style={{marginTop:8,marginLeft:49,background:'#F0F7F4',border:`1px solid #CFE9DD`,borderRadius:8,padding:'8px 10px'}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Movimiento bancario</div>
+                    {mv ? <>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'1px 0'}}><span style={{color:C.muted}}>Fecha</span><span style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(mv.fecha)}</span></div>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'1px 0'}}><span style={{color:C.muted}}>Monto</span><span style={{color:C.text,fontWeight:600}}>{fmt(mv.monto)}</span></div>
+                      {mv.n_operacion&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'1px 0'}}><span style={{color:C.muted}}>N° operación</span><span style={{color:C.text,fontWeight:600}}>{mv.n_operacion}</span></div>}
+                      {mv.descripcion&&<div style={{fontSize:10.5,color:C.muted,marginTop:2,lineHeight:1.4}}>{String(mv.descripcion).slice(0,90)}</div>}
+                    </> : <div style={{fontSize:11,color:C.muted}}>Conciliada (movimiento en otra cuenta o sin detalle local).</div>}
+                    <div style={{display:'flex',justifyContent:'flex-end',gap:12,marginTop:6}}>
+                      {onEditBilling&&<span onClick={()=>onEditBilling(b)} style={{fontSize:10,fontWeight:600,color:C.muted,cursor:'pointer'}}>Editar</span>}
+                      {onConciliar&&<span onClick={()=>onConciliar()} style={{fontSize:10,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver en conciliación →</span>}
+                    </div>
+                  </div>
+                )})()}
+                {assignable&&<div style={{display:'flex',gap:6,alignItems:'center',marginTop:7,flexWrap:'wrap',marginLeft:49}}>
                   {sug&&<button onClick={()=>onAssignSeries&&onAssignSeries(sug.id,[b.id])} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'3px 10px',fontWeight:600,cursor:'pointer'}}>✦ {sug.title}</button>}
                   {ventasAsig.length>0
                     ? <select defaultValue='' onChange={e=>{ if(e.target.value&&onAssignSeries) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:10,padding:'3px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}>
@@ -10312,9 +10337,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     const rutOf=b=>{ if(b.entity_id){ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e&&e.rut) return String(e.rut).trim() } return String(b.receptor_rut||'').trim() }
                     const rsKeyOf=b=>{ const r=rutOf(b); return r?('rut:'+r):(b.receptor_name?('n:'+String(b.receptor_name).trim().toLowerCase()):'sin') }
                     const rsNameOf=b=>{ const r=rutOf(b); const e=entities.find(x=>String(x.id)===String(b.entity_id))||entities.find(x=>x.rut&&String(x.rut).trim()===r); if(e) return e.name+(e.rut?(' · '+e.rut):''); return b.receptor_name?(b.receptor_name+(r?(' · '+r):'')):'Sin razón social' }
-                    const sortFac=arr=> facSort==='folio'
-                      ? [...arr].sort((a,b)=>(folioN(b.invoice_no)||0)-(folioN(a.invoice_no)||0))
-                      : [...arr].sort((a,b)=>(kpiDate(b)||'').localeCompare(kpiDate(a)||''))
+                    const sortFac=arr=> [...arr].sort((a,b)=> facDir==='asc' ? (kpiDate(a)||'').localeCompare(kpiDate(b)||'') : (kpiDate(b)||'').localeCompare(kpiDate(a)||''))
                     const gmap={}; rows.forEach(b=>{ const k=rsKeyOf(b); (gmap[k]=gmap[k]||{name:rsNameOf(b),facs:[]}).facs.push(b) })
                     const grps=Object.entries(gmap).map(([k,g])=>{ const pend=g.facs.reduce((s,b)=>s+(['Pendiente','Vencido'].includes(b.status)?Math.max(0,(b.amount||0)-(b.paid_amount||0)):0),0); const cob=g.facs.filter(b=>['Pagado','Anticipada'].includes(b.status)).length; return {k,name:g.name,facs:g.facs,pend,cob,total:g.facs.length} })
                     if(grps.length<=1) return sortFac(rows).map(b=>renderFactura(b,false))
