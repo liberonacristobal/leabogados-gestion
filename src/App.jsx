@@ -10256,10 +10256,10 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   <div style={{textAlign:'right',flexShrink:0}}>
                     {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
                       ? <><div style={{fontSize:9,color:C.done}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:b.status==='Vencido'?C.overdueText:C.accent,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>{b.status} · abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
-                      : <><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div><div style={{fontSize:9,fontWeight:600,color:STAT[b.status]||C.muted}}>{b.status}</div></> })()}
+                      : <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div> })()}
                   </div>
                 </div>
-                {respaldoMap&&(()=>{ const r=facturaRespaldo(b,respaldoMap,cartolaHasta); return r?<div style={{marginTop:6}}><RespaldoBadge b={b} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta}/></div>:null })()}
+                {(()=>{ const e=estadoFacturaLabel(b,(respaldoMap&&respaldoMap[b.id])||0,cartolaHasta); return e?<div style={{marginTop:6}}><span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap',display:'inline-block'}}>{e.label}</span></div>:null })()}
                 {['Pendiente','Vencido'].includes(b.status)&&<div style={{display:'flex',gap:6,marginTop:7}}>
                   <button onClick={()=>pagar(b)} style={{fontSize:10,background:C.greenBg,color:C.greenText,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Pagar</button>
                   <button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>
