@@ -9817,7 +9817,8 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
     // 1:1 (cada emitida se usa una vez). Calce por SCORE de confianza: período de la glosa (eje) + mes emisión + venta +
     // cuota + glosa + razón social + monto (tolerancia escalada por UF) + cercanía emisión/pago. Solo sugiere score≥6.
     const progs = act.filter(b=>b.status==='Programada').slice().sort((a,b)=>(a.due||'')<(b.due||'')?-1:1)
-    const reals = act.filter(b=>b.issued_at && b.status!=='Programada')
+    // Una emitida REAL tiene FOLIO (invoice_no). Sin folio no está emitida (es otra programada/placeholder) → NO califica para reemplazar.
+    const reals = act.filter(b=>b.issued_at && b.invoice_no && b.status!=='Programada')
     const usados=new Set(); const out=[]; const noSet=matchNo||new Set()
     const mIdx = s => parseInt(s.slice(0,4))*12+parseInt(s.slice(5,7))
     progs.forEach(p=>{
