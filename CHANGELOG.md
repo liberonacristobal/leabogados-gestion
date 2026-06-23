@@ -1,5 +1,6 @@
 # Changelog
 
+- 2026-06-22 — Costos de Oficina: categorías editables que aprenden (Pieza 1), panel mensual por categoría con neto costos−recuperos (Pieza 2) y hook en conciliación: un cargo se registra como costo de oficina con categoría, al cliente interno, reversible (Pieza 3). Además: una propuesta ya nunca genera facturación (solo al aceptarse).
 ## 2026-06-22 — Conciliación: ver TODAS las facturas del cliente + liberar calce
 - La lista del movimiento ahora muestra **todas las facturas del cliente** (emitidas, no solo las "por cobrar"), ordenadas **nueva→antigua**, con buscador. Así aparecen las pagadas/conciliadas (ej. F273 de Pablo Liberona) para poder revisarlas. En el detalle de una factura **conciliada** se agrega **"Liberar calce"** → deshace el calce y el pago vuelve a "por conciliar" para reasignarlo (corregir asignaciones con error).
 
