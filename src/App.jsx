@@ -5103,7 +5103,14 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                   </div>
                 </div>
                 {(()=>{ const r=facturaRespaldo(b,respaldoMap,cartolaHasta); return r?<div style={{padding:'0 12px 9px 61px'}}><RespaldoBadge b={b} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta}/></div>:null })()}
-                {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',padding:'9px 12px',borderTop:`1px solid ${C.border}`}}>
+                {exp&&<><div onClick={e=>e.stopPropagation()} style={{padding:'8px 12px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted,lineHeight:1.6}}>
+                  <div>Concepto: <b style={{color:C.text}}>{b.concept||'—'}</b></div>
+                  {b.receptor_name&&<div>Razón social: <b style={{color:C.text}}>{b.receptor_name}</b>{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>}
+                  <div>Emisión: {b.issued_at?fmtFechaDMY(b.issued_at):'—'}{b.due?` · vence ${fmtFechaDMY(b.due)}`:''}{pagado&&b.paid_at?` · pagada ${fmtFechaDMY(b.paid_at)}`:''}</div>
+                  <div>Monto: {fmt(b.amount)}{!pagado&&!anulada&&!prog?` · saldo ${fmt(saldoBill(b))}`:''}</div>
+                  {pagado&&(()=>{ const ap=respaldoMap[b.id]||0; const col=ap>=(b.amount||0)&&ap>0?C.greenText:ap>0?C.soonText:C.overdueText; return <div>Respaldo banco: <b style={{color:col}}>{ap>0?`${fmt(ap)}${ap<(b.amount||0)?` de ${fmt(b.amount)}`:''}`:'sin movimiento (marcada a mano)'}</b></div> })()}
+                </div>
+                <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',padding:'0 12px 9px'}}>
                   {client.id==='__none__'&&onAssignClient&&!prog&&<AsignarClienteInline bill={b} clients={clients} onAssign={onAssignClient}/>}
                   {prog ? (
                     <button onClick={()=>marcarEmitida(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Ya emitida</button>
@@ -5115,7 +5122,7 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
                     <button onClick={()=>{ if(confirm('¿Reactivar esta factura anulada? Vuelve a su estado previo y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Reactivar</button>
                   )}
                   <button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Editar</button>
-                </div>}
+                </div></>}
               </div>
               )
             })}
