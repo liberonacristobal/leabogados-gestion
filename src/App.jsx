@@ -9755,11 +9755,17 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
   const [sel,setSel] = useState(()=>new Set())              // facturas seleccionadas (opción A) para asignar en lote
   const fEstado = b => onEditBilling ? estadoFacturaLabel(b,(respaldoMap&&respaldoMap[b.id])||0,cartolaHasta) : null
   const abrirFac = b => { if(onEditBilling&&b) onEditBilling(b) }
+  const [matchNo,setMatchNo] = useState(null)   // pares programada|emitida descartados a mano (aprendido, persistente) — DEBE ir antes de progMatches (dep array)
+  useEffect(()=>{ supabase.from('learnings').select('key').eq('kind','match_no').then(({data})=>setMatchNo(new Set((data||[]).map(r=>String(r.key)))),()=>setMatchNo(new Set())) },[])
   const curMes = new Date().toISOString().slice(0,7)
   const inPeriodo = b => periodo==='todo' ? true : (b.status==='Programada' ? mes(b.due)===curMes : mes(b.issued_at||b.due)===curMes)
   const act = (scope||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && b.status!=='Anulado').filter(inPeriodo)
   const cName = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  // Período que dice la GLOSA (ej. "Asesoría — July 2026" → 2026-07). Eje del calce: dos facturas del mismo servicio comparten período.
+  const _MESMAP={enero:1,ene:1,january:1,jan:1,febrero:2,feb:2,february:2,marzo:3,mar:3,march:3,abril:4,abr:4,april:4,apr:4,mayo:5,may:5,junio:6,jun:6,june:6,julio:7,jul:7,july:7,agosto:8,ago:8,august:8,aug:8,septiembre:9,sept:9,sep:9,september:9,octubre:10,oct:10,october:10,noviembre:11,nov:11,november:11,diciembre:12,dic:12,december:12,dec:12}
+  const concPeriodo = c => { const s=norm(c); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_MESMAP)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_MESMAP[k]).padStart(2,'0')}` } return null }
+  const cuotaNM = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
 
   // (1) Duplicados: mismo cliente + mismo monto + mismo vencimiento, o mismo folio normalizado.
   const dupGroups = useMemo(()=>{
@@ -9808,37 +9814,40 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
 
   // (3) Programada ↔ real: programada con venta, busca real del mismo cliente, mismo mes (±1) y monto con tolerancia ±15%.
   const progMatches = useMemo(()=>{
-    // Cada programada se cruza con UNA emitida y cada emitida se usa UNA sola vez (1:1). Así una misma factura real
-    // (ej. F°373) no se ofrece para dos cuotas distintas — evita aplicar la misma factura a varias programadas.
+    // 1:1 (cada emitida se usa una vez). Calce por SCORE de confianza: período de la glosa (eje) + mes emisión + venta +
+    // cuota + glosa + razón social + monto (tolerancia escalada por UF) + cercanía emisión/pago. Solo sugiere score≥6.
     const progs = act.filter(b=>b.status==='Programada').slice().sort((a,b)=>(a.due||'')<(b.due||'')?-1:1)
     const reals = act.filter(b=>b.issued_at && b.status!=='Programada')
-    const usados=new Set(); const out=[]
+    const usados=new Set(); const out=[]; const noSet=matchNo||new Set()
     const mIdx = s => parseInt(s.slice(0,4))*12+parseInt(s.slice(5,7))
     progs.forEach(p=>{
       const pm=mes(p.due||p.issued_at); const a=p.amount||0; if(!a||!pm) return
-      let best=null, bestKey=null
+      const pcc=concPeriodo(p.concept); const pCu=cuotaNM(p.concept); const pRut=(p.receptor_rut||'').trim()
+      let best=null, bestScore=0, bestRaz=null
       for(const x of reals){
-        if(usados.has(x.id)) continue
-        if(String(x.client_id)!==String(p.client_id)) continue
-        const dMonto=Math.abs((x.amount||0)-a)/a; if(dMonto>0.15) continue
-        const rm=mes(x.due||x.issued_at); if(!rm) continue
-        const dMes=Math.abs(mIdx(pm)-mIdx(rm)); if(dMes>1) continue
-        const sameSale=(p.sale_id&&x.sale_id&&String(p.sale_id)===String(x.sale_id))?0:1
-        const key=[sameSale,dMes,dMonto]   // preferir: misma venta › mismo mes › monto más cercano
-        if(!best||key[0]<bestKey[0]||(key[0]===bestKey[0]&&(key[1]<bestKey[1]||(key[1]===bestKey[1]&&key[2]<bestKey[2])))){ best=x; bestKey=key }
+        if(usados.has(x.id)||String(x.client_id)!==String(p.client_id)) continue
+        if(noSet.has(`${p.id}|${x.id}`)) continue                          // descartado a mano antes → no reaparece (aprendido)
+        const xm=mes(x.issued_at||x.due); if(!xm) continue
+        const xcc=concPeriodo(x.concept); const dMes=Math.abs(mIdx(pm)-mIdx(xm))
+        if(pcc&&xcc&&pcc!==xcc) continue                                   // glosas de meses distintos → NO es el mismo servicio
+        if(dMes>2) continue                                                // emitida muy lejana de la programada → descartar
+        const dMonto=Math.abs((x.amount||0)-a)/a; const tol=Math.max(0.02, dMes*0.05)   // ±2% mismo mes; afloja por la UF según distancia
+        if(dMonto>tol) continue
+        let sc=0; const raz=[]
+        if(pcc&&xcc&&pcc===xcc){ sc+=5; raz.push(`mismo período (${pcc.slice(5)}-${pcc.slice(0,4)})`) }
+        else if(dMes===0){ sc+=3; raz.push('mismo mes de emisión') } else { raz.push('mes adyacente') }
+        if(p.sale_id&&x.sale_id&&String(p.sale_id)===String(x.sale_id)){ sc+=4; raz.push('misma venta') }
+        const xCu=cuotaNM(x.concept); if(pCu&&xCu&&pCu.n===xCu.n&&pCu.tot===xCu.tot){ sc+=3; raz.push(`cuota ${pCu.n}/${pCu.tot}`) }
+        if(simTexto(p.concept,x.concept)>=0.3){ sc+=2; raz.push('glosa parecida') }
+        if((p.entity_id&&x.entity_id&&String(p.entity_id)===String(x.entity_id))||(pRut&&(x.receptor_rut||'').trim()===pRut)){ sc+=1; raz.push('misma razón social') }
+        if(dMonto<=0.01){ sc+=2; raz.push('mismo monto') } else if(dMonto<=0.03){ sc+=1; raz.push(`monto a ${(dMonto*100).toFixed(1).replace(/\.0$/,'')}%`) }
+        const ref=x.paid_at||x.issued_at; if(ref&&p.due&&Math.abs(new Date(ref)-new Date(p.due))/86400000<=40){ sc+=1; raz.push('emisión/pago cercano') }
+        if(sc>bestScore){ best=x; bestScore=sc; bestRaz=raz }
       }
-      if(best){
-        usados.add(best.id)
-        const dMonto=Math.abs((best.amount||0)-a)/a; const rm=mes(best.due||best.issued_at); const dMes=Math.abs(mIdx(pm)-mIdx(rm))
-        const raz=[]
-        if(p.sale_id&&best.sale_id&&String(p.sale_id)===String(best.sale_id)) raz.push('misma venta')
-        raz.push(dMes===0?`mismo mes (${pm.slice(5,7)}/${pm.slice(0,4)})`:'mes adyacente')
-        raz.push(dMonto<0.01?'mismo monto':`monto a ${(dMonto*100).toFixed(1).replace(/\.0$/,'')}%`)
-        out.push({prog:p, real:best, razones:raz})
-      }
+      if(best && bestScore>=6){ usados.add(best.id); out.push({prog:p, real:best, razones:bestRaz, score:bestScore}) }
     })
     return out
-  },[scope,periodo])
+  },[scope,periodo,matchNo])
 
   // (0) Fantasmas: Pagado SIN folio que es copia de una real CON folio (absorbe el tool de conciliación viejo). Respeta "no es duplicado" (learnings conciliacion_ok).
   const [okIds,setOkIds] = useState(null)
@@ -9901,7 +9910,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
   const renderCopia = (x) => { const k='copia|'+x.g.id; const ex=expItem.has(k); return itemBox(k,<>{itemHead(k,x.g.issued_at||x.g.due,x.g.concept||'—',`${fmt(x.g.amount)} · copia sin folio`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(x.real,`Factura N°${folioN(x.real.invoice_no)} · ${fmt(x.real.amount)}`)}{rowElimina(`copia sin folio · ${fmt(x.g.amount)}`,x.g)}<div style={{display:'flex',gap:8}}><button onClick={()=>onReplaceProgramada&&onReplaceProgramada(x.g.id)} style={btnP}>Eliminar copia</button><button onClick={()=>marcarLegit(x.g.id)} style={btnS}>No es copia</button></div></div>}</>) }
   const renderDup = (g) => { const keep=g.rows.find(r=>r.id===g.keepId); const drop=g.rows.filter(r=>r.id!==g.keepId); const k='dup|'+g.keepId; const ex=expItem.has(k); const lbl=b=>b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'copia sin folio'; return itemBox(k,<>{itemHead(k,keep.issued_at||keep.due,keep.concept||'—',`${fmt(keep.amount)} · ${g.rows.length} copias`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(keep,`${lbl(keep)} · ${fmt(keep.amount)}`)}{drop.map(d=><span key={d.id}>{rowElimina(`${lbl(d)} · ${fmt(d.amount)}`,d)}</span>)}<div style={{display:'flex',gap:8}}><button onClick={()=>onResolveDup&&onResolveDup(g.keepId,drop.map(r=>r.id))} style={btnP}>Eliminar {drop.length} copia{drop.length!==1?'s':''}</button><button onClick={()=>toggle(setExpItem,k)} style={btnS}>No tocar</button></div></div>}</>) }
   const renderSerie = (g,i) => { const k='serie|'+i; const ex=expItem.has(k); const eff=g.sug||aiSug[i]; const ia=!g.sug&&aiSug[i]; const ids=g.rows.map(r=>r.id); const selIds=ids.filter(id=>sel.has(id)); const toAssign=selIds.length?selIds:ids; return itemBox(k,<>{itemHead(k,g.rows[0].due||g.rows[0].issued_at,g.rows[0].concept||'—',`${g.rows.length} facturas`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{eff?<div style={{fontSize:10.5,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 9px',marginBottom:8}}>✦ {ia?'(IA) ':''}Sugerida: <b style={{color:C.accent}}>{eff.title}</b></div>:<div style={{fontSize:10.5,color:C.muted,marginBottom:8}}>Elige la venta para estas facturas.</div>}{g.rows.map(r=>{ const on=sel.has(r.id); return (<div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderTop:`0.5px solid ${C.border}`}}><span onClick={()=>toggle(setSel,r.id)} style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',color:'#fff',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>{on?'✓':''}</span>{bigDate(r.due||r.issued_at)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{fmt(r.amount)}</div></div>{estadoChip(r)}{onEditBilling&&<span onClick={()=>abrirFac(r)} style={{color:C.muted,fontSize:11,cursor:'pointer'}}>↗</span>}</div>) })}<div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap',alignItems:'center'}}>{eff&&<button onClick={()=>onAssignSeries&&onAssignSeries(eff.id,toAssign)} style={btnP}>Asignar {selIds.length||g.rows.length} a {eff.title}</button>}{!eff&&<button onClick={()=>sugerirIA(g,i)} disabled={aiBusy===i} style={{...btnS,color:C.accent,background:C.azulBg,border:'none'}}>{aiBusy===i?'Consultando…':'✦ Sugerir con IA'}</button>}<select onChange={e=>{ if(e.target.value) onAssignSeries&&onAssignSeries(e.target.value,toAssign) }} defaultValue='' style={{fontSize:10,padding:'5px 8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}><option value=''>otra venta…</option>{g.sales.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}</select></div></div>}</>) }
-  const renderProg = (m) => { const k='prog|'+m.prog.id; const ex=expItem.has(k); const dif=(m.real.amount||0)-(m.prog.amount||0); return itemBox(k,<>{itemHead(k,m.prog.due||m.prog.issued_at,m.prog.concept||'—',`${fmt(m.prog.amount)} · programada`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(m.real,`${m.real.invoice_no?`Factura N°${folioN(m.real.invoice_no)}`:'emitida'} · ${fmt(m.real.amount)}`)}{rowElimina(`programada · ${fmt(m.prog.amount)}`,null,'SE DA DE BAJA')}<div style={{fontSize:10,color:'#0C447C',background:C.azulBg,borderRadius:7,padding:'5px 8px',marginBottom:8}}>Diferencia {dif>=0?'+':'−'}{fmt(Math.abs(dif))} — por la UF del día.</div><div style={{display:'flex',gap:8}}><button onClick={()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id)} style={btnP}>Reemplazar por la emitida</button><button onClick={()=>setDismissedMatch(p=>new Set([...p,m.prog.id]))} style={btnS}>No es match</button></div></div>}</>) }
+  const renderProg = (m) => { const k='prog|'+m.prog.id; const ex=expItem.has(k); const dif=(m.real.amount||0)-(m.prog.amount||0); return itemBox(k,<>{itemHead(k,m.prog.due||m.prog.issued_at,m.prog.concept||'—',`${fmt(m.prog.amount)} · programada`)}{ex&&<div style={{padding:'2px 9px 9px'}}>{rowConserva(m.real,`${m.real.invoice_no?`Factura N°${folioN(m.real.invoice_no)}`:'emitida'} · ${fmt(m.real.amount)}`)}{rowElimina(`programada · ${fmt(m.prog.amount)}`,null,'SE DA DE BAJA')}<div style={{fontSize:10,color:'#0C447C',background:C.azulBg,borderRadius:7,padding:'5px 8px',marginBottom:8}}>Diferencia {dif>=0?'+':'−'}{fmt(Math.abs(dif))} — por la UF del día.</div><div style={{display:'flex',gap:8}}><button onClick={()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id)} style={btnP}>Reemplazar por la emitida</button><button onClick={()=>{ const kk=`${m.prog.id}|${m.real.id}`; learnPut('match_no',kk); setMatchNo(p=>new Set([...(p||[]),kk])); setDismissedMatch(p=>new Set([...p,m.prog.id])) }} style={btnS}>No es match</button></div></div>}</>) }
   const catBlock = (key,dot,name,items,getCid,getDate,renderRow) => { if(!items.length) return null; const open=openCat.has(key); return <div key={key} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}><div onClick={()=>toggle(setOpenCat,key)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',cursor:'pointer',background:open?'#F5F7F9':'#fff'}}><span style={{color:C.muted,fontSize:12,width:10}}>{open?'▾':'▸'}</span><span style={{width:7,height:7,borderRadius:'50%',background:dot,flexShrink:0}}/><span style={{flex:1,fontSize:13,fontWeight:500,color:C.text}}>{name}</span><span style={{fontSize:11,color:C.muted}}>{items.length}</span></div>{open&&<div style={{padding:'4px 8px 8px'}}>{byCli(items,getCid,getDate).map(grp=>{ const ck=key+'|'+grp.cid; const co=openCli.has(ck); return (<div key={grp.cid} style={{marginBottom:5}}><div onClick={()=>toggle(setOpenCli,ck)} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 8px',background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,cursor:'pointer'}}><span style={{color:C.muted,fontSize:11,width:9}}>{co?'▾':'▸'}</span><span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.name}</span><span style={{fontSize:10,color:C.muted}}>{grp.items.length}</span>{onOpenClientFicha&&grp.cid&&grp.cid!=='null'&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(grp.cid)}} title='Ver ficha' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer'}}>↗</span>}</div>{co&&<div style={{marginTop:4,paddingLeft:2}}>{grp.items.map(({it,i})=>renderRow(it,i))}</div>}</div>) })}</div>}</div> }
 
   return (
