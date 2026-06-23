@@ -15835,12 +15835,16 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                       <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(f.invoice_no)||'—'}</b> · {(f.concept||'sin concepto').slice(0,26)} <span style={{color:C.done}}>· {fmtFechaDMY(f.issued_at)}</span></span>
                                       <span style={{textAlign:'right'}}><b style={{whiteSpace:'nowrap'}}>{fmtM(f.amount)}</b><br/>{f.status==='Pagado'?(()=>{ const e=facturaRespaldo(f,aplicadoByFactura,cartolaHasta); return <span style={{fontSize:9,fontWeight:600,color:(e&&e.fg)||C.greenText}}>{(e&&e.label)||'Pagada'}</span> })():<span style={{fontSize:9,color:estCol,whiteSpace:'nowrap'}}>saldo {fmtM(saldoFactura(f))}</span>}</span>
                                     </div>
-                                    {open&&<div style={{padding:'6px 8px 7px',background:'#F5F7F9',borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 4px'}}>
+                                    {open&&(()=>{ const ap=aplicadoByFactura[f.id]||0; const est=estadoFacturaLabel(f,ap,cartolaHasta); const movsF=(conc||[]).filter(c=>String(c.factura_id)===String(f.id)&&c.tipo_destino==='factura').map(c=>{ const mm=(movs||[]).find(x=>String(x.id)===String(c.movimiento_id)); return mm?`${fmtFechaDMY(mm.fecha)} · ${fmtM(c.monto_aplicado)}`:null }).filter(Boolean); return (
+                                    <div style={{padding:'7px 9px 8px',background:'#F5F7F9',borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 4px'}}>
+                                      {est&&<div style={{marginBottom:4}}><span style={{fontSize:9,fontWeight:700,padding:'1px 8px',borderRadius:7,background:est.bg,color:est.fg}}>{est.label}</span></div>}
+                                      <div>Concepto: <b style={{color:C.text}}>{f.concept||'—'}</b></div>
                                       <div>Razón social: <b style={{color:C.text}}>{f.receptor_name||'—'}</b>{f.receptor_rut?` · ${f.receptor_rut}`:''}</div>
                                       <div>Emisión: {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
-                                      <div>Monto: {fmtM(f.amount)} · Saldo: {fmtM(saldoFactura(f))} · {f.status}</div>
-                                      <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{marginTop:5,fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:C.accent,color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
-                                    </div>}
+                                      <div>Monto: {fmtM(f.amount)} · Saldo: {fmtM(saldoFactura(f))}</div>
+                                      {f.status==='Pagado'&&<div>Respaldo banco: <b style={{color:ap>0?C.greenText:C.overdueText}}>{ap>0?`${fmtM(ap)}${ap<(f.amount||0)?` de ${fmtM(f.amount)}`:''}`:'sin movimiento (marcada a mano)'}</b>{movsF.length?` · ${movsF.join(', ')}`:''}</div>}
+                                      <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{marginTop:6,fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:C.accent,color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
+                                    </div>) })()}
                                   </div>) })}
                               </div>
                             ))}
