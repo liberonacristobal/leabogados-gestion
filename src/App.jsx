@@ -80,23 +80,23 @@ function facturaRespaldo(b, respaldoMap={}, cartolaHasta=null){
   if((b.billing_type||'')==='reembolso') return null
   const monto = b.amount||0
   const aplicado = respaldoMap[b.id]||0
-  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Pagada y conciliada', bg:C.azulBg, fg:C.accent}
-  if(aplicado>0) return {key:'parcial', label:`Pagada · parcial · falta ${fmt(monto-aplicado)}`, bg:C.ambarBg, fg:C.soonText}
+  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Pagada y conciliada', short:'Conciliada', bg:C.azulBg, fg:C.accent}
+  if(aplicado>0) return {key:'parcial', label:`Pagada · parcial · falta ${fmt(monto-aplicado)}`, short:'Parcial', bg:C.ambarBg, fg:C.soonText}
   const fechaPago = String(b.paid_at||b.issued_at||'').slice(0,10)
-  if(fechaPago && fechaPago < RESPALDO_CUTOFF) return {key:'manual', label:'Pagada (histórica)', bg:C.border, fg:C.grisText}
-  if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pagada · pendiente cartola', bg:C.greenBg, fg:C.greenText}
-  return {key:'sin', label:'Pagada sin conciliar', bg:C.overdueBg, fg:C.overdueText}
+  if(fechaPago && fechaPago < RESPALDO_CUTOFF) return {key:'manual', label:'Pagada (histórica)', short:'Histórica', bg:C.border, fg:C.grisText}
+  if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pagada · pendiente cartola', short:'Pend. cartola', bg:C.greenBg, fg:C.greenText}
+  return {key:'sin', label:'Pagada sin conciliar', short:'Sin conciliar', bg:C.overdueBg, fg:C.overdueText}
 }
 // Estado unificado para mostrar (cualquier status, no solo Pagada) — fuente única del rótulo en Conciliación/Facturación/ficha.
 function estadoFacturaLabel(b, aplicado=0, cartolaHasta=null){
   if(!b) return null
   const r = facturaRespaldo(b, {[b.id]:aplicado}, cartolaHasta)
   if(r) return r
-  if(b.status==='Anulada') return {key:'anulada', label:'Anulada', bg:C.border, fg:C.grisText}
-  if(b.status==='Anticipada') return {key:'anticipada', label:'Anticipada', bg:C.greenBg, fg:C.greenText}
-  if(b.status==='Programada') return {key:'programada', label:'Programada', bg:C.border, fg:C.muted}
-  if(['Pendiente','Vencido'].includes(b.status)) return {key:'sinpago', label:'Sin pago', bg:C.soonBg, fg:C.soonText}
-  return {key:'otro', label:b.status||'', bg:C.border, fg:C.muted}
+  if(b.status==='Anulada') return {key:'anulada', label:'Anulada', short:'Anulada', bg:C.border, fg:C.grisText}
+  if(b.status==='Anticipada') return {key:'anticipada', label:'Anticipada', short:'Anticipada', bg:C.greenBg, fg:C.greenText}
+  if(b.status==='Programada') return {key:'programada', label:'Programada', short:'Programada', bg:C.border, fg:C.muted}
+  if(['Pendiente','Vencido'].includes(b.status)) return {key:'sinpago', label:'Sin pago', short:'Sin pago', bg:C.soonBg, fg:C.soonText}
+  return {key:'otro', label:b.status||'', short:b.status||'', bg:C.border, fg:C.muted}
 }
 function RespaldoBadge({b, respaldoMap, cartolaHasta}){
   const r = facturaRespaldo(b, respaldoMap, cartolaHasta)
@@ -9926,6 +9926,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   })(); return ()=>{ok=false} },[client.id])
   const ventaById=useMemo(()=>{const m={};sales.forEach(s=>m[s.id]=s);return m},[sales])
   const concByFac=useMemo(()=>{const m={};conc.forEach(c=>{if(c.factura_id)m[c.factura_id]=c});return m},[conc])
+  const aplicadoByFac=useMemo(()=>{const m={};conc.forEach(c=>{if(c.factura_id&&c.tipo_destino==='factura')m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0)});return m},[conc])
+  const cartolaHastaEC=useMemo(()=>{let mx='';for(const x of movs){const f=String(x.fecha||'').slice(0,10);if(f>mx)mx=f}return mx||null},[movs])
   const movById=useMemo(()=>{const m={};movs.forEach(x=>m[x.id]=x);return m},[movs])
   const facturas=useMemo(()=>clientBilling.filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&b.status!=='Programada'),[clientBilling])
   const facturado=facturas.reduce((s,b)=>s+(b.amount||0),0)
@@ -9971,7 +9973,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
             {open&&<div style={{padding:'2px 0 6px'}}>{p.facs.map(b=>{ const pagada=b.status==='Pagado'; return (
               <div key={b.id} onClick={()=>onOpenSale&&p.venta&&onOpenSale(p.venta)} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0 4px 12px',fontSize:11,cursor:onOpenSale&&p.venta?'pointer':'default'}}>
                 <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(b.invoice_no)||'—'} <span style={{color:C.done}}>· {mesAA(b.issued_at)}</span></span>
-                <span style={{fontSize:9,color:pagada?C.greenText:C.soon}}>{pagada?'Pagada':'pend.'}</span>
+                {(()=>{ const e=estadoFacturaLabel(b,aplicadoByFac[b.id]||0,cartolaHastaEC); return <span style={{fontSize:9,fontWeight:600,color:(e&&e.fg)||C.soon}}>{(e&&e.short)||(pagada?'Pagada':'pend.')}</span> })()}
                 <span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{fmt(b.amount)}</span>
               </div>) })}</div>}
           </div>) }
@@ -10017,16 +10019,16 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
         </div>
         {abierta&&fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]
           const dp=String(b.issued_at||'').slice(0,10).split('-'); const dia=dp.length>=3?dp[2]:'—'; const sub=dp.length>=3?`${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(dp[1])-1]||''} ${dp[0].slice(2)}`:''
-          const eCol=pagada?C.greenText:(ag?ag.c:C.soon); const eBg=eCol==='#0F6E56'?C.greenBg:eCol==='#A32D2D'?C.overdueBg:eCol==='#C77F18'?C.ambarBg:C.azulBg; return (
+          const estB=pagada?estadoFacturaLabel(b,aplicadoByFac[b.id]||0,cartolaHastaEC):null; const eCol=pagada?((estB&&estB.fg)||C.greenText):(ag?ag.c:C.soon); const eBg=pagada?((estB&&estB.bg)||C.greenBg):(eCol==='#A32D2D'?C.overdueBg:eCol==='#0F6E56'?C.greenBg:C.azulBg); return (
           <div key={b.id}>
             <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer',borderBottom:open?'none':`1px solid ${C.border}`}}>
               <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{dia}</div><div style={{fontSize:9,color:C.done}}>{sub}</div></div>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:9,padding:'1px 7px',borderRadius:10,background:eBg,color:eCol}}>{pagada?'Pagada':(ag?ag.t:'pendiente')}</span></div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:9,fontWeight:600,padding:'1px 7px',borderRadius:10,background:eBg,color:eCol}}>{pagada?((estB&&estB.short)||'Pagada'):(ag?ag.t:'pendiente')}</span></div></div>
               <div style={{fontSize:13,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</div>
             </div>
             {open&&<div style={{padding:'7px 9px',background:'#F5F7F9',borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
               <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{b.billing_type||'honorarios'}</b></span><span>Emisión: <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b></span>{b.due&&<span>Vence: <b style={{color:C.text}}>{fmtFechaDMY(b.due)}</b></span>}</div>
-              <div>Monto: <b style={{color:C.text}}>{fmt(b.amount)}</b> · {pagada?'Pagada':`Saldo ${fmt((b.amount||0)-(b.paid_amount||0))}`}</div>
+              <div>Monto: <b style={{color:C.text}}>{fmt(b.amount)}</b> · {pagada?((estB&&estB.label)||'Pagada'):`Saldo ${fmt((b.amount||0)-(b.paid_amount||0))}`}</div>
               {v&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Venta / proyecto</span>{onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}</div><div onClick={onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:onOpenSale?'pointer':'default'}}><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</div></div>}
               {pagada&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase'}}>Pago</span>{c&&onOpenConciliacion&&<span onClick={(ev)=>{ev.stopPropagation();onOpenConciliacion(c.movimiento_id)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver movimiento ↗</span>}</div>
                 {c?<div onClick={onOpenConciliacion?(ev)=>{ev.stopPropagation();onOpenConciliacion(c.movimiento_id)}:undefined} style={{color:C.text,cursor:onOpenConciliacion?'pointer':'default'}}>Transferencia <b>{fmt(c.monto_aplicado)}</b>{mv?` · ${fmtFechaDMY(mv.fecha)} · ${mv.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}${mv.n_operacion?` · N° op. ${mv.n_operacion}`:''}`:''} <span style={{color:C.greenText,fontWeight:600}}>✓ verificado en banco</span></div>
