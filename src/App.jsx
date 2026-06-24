@@ -8428,7 +8428,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [revOpen,setRevOpen] = useState(null)
   const [showRevision,setShowRevision] = useState(false)   // panel "Gastos por revisar" (on-demand desde el menú Cargar)
   const [revSel,setRevSel] = useState(()=>new Set())       // selección múltiple en "Gastos por revisar"
-  const toggleSel = id => setRevSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })   // grupo de revisión abierto: 'na' | 'oc'
+  const toggleSel = id => setRevSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  const [revDupConfirm,setRevDupConfirm] = useState(null)   // confirmación si al mover hay gastos iguales en el destino
+  const doMove = async (ids,cid)=>{ for(const id of ids){ await onAssignClientToExpense(id,cid) } setRevSel(new Set()); setRevDupConfirm(null) }
+  // Mover los seleccionados a un cliente; si el destino ya tiene iguales (monto+descripción+categoría), pide confirmación.
+  const revMoverA = (cid)=>{
+    const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim()
+    const sel=(expenses||[]).filter(e=>revSel.has(e.id))
+    const dest=(expenses||[]).filter(e=>!e.deleted_at&&String(e.client_id)===String(cid))
+    const dupIds=sel.filter(g=>dest.some(e=>String(e.id)!==String(g.id)&&(e.amount||0)===(g.amount||0)&&norm(e.concept)===norm(g.concept)&&(e.category||'')===(g.category||''))).map(g=>g.id)
+    const all=sel.map(g=>g.id)
+    if(dupIds.length===0){ doMove(all,cid); return }
+    setRevDupConfirm({cid, name:(clients.find(c=>String(c.id)===String(cid))?.name||'el cliente'), dups:dupIds, all, unique:all.filter(id=>!dupIds.includes(id))})
+  }   // grupo de revisión abierto: 'na' | 'oc'
   const [revPick,setRevPick] = useState(null)   // id del gasto con buscador de reasignación abierto
   const revN = grp => grp.reduce((a,x)=>a+x.gastos.length,0)
 
@@ -9105,10 +9117,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   </div>}
                 </div>}
                 {revSel.size>0&&(
-                  <div style={{display:'flex',alignItems:'center',gap:10,marginTop:8,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'9px 12px',flexWrap:'wrap'}}>
-                    <span style={{fontSize:12,fontWeight:600,color:C.accent,flex:1,minWidth:70}}>{revSel.size} seleccionado{revSel.size!==1?'s':''}</span>
-                    <AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>{(async()=>{ for(const id of [...revSel]){ await onAssignClientToExpense(id,cid) } setRevSel(new Set()) })()}} label='Mover a…' placeholder='Buscar cliente…'/>
-                    <span onClick={()=>setRevSel(new Set())} style={{fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',flexShrink:0}}>Quitar</span>
+                  <div style={{marginTop:8}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'9px 12px',flexWrap:'wrap'}}>
+                      <span style={{fontSize:12,fontWeight:600,color:C.accent,flex:1,minWidth:70}}>{revSel.size} seleccionado{revSel.size!==1?'s':''}</span>
+                      <AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>revMoverA(cid)} label='Mover a…' placeholder='Buscar cliente…'/>
+                      <span onClick={()=>{setRevSel(new Set());setRevDupConfirm(null)}} style={{fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',flexShrink:0}}>Quitar</span>
+                    </div>
+                    {revDupConfirm&&(
+                      <div style={{marginTop:7,background:C.ambarBg,border:`1px solid ${C.soon}`,borderRadius:10,padding:'10px 12px'}}>
+                        <div style={{fontSize:11.5,color:C.coralText,marginBottom:8,lineHeight:1.45}}><b>{revDupConfirm.dups.length}</b> de los seleccionados ya existe{revDupConfirm.dups.length!==1?'n':''} igual{revDupConfirm.dups.length!==1?'es':''} en <b>{revDupConfirm.name}</b> (mismo monto, descripción y categoría).</div>
+                        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+                          <button onClick={()=>doMove(revDupConfirm.unique,revDupConfirm.cid)} style={{fontSize:11,fontWeight:600,border:'none',background:C.accent,color:'#fff',borderRadius:7,padding:'6px 11px',cursor:'pointer'}}>Omitir repetidos · mover {revDupConfirm.unique.length}</button>
+                          <button onClick={()=>doMove(revDupConfirm.all,revDupConfirm.cid)} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.text,borderRadius:7,padding:'6px 11px',cursor:'pointer'}}>Mover igual · {revDupConfirm.all.length}</button>
+                          <button onClick={()=>setRevDupConfirm(null)} style={{fontSize:11,fontWeight:600,border:'none',background:'none',color:C.muted,cursor:'pointer'}}>Cancelar</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
