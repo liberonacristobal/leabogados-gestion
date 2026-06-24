@@ -1604,6 +1604,9 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const [horizon,setHorizon] = useState(6)
   const [activePoint,setActivePoint] = useState(null)
   const [respF,setRespF] = useState('todos')
+  const [projOpen,setProjOpen] = useState(false)
+  const [projResp,setProjResp] = useState(null)   // abogado seleccionado en el panel de proyección (null=todos)
+  const [projYear,setProjYear] = useState('todos')
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const respByClient = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
   const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
@@ -1646,6 +1649,20 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const fmtKpi = clp => moneda==='UF' ? (ufRef>0?fmtUFk(clp/ufRef):'—') : fmtShort(clp)
   const hLbl = horizon===3?'3M':horizon===6?'6M':'12M'
 
+  // ── Proyección al 31-dic (panel B): por cobrar (Pendiente/Vencido) + programadas con vencimiento hasta fin de año; por abogado y por año de venta ──
+  const anoCurr = new Date().getFullYear()
+  const finAno = `${anoCurr}-12-31`
+  const saleYearById = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.year||null])),[sales])
+  const ventaYearDe = b => (b.sale_id&&saleYearById[String(b.sale_id)]) || b.sale_year || null
+  const baseProj = useMemo(()=> (billing||[]).filter(b=> b.billing_type!=='reembolso' && b.due && b.due<=finAno && (['Pendiente','Vencido'].includes(b.status)||b.status==='Programada')), [billing,finAno])
+  const projTotalAll = useMemo(()=> baseProj.reduce((a,b)=>a+saldoBill(b),0), [baseProj])
+  const projYearsDisp = useMemo(()=>[...new Set(baseProj.map(ventaYearDe).filter(Boolean))].sort((a,b)=>b-a), [baseProj,saleYearById])
+  const projFilt = useMemo(()=> baseProj.filter(b=> projYear==='todos'||String(ventaYearDe(b))===String(projYear)), [baseProj,projYear,saleYearById])
+  const projTotalFiltAll = useMemo(()=> projFilt.reduce((a,b)=>a+saldoBill(b),0), [projFilt])
+  const projPorAbogado = useMemo(()=>{ const m={}; projFilt.forEach(b=>{ const r=respDe(b)||'Sin abogado'; m[r]=(m[r]||0)+saldoBill(b) }); return Object.entries(m).map(([r,v])=>({r,v})).sort((a,b)=>b.v-a.v) }, [projFilt,respBySale,respByClient])
+  const projTotalFilt = useMemo(()=> projFilt.filter(b=>!projResp||respDe(b)===projResp).reduce((a,b)=>a+saldoBill(b),0), [projFilt,projResp,respBySale,respByClient])
+  const projFacturas = useMemo(()=> projResp ? projFilt.filter(b=>respDe(b)===projResp).sort((a,b)=>(a.due||'').localeCompare(b.due||'')) : [], [projFilt,projResp,respBySale,respByClient])
+
   // Geometría del gráfico
   const W=470, padX=24, padTop=14, baseY=120, n=months.length
   const xAt = i => n>1 ? padX + i*(W-2*padX)/(n-1) : W/2
@@ -1678,27 +1695,28 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const tlabel = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
-        <div style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'0.06em',textTransform:'uppercase'}}>Cash flow · proyección {hLbl}</div>
-        <div style={{display:'flex',gap:4,flexShrink:0}}>
-          {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
-            <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?C.azulBg:'transparent',color:horizon===v?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer'}}>{l}</button>
-          ))}
-        </div>
-      </div>
-      {respList.length>1&&<div style={{display:'flex',gap:5,marginBottom:8,flexWrap:'wrap'}}>
-        {['todos',...respList].map(r=>{ const on=respF===r; const pc=r==='todos'?{bg:C.azulBg,color:C.accent}:personChip(r); return (
-          <button key={r} onClick={()=>{setRespF(r);setActivePoint(null)}} style={{padding:'3px 11px',borderRadius:20,border:`1px solid ${on?pc.color:C.border}`,background:on?pc.bg:'transparent',color:on?pc.color:C.done,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r==='todos'?'Todos':r}</button>
-        )})}
-      </div>}
+      <div style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:8}}>Cash flow · proyección</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:10}}>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`}}><div style={tlabel}>Total {hLbl}</div><div style={{fontSize:17,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalHorizon)}</div></div>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.normal}`}}><div style={tlabel}>Emitido (por cobrar)</div><div style={{fontSize:17,fontWeight:600,color:C.normal,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalEmitido)}</div></div>
-          <div style={{...tcell,background:'#fff',border:`1px solid ${C.border}`,borderLeft:'3px solid #99ABB4'}}><div style={tlabel}>Programado {hLbl}</div><div style={{fontSize:17,fontWeight:600,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtKpi(totalProgramado)}</div></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:1}}>
+          <span style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>Total a cobrar · {hLbl}</span>
+          <div style={{display:'flex',gap:4,flexShrink:0}}>
+            {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
+              <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'2px 9px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?C.azulBg:'transparent',color:horizon===v?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer'}}>{l}</button>
+            ))}
+          </div>
         </div>
-        <div style={{fontSize:10,color:C.done,marginBottom:8}}>Proyección a {hLbl} desde hoy. A la izquierda de "Hoy", lo efectivamente cobrado.</div>
+        <div style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(totalHorizon)}</div>
+        {(()=>{ const t=totalHorizon||1; const pe=Math.max(0,Math.min(100,Math.round(totalEmitido/t*100))); return (<>
+          <div style={{display:'flex',height:10,borderRadius:6,overflow:'hidden',margin:'9px 0 6px',background:C.bgSoft}}>
+            {totalEmitido>0&&<div style={{width:`${pe}%`,background:C.normal}}/>}
+            {totalProgramado>0&&<div style={{width:`${100-pe}%`,background:C.done}}/>}
+          </div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,flexWrap:'wrap',gap:4,marginBottom:8}}>
+            <span style={{color:C.greenText}}>● Por cobrar <b>{fmtKpi(totalEmitido)}</b></span>
+            <span style={{color:C.muted}}>● Programado <b>{fmtKpi(totalProgramado)}</b></span>
+          </div>
+        </>)})()}
 
         <div style={{display:'flex',gap:14,fontSize:10,color:C.muted,marginBottom:4,flexWrap:'wrap'}}>
           <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px solid #99ABB4',display:'inline-block'}}/>Cobrado real</span>
@@ -1759,7 +1777,59 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
           </div>
         )}
         {activePoint==null&&<div style={{fontSize:10,color:C.done,textAlign:'center',marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>Toca un mes para ver las facturas que lo componen</div>}
+        <div style={{borderTop:`1px solid ${C.border}`,marginTop:10,paddingTop:10}}>
+          <div onClick={()=>setProjOpen(true)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.azulBg,borderRadius:9,padding:'10px 12px',cursor:'pointer'}}>
+            <span style={{fontSize:12.5,color:C.accent,fontWeight:600}}>Proyección al 31 dic {anoCurr}</span>
+            <span style={{fontSize:13,color:C.accent,fontWeight:700,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtKpi(projTotalAll)} →</span>
+          </div>
+        </div>
       </div>
+
+      {projOpen&&(
+        <div onClick={()=>setProjOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:'#fff',borderRadius:'16px 16px 0 0',maxHeight:'86vh',overflowY:'auto',padding:'16px 18px 26px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8}}>
+              <span style={{fontSize:15,color:C.text}}>Proyección de ingresos{projResp?` · ${projResp}`:''}</span>
+              {projResp
+                ? <span onClick={()=>setProjResp(null)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>quitar filtro</span>
+                : <span onClick={()=>setProjOpen(false)} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>}
+            </div>
+            <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmt(projTotalFilt)}</div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:12}}>
+              <span style={{fontSize:10.5,color:C.muted}}>por cobrar + programadas · al 31 dic {anoCurr}{projResp?` · de ${fmt(projTotalFiltAll)} total`:''}</span>
+              {projYearsDisp.length>1&&<select value={projYear} onChange={e=>{setProjYear(e.target.value);setProjResp(null)}} style={{fontSize:11,padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>
+                <option value='todos'>Año venta: todos</option>
+                {projYearsDisp.map(y=><option key={y} value={y}>Año venta {y}</option>)}
+              </select>}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {projPorAbogado.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin montos por cobrar al 31 dic.</div>}
+              {projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
+                <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:8,background:on?(pc.bg||C.azulBg):C.bgSoft,borderLeft:`3px solid ${pc.color||C.muted}`,borderRadius:'0 8px 8px 0',padding:'8px 11px',cursor:'pointer',opacity:projResp&&!on?.45:1}}>
+                  <span style={{flex:1,fontSize:12.5,color:on?(pc.color||C.accent):C.text,fontWeight:on?600:400}}>{r}</span>
+                  <span style={{fontSize:12.5,color:on?(pc.color||C.accent):C.text,fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</span>
+                </div>
+              )})}
+            </div>
+            {projResp&&<div style={{marginTop:13,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+              <div style={{fontSize:9,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Sus facturas · hasta 31 dic</div>
+              {projFacturas.length===0&&<div style={{fontSize:12,color:C.muted}}>Sin facturas.</div>}
+              {projFacturas.map(b=>(
+                <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
+                    <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:9,fontWeight:600,color:b.status==='Programada'?C.muted:b.status==='Vencido'?C.overdueText:C.accent}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(saldoBill(b))}</div>
+                  </div>
+                </div>
+              ))}
+            </div>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
