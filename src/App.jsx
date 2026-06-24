@@ -1703,18 +1703,18 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const tlabel = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Cash flow · proyección</div>
+      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Proyección flujo de caja</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:1}}>
-          <span style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>Total a cobrar · {hLbl}</span>
+        <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginBottom:1}}>Total a cobrar · {hLbl}</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+          <span style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(totalHorizon)}</span>
           <div style={{display:'flex',gap:4,flexShrink:0}}>
             {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
               <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'4px 11px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?C.azulBg:'transparent',color:horizon===v?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
             ))}
           </div>
         </div>
-        <div style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(totalHorizon)}</div>
         {(()=>{ const t=totalHorizon||1; const pe=Math.max(0,Math.min(100,Math.round(totalEmitido/t*100))); return (<>
           <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',margin:'9px 0 6px',background:C.bgSoft}}>
             {totalEmitido>0&&<div style={{width:`${pe}%`,background:C.normal}}/>}
