@@ -2269,8 +2269,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       <div style={{padding:'0 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <div style={{display:'flex',alignItems:'center',position:'relative'}}>
-            <span style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em'}}>Cómo va el año</span>
-            <button onClick={()=>setYearMenu(o=>!o)} style={{marginLeft:5,display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:10,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:'0.06em'}}>{selYear}<span style={{fontSize:9,color:C.done}}>{'▾'}</span></button>
+            <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Cómo va el año</span>
+            <button onClick={()=>setYearMenu(o=>!o)} style={{marginLeft:5,display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'0.04em'}}>{selYear}<span style={{fontSize:9,color:C.done}}>{'▾'}</span></button>
             {yearMenu&&(
               <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
                 {aniosDisponibles.map(y=>(
@@ -2489,14 +2489,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Aging de cartera */}
       <div style={{padding:'16px 20px 0'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Antigüedad de cartera</span>
-          <button onClick={()=>setTop5Open(o=>!o)} style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:C.muted,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>Detalle <span style={{fontSize:12,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span></button>
-        </div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Antigüedad de cartera</div>
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
-          <div style={{marginBottom:11}}>
-            <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtMon(agingData.total)}</div>
-            <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>por cobrar{agingData.delta.monto!==0?` · ${agingData.delta.monto>0?'+':''}${fmtMon(agingData.delta.monto)} vs mes ant.`:''}</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:11}}>
+            <div>
+              <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtMon(agingData.total)}</div>
+              <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>por cobrar{agingData.delta.monto!==0?` · ${agingData.delta.monto>0?'+':''}${fmtMon(agingData.delta.monto)} vs mes ant.`:''}</div>
+            </div>
+            <button onClick={()=>setTop5Open(o=>!o)} style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:C.muted,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em',flexShrink:0}}>Detalle <span style={{fontSize:12,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span></button>
           </div>
           <div style={{height:8.5,borderRadius:5,display:'flex',overflow:'hidden',background:C.border,marginBottom:12}}>
             <div style={{width:`${agingData.buckets.current.pct}%`,background:C.normal}}/>
@@ -2808,7 +2808,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const expF = filas.find(f=>f.u===cajaExp)
         return (
           <div style={{padding:'16px 20px 0'}}>
-            <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Gestión caja chica</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Gestión caja chica</div>
             {/* Lado a lado; en iPhone el detalle baja bajo el saldo (clase .cc-body) */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               {filas.map(f=>{
