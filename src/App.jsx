@@ -2620,7 +2620,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{padding:'16px 20px 0'}}>
             <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cuentas por pagar · proveedores</div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
-              <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot+pendienteTot)}</div>
+              <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot+pendienteTot)}</div>
               <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3,marginBottom:11}}>Le debes a proveedores</div>
                 {(()=>{ const debe=(porPagarTot+pendienteTot)||1; return (<>
                   <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',background:'#F1EFE8',marginBottom:9}}>
@@ -2628,8 +2628,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     {pendienteTot>0&&<div style={{width:`${Math.round(pendienteTot/debe*100)}%`,background:C.soon}}/>}
                   </div>
                   <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',fontSize:12,marginBottom:13}}>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.normal}}>●</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot)}</b> <span style={{color:C.muted}}>listo para pagar</span></span>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.soon}}>●</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(pendienteTot)}</b> <span style={{color:C.muted}}>en espera del cobro</span></span>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.normal}}>●</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot)}</b> <span style={{color:C.greenText}}>listo para pagar</span></span>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.soon}}>●</span><b style={{color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pendienteTot)}</b> <span style={{color:C.soonText}}>en espera del cobro</span></span>
                   </div>
                 </>)})()}
                 {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
@@ -2643,7 +2643,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} title={provRS&&titleCase(provRS)!==provNom?titleCase(provRS):undefined} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.neutro||'#F5F7F9',cursor:'pointer'}}>
                       <span style={{width:24,height:24,borderRadius:6,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
                       <span style={{flex:1,fontSize:13,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}</span>
-                      <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtShort(g.total)}</span>
                       <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
                     </div>
                     {provOpen&&ppCuentas.length>=2&&(
@@ -3131,7 +3131,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
             <div>
               <div style={{fontSize:9.5,fontWeight:700,color:'#9FC4DE',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Radar tributario · SII</div>
-              <div style={{fontSize:20,fontWeight:700,color:'#fff',lineHeight:1}}>{radar.length} foco{radar.length!==1?'s':''} activo{radar.length!==1?'s':''}{radar.length>0&&<span style={{fontSize:11,fontWeight:500,color:'#88A6B6'}}> · {radar.reduce((a,n)=>a+n.expuestos.length,0)} a conversar</span>}</div>
+              <div style={{fontSize:20,fontWeight:700,color:'#fff',lineHeight:1}}>{radar.length} foco{radar.length!==1?'s':''} activo{radar.length!==1?'s':''}</div>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:13,flexShrink:0,paddingTop:2}}>
               <button onClick={actualizarRadar} disabled={radarBusy} title='Actualizar' style={{fontSize:14,color:'#9FC4DE',background:'none',border:'none',cursor:radarBusy?'default':'pointer',padding:0,lineHeight:1}}>{radarBusy?'…':'↻'}</button>
@@ -3147,11 +3147,11 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
                   <span style={{width:7,height:7,borderRadius:'50%',background:pr,flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12.5,color:'#EAF0F3',lineHeight:1.3}}>{n.titulo}</div>
-                    {n.tipo&&<div style={{fontSize:9.5,color:'#88A6B6',marginTop:1,textTransform:'capitalize'}}>{n.tipo}{n.numero?` ${n.numero}`:''}</div>}
+                    {(n.tipo||n.numero)&&<div style={{fontSize:9.5,color:'#88A6B6',marginTop:1}}>{((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim()}</div>}
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     <div style={{fontSize:15,fontWeight:700,color:'#fff',lineHeight:1}}>{n.expuestos.length}</div>
-                    <div style={{fontSize:7.5,color:'#88A6B6',textTransform:'uppercase',letterSpacing:'.04em'}}>a conversar</div>
+                    <div style={{fontSize:7.5,color:'#88A6B6',textTransform:'uppercase',letterSpacing:'.04em'}}>clientes</div>
                   </div>
                   <span style={{fontSize:13,color:'#6E93A6',flexShrink:0}}>{op?'⌃':'›'}</span>
                 </div>
@@ -3165,7 +3165,6 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
                 </div>}
               </div>
             )})}
-          {radar.length>0&&<div style={{fontSize:8.5,color:'#6E93A6',textAlign:'center',padding:'5px 0 4px'}}>Solo documentos reales del SII, citados · tú validas</div>}
         </div>
 
         {/* ÍNDICE — lentes del negocio (una sección abierta a la vez) */}
@@ -3370,7 +3369,6 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             )}
           </div>
         </div>)}
-        <div style={{marginTop:14,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
       </div>
     </div>
   )
