@@ -2927,6 +2927,9 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
   const [biSec,setBiSec] = useState(null)       // sección del índice abierta (hub): oport|cartera|servicios|tendencias|ia
   const [openFoco,setOpenFoco] = useState(null) // foco del SII expandido en el héroe
+  const [briefBusy,setBriefBusy] = useState(false)  // generando brief IA del foco
+  const [memoBusy,setMemoBusy] = useState(false)    // generando memo de conversación
+  const [memoText,setMemoText] = useState(null)     // memo generado (editable)
   const [iaResumen,setIaResumen] = useState(null)   // narrativa IA "foco de la semana"
   const [iaBusy,setIaBusy] = useState(false)
   const [planAnio,setPlanAnio] = useState(null)     // "Plan del Año" (interno + outlook SII)
@@ -3112,6 +3115,29 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     setPlanBusy(false)
   }
 
+  // Brief del foco (Fase 2): IA explica de qué se trata y por qué importa, BLINDADA a la fuente; se guarda en sii_novedades.brief para no regenerar.
+  const generarBrief = async (n) => {
+    setBriefBusy(true)
+    try{
+      const prompt = `Eres asistente tributario de un estudio de abogados chileno. Explica en 2-3 frases, factual y en español de Chile, de qué se trata este foco del SII y por qué le importa al estudio y a sus clientes. Usa SOLO la información dada; NO inventes cifras, números de norma ni cites artículos que no aparezcan. Sin markdown.\n\nFOCO: ${n.titulo}\nTIPO: ${n.tipo||''} ${n.numero||''}\nRESUMEN: ${n.resumen||'(sin resumen)'}\nÁREAS: ${(n.areas||[]).join(', ')||'—'}`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      const brief = (data.content?.[0]?.text||'').trim()
+      if(brief){ const {error}=await supabase.from('sii_novedades').update({brief}).eq('id',n.id); if(error){alert('No se pudo guardar: '+error.message)} else { await cargarSii() } }
+    }catch(e){ alert('No se pudo generar el brief: '+(e?.message||'reintenta')) }
+    setBriefBusy(false)
+  }
+
+  // Memo de conversación (Fase 3): borrador IA para plantear el foco al cliente, editable. La IA es insumo, el abogado valida.
+  const generarMemo = async (n) => {
+    setMemoBusy(true); setMemoText(null)
+    try{
+      const prompt = `Eres abogado tributarista de un estudio chileno. Redacta un MEMO breve para que el abogado plantee una conversación proactiva a un cliente sobre este foco del SII. Empieza con "Asunto: ..." y luego 4-5 frases. Tono profesional cercano, español de Chile (forma usted). Explica qué está haciendo el SII, por qué conviene revisarlo y propón coordinar una reunión. Usa SOLO la info dada; NO inventes cifras ni cites normas que no aparezcan. Sin markdown.\n\nFOCO: ${n.titulo}\nTIPO: ${n.tipo||''} ${n.numero||''}\nCONTEXTO: ${n.brief||n.resumen||''}\nÁREAS: ${(n.areas||[]).join(', ')||'—'}`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:450,messages:[{role:'user',content:prompt}]})
+      setMemoText((data.content?.[0]?.text||'').trim()||'No se pudo generar el memo.')
+    }catch(e){ setMemoText('No se pudo: '+(e?.message||'reintenta')) }
+    setMemoBusy(false)
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -3147,7 +3173,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           {radar.length===0
             ? <div style={{fontSize:11.5,color:'#88A6B6',padding:'2px 0 9px',lineHeight:1.5}}>Sin novedades del SII aún · agrégalas con + o la ingesta automática.</div>
             : radar.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const op=openFoco===n.id; return (
-              <div key={n.id} onClick={()=>setOpenFoco(op?null:n.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'0.5px solid rgba(255,255,255,.13)',cursor:'pointer'}}>
+              <div key={n.id} onClick={()=>{setOpenFoco(op?null:n.id);setMemoText(null)}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'0.5px solid rgba(255,255,255,.13)',cursor:'pointer'}}>
                 <span style={{width:7,height:7,borderRadius:'50%',background:pr,flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12.5,color:op?'#fff':'#EAF0F3',fontWeight:op?600:400,lineHeight:1.3}}>{n.titulo}</div>
@@ -3164,13 +3190,24 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         {openFoco&&(()=>{ const n=radar.find(x=>String(x.id)===String(openFoco)); if(!n) return null; const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const tag=((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim(); return (
           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:12,padding:'12px 14px',marginBottom:13}}>
             <div style={{fontSize:9,fontWeight:700,color:pr,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>{tag||'SII'}{n.prioridad?` · prioridad ${n.prioridad}`:''}</div>
-            <div style={{fontSize:13.5,fontWeight:600,color:C.text,lineHeight:1.3,marginBottom:n.resumen?6:8}}>{n.titulo}</div>
-            {n.resumen&&<div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:9}}>{n.resumen}</div>}
-            {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:n.url?9:0}}>
+            <div style={{fontSize:13.5,fontWeight:600,color:C.text,lineHeight:1.3,marginBottom:6}}>{n.titulo}</div>
+            {(n.brief||n.resumen)&&<div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:10}}>{n.brief||n.resumen}</div>}
+            {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:11}}>
               {n.expuestos.slice(0,10).map(c=>(<span key={c.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:11.5,color:C.text,background:C.bgSoft,borderRadius:20,padding:'4px 10px',cursor:'pointer'}}>{c.name}</span>))}
               {n.expuestos.length>10&&<span style={{fontSize:11,color:C.muted,padding:'4px 4px'}}>+{n.expuestos.length-10}</span>}
             </div>}
-            {n.url&&<a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10.5,fontWeight:600,color:C.azulInfo,textDecoration:'none'}}>{n.numero?n.numero:'Fuente'} · sii.cl ↗</a>}
+            <div style={{display:'flex',flexWrap:'wrap',gap:7,alignItems:'center'}}>
+              {!n.brief&&<button onClick={()=>generarBrief(n)} disabled={briefBusy} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,borderRadius:7,padding:'4px 10px',cursor:briefBusy?'default':'pointer',opacity:briefBusy?.6:1}}>{briefBusy?'…':'✦ Generar brief'}</button>}
+              <button onClick={()=>generarMemo(n)} disabled={memoBusy} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,borderRadius:7,padding:'4px 10px',cursor:memoBusy?'default':'pointer',opacity:memoBusy?.6:1}}>{memoBusy?'…':'✦ Memo de conversación'}</button>
+              {n.url&&<a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10.5,fontWeight:600,color:C.azulInfo,textDecoration:'none',marginLeft:'auto'}}>{n.numero?n.numero:'Fuente'} · sii.cl ↗</a>}
+            </div>
+            {memoText&&<div style={{marginTop:11,borderTop:`0.5px solid ${C.border}`,paddingTop:11}}>
+              <textarea value={memoText} onChange={e=>setMemoText(e.target.value)} rows={7} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',fontSize:12,color:C.text,lineHeight:1.5,outline:'none',resize:'vertical',boxSizing:'border-box',fontFamily:'inherit',background:C.bgSoft}}/>
+              <div style={{display:'flex',gap:7,marginTop:7}}>
+                <Copyable text={memoText} title='Copiar memo' style={{fontSize:11,fontWeight:600,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,borderRadius:7,padding:'4px 12px',cursor:'pointer'}}>Copiar</Copyable>
+                <button onClick={()=>setMemoText(null)} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:7,padding:'4px 10px',cursor:'pointer'}}>Cerrar</button>
+              </div>
+            </div>}
           </div>
         )})()}
 
