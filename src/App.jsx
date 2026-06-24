@@ -2575,13 +2575,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const estPill = est => est==='por_pagar'?{l:'Por pagar',c:C.normal,bg:C.greenBg}:{l:'Pendiente',c:C.soon,bg:'#FFF8E1'}
         return (
           <div style={{padding:'16px 20px 0'}}>
-            <button onClick={()=>setOpenPagar(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openPagar?10:0}}>
-              <span style={{fontSize:10,color:C.muted,transform:openPagar?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Cuentas por pagar a proveedores</span>
-              <span style={{fontSize:13,fontWeight:600,color:porPagarTot>0?C.normal:(pendienteTot>0?C.soon:C.muted),marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot+pendienteTot)}</span>
-            </button>
-            {openPagar&&(
-              <div>
+            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cuentas por pagar · proveedores</div>
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
+              <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot+pendienteTot)}</div>
+              <div style={{fontSize:11,color:C.muted,fontWeight:500,marginBottom:11}}>le debes a proveedores</div>
                 {(()=>{ const debe=(porPagarTot+pendienteTot)||1; return (<>
                   <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',background:'#F1EFE8',marginBottom:9}}>
                     {porPagarTot>0&&<div style={{width:`${Math.round(porPagarTot/debe*100)}%`,background:C.normal}}/>}
@@ -2653,7 +2650,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   </div>
                 )})}
               </div>
-            )}
           </div>
         )
       })()}
