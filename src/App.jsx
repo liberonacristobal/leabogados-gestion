@@ -2922,7 +2922,13 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [respuesta,setRespuesta] = useState(null)
   const [pregBusy,setPregBusy] = useState(false)
   const [siiNov,setSiiNov] = useState([])           // Radar tributario: novedades del SII (Stage 7)
-  useEffect(()=>{ supabase.from('sii_novedades').select('*').then(({data})=>setSiiNov(data||[]),()=>{}) },[])
+  const cargarSii = ()=> supabase.from('sii_novedades').select('*').then(({data})=>setSiiNov(data||[]),()=>{})
+  useEffect(()=>{ cargarSii() },[])
+  const [addOpen,setAddOpen] = useState(false)      // "Agregar novedad SII"
+  const [addForm,setAddForm] = useState({tipo:'circular',numero:'',fecha:'',titulo:'',url:'',resumen:'',prioridad:'media',areas:[]})
+  const [addBusy,setAddBusy] = useState(false)
+  const [iaAreasBusy,setIaAreasBusy] = useState(false)
+  const areasFirma = useMemo(()=>[...new Set((sales||[]).filter(s=>['Activo','Terminado'].includes(s.status)).map(s=>s.area).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')),[sales])
   const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
   const yr = currentYear
   const hoy = new Date().toISOString().slice(0,10)
@@ -3034,6 +3040,31 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     setPregBusy(false)
   }
 
+  // Radar: sugerir áreas con IA (clasifica la novedad contra las áreas reales del estudio).
+  const sugerirAreas = async () => {
+    if(!addForm.titulo.trim()&&!addForm.resumen.trim()) return
+    setIaAreasBusy(true)
+    try{
+      const prompt = `Eres asistente tributario de un estudio de abogados chileno. Áreas del estudio (usa SOLO estas, tal cual están escritas): ${areasFirma.join(' | ')}. Novedad del SII: "${addForm.titulo}. ${addForm.resumen}". Responde SOLO un array JSON con las áreas del estudio a las que afecta (subconjunto EXACTO de la lista; [] si ninguna). Sin markdown ni texto extra.`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:200,messages:[{role:'user',content:prompt}]})
+      const txt=(data.content?.[0]?.text||'').trim().replace(/```json|```/g,'')
+      const arr=JSON.parse(txt)
+      if(Array.isArray(arr)) setAddForm(f=>({...f,areas:arr.filter(a=>areasFirma.includes(a))}))
+    }catch(_){ alert('No se pudo sugerir áreas, márcalas a mano.') }
+    setIaAreasBusy(false)
+  }
+  const guardarNovedad = async () => {
+    if(!addForm.titulo.trim()) return
+    setAddBusy(true)
+    try{
+      const row={tipo:addForm.tipo,numero:addForm.numero||null,fecha:addForm.fecha||null,titulo:addForm.titulo.trim(),url:addForm.url.trim()||null,resumen:addForm.resumen.trim()||null,areas:addForm.areas,prioridad:addForm.prioridad,vigente:true}
+      const {error}=await supabase.from('sii_novedades').insert(row)
+      if(error){alert('Error: '+error.message);setAddBusy(false);return}
+      await cargarSii(); setAddOpen(false); setAddForm({tipo:'circular',numero:'',fecha:'',titulo:'',url:'',resumen:'',prioridad:'media',areas:[]})
+    }catch(e){ alert('Error: '+(e?.message||e)) }
+    setAddBusy(false)
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -3098,7 +3129,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',margin:'18px 0 8px'}}>
           <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Radar tributario · SII</span>
-          <span style={{fontSize:9,color:'#99ABB4'}}>fuente SII</span>
+          <button onClick={()=>setAddOpen(true)} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,textTransform:'uppercase',letterSpacing:'.04em'}}>+ novedad</button>
         </div>
         {radar.length===0
           ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px',fontSize:12,color:C.muted,textAlign:'center'}}>Sin novedades del SII cargadas aún · <span style={{color:C.azulInfo}}>la ingesta automática (Fase B) las traerá</span></div>
@@ -3118,6 +3149,42 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         {radar.length>0&&<div style={{fontSize:9.5,color:C.done,textAlign:'center',margin:'2px 0 4px'}}>Solo documentos reales del SII, citados · la IA resume, tú validas</div>}
+        {addOpen&&(
+          <div onClick={()=>!addBusy&&setAddOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+            <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:440,background:'#fff',borderRadius:14,maxHeight:'88vh',overflowY:'auto',padding:'16px 18px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <span style={{fontSize:15,color:C.text}}>Agregar novedad SII</span>
+                <span onClick={()=>!addBusy&&setAddOpen(false)} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
+              </div>
+              {(()=>{ const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',background:'#fff',fontFamily:'inherit'}; const lab={fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',display:'block',marginBottom:4}; return (<>
+                <div style={{marginBottom:10}}><label style={lab}>Título *</label><input value={addForm.titulo} onChange={e=>setAddForm(f=>({...f,titulo:e.target.value}))} style={inp} placeholder='Ej: Fiscalización IVA servicios digitales'/></div>
+                <div style={{marginBottom:10}}><label style={lab}>Resumen</label><textarea value={addForm.resumen} onChange={e=>setAddForm(f=>({...f,resumen:e.target.value}))} rows={2} style={{...inp,resize:'vertical'}} placeholder='Qué dice, en una frase'/></div>
+                <div style={{display:'flex',gap:8,marginBottom:10}}>
+                  <div style={{flex:1}}><label style={lab}>Tipo</label><select value={addForm.tipo} onChange={e=>setAddForm(f=>({...f,tipo:e.target.value}))} style={inp}>{['circular','resolucion','oficio','jurisprudencia','pgct','ley'].map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+                  <div style={{flex:1}}><label style={lab}>N°</label><input value={addForm.numero} onChange={e=>setAddForm(f=>({...f,numero:e.target.value}))} style={inp} placeholder='42'/></div>
+                </div>
+                <div style={{display:'flex',gap:8,marginBottom:10}}>
+                  <div style={{flex:1}}><label style={lab}>Fecha</label><input type='date' value={addForm.fecha} onChange={e=>setAddForm(f=>({...f,fecha:e.target.value}))} style={inp}/></div>
+                  <div style={{flex:1}}><label style={lab}>Prioridad</label><select value={addForm.prioridad} onChange={e=>setAddForm(f=>({...f,prioridad:e.target.value}))} style={inp}>{['alta','media','baja'].map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+                </div>
+                <div style={{marginBottom:10}}><label style={lab}>Fuente (URL oficial)</label><input value={addForm.url} onChange={e=>setAddForm(f=>({...f,url:e.target.value}))} style={inp} placeholder='https://www.sii.cl/...'/></div>
+                <div style={{marginBottom:13}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                    <label style={{...lab,marginBottom:0}}>Áreas afectadas</label>
+                    <button onClick={sugerirAreas} disabled={iaAreasBusy} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>{iaAreasBusy?'…':'✦ Sugerir con IA'}</button>
+                  </div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {areasFirma.length===0&&<span style={{fontSize:11,color:C.muted}}>Sin áreas registradas en ventas.</span>}
+                    {areasFirma.map(a=>{ const on=addForm.areas.includes(a); return (
+                      <button key={a} onClick={()=>setAddForm(f=>({...f,areas:on?f.areas.filter(x=>x!==a):[...f.areas,a]}))} style={{fontSize:11,fontWeight:on?600:500,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{a}</button>
+                    )})}
+                  </div>
+                </div>
+                <button onClick={guardarNovedad} disabled={addBusy||!addForm.titulo.trim()} style={{width:'100%',height:40,borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:(addBusy||!addForm.titulo.trim())?'default':'pointer',opacity:(addBusy||!addForm.titulo.trim())?.5:1}}>{addBusy?'Guardando…':'Guardar novedad'}</button>
+              </>)})()}
+            </div>
+          </div>
+        )}
         <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Cartera · salud de clientes</div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
