@@ -8050,40 +8050,51 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const rend=concil.actualizar.filter(a=>a.rendido)
             const sinCli=concil.nuevos.filter(r=>!r.client_id&&!r.personal_de)
             const cn=(r)=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); return c?.name||r?.clientName||r?.nombre||'sin cliente' }
-            const SEC=[
-              {k:'act', t:'Corregir (ya existen)', n:concil.actualizar.length, col:C.azulInfo, items:concil.actualizar},
-              {k:'new', t:'Nuevos a importar', n:concil.nuevos.length, col:C.greenText, items:concil.nuevos.map(r=>({r}))},
+            const lista=(items,kind)=>(<div style={{background:'#FBFCFD',maxHeight:240,overflowY:'auto'}}>
+              {kind==='rend'&&<label style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
+                <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
+                <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su rendición</span>
+              </label>}
+              {items.slice(0,300).map((it,j)=>{ const r=it.r||it, e=it.e; return (
+                <div key={(e&&e.id)||(r.id+'_'+j)} style={{padding:'7px 13px',borderTop:j?`0.5px solid ${C.border}`:'none',fontSize:11}}>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(r)}</span><span style={{color:C.muted,flexShrink:0}}>${(r.monto||0).toLocaleString('es-CL')}</span></div>
+                  <div style={{color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'}{e?<span style={{color:C.done}}> · → {r.categoria||e.category||'Otro'}</span>:''}{kind==='dup'?<span style={{color:C.done}}> · {r.fecha?String(r.fecha).slice(0,10):'sin fecha'}</span>:''}</div>
+                </div>
+              )})}
+              {items.length>300&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'7px'}}>+{items.length-300} más</div>}
+            </div>)
+            const avisos=[
               {k:'rend', t:'Ya rendidos · protegidos', n:rend.length, col:C.coralText, items:rend},
-              {k:'sin', t:'Quedan sin cliente', n:sinCli.length, col:C.overdueText, items:sinCli.map(r=>({r}))},
-              {k:'dup', t:'Duplicados del archivo · se omite 1', n:dups.length, col:C.soon, items:dups.map(r=>({r}))},
+              {k:'sin', t:'Quedan sin cliente', n:sinCli.length, col:C.overdueText, items:sinCli},
+              {k:'dup', t:'Duplicados del archivo · se omite 1', n:dups.length, col:C.soon, items:dups},
             ].filter(s=>s.n>0)
+            const tileOpen = concilOpen==='act'||concilOpen==='new'
             return (
             <div style={{marginBottom:10}}>
-              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                {SEC.map((s,i)=>{ const open=concilOpen===s.k; return (
-                  <div key={s.k} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
-                    <div onClick={()=>setConcilOpen(open?null:s.k)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
-                      <span style={{width:9,height:9,borderRadius:3,background:s.col,flexShrink:0}}/>
-                      <span style={{flex:1,fontSize:12.5,fontWeight:600,color:C.text,minWidth:0}}>{s.t}</span>
-                      <span style={{fontSize:15,fontWeight:700,color:s.col}}>{s.n}</span>
-                      <span style={{fontSize:13,color:C.done,flexShrink:0}}>{open?'⌃':'›'}</span>
-                    </div>
-                    {open&&<div style={{background:'#FBFCFD',maxHeight:240,overflowY:'auto'}}>
-                      {s.k==='rend'&&<label style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
-                        <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
-                        <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su rendición</span>
-                      </label>}
-                      {s.items.slice(0,300).map((it,j)=>{ const r=it.r, e=it.e; return (
-                        <div key={(e&&e.id)||(r.id+'_'+j)} style={{padding:'7px 13px',borderTop:j?`0.5px solid ${C.border}`:'none',fontSize:11}}>
-                          <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(r)}</span><span style={{color:C.muted,flexShrink:0}}>${(r.monto||0).toLocaleString('es-CL')}</span></div>
-                          <div style={{color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'}{e?<span style={{color:C.done}}> · → {r.categoria||e.category||'Otro'}</span>:''}{s.k==='dup'?<span style={{color:C.done}}> · {r.fecha?String(r.fecha).slice(0,10):'sin fecha'}</span>:''}</div>
-                        </div>
-                      )})}
-                      {s.items.length>300&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'7px'}}>+{s.items.length-300} más</div>}
-                    </div>}
+              {/* Tiles: el resultado de la carga */}
+              <div style={{display:'flex',gap:8,marginBottom:tileOpen?0:10}}>
+                {[['act','Corregir',concil.actualizar.length,C.azulInfo,C.azulBg,'ya existen · sin duplicar'],['new','Nuevos',concil.nuevos.length,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
+                  <div key={k} onClick={()=>setConcilOpen(on?null:k)} style={{flex:1,background:bg,borderRadius:on?'12px 12px 0 0':12,padding:'12px',cursor:'pointer',border:`1px solid ${on?col:bg}`,borderBottom:on?'none':`1px solid ${bg}`}}>
+                    <div style={{fontSize:25,fontWeight:800,color:col,lineHeight:1}}>{n}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:'.03em',marginTop:3}}>{l}</div>
+                    <div style={{fontSize:9.5,color:col,opacity:.8,marginTop:2}}>{h}</div>
                   </div>
                 )})}
               </div>
+              {tileOpen&&<div style={{border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px',overflow:'hidden',marginBottom:10}}>{lista(concilOpen==='act'?concil.actualizar:concil.nuevos, concilOpen)}</div>}
+              {avisos.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+                {avisos.map((s,i)=>{ const open=concilOpen===s.k; return (
+                  <div key={s.k} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
+                    <div onClick={()=>setConcilOpen(open?null:s.k)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
+                      <span style={{width:9,height:9,borderRadius:'50%',background:s.col,flexShrink:0}}/>
+                      <span style={{flex:1,fontSize:12.5,fontWeight:600,color:C.text,minWidth:0}}>{s.t}</span>
+                      <span style={{fontSize:14,fontWeight:700,color:s.col}}>{s.n}</span>
+                      <span style={{fontSize:13,color:C.done,flexShrink:0}}>{open?'⌃':'›'}</span>
+                    </div>
+                    {open&&lista(s.items,s.k)}
+                  </div>
+                )})}
+              </div>}
               <button disabled={guardando||(concil.actualizar.length+concil.nuevos.length===0)} onClick={aplicarConcil} style={{width:'100%',padding:'11px',borderRadius:8,fontSize:13,fontWeight:600,cursor:(concil.actualizar.length+concil.nuevos.length)?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:(concil.actualizar.length+concil.nuevos.length)?1:.5}}>{guardando?'Aplicando…':`Aplicar · ${concil.actualizar.length} corregir · ${concil.nuevos.length} nuevos`}</button>
             </div>
             )})()}
