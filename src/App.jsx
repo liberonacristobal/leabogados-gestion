@@ -487,17 +487,17 @@ function LoginScreen({loading}) {
 }
 
 const TABS_ADMIN = [
-  {id:'dashboard',icon:'house',label:'Inicio'},
-  {id:'sales',icon:'tag',label:'Ventas'},
-  {id:'billing',icon:'dollar',label:'Facturación'},
-  {id:'expenses',icon:'minus',label:'Gastos'},
-  {id:'clients',icon:'person',label:'Clientes'},
+  {id:'dashboard',icon:'grid',label:'Inicio'},
+  {id:'sales',icon:'trending',label:'Ventas'},
+  {id:'billing',icon:'receipt',label:'Facturación'},
+  {id:'expenses',icon:'card',label:'Gastos'},
+  {id:'clients',icon:'idcard',label:'Clientes'},
 ]
 const TABS_LIMITED = [
   {id:'tasks',icon:'check',label:'Tareas'},
-  {id:'expenses',icon:'minus',label:'Gastos'},
-  {id:'cajachica',icon:'tag',label:'Caja chica'},
-  {id:'clients',icon:'person',label:'Clientes'},
+  {id:'expenses',icon:'card',label:'Gastos'},
+  {id:'cajachica',icon:'coins',label:'Caja chica'},
+  {id:'clients',icon:'idcard',label:'Clientes'},
 ]
 
 
@@ -1514,7 +1514,16 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
 
 function BottomNav({tab,setTab,overdueN,userRole}) {
   const tabs = userRole==='admin' ? TABS_ADMIN : TABS_LIMITED
-  const icons = {house:'⌂',tag:'◈',dollar:'$',minus:'⊖',person:'⊙',check:'✓'}
+  const sp = {fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
+  const icons = {
+    grid:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>,
+    trending:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>,
+    receipt:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><path d="M5 3v18l2-1.2 2 1.2 2-1.2 2 1.2 2-1.2 2 1.2V3l-2 1.2-2-1.2-2 1.2-2-1.2-2 1.2z"/><line x1="8.5" y1="8.5" x2="15.5" y2="8.5"/><line x1="8.5" y1="12.5" x2="15.5" y2="12.5"/></svg>,
+    card:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
+    idcard:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="10" r="2.5"/><path d="M8.5 17a3.5 3.5 0 0 1 7 0"/></svg>,
+    coins:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/><path d="M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg>,
+    check:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><path d="M4 12l5 5L20 6"/></svg>,
+  }
   return (
     <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
       <style>{`
@@ -1527,7 +1536,7 @@ function BottomNav({tab,setTab,overdueN,userRole}) {
       `}</style>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:'10px 0 8px',background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,position:'relative',minWidth:0}}>
-          <span style={{fontSize:16,lineHeight:1,color:tab===t.id?C.accent:C.muted}}>{icons[t.icon]}</span>
+          <span style={{lineHeight:0,color:tab===t.id?C.accent:C.muted,display:'flex'}}>{icons[t.icon]||icons.grid}</span>
           <span style={{fontSize:10,color:tab===t.id?C.accent:C.muted,fontWeight:tab===t.id?700:400,whiteSpace:'nowrap'}}>{t.label}</span>
           {t.id==='billing'&&overdueN>0&&<span style={{position:'absolute',top:4,right:'calc(50% - 16px)',background:C.overdue,color:'#fff',borderRadius:10,fontSize:9,fontWeight:700,padding:'1px 5px'}}>{overdueN}</span>}
         </button>
