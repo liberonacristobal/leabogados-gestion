@@ -2887,6 +2887,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 // El código calcula; el Resumen IA (claudeCall) se suma en una etapa siguiente.
 function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha}){
   const [openOpp,setOpenOpp] = useState(null)
+  const [openSeg,setOpenSeg] = useState(null)   // segmento de cartera abierto
   const [iaResumen,setIaResumen] = useState(null)   // narrativa IA "foco de la semana"
   const [iaBusy,setIaBusy] = useState(false)
   const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
@@ -2894,7 +2895,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const hoy = new Date().toISOString().slice(0,10)
   const mesesDesde = d => { if(!d) return 999; const a=new Date(hoy), b=new Date(String(d).slice(0,10)); if(isNaN(b.getTime())) return 999; return (a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()) }
 
-  const {kpis, opp} = useMemo(()=>{
+  const {kpis, opp, cartera, carteraTot} = useMemo(()=>{
     const reales = (clients||[]).filter(c=>!c.is_internal&&!c.is_occasional)
     const vh = id => ventaHistoricaUF(id, sales, ufRef)
     const ult = id => ultimaActividad(id, sales, billing, expenses)
@@ -2911,7 +2912,22 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr).reduce((a,s)=>a+ventaUF(s,ufRef),0)
     const porCobrar = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
     const cobradoYTD = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.status==='Pagado'&&String(b.paid_at||'').slice(0,4)===String(yr)).reduce((a,b)=>a+(b.amount||0),0)
-    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}}
+    // Cartera: TODOS los no-internos segmentados por salud (cascada, cada cliente cae en uno). Terminados fuera.
+    const noInt = (clients||[]).filter(c=>!c.is_internal)
+    const segCli = c => {
+      if(c.is_occasional) return 'ocasional'
+      if(c.status==='Terminado') return null
+      const meses = mesesDesde(ult(c.id))
+      if(meses>=9) return 'dormido'
+      if((venc[c.id]||0)>0 || meses>=4) return 'riesgo'
+      return 'sano'
+    }
+    const cartera = {sano:[],riesgo:[],dormido:[],ocasional:[]}
+    noInt.forEach(c=>{ const s=segCli(c); if(!s) return; cartera[s].push({c, uf:vh(c.id), meses:mesesDesde(ult(c.id)), area:areasDe(c.id)[0]||'—', rec:tieneRec(c.id), saldoVenc:venc[c.id]||0}) })
+    Object.keys(cartera).forEach(k=>cartera[k].sort((a,b)=>b.uf-a.uf))
+    const ufSeg = k => cartera[k].reduce((a,x)=>a+x.uf,0)
+    const carteraTot = {activos: cartera.sano.length+cartera.riesgo.length+cartera.dormido.length, ufTotal: ['sano','riesgo','dormido','ocasional'].reduce((a,k)=>a+ufSeg(k),0), ufSeg:{sano:ufSeg('sano'),riesgo:ufSeg('riesgo'),dormido:ufSeg('dormido'),ocasional:ufSeg('ocasional')}}
+    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot}
   },[sales,billing,clients,expenses,ufRef,yr])
 
   const OPPS = [
@@ -2985,7 +3001,42 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         </div>
-        <div style={{marginTop:11,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',margin:'18px 0 8px'}}>Cartera · salud de clientes</div>
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
+            <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes activos</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{carteraTot.activos}</div></div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Valor cartera · histórico</div><div style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(carteraTot.ufTotal)}</div></div>
+          </div>
+          {carteraTot.ufTotal>0&&<div style={{display:'flex',height:10,borderRadius:6,overflow:'hidden',background:'#F1EFE8',marginBottom:12}}>
+            {[['sano','#1D9E75'],['riesgo','#C77F18'],['dormido','#E24B4A'],['ocasional','#99ABB4']].map(([k,c])=>{ const w=carteraTot.ufSeg[k]/carteraTot.ufTotal*100; return w>0?<div key={k} style={{width:`${w}%`,background:c}}/>:null })}
+          </div>}
+          {[
+            {k:'sano', dot:'#1D9E75', col:C.greenText, t:'Sanos', sub:''},
+            {k:'riesgo', dot:'#C77F18', col:C.soonText, t:'En riesgo', sub:'saldo vencido o enfriándose'},
+            {k:'dormido', dot:'#E24B4A', col:C.overdueText, t:'Dormidos', sub:'activos 9+ meses sin actividad'},
+            {k:'ocasional', dot:'#99ABB4', col:C.muted, t:'Ocasionales', sub:''},
+          ].map(seg=>{ const rows=cartera[seg.k]; const open=openSeg===seg.k; const n=rows.length; return (
+            <div key={seg.k} style={{borderTop:`0.5px solid ${C.border}`}}>
+              <div onClick={()=>n&&setOpenSeg(open?null:seg.k)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 0',cursor:n?'pointer':'default'}}>
+                <span style={{width:9,height:9,borderRadius:'50%',background:seg.dot,flexShrink:0}}/>
+                <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text,minWidth:0}}>{seg.t}{seg.sub&&<span style={{fontSize:10,fontWeight:400,color:C.muted}}> · {seg.sub}</span>}</span>
+                <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{n}{seg.k!=='ocasional'&&carteraTot.ufSeg[seg.k]>0?` · ${fmtUFk(carteraTot.ufSeg[seg.k])}`:''}</span>
+                {n>0&&<span style={{fontSize:12,color:C.done,flexShrink:0}}>{open?'▴':'▾'}</span>}
+              </div>
+              {open&&rows.slice(0,15).map(x=>(
+                <div key={x.c.id} onClick={()=>x.c.id&&onOpenClientFicha&&onOpenClientFicha(x.c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0 7px 18px',borderTop:'0.5px solid #EEF1F3',cursor:'pointer'}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</div>
+                    <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.area} · {fmtUFk(x.uf)}{x.meses<900?` · hace ${x.meses}m`:''}{x.saldoVenc>0?` · saldo ${fmt(x.saldoVenc)}`:(x.rec?' · recurrente':'')}</div>
+                  </div>
+                  <span style={{fontSize:12,color:seg.col,flexShrink:0}}>›</span>
+                </div>
+              ))}
+              {open&&rows.length>15&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'5px 0'}}>+{rows.length-15} más</div>}
+            </div>
+          )})}
+        </div>
+        <div style={{marginTop:14,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
       </div>
     </div>
   )
