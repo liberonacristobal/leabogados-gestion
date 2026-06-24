@@ -2600,21 +2600,15 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   const provNom=titleCase(tituloProv(g.prov)); const provRS=g.prov?.razon_social?.trim()
                   return (
                   <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                    <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',background:C.neutro||'#F5F7F9',cursor:'pointer'}}>
-                      <span style={{width:34,height:34,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
-                      <div style={{minWidth:0,flex:1}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}</div>
-                        {provRS&&titleCase(provRS)!==provNom&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(provRS)}</div>}
-                      </div>
-                      <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Le debes</div>
-                        <div style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</div>
-                        {ppCuentas.length>=2&&(
-                          <button onClick={e=>{e.stopPropagation();setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{marginTop:6,height:28,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:13,fontWeight:600,padding:'0 11px',cursor:'pointer',whiteSpace:'nowrap'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
-                        )}
-                      </div>
-                      <span style={{fontSize:11,color:C.done,flexShrink:0,marginLeft:2}}>{provOpen?'▴':'▾'}</span>
+                    <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} title={provRS&&titleCase(provRS)!==provNom?titleCase(provRS):undefined} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.neutro||'#F5F7F9',cursor:'pointer'}}>
+                      <span style={{width:24,height:24,borderRadius:6,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
+                      <span style={{flex:1,fontSize:13,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</span>
+                      <span style={{fontSize:11,color:C.done,flexShrink:0}}>{provOpen?'▴':'▾'}</span>
                     </div>
+                    {provOpen&&ppCuentas.length>=2&&(
+                      <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{margin:'8px 12px 0',height:30,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
+                    )}
                     {provOpen&&ordCuentas(g.cuentas).map(t=>{
                       const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
                       const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
