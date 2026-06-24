@@ -8426,7 +8426,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const revNoActivo = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at||!e.client_id||e.type==='fondo') return false; const c=clientById[String(e.client_id)]; return c && !c.is_internal && !c.is_occasional && c.status && c.status!=='Activo' })),[expenses,clientById])
   const revOcasional = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at||e.type==='fondo') return false; const c=clientById[String(e.client_id)]; return c && c.is_occasional })),[expenses,clientById])
   const [revOpen,setRevOpen] = useState(null)
-  const [showRevision,setShowRevision] = useState(false)   // panel "Gastos por revisar" (on-demand desde el menú Cargar)   // grupo de revisión abierto: 'na' | 'oc'
+  const [showRevision,setShowRevision] = useState(false)   // panel "Gastos por revisar" (on-demand desde el menú Cargar)
+  const [revSel,setRevSel] = useState(()=>new Set())       // selección múltiple en "Gastos por revisar"
+  const toggleSel = id => setRevSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })   // grupo de revisión abierto: 'na' | 'oc'
   const [revPick,setRevPick] = useState(null)   // id del gasto con buscador de reasignación abierto
   const revN = grp => grp.reduce((a,x)=>a+x.gastos.length,0)
 
@@ -9058,22 +9060,18 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       {revNoActivo.map(({c,gastos})=>(
                         <div key={c.id} style={{borderTop:`0.5px solid ${C.border}`}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',flexWrap:'wrap'}}>
+                            <input type='checkbox' checked={gastos.length>0&&gastos.every(e=>revSel.has(e.id))} onChange={()=>{ const all=gastos.every(e=>revSel.has(e.id)); setRevSel(s=>{ const n=new Set(s); gastos.forEach(e=>all?n.delete(e.id):n.add(e.id)); return n }) }} style={{flexShrink:0,cursor:'pointer'}}/>
                             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                             <span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{c.status==='Terminado'?'Archivado':c.status}</span>
                             <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
-                            {gastos.length>1&&<AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>{(async()=>{ for(const g of gastos){ await onAssignClientToExpense(g.id,cid) } })()}} label={`Mover los ${gastos.length}`} placeholder='Mover todos a…'/>}
                             {c.status==='Terminado'&&onToggleClientStatus&&<button onClick={()=>onToggleClientStatus(c)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.normal}`,background:'#fff',color:C.greenText,borderRadius:7,padding:'3px 9px',cursor:'pointer',flexShrink:0}}>Reactivar</button>}
                           </div>
-                          {gastos.map(e=>{ const rendido=!!(e.render_id||e.client_render_id); return (
-                            <div key={e.id} style={{padding:'6px 13px 6px 22px',borderTop:`0.5px solid ${C.border}`}}>
-                              <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}>
-                                <span style={{fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rendido&&<span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>rendido</span>}{e.concept||'—'}</span>
-                                <div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}>
-                                  <span style={{fontSize:11,color:C.muted}}>{fmt(e.amount)}</span>
-                                  <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Cambiar' placeholder='Buscar cliente…'/>
-                                </div>
-                              </div>
-                            </div>
+                          {gastos.map(e=>{ const rendido=!!(e.render_id||e.client_render_id); const sel=revSel.has(e.id); return (
+                            <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 13px 7px 22px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
+                              <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{flexShrink:0,cursor:'pointer'}}/>
+                              <span style={{flex:1,fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rendido&&<span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>rendido</span>}{e.concept||'—'}</span>
+                              <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmt(e.amount)}</span>
+                            </label>
                           )})}
                         </div>
                       ))}
@@ -9089,27 +9087,30 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       {revOcasional.map(({c,gastos})=>(
                         <div key={c.id} style={{borderTop:`0.5px solid ${C.border}`}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',flexWrap:'wrap'}}>
+                            <input type='checkbox' checked={gastos.length>0&&gastos.every(e=>revSel.has(e.id))} onChange={()=>{ const all=gastos.every(e=>revSel.has(e.id)); setRevSel(s=>{ const n=new Set(s); gastos.forEach(e=>all?n.delete(e.id):n.add(e.id)); return n }) }} style={{flexShrink:0,cursor:'pointer'}}/>
                             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                             <span style={{fontSize:9,fontWeight:600,color:C.grisText,background:'#F1EFE8',borderRadius:3,padding:'1px 6px',flexShrink:0}}>ocasional</span>
                             <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
-                            {gastos.length>1&&<AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>{(async()=>{ for(const g of gastos){ await onAssignClientToExpense(g.id,cid) } })()}} label={`Mover los ${gastos.length}`} placeholder='Mover todos a…'/>}
                           </div>
-                          {gastos.map(e=>(
-                            <div key={e.id} style={{padding:'6px 13px 6px 22px',borderTop:`0.5px solid ${C.border}`}}>
-                              <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}>
-                                <span style={{fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
-                                <div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}>
-                                  <span style={{fontSize:11,color:C.muted}}>{fmt(e.amount)}</span>
-                                  <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Cambiar' placeholder='Buscar cliente…'/>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                          {gastos.map(e=>{ const sel=revSel.has(e.id); return (
+                            <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 13px 7px 22px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
+                              <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{flexShrink:0,cursor:'pointer'}}/>
+                              <span style={{flex:1,fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
+                              <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{fmt(e.amount)}</span>
+                            </label>
+                          )})}
                         </div>
                       ))}
                     </div>}
                   </div>}
                 </div>}
+                {revSel.size>0&&(
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginTop:8,background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:10,padding:'9px 12px',flexWrap:'wrap'}}>
+                    <span style={{fontSize:12,fontWeight:600,color:C.accent,flex:1,minWidth:70}}>{revSel.size} seleccionado{revSel.size!==1?'s':''}</span>
+                    <AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>{(async()=>{ for(const id of [...revSel]){ await onAssignClientToExpense(id,cid) } setRevSel(new Set()) })()}} label='Mover a…' placeholder='Buscar cliente…'/>
+                    <span onClick={()=>setRevSel(new Set())} style={{fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',flexShrink:0}}>Quitar</span>
+                  </div>
+                )}
               </div>
             )}
             <div style={{display:'flex',gap:8,marginBottom:8}}>
