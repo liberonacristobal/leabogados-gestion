@@ -1714,9 +1714,9 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
           </div>
           <div style={{display:'flex',gap:4,flexShrink:0}}>
             {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>{ const on=cfVista==='flujo'&&horizon===v; return (
-              <button key={v} onClick={()=>{setHorizon(v);setCfVista('flujo');setActivePoint(null)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
+              <button key={v} onClick={()=>{setHorizon(v);setCfVista('flujo');setActivePoint(null)}} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
             )})}
-            <button onClick={()=>setCfVista('dic')} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${cfVista==='dic'?C.accent:C.border}`,background:cfVista==='dic'?C.azulBg:'transparent',color:cfVista==='dic'?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>31 dic</button>
+            <button onClick={()=>setCfVista('dic')} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${cfVista==='dic'?C.accent:C.border}`,background:cfVista==='dic'?C.azulBg:'transparent',color:cfVista==='dic'?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>31 dic</button>
           </div>
         </div>
         {cfVista==='dic' ? (
@@ -2315,7 +2315,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           </div>
           <div style={{display:'flex',gap:4}}>
             {['UF','CLP'].map(v=>{ const on=dashMoneda===v; return (
-              <button key={v} onClick={()=>setDashMoneda(v)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{v}</button>
+              <button key={v} onClick={()=>setDashMoneda(v)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1}}>{v}</button>
             )})}
           </div>
         </div>
@@ -2342,7 +2342,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <div style={{display:'flex',gap:4}}>
                       {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; return (
-                        <button key={k} onClick={()=>setGaugeMode(k)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
+                        <button key={k} onClick={()=>setGaugeMode(k)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,cursor:'pointer',lineHeight:1}}>{l}</button>
                       )})}
                     </div>
                     <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?C.accent:C.muted,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
