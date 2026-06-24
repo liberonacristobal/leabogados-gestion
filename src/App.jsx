@@ -2918,6 +2918,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
   const [iaResumen,setIaResumen] = useState(null)   // narrativa IA "foco de la semana"
   const [iaBusy,setIaBusy] = useState(false)
+  const [planAnio,setPlanAnio] = useState(null)     // "Plan del Año" (interno + outlook SII)
+  const [planBusy,setPlanBusy] = useState(false)
   const [pregunta,setPregunta] = useState('')       // "pregúntale al negocio"
   const [respuesta,setRespuesta] = useState(null)
   const [pregBusy,setPregBusy] = useState(false)
@@ -3063,6 +3065,20 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
       await cargarSii(); setAddOpen(false); setAddForm({tipo:'circular',numero:'',fecha:'',titulo:'',url:'',resumen:'',prioridad:'media',areas:[]})
     }catch(e){ alert('Error: '+(e?.message||e)) }
     setAddBusy(false)
+  }
+
+  // Plan del Año: relato IA que sintetiza lo interno (BI) + el outlook del SII (Radar). La culminación.
+  const correrPlan = async () => {
+    setPlanBusy(true)
+    try{
+      const radarTxt = radar.length ? radar.slice(0,6).map(n=>`${n.titulo} [${(n.areas||[]).join('/')||'s/área'}; ${n.expuestos.length} clientes]`).join('; ') : 'sin novedades del SII cargadas aún'
+      const oppTxt = OPPS.map(o=> o.rows.length?`${o.t} ${o.rows.length}`:null).filter(Boolean).join(', ')
+      const brief = `INTERNO — vendido ${yr} ${fmtUFk(kpis.vendidoYTD)} (crecimiento ${tendencias.pctTot==null?'s/d':tendencias.pctTot+'%'} vs ${tendencias.prevYr}); por cobrar ${fmt(kpis.porCobrar)}; cobrado ${fmt(kpis.cobradoYTD)}. Cartera ${carteraTot.activos} activos (en riesgo ${cartera.riesgo.length}, dormidos ${cartera.dormido.length}). Áreas top: ${servicios.slice(0,4).map(s=>`${s.area} ${fmtUFk(s.uf)} (${s.recPct}% rec)`).join(', ')}. Por abogado: ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct}%)`:''}`).join(', ')}. Oportunidades: ${oppTxt||'—'}. EXTERNO (Radar SII): ${radarTxt}.`
+      const prompt = `Eres el asesor estratégico del socio de un estudio de abogados chileno. Con los datos INTERNOS + el outlook del SII (EXTERNO), escribe un PLAN DEL AÑO en 5-6 frases concretas: dónde concentrar, qué áreas potenciar, qué clientes/segmentos priorizar, qué riesgos de cobranza atacar, y qué oportunidades regulatorias del SII aprovechar (con su cruce por área). Español de Chile, directo, con cifras cuando aporten. Usa SOLO estos datos, no inventes; si algo no está, no lo afirmes. Sin markdown ni viñetas.\n\nDATOS:\n${brief}`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})
+      setPlanAnio((data.content?.[0]?.text||'').trim()||'No se pudo generar el plan.')
+    }catch(e){ setPlanAnio('No se pudo: '+(e?.message||'reintenta')) }
+    setPlanBusy(false)
   }
 
   return (
@@ -3264,6 +3280,20 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               <span style={{width:50,textAlign:'right',fontSize:11,fontWeight:600,color:a.pct==null?C.muted:(a.pct>=0?C.greenText:C.overdueText),flexShrink:0}}>{a.pct==null?'nuevo':`${a.pct>=0?'+':''}${a.pct}%`}</span>
             </div>
           )})}
+        </div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Plan del Año</div>
+        <div style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'13px 14px'}}>
+          {planAnio ? (<>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7,gap:8}}>
+              <span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.05em'}}>✦ Plan del año {yr}</span>
+              <button onClick={correrPlan} disabled={planBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:planBusy?.6:1}}>{planBusy?'…':'Otra vez'}</button>
+            </div>
+            <div style={{fontSize:13,color:C.text,lineHeight:1.55}}>{planAnio}</div>
+          </>) : (
+            <button onClick={correrPlan} disabled={planBusy} style={{width:'100%',background:'none',border:'none',cursor:planBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,color:C.accent,fontSize:13,fontWeight:600,padding:'2px 0'}}>
+              {planBusy?'Sintetizando interno + SII…':'✦ Generar Plan del Año (interno + SII)'}
+            </button>
+          )}
         </div>
         <div style={{marginTop:14,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
       </div>
