@@ -7922,9 +7922,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const used = new Set(); const actualizar=[], nuevos=[]
     const pick = r=>{
       const o=normOt(r.ot); if(o&&byOt[o]){ const c=byOt[o].find(e=>!used.has(e.id)); if(c) return c }
-      const cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
-      if(cands.length===1) return cands[0]
-      if(cands.length>1){ const rt=tok(r.concepto); let best=cands[0],bn=-1; cands.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); return best }
+      if(r.fecha){ const cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
+        if(cands.length===1) return cands[0]
+        if(cands.length>1){ const rt=tok(r.concepto); let best=cands[0],bn=-1; cands.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); return best } }
+      // Sin OT ni fecha que calce (históricos sin fecha): cliente + monto + glosa (≥1 palabra en común).
+      if(r.client_id){ const cm=live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.client_id||'')===String(r.client_id)); if(cm.length){ const rt=tok(r.concepto); let best=null,bn=-1; cm.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); if(bn>=1) return best } }
       return null
     }
     ;(rows||[]).filter(r=>!r.error&&(r.monto||0)>0).forEach(r=>{ const m=pick(r); if(m){ used.add(m.id); actualizar.push({r,e:m,rendido:!!(m.render_id||m.client_render_id)}) } else nuevos.push(r) })
