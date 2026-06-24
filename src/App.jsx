@@ -17383,31 +17383,27 @@ export default function App() {
           <div style={{position:'relative'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
-              <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                 {userRole==='admin'&&tab==='dashboard'&&(()=>{
                   const act=(tasks||[]).filter(t=>t.status!=='Terminado')
                   const venc=act.filter(t=>{const d=daysLeft(t.due);return d!=null&&d<0}).length
                   const hoy=act.filter(t=>{const d=daysLeft(t.due);return d===0}).length
                   const alert=venc>0
                   return (
-                  <button onClick={()=>setTareasOpen(true)} title='Tareas' style={{position:'relative',display:'flex',alignItems:'center',gap:4,height:24,padding:'0 9px',borderRadius:7,background:alert?C.overdueBg:'#fff',border:`0.5px solid ${alert?'#F3C9C7':C.border}`,color:alert?C.overdueText:C.muted,fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+                  <button onClick={()=>setTareasOpen(true)} title='Tareas' style={{position:'relative',width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:alert?C.overdue:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                     <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
-                    Tareas
-                    {(venc>0||hoy>0)&&<span style={{position:'absolute',top:-6,right:-6,minWidth:15,height:15,padding:'0 4px',borderRadius:8,background:venc>0?C.overdue:C.soon,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{venc>0?venc:hoy}</span>}
+                    {(venc>0||hoy>0)&&<span style={{position:'absolute',top:-2,right:-2,minWidth:14,height:14,padding:'0 3px',borderRadius:7,background:venc>0?C.overdue:C.soon,color:'#fff',fontSize:8,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{venc>0?venc:hoy}</span>}
                   </button>
                   )
                 })()}
-                <span className='fecha-full' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaFull}</span>
-                <span className='fecha-short' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaShort}</span>
-                <div style={{width:1,height:18,background:C.border,flexShrink:0}}/>
-                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:28,height:28,borderRadius:6,background:C.ambarBg,border:`1px solid ${C.soon}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='13' height='13' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill={C.soon}/><rect x='5.5' y='4' width='3' height='9' rx='1' fill={C.soon}/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill={C.soon}/></svg>
+                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='15' height='15' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill={C.soon}/><rect x='5.5' y='4' width='3' height='9' rx='1' fill={C.soon}/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill={C.soon}/></svg>
                 </button>}
-                <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+                <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                 </button>
-                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:28,height:28,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
+                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} title='Menú' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
                 </button>
               </div>
             </div>
