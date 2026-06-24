@@ -7400,8 +7400,10 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
   )
 }
 
-function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImport,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional}) {
+function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
+  const [modo,setModo] = useState('importar')   // importar | conciliar (conciliar = actualizar lo existente + importar solo lo nuevo)
+  const [noTocarRendidos,setNoTocarRendidos] = useState(true)  // en conciliar, no cambiar cliente de gastos ya rendidos
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
@@ -7909,6 +7911,42 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     setGuardando(false)
   }
 
+  // Conciliación: calza cada fila con un gasto existente (por OT, si no por fecha+monto+glosa). Lo que calza se ACTUALIZA; el resto se IMPORTA.
+  const concil = useMemo(()=>{
+    if(modo!=='conciliar' || !rows) return null
+    const normOt = s=>String(s||'').replace(/\D/g,'')
+    const tok = s=>new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').split(/[^a-z0-9]+/).filter(w=>w.length>2))
+    const ov = (a,b)=>{ let n=0; a.forEach(w=>{ if(b.has(w)) n++ }); return n }
+    const live = (expenses||[]).filter(e=>!e.deleted_at)
+    const byOt = {}; live.forEach(e=>{ const o=normOt(e.ot_number); if(o){(byOt[o]=byOt[o]||[]).push(e)} })
+    const used = new Set(); const actualizar=[], nuevos=[]
+    const pick = r=>{
+      const o=normOt(r.ot); if(o&&byOt[o]){ const c=byOt[o].find(e=>!used.has(e.id)); if(c) return c }
+      const cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
+      if(cands.length===1) return cands[0]
+      if(cands.length>1){ const rt=tok(r.concepto); let best=cands[0],bn=-1; cands.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); return best }
+      return null
+    }
+    ;(rows||[]).filter(r=>!r.error&&(r.monto||0)>0).forEach(r=>{ const m=pick(r); if(m){ used.add(m.id); actualizar.push({r,e:m,rendido:!!(m.render_id||m.client_render_id)}) } else nuevos.push(r) })
+    return {actualizar, nuevos, rendidosN: actualizar.filter(a=>a.rendido).length}
+  },[modo,rows,expenses])
+  const [concilBefore,setConcilBefore] = useState(null)
+  const aplicarConcil = async()=>{
+    if(!concil) return
+    setGuardando(true)
+    try{
+      const actualizaciones = concil.actualizar.map(({r,e,rendido})=>{
+        const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}
+        if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null }
+        return a
+      })
+      const res = await onConciliar(actualizaciones, concil.nuevos, {tipo, filename:fileName})
+      setConcilBefore(res.before||null)
+      setResultado({concil:true, actualizados:res.actualizados, imported:res.importados, batchId:res.batchId})
+    }catch(e){ alert('Error al conciliar: '+(e.message||e)) }
+    setGuardando(false)
+  }
+
   const inS = {padding:'7px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none',width:'100%'}
 
   if(resultado) return (
@@ -7916,7 +7954,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       <div style={{width:54,height:54,borderRadius:'50%',background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',margin:'4px auto 12px'}}>
         <svg width='27' height='27' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
       </div>
-      <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.imported} {tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)</div>
+      <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.concil?`${resultado.actualizados} corregido(s) · ${resultado.imported} nuevo(s)`:`${resultado.imported} ${tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)`}</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:18}}>
         {resultado.sinCliente>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinCliente}</b> sin cliente</span>}
         {resultado.sinFecha>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinFecha}</b> sin fecha</span>}
@@ -7925,6 +7963,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       </div>
       {resultado.sinCliente>0&&<div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.45}}>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</div>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
+      {resultado.concil&&concilBefore&&concilBefore.length>0&&<button onClick={async()=>{ if(confirm('¿Revertir las correcciones de cliente/categoría a como estaban antes?')){ const ok=await onUndoConciliar(concilBefore); if(ok){ setConcilBefore(null); onClose() } } }} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Revertir correcciones ({concilBefore.length})</button>}
       {resultado.batchId&&resultado.imported>0&&<button onClick={()=>setUndoTarget({batchId:resultado.batchId,count:resultado.imported})} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Deshacer importación</button>}
       {undoTarget&&<UndoConfirm target={undoTarget} undoing={undoing} onCancel={()=>setUndoTarget(null)} onConfirm={async()=>{ setUndoing(true); const ok=await onUndoImport(undoTarget.batchId); setUndoing(false); if(ok){ setUndoTarget(null); onClose() } }}/>}
     </div>
@@ -7936,6 +7975,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {!rows&&(
         <>
           <div style={{fontSize:12,color:C.muted,marginBottom:notaria?14:10}}>{notaria?'Sube el Excel de notaría — la app reconoce las columnas y deja la categoría en Notaría.':'Sube un Excel — la app reconoce las columnas solas.'}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+            {[['importar','Importar nuevo'],['conciliar','Conciliar / enriquecer']].map(([v,l])=>(
+              <button key={v} type='button' onClick={()=>setModo(v)} style={{padding:'9px 6px',borderRadius:8,border:`1.5px solid ${modo===v?C.accent:C.border}`,background:modo===v?C.azulBg:'transparent',color:modo===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
+            ))}
+          </div>
+          {modo==='conciliar'&&<div style={{fontSize:11,color:C.muted,background:C.bgSoft,borderRadius:8,padding:'8px 10px',marginBottom:12,lineHeight:1.45}}>Calza cada fila con un gasto ya cargado (por OT, o por fecha+monto). Lo que ya existe se <b style={{color:C.text}}>corrige en su lugar</b> (sin duplicar); solo lo nuevo se importa. Los gastos rendidos quedan protegidos.</div>}
           {!notaria&&(
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
               {[['gasto','Gastos'],['fondo','Fondos']].map(([v,l])=>(
@@ -7996,11 +8041,28 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             ))}
           </div>
           {matching&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.accent,background:C.azulBg,borderRadius:8,padding:'8px 10px',marginBottom:8}}><Spin/>Analizando {rows.length} filas con IA{matchProg?` · lote ${matchProg.done}/${matchProg.total}`:''}…</div>}
-          <div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
+          {modo==='conciliar'&&concil&&(
+            <div style={{marginBottom:10}}>
+              <div style={{display:'flex',gap:6,marginBottom:9}}>
+                {[['Actualizar',concil.actualizar.length,C.azulInfo,C.azulBg],['Nuevos',concil.nuevos.length,C.greenText,C.greenBg]].map(([l,n,col,bg])=>(
+                  <div key={l} style={{flex:1,background:bg,borderRadius:10,padding:'9px 6px',textAlign:'center'}}>
+                    <div style={{fontSize:18,fontWeight:700,color:col}}>{n}</div>
+                    <div style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,color:col}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              {concil.rendidosN>0&&<label style={{display:'flex',gap:8,alignItems:'flex-start',background:C.ambarBg,borderRadius:8,padding:'8px 10px',marginBottom:9,cursor:'pointer'}}>
+                <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
+                <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}><b>{concil.rendidosN} ya rendido(s)</b> calzaron · no cambiarles el cliente (solo categoría) para no desincronizar su rendición</span>
+              </label>}
+              <button disabled={guardando||(concil.actualizar.length+concil.nuevos.length===0)} onClick={aplicarConcil} style={{width:'100%',padding:'11px',borderRadius:8,fontSize:13,fontWeight:600,cursor:(concil.actualizar.length+concil.nuevos.length)?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:(concil.actualizar.length+concil.nuevos.length)?1:.5}}>{guardando?'Aplicando…':`Aplicar · ${concil.actualizar.length} corregir · ${concil.nuevos.length} nuevos`}</button>
+            </div>
+          )}
+          {modo!=='conciliar'&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
             <button disabled={sugeridos.length===0} onClick={confirmarSugeridos} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:sugeridos.length?'pointer':'default',border:'1px solid #F0D88A',background:sugeridos.length?'#FFF8E1':'#F5F7F9',color:C.soon,opacity:sugeridos.length?1:.5}}>Confirmar sugeridos ({sugeridos.length})</button>
             <button disabled={guardando||listas.length===0} onClick={()=>guardar(false)} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:listas.length?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:listas.length?1:.5}}>Importar listos ({listas.length})</button>
             <button disabled={guardando||rows.length===0} onClick={()=>{ if(confirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
-          </div>
+          </div>}
           {dups.length>0&&<div style={{fontSize:11,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto) dentro del archivo.</div>}
           {/* Resumen de abogados involucrados: tocar un nombre filtra las filas de ese responsable */}
           {(()=>{ const m={}; rows.forEach(r=>{ const k=respDeRow(r)||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!ents.length) return null; return (
@@ -17048,6 +17110,36 @@ export default function App() {
     return {imported:inserted.length, dupOmit, otDupOmit, sinCliente, sinFecha, batchId, filename}
   },[expenses,user])
 
+  // Conciliar una carga: ACTUALIZA en su lugar los gastos que ya existen (cliente/categoría) e IMPORTA solo los nuevos.
+  // Evita duplicar y preserva los movimientos ya rendidos. Devuelve también los valores previos (para deshacer las correcciones).
+  const handleConciliarCarga=useCallback(async(actualizaciones, nuevos, {tipo,filename})=>{
+    const before=[]
+    for(const a of (actualizaciones||[])){
+      const ex=(expenses||[]).find(e=>String(e.id)===String(a.id))
+      before.push({id:a.id, client_id:ex?.client_id??null, entity_id:ex?.entity_id??null, category:ex?.category??null})
+      const patch={}
+      if('client_id' in a) patch.client_id=a.client_id
+      if('entity_id' in a) patch.entity_id=a.entity_id
+      if('category' in a) patch.category=a.category
+      if(Object.keys(patch).length===0) continue
+      const {error}=await supabase.from('expenses').update(patch).eq('id',a.id)
+      if(error) throw error
+    }
+    setExpenses(p=>p.map(e=>{ const a=(actualizaciones||[]).find(x=>String(x.id)===String(e.id)); if(!a) return e; const n={...e}; if('client_id' in a)n.client_id=a.client_id; if('entity_id' in a)n.entity_id=a.entity_id; if('category' in a)n.category=a.category; return n }))
+    let importados=0, batchId=null
+    if(nuevos&&nuevos.length){ const res=await handleBulkImport(nuevos,{tipo,filename}); importados=res.imported; batchId=res.batchId }
+    return {actualizados:(actualizaciones||[]).length, importados, batchId, before}
+  },[expenses, handleBulkImport])
+
+  // Revertir las correcciones de una conciliación (vuelve cliente/entity/categoría a su valor previo).
+  const handleUndoConciliar=useCallback(async(before)=>{
+    try{
+      for(const b of (before||[])){ const {error}=await supabase.from('expenses').update({client_id:b.client_id,entity_id:b.entity_id,category:b.category}).eq('id',b.id); if(error) throw error }
+      setExpenses(p=>p.map(e=>{ const b=(before||[]).find(x=>String(x.id)===String(e.id)); return b?{...e,client_id:b.client_id,entity_id:b.entity_id,category:b.category}:e }))
+      return true
+    }catch(e){ alert('No se pudo revertir: '+(e.message||e)); return false }
+  },[])
+
   // Deshacer una carga masiva: elimina sus gastos y marca el lote como anulado.
   const handleUndoImport=useCallback(async(batchId)=>{
     try{
@@ -17951,7 +18043,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
+        {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='ajuste'&&<Modal title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
