@@ -1672,7 +1672,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const projFacturas = useMemo(()=> projResp ? projFilt.filter(b=>respDe(b)===projResp).sort((a,b)=>(a.due||'').localeCompare(b.due||'')) : [], [projFilt,projResp,respBySale,respByClient])
 
   // Geometría del gráfico
-  const W=470, padX=24, padTop=14, baseY=120, n=months.length
+  const W=470, padX=24, padTop=14, baseY=92, n=months.length
   const xAt = i => n>1 ? padX + i*(W-2*padX)/(n-1) : W/2
   const yAt = m => baseY - (m.total/maxVal)*(baseY-padTop)
   const pastPath = months.slice(0,firstFut+1).map((m,i)=>`${i?'L':'M'}${xAt(i).toFixed(1)},${yAt(m).toFixed(1)}`).join(' ')
@@ -1726,13 +1726,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
           </div>
         </>)})()}
 
-        <div style={{display:'flex',gap:14,fontSize:10,color:C.muted,marginBottom:4,flexWrap:'wrap'}}>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px solid #99ABB4',display:'inline-block'}}/>Cobrado real</span>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px solid #003C50',display:'inline-block'}}/>Proyección</span>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:14,borderTop:'2px dashed #99ABB4',display:'inline-block'}}/>Hoy</span>
-        </div>
-
-        <svg viewBox={`0 0 ${W} 150`} width="100%" style={{display:'block'}}>
+        <svg viewBox={`0 0 ${W} 120`} width="100%" style={{display:'block',marginTop:4}}>
           <defs>
             <linearGradient id="cfArea" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#003C50" stopOpacity="0.20"/>
@@ -1892,14 +1886,13 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[]}) {
 
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Ventas por mes {yr}</div>
+      <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Ventas por mes · {yr}</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:8}}>
-          <div style={{fontSize:11,color:C.muted}}>Total {yr}: <strong style={{color:C.text,fontSize:13}}>{moneda==='UF'?fmtUF(totalUF):fmt(totalCLP)}</strong></div>
-          {sel!==null&&data[sel]&&val(data[sel])>0&&(
+        {sel!==null&&data[sel]&&val(data[sel])>0&&(
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
             <div style={{fontSize:11,color:C.accent,fontWeight:600,textAlign:'right'}}>{MESES[sel]}: {fmtUF(data[sel].uf)} · {fmt(data[sel].clp)}</div>
-          )}
-        </div>
+          </div>
+        )}
         <div style={{display:'flex',gap:3,alignItems:'flex-end',height:84}}>
           {data.map((m,i)=>{
             const v = val(m)
@@ -2481,12 +2474,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',marginBottom:12,background:'#F5F7F9'}}>
               {segs.filter(s=>s.val>0).map((s,i)=>(<div key={i} style={{width:`${(s.val/iv.total)*100}%`,background:s.col}}/>))}
             </div>
-            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+            <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',fontSize:12.5}}>
               {segs.map((s,i)=>(
-                <div key={i} onClick={s.sin?()=>setTab('billing'):undefined} style={{display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:13,cursor:s.sin?'pointer':'default',...(s.sin?{paddingTop:7,borderTop:'0.5px solid #E4E8EB'}:{})}}>
-                  <span style={{display:'flex',alignItems:'center',gap:7,color:s.sin?C.soon:C.text,fontWeight:s.sin?500:400}}><span style={{width:9,height:9,borderRadius:2,background:s.col,flexShrink:0}}/>{s.lbl}</span>
-                  <span style={{fontWeight:500,color:s.sin?C.soon:(s.col===C.accent?C.accent:C.muted),fontVariantNumeric:'tabular-nums'}}>{fmtMon(s.val)}{s.sin?` · ${iv.sinN} ›`:''}</span>
-                </div>
+                <span key={i} onClick={s.sin?()=>setTab('billing'):undefined} style={{display:'inline-flex',alignItems:'center',gap:5,cursor:s.sin?'pointer':'default',color:s.sin?C.soon:C.muted}}>
+                  <span style={{width:8,height:8,borderRadius:2,background:s.col,flexShrink:0}}/>{s.lbl} <b style={{color:s.sin?C.soon:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtMon(s.val)}</b>{s.sin?` · ${iv.sinN} ›`:''}
+                </span>
               ))}
             </div>
           </div>
@@ -2902,7 +2894,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const hoy = new Date().toISOString().slice(0,10)
   const mesesDesde = d => { if(!d) return 999; const a=new Date(hoy), b=new Date(String(d).slice(0,10)); if(isNaN(b.getTime())) return 999; return (a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()) }
 
-  const {kpis, opp, cartera, carteraTot, servicios, serviciosTot} = useMemo(()=>{
+  const {kpis, opp, cartera, carteraTot, servicios, serviciosTot, tendencias} = useMemo(()=>{
     const reales = (clients||[]).filter(c=>!c.is_internal&&!c.is_occasional)
     const vh = id => ventaHistoricaUF(id, sales, ufRef)
     const ult = id => ultimaActividad(id, sales, billing, expenses)
@@ -2941,7 +2933,17 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     ventasReales.forEach(s=>{ const a=s.area||'Sin área'; const u=ventaUF(s,ufRef); if(!areaAgg[a]) areaAgg[a]={uf:0,n:0,rec:0,tickets:[],byCli:{}}; const A=areaAgg[a]; A.uf+=u; A.n++; if(esRecurrente(s)) A.rec++; if(u>0) A.tickets.push(u); if(s.client_id) A.byCli[s.client_id]=(A.byCli[s.client_id]||0)+u })
     const servicios = Object.entries(areaAgg).map(([area,d])=>({ area, uf:d.uf, n:d.n, ticket:d.n?d.uf/d.n:0, recPct:d.n?Math.round(d.rec/d.n*100):0, min:d.tickets.length?Math.min(...d.tickets):0, max:d.tickets.length?Math.max(...d.tickets):0, clientes:Object.entries(d.byCli).map(([cid,uf])=>({cid,uf,name:((clients||[]).find(c=>String(c.id)===String(cid))||{}).name||'—'})).sort((a,b)=>b.uf-a.uf) })).sort((a,b)=>b.uf-a.uf)
     const serviciosTot = {areas:servicios.length, uf:servicios.reduce((a,s)=>a+s.uf,0)}
-    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot, servicios, serviciosTot}
+
+    // Tendencias: crecimiento año vs año anterior (total y por abogado). Complementa (no duplica) Ventas-por-mes ni Servicios.
+    const prevYr = yr-1
+    const vYear = y => (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&Number(s.year)===y)
+    const sumBy = (arr,fn)=>{ const m={}; arr.forEach(s=>{ const k=fn(s)||'—'; m[k]=(m[k]||0)+ventaUF(s,ufRef) }); return m }
+    const curY=vYear(yr), prvY=vYear(prevYr)
+    const totCur=curY.reduce((a,s)=>a+ventaUF(s,ufRef),0), totPrv=prvY.reduce((a,s)=>a+ventaUF(s,ufRef),0)
+    const abCur=sumBy(curY,s=>s.responsible), abPrv=sumBy(prvY,s=>s.responsible)
+    const dl=(cur,prv)=>[...new Set([...Object.keys(cur),...Object.keys(prv)])].map(k=>({k,cur:cur[k]||0,prv:prv[k]||0,pct:(prv[k]||0)>0?Math.round(((cur[k]||0)-(prv[k]||0))/(prv[k]||0)*100):null})).filter(x=>x.cur>0||x.prv>0).sort((a,b)=>b.cur-a.cur)
+    const tendencias={prevYr,totCur,totPrv,pctTot: totPrv>0?Math.round((totCur-totPrv)/totPrv*100):null, abogados:dl(abCur,abPrv)}
+    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot, servicios, serviciosTot, tendencias}
   },[sales,billing,clients,expenses,ufRef,yr])
 
   const OPPS = [
@@ -3078,6 +3080,22 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             <span style={{fontSize:11,color:C.coralText}}>Margen por área <span style={{color:C.soon}}>(necesita costo de venta)</span></span>
             <span style={{fontSize:11,color:C.soon,fontWeight:600}}>por desbloquear</span>
           </div>
+        </div>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',margin:'18px 0 8px'}}>Tendencias</div>
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:11}}>
+            <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Vendido {yr}</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{fmtUFk(tendencias.totCur)}</div></div>
+            {tendencias.pctTot!=null&&<div style={{textAlign:'right'}}><div style={{fontSize:14,fontWeight:700,color:tendencias.pctTot>=0?C.greenText:C.overdueText}}>{tendencias.pctTot>=0?'+':''}{tendencias.pctTot}%</div><div style={{fontSize:9,color:C.muted}}>vs {tendencias.prevYr} · {fmtUFk(tendencias.totPrv)}</div></div>}
+          </div>
+          <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Por abogado · vs {tendencias.prevYr}</div>
+          {tendencias.abogados.map(a=>{ const pc=personChip(a.k); return (
+            <div key={a.k} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 0',borderTop:'0.5px solid #EEF1F3'}}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/>
+              <span style={{flex:1,fontSize:12.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.k}</span>
+              <span style={{fontSize:12.5,fontWeight:500,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(a.cur)}</span>
+              <span style={{width:50,textAlign:'right',fontSize:11,fontWeight:600,color:a.pct==null?C.muted:(a.pct>=0?C.greenText:C.overdueText),flexShrink:0}}>{a.pct==null?'nuevo':`${a.pct>=0?'+':''}${a.pct}%`}</span>
+            </div>
+          )})}
         </div>
         <div style={{marginTop:14,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
       </div>
