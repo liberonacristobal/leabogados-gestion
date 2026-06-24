@@ -8392,6 +8392,14 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   )
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
   const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id&&!e.personal_de).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
+  // Revisión de carga: gastos pegados a un cliente NO activo (Terminado/Prospecto) o a un ocasional → para revisar/corregir.
+  const clientById = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{m[String(c.id)]=c}); return m },[clients])
+  const revGroup = items => { const g={}; items.forEach(e=>{ const k=String(e.client_id); (g[k]=g[k]||{c:clientById[k],gastos:[]}).gastos.push(e) }); return Object.values(g).filter(x=>x.c).sort((a,b)=>b.gastos.length-a.gastos.length) }
+  const revNoActivo = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at||!e.client_id) return false; const c=clientById[String(e.client_id)]; return c && !c.is_internal && !c.is_occasional && c.status && c.status!=='Activo' })),[expenses,clientById])
+  const revOcasional = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at) return false; const c=clientById[String(e.client_id)]; return c && c.is_occasional })),[expenses,clientById])
+  const [revOpen,setRevOpen] = useState(null)   // grupo de revisión abierto: 'na' | 'oc'
+  const [revPick,setRevPick] = useState(null)   // id del gasto con buscador de reasignación abierto
+  const revN = grp => grp.reduce((a,x)=>a+x.gastos.length,0)
 
   // ── Liquidación de NOTARÍA (sección dentro de Gastos): gastos categoría Notaria que la oficina paga a la notaría ──
   // Marca propia notaria_render_id (independiente de caja chica y de la rendición al cliente). La preparan los limited; visible para admin.
@@ -8996,6 +9004,65 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
           const cards=[['neg','Saldo negativo',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','Saldo a favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
+            {(orphans.length>0||revNoActivo.length>0||revOcasional.length>0)&&(
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:7}}>Revisión de carga</div>
+                <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                  {orphans.length>0&&<div onClick={()=>setShowOrphans(true)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',cursor:'pointer'}}>
+                    <span style={{width:30,height:30,borderRadius:8,background:C.overdueBg,color:C.overdueText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontWeight:700,fontSize:15}}>!</span>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>En el aire (sin cliente)</div><div style={{fontSize:10,color:C.muted}}>quedaron sin asignar</div></div>
+                    <span style={{fontSize:15,fontWeight:700,color:C.overdueText}}>{orphans.length}</span><span style={{fontSize:15,color:C.done}}>›</span>
+                  </div>}
+                  {revNoActivo.length>0&&<div style={{borderTop:orphans.length>0?`0.5px solid ${C.border}`:'none'}}>
+                    <div onClick={()=>setRevOpen(revOpen==='na'?null:'na')} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',cursor:'pointer',background:revOpen==='na'?C.bgSoft:'#fff'}}>
+                      <span style={{width:30,height:30,borderRadius:8,background:C.ambarBg,color:C.soonText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontWeight:700,fontSize:15}}>!</span>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cliente no activo</div><div style={{fontSize:10,color:C.muted}}>Terminado o Prospecto · revisar</div></div>
+                      <span style={{fontSize:15,fontWeight:700,color:C.soonText}}>{revN(revNoActivo)}</span><span style={{fontSize:13,color:C.done}}>{revOpen==='na'?'⌃':'›'}</span>
+                    </div>
+                    {revOpen==='na'&&<div style={{background:C.bgSoft}}>
+                      {revNoActivo.map(({c,gastos})=>(
+                        <div key={c.id} style={{borderTop:`0.5px solid ${C.border}`}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px'}}>
+                            <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                            <span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{c.status}</span>
+                            <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                            {c.status==='Terminado'&&onToggleClientStatus&&<button onClick={()=>onToggleClientStatus(c)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.normal}`,background:'#fff',color:C.greenText,borderRadius:7,padding:'3px 9px',cursor:'pointer',flexShrink:0}}>Reactivar</button>}
+                          </div>
+                          {gastos.map(e=>{ const rendido=!!(e.render_id||e.client_render_id); return (
+                            <div key={e.id} style={{padding:'6px 13px 6px 22px',borderTop:`0.5px solid ${C.border}`}}>
+                              <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}>
+                                <span style={{fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rendido&&<span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>rendido</span>}{e.concept||'—'}</span>
+                                <div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}>
+                                  <span style={{fontSize:11,color:C.muted}}>{fmt(e.amount)}</span>
+                                  <button onClick={()=>setRevPick(revPick===e.id?null:e.id)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.azulInfo,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>Reasignar</button>
+                                </div>
+                              </div>
+                              {revPick===e.id&&<div style={{marginTop:6}}><AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>{onAssignClientToExpense(e.id,cid);setRevPick(null)}} label='Mover a' placeholder='Buscar cliente…'/></div>}
+                            </div>
+                          )})}
+                        </div>
+                      ))}
+                    </div>}
+                  </div>}
+                  {revOcasional.length>0&&<div style={{borderTop:(orphans.length>0||revNoActivo.length>0)?`0.5px solid ${C.border}`:'none'}}>
+                    <div onClick={()=>setRevOpen(revOpen==='oc'?null:'oc')} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',cursor:'pointer',background:revOpen==='oc'?C.bgSoft:'#fff'}}>
+                      <span style={{width:30,height:30,borderRadius:8,background:'#F1EFE8',color:C.grisText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></span>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>En cliente ocasional</div><div style={{fontSize:10,color:C.muted}}>confirma si corresponde</div></div>
+                      <span style={{fontSize:15,fontWeight:700,color:C.grisText}}>{revN(revOcasional)}</span><span style={{fontSize:13,color:C.done}}>{revOpen==='oc'?'⌃':'›'}</span>
+                    </div>
+                    {revOpen==='oc'&&<div style={{background:C.bgSoft}}>
+                      {revOcasional.map(({c,gastos})=>(
+                        <div key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:`0.5px solid ${C.border}`}}>
+                          <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                          <span style={{fontSize:9,fontWeight:600,color:C.grisText,background:'#F1EFE8',borderRadius:3,padding:'1px 6px',flexShrink:0}}>ocasional</span>
+                          <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                        </div>
+                      ))}
+                    </div>}
+                  </div>}
+                </div>
+              </div>
+            )}
             <div style={{display:'flex',gap:8,marginBottom:8}}>
               {cards.map(([k,lbl,tot,n,col,tint,brd])=>{
                 const active=saldoFilter===k
