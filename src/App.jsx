@@ -1710,7 +1710,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
           <span style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.4}}>Total a cobrar · {hLbl}</span>
           <div style={{display:'flex',gap:4,flexShrink:0}}>
             {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
-              <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'2px 9px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?C.azulBg:'transparent',color:horizon===v?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer'}}>{l}</button>
+              <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'4px 11px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?C.azulBg:'transparent',color:horizon===v?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
             ))}
           </div>
         </div>
