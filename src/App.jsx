@@ -8423,9 +8423,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Revisión de carga: gastos pegados a un cliente NO activo (Terminado/Prospecto) o a un ocasional → para revisar/corregir.
   const clientById = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{m[String(c.id)]=c}); return m },[clients])
   const revGroup = items => { const g={}; items.forEach(e=>{ const k=String(e.client_id); (g[k]=g[k]||{c:clientById[k],gastos:[]}).gastos.push(e) }); return Object.values(g).filter(x=>x.c).sort((a,b)=>b.gastos.length-a.gastos.length) }
-  const revNoActivo = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at||!e.client_id) return false; const c=clientById[String(e.client_id)]; return c && !c.is_internal && !c.is_occasional && c.status && c.status!=='Activo' })),[expenses,clientById])
-  const revOcasional = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at) return false; const c=clientById[String(e.client_id)]; return c && c.is_occasional })),[expenses,clientById])
-  const [revOpen,setRevOpen] = useState(null)   // grupo de revisión abierto: 'na' | 'oc'
+  const revNoActivo = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at||!e.client_id||e.type==='fondo') return false; const c=clientById[String(e.client_id)]; return c && !c.is_internal && !c.is_occasional && c.status && c.status!=='Activo' })),[expenses,clientById])
+  const revOcasional = useMemo(()=>revGroup((expenses||[]).filter(e=>{ if(e.deleted_at||e.type==='fondo') return false; const c=clientById[String(e.client_id)]; return c && c.is_occasional })),[expenses,clientById])
+  const [revOpen,setRevOpen] = useState(null)
+  const [showRevision,setShowRevision] = useState(false)   // panel "Gastos por revisar" (on-demand desde el menú Cargar)   // grupo de revisión abierto: 'na' | 'oc'
   const [revPick,setRevPick] = useState(null)   // id del gasto con buscador de reasignación abierto
   const revN = grp => grp.reduce((a,x)=>a+x.gastos.length,0)
 
@@ -8998,6 +8999,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <button onClick={()=>{setNotaMenuOpen(false);onAdd()}} style={chipBtn('primary')}>+ Gastos</button>
             <button onClick={()=>{setNotaMenuOpen(false);onAddFondo()}} style={chipBtn('green')}>+ Fondo</button>
             <button onClick={()=>{setNotaMenuOpen(false);onBulk(false)}} style={chipBtn('soft')}>Carga masiva</button>
+            {(orphans.length+revN(revNoActivo)+revN(revOcasional))>0&&<button onClick={()=>{setNotaMenuOpen(false);setShowRevision(true)}} style={chipBtn('soft')}>Gastos por revisar · {orphans.length+revN(revNoActivo)+revN(revOcasional)}</button>}
           </div>
         )}
         {/* Botón Notaría (visible) — liquidar y carga de notaría */}
@@ -9032,10 +9034,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
           const cards=[['neg','Saldo negativo',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','Saldo a favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
-            {(orphans.length>0||revNoActivo.length>0||revOcasional.length>0)&&(
+            {showRevision&&(
               <div style={{marginBottom:10}}>
-                <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:7}}>Revisión de carga</div>
-                <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7}}>
+                  <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Gastos por revisar</span>
+                  <span onClick={()=>setShowRevision(false)} style={{fontSize:17,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
+                </div>
+                {(orphans.length===0&&revNoActivo.length===0&&revOcasional.length===0)
+                  ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'18px',textAlign:'center',fontSize:12.5,color:C.greenText}}>Todo en orden · sin gastos en clientes archivados ni ocasionales.</div>
+                  : <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   {orphans.length>0&&<div onClick={()=>setShowOrphans(true)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 13px',cursor:'pointer'}}>
                     <span style={{width:30,height:30,borderRadius:8,background:C.overdueBg,color:C.overdueText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontWeight:700,fontSize:15}}>!</span>
                     <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Sin cliente</div><div style={{fontSize:10,color:C.muted}}>por asignar</div></div>
@@ -9088,7 +9095,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       ))}
                     </div>}
                   </div>}
-                </div>
+                </div>}
               </div>
             )}
             <div style={{display:'flex',gap:8,marginBottom:8}}>
