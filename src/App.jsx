@@ -1716,7 +1716,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
         </div>
         <div style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(totalHorizon)}</div>
         {(()=>{ const t=totalHorizon||1; const pe=Math.max(0,Math.min(100,Math.round(totalEmitido/t*100))); return (<>
-          <div style={{display:'flex',height:10,borderRadius:6,overflow:'hidden',margin:'9px 0 6px',background:C.bgSoft}}>
+          <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',margin:'9px 0 6px',background:C.bgSoft}}>
             {totalEmitido>0&&<div style={{width:`${pe}%`,background:C.normal}}/>}
             {totalProgramado>0&&<div style={{width:`${100-pe}%`,background:C.done}}/>}
           </div>
@@ -2320,7 +2320,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 </div>
                 <div style={{fontSize:23,fontWeight:700,color:heroCol,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{vMon(heroUF,heroVal)}</div>
                 {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:1}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
-                <div style={{height:10,borderRadius:6,background:'#F1EFE8',overflow:'hidden',margin:'9px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:6,transition:'width .3s'}}/></div>
+                <div style={{height:8.5,borderRadius:5,background:'#F1EFE8',overflow:'hidden',margin:'9px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:5,transition:'width .3s'}}/></div>
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:10}}>
                   <span style={{color:C.overdueText}}>faltan {vMon(faltanUF,faltanVal)}</span>
                   <span style={{color:C.muted,fontWeight:600}}>meta {vMon(metaUF,m.meta)}</span>
@@ -2478,7 +2478,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cobrado {selYear} · por año de venta</div>
           <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
             <div style={{fontSize:22,fontWeight:600,color:C.accent,marginBottom:10}}>{fmtMon(iv.total)}</div>
-            <div style={{display:'flex',height:12,borderRadius:6,overflow:'hidden',marginBottom:12,background:'#F5F7F9'}}>
+            <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',marginBottom:12,background:'#F5F7F9'}}>
               {segs.filter(s=>s.val>0).map((s,i)=>(<div key={i} style={{width:`${(s.val/iv.total)*100}%`,background:s.col}}/>))}
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:7}}>
@@ -2503,7 +2503,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtMon(agingData.total)}</div>
             <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>por cobrar{agingData.delta.monto!==0?` · ${agingData.delta.monto>0?'+':''}${fmtMon(agingData.delta.monto)} vs mes ant.`:''}</div>
           </div>
-          <div style={{height:6,borderRadius:3,display:'flex',overflow:'hidden',background:C.border,marginBottom:12}}>
+          <div style={{height:8.5,borderRadius:5,display:'flex',overflow:'hidden',background:C.border,marginBottom:12}}>
             <div style={{width:`${agingData.buckets.current.pct}%`,background:C.normal}}/>
             <div style={{width:`${agingData.buckets.warning.pct}%`,background:C.soon}}/>
             <div style={{width:`${agingData.buckets.overdue.pct}%`,background:C.overdue}}/>
@@ -2590,10 +2590,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             </button>
             {openPagar&&(
               <div>
-                <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
-                  <div style={{flex:1,padding:'11px 12px'}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Por pagar</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.normal}}>{fmt(porPagarTot)}</div></div>
-                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Pendiente</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.soon}}>{fmt(pendienteTot)}</div></div>
-                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Pagado {yr}</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.muted}}>{fmt(pagadoYr)}</div></div>
+                <div style={{display:'flex',alignItems:'flex-end',gap:24,marginBottom:13}}>
+                  <div><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Pendiente</div><div style={{fontSize:19,fontWeight:600,letterSpacing:-.4,marginTop:2,color:C.soon,fontVariantNumeric:'tabular-nums'}}>{fmt(pendienteTot)}</div></div>
+                  <div><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Por pagar ya</div><div style={{fontSize:19,fontWeight:600,letterSpacing:-.4,marginTop:2,color:C.normal,fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot)}</div></div>
+                  <div style={{marginLeft:'auto',textAlign:'right'}}><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Pagado {yr}</div><div style={{fontSize:13,fontWeight:500,marginTop:3,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(pagadoYr)}</div></div>
                 </div>
                 {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
                 {grupos.map((g,gi)=>{
@@ -3021,7 +3021,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes activos</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{carteraTot.activos}</div></div>
             <div style={{textAlign:'right'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Valor cartera · histórico</div><div style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(carteraTot.ufTotal)}</div></div>
           </div>
-          {carteraTot.ufTotal>0&&<div style={{display:'flex',height:10,borderRadius:6,overflow:'hidden',background:'#F1EFE8',marginBottom:12}}>
+          {carteraTot.ufTotal>0&&<div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',background:'#F1EFE8',marginBottom:12}}>
             {[['sano','#1D9E75'],['riesgo','#C77F18'],['dormido','#E24B4A'],['ocasional','#99ABB4']].map(([k,c])=>{ const w=carteraTot.ufSeg[k]/carteraTot.ufTotal*100; return w>0?<div key={k} style={{width:`${w}%`,background:c}}/>:null })}
           </div>}
           {[
@@ -3063,7 +3063,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
                   <span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.area}</span>
                   <span style={{fontSize:13,fontWeight:600,color:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span>
                 </div>
-                <div style={{height:6,borderRadius:4,background:'#F1EFE8',overflow:'hidden',margin:'6px 0 5px'}}><div style={{width:`${Math.max(2,w)}%`,height:'100%',background:C.accent,borderRadius:4}}/></div>
+                <div style={{height:8.5,borderRadius:5,background:'#F1EFE8',overflow:'hidden',margin:'6px 0 5px'}}><div style={{width:`${Math.max(2,w)}%`,height:'100%',background:C.accent,borderRadius:5}}/></div>
                 <div style={{fontSize:10.5,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct}% recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
               </div>
               {open&&s.clientes.slice(0,8).map(c=>(
