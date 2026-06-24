@@ -2887,6 +2887,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [pregunta,setPregunta] = useState('')       // "pregúntale al negocio"
   const [respuesta,setRespuesta] = useState(null)
   const [pregBusy,setPregBusy] = useState(false)
+  const [siiNov,setSiiNov] = useState([])           // Radar tributario: novedades del SII (Stage 7)
+  useEffect(()=>{ supabase.from('sii_novedades').select('*').then(({data})=>setSiiNov(data||[]),()=>{}) },[])
   const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
   const yr = currentYear
   const hoy = new Date().toISOString().slice(0,10)
@@ -2943,6 +2945,19 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     const tendencias={prevYr,totCur,totPrv,pctTot: totPrv>0?Math.round((totCur-totPrv)/totPrv*100):null, abogados:dl(abCur,abPrv)}
     return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot, servicios, serviciosTot, tendencias}
   },[sales,billing,clients,expenses,ufRef,yr])
+
+  // Radar tributario (Stage 7): cruza cada novedad del SII con los clientes cuya área coincide con la(s) área(s) de la novedad.
+  const radar = useMemo(()=>{
+    if(!(siiNov||[]).length) return []
+    const reales = (clients||[]).filter(c=>!c.is_internal)
+    const areasDe = id => [...new Set((sales||[]).filter(s=>String(s.client_id)===String(id)&&['Activo','Terminado'].includes(s.status)).map(s=>s.area).filter(Boolean))]
+    const cliAreas = {}; reales.forEach(c=>{ cliAreas[c.id]=areasDe(c.id) })
+    return (siiNov||[]).filter(n=>n.vigente!==false).map(n=>{
+      const areas=n.areas||[]
+      const expuestos = areas.length ? reales.filter(c=>(cliAreas[c.id]||[]).some(a=>areas.includes(a))).map(c=>({id:c.id,name:c.name,uf:ventaHistoricaUF(c.id,sales,ufRef)})).sort((a,b)=>b.uf-a.uf) : []
+      return {...n, expuestos}
+    }).sort((a,b)=> (b.expuestos.length-a.expuestos.length) || (String(b.fecha||'')).localeCompare(String(a.fecha||'')))
+  },[siiNov,sales,clients,ufRef])
 
   const OPPS = [
     {k:'dormidos', col:C.soonText, t:'Clientes dormidos', sub:'Activos 9+ meses sin actividad', rows:opp.dormidos, metric:x=>`${fmtUFk(x.uf)} · ${x.meses}m`},
@@ -3047,6 +3062,28 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',margin:'18px 0 8px'}}>
+          <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Radar tributario · SII</span>
+          <span style={{fontSize:9,color:'#99ABB4'}}>fuente SII</span>
+        </div>
+        {radar.length===0
+          ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px',fontSize:12,color:C.muted,textAlign:'center'}}>Sin novedades del SII cargadas aún · <span style={{color:C.azulInfo}}>la ingesta automática (Fase B) las traerá</span></div>
+          : radar.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; return (
+            <div key={n.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:12,padding:'13px 14px',marginBottom:9}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                <span style={{fontSize:13,fontWeight:600,color:C.text}}>{n.titulo}</span>
+                {n.tipo&&<span style={{fontSize:9,fontWeight:600,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0,textTransform:'capitalize'}}>{n.tipo}{n.numero?` ${n.numero}`:''}</span>}
+              </div>
+              {n.resumen&&<div style={{fontSize:11.5,color:C.muted,lineHeight:1.45,margin:'5px 0 8px'}}>{n.resumen}</div>}
+              <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>{n.expuestos.length} cliente{n.expuestos.length!==1?'s':''} expuesto{n.expuestos.length!==1?'s':''}{(n.areas||[]).length?` · ${(n.areas||[]).join(', ')}`:''}</div>
+              {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                {n.expuestos.slice(0,6).map(c=>(<span key={c.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:11,color:C.text,background:C.bgSoft,borderRadius:20,padding:'3px 9px',cursor:'pointer'}}>{c.name}</span>))}
+                {n.expuestos.length>6&&<span style={{fontSize:11,color:C.muted,padding:'3px 4px'}}>+{n.expuestos.length-6}</span>}
+              </div>}
+              {n.url&&<div style={{marginTop:9,borderTop:'0.5px solid #EEF1F3',paddingTop:8}}><a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.azulInfo,textDecoration:'none'}} onClick={e=>e.stopPropagation()}>{n.numero?`${n.numero}`:'Fuente'} · sii.cl ↗</a></div>}
+            </div>
+          )})}
+        {radar.length>0&&<div style={{fontSize:9.5,color:C.done,textAlign:'center',margin:'2px 0 4px'}}>Solo documentos reales del SII, citados · la IA resume, tú validas</div>}
         <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',margin:'18px 0 8px'}}>Cartera · salud de clientes</div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
