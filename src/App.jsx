@@ -2340,9 +2340,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>{neto?'Neto':'Vendido'} · {pctMeta}% de la meta</div>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    <div style={{display:'inline-flex',background:'#F1F4F6',borderRadius:20,padding:2}}>
-                      {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; const c=k==='neto'?C.greenText:C.accent; return (
-                        <button key={k} onClick={()=>setGaugeMode(k)} style={{border:'none',cursor:'pointer',fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',padding:'3px 10px',borderRadius:20,background:on?'#fff':'transparent',color:on?c:'#A8B2B8',boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l}</button>
+                    <div style={{display:'flex',gap:4}}>
+                      {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; return (
+                        <button key={k} onClick={()=>setGaugeMode(k)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
                       )})}
                     </div>
                     <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?C.accent:C.muted,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
