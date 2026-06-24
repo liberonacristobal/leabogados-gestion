@@ -7404,6 +7404,8 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
   const [modo,setModo] = useState('importar')   // importar | conciliar (conciliar = actualizar lo existente + importar solo lo nuevo)
   const [noTocarRendidos,setNoTocarRendidos] = useState(true)  // en conciliar, no cambiar cliente de gastos ya rendidos
+  const [showRend,setShowRend] = useState(false)   // ver detalle de rendidos que calzaron
+  const [showDup,setShowDup] = useState(false)     // ver detalle de duplicados del archivo
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
@@ -8061,10 +8063,21 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                 )})}
               </div>}
-              {concil.rendidosN>0&&<label style={{display:'flex',gap:8,alignItems:'flex-start',background:C.ambarBg,borderRadius:8,padding:'8px 10px',marginBottom:9,cursor:'pointer'}}>
-                <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
-                <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}><b>{concil.rendidosN} ya rendido(s)</b> calzaron · no cambiarles el cliente (solo categoría) para no desincronizar su rendición</span>
-              </label>}
+              {concil.rendidosN>0&&<div style={{background:C.ambarBg,borderRadius:8,padding:'8px 10px',marginBottom:9}}>
+                <label style={{display:'flex',gap:8,alignItems:'flex-start',cursor:'pointer'}}>
+                  <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
+                  <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}><b>{concil.rendidosN} ya rendido(s)</b> calzaron · no cambiarles el cliente (solo categoría) para no desincronizar su rendición</span>
+                </label>
+                <button onClick={()=>setShowRend(s=>!s)} style={{marginTop:6,fontSize:10,fontWeight:600,color:C.coralText,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>{showRend?'ocultar':'ver cuáles'}</button>
+                {showRend&&<div style={{marginTop:6,maxHeight:170,overflowY:'auto',background:'#fff',borderRadius:7}}>
+                  {concil.actualizar.filter(a=>a.rendido).map(({r,e})=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); return (
+                    <div key={e.id} style={{padding:'6px 9px',borderTop:`0.5px solid ${C.border}`,fontSize:11}}>
+                      <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||r.clientName||r.nombre||'—'}</span><span style={{color:C.muted,flexShrink:0}}>${(r.monto||0).toLocaleString('es-CL')}</span></div>
+                      <div style={{color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'}</div>
+                    </div>
+                  )})}
+                </div>}
+              </div>}
               <button disabled={guardando||(concil.actualizar.length+concil.nuevos.length===0)} onClick={aplicarConcil} style={{width:'100%',padding:'11px',borderRadius:8,fontSize:13,fontWeight:600,cursor:(concil.actualizar.length+concil.nuevos.length)?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:(concil.actualizar.length+concil.nuevos.length)?1:.5}}>{guardando?'Aplicando…':`Aplicar · ${concil.actualizar.length} corregir · ${concil.nuevos.length} nuevos`}</button>
             </div>
           )}
@@ -8073,7 +8086,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             <button disabled={guardando||listas.length===0} onClick={()=>guardar(false)} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:listas.length?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:listas.length?1:.5}}>Importar listos ({listas.length})</button>
             <button disabled={guardando||rows.length===0} onClick={()=>{ if(confirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
           </div>}
-          {dups.length>0&&<div style={{fontSize:11,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo RUT, fecha, monto y concepto) dentro del archivo.</div>}
+          {dups.length>0&&<div style={{fontSize:11,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>
+            <div onClick={()=>setShowDup(s=>!s)} style={{cursor:'pointer'}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo cliente, fecha, monto y concepto) dentro del archivo. <b style={{textDecoration:'underline'}}>{showDup?'ocultar':'ver cuáles'}</b></div>
+            {showDup&&<div style={{marginTop:6,maxHeight:170,overflowY:'auto',background:'#fff',borderRadius:7}}>
+              {dups.map(r=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); return (
+                <div key={r.id} style={{padding:'6px 9px',borderTop:`0.5px solid ${C.border}`,fontSize:11}}>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||r.clientName||r.nombre||'—'}</span><span style={{color:C.muted,flexShrink:0}}>${(r.monto||0).toLocaleString('es-CL')}</span></div>
+                  <div style={{color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'} · {r.fecha?String(r.fecha).slice(0,10):'sin fecha'}</div>
+                </div>
+              )})}
+            </div>}
+          </div>}
           {/* Resumen de abogados involucrados: tocar un nombre filtra las filas de ese responsable */}
           {(()=>{ const m={}; rows.forEach(r=>{ const k=respDeRow(r)||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!ents.length) return null; return (
             <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
