@@ -2285,70 +2285,45 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
           {/* Bloque único: izquierda velocímetro de meta · derecha desglose financiero */}
-          <div style={{display:'flex',alignItems:'stretch'}}>
-            <div style={{flex:1.18,padding:'16px 14px',borderRight:`1px solid ${C.border}`,textAlign:'center',display:'flex',flexDirection:'column',justifyContent:'center'}}>
-              {(()=>{
-                const denom = dashMoneda==='UF' ? metaUF : m.meta
-                const pctVenta = denom>0?Math.round((dashMoneda==='UF'?m.brutoUF:m.bruto)/denom*100):0
-                const pctNeto  = denom>0?Math.round((dashMoneda==='UF'?m.netoUF:m.neto)/denom*100):0
-                const gv = gaugeMode==='neto'
-                  ? {pct:pctNeto, val:m.neto, valUF:m.netoUF, col:C.greenText, grad:'url(#gMetaNeto)', lbl:'Neto vs meta'}
-                  : {pct:pctVenta, val:m.bruto, valUF:m.brutoUF, col:C.accent, grad:'url(#gMetaDash)', lbl:'Vendido vs meta'}
-                return (<>
-                  {/* Toggle claro Bruto/Neto: destaca qué se está viendo en el velocímetro */}
-                  <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>
+          <div style={{padding:'14px 15px'}}>
+            {(()=>{
+              const denom = dashMoneda==='UF' ? metaUF : m.meta
+              const neto = gaugeMode==='neto'
+              const heroUF = neto?m.netoUF:m.brutoUF, heroVal = neto?m.neto:m.bruto
+              const heroMon = dashMoneda==='UF'?heroUF:heroVal
+              const pctMeta = denom>0?Math.round(heroMon/denom*100):0
+              const faltanUF = Math.max(0,metaUF-heroUF), faltanVal = Math.max(0,m.meta-heroVal)
+              const otherUF = neto?m.brutoUF:m.netoUF, otherVal = neto?m.bruto:m.neto
+              const heroCol = neto?C.greenText:C.accent
+              const lblBig = {fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}
+              const lblSm = {fontSize:9,color:'#A8B2B8',textTransform:'uppercase',letterSpacing:.3}
+              return (<>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:2}}>
+                  <span style={{fontSize:9,fontWeight:600,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase'}}>{neto?'Neto':'Vendido'} · {pctMeta}% de la meta</span>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <div style={{display:'inline-flex',background:'#F1F4F6',borderRadius:20,padding:2}}>
                       {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; const c=k==='neto'?C.greenText:C.accent; return (
-                        <button key={k} onClick={()=>setGaugeMode(k)} style={{border:'none',cursor:'pointer',fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',padding:'3px 12px',borderRadius:20,background:on?'#fff':'transparent',color:on?c:'#A8B2B8',boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l}</button>
+                        <button key={k} onClick={()=>setGaugeMode(k)} style={{border:'none',cursor:'pointer',fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',padding:'3px 10px',borderRadius:20,background:on?'#fff':'transparent',color:on?c:'#A8B2B8',boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l}</button>
                       )})}
                     </div>
+                    <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?C.accent:C.muted,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
                   </div>
-                  <div onClick={()=>setGaugeMode(g=>g==='venta'?'neto':'venta')} style={{cursor:'pointer'}}>
-                    <div style={{fontSize:9,fontWeight:600,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:2,textAlign:'center'}}>{gv.lbl}</div>
-                    <svg viewBox='0 0 148 86' style={{width:'100%',maxWidth:185,margin:'0 auto'}}>
-                      <defs>
-                        <linearGradient id='gMetaDash' x1='16' y1='0' x2='132' y2='0' gradientUnits='userSpaceOnUse'><stop offset='0' stopColor='#99ABB4'/><stop offset='0.55' stopColor='#537281'/><stop offset='1' stopColor='#003C50'/></linearGradient>
-                        <linearGradient id='gMetaNeto' x1='16' y1='0' x2='132' y2='0' gradientUnits='userSpaceOnUse'><stop offset='0' stopColor='#9FE1CB'/><stop offset='0.55' stopColor='#1D9E75'/><stop offset='1' stopColor='#0F6E56'/></linearGradient>
-                      </defs>
-                      <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke='#F1F4F6' strokeWidth='9' strokeLinecap='round'/>
-                      <path d='M16 76 A58 58 0 0 1 132 76' fill='none' stroke={gv.grad} strokeWidth='9' strokeLinecap='round' strokeDasharray={`${Math.round(Math.min(100,gv.pct)/100*182)} 182`}/>
-                      <text x='74' y='72' textAnchor='middle' style={{fontSize:30,fontWeight:700,fill:gv.col}}>{gv.pct}%</text>
-                    </svg>
-                    <div><span style={{fontSize:26,fontWeight:700,color:gv.col,fontVariantNumeric:'tabular-nums'}}>{vMon(gv.valUF,gv.val)}</span><span style={{fontSize:14,color:'#A8B2B8'}}> / {vMon(metaUF,m.meta)}</span></div>
-                  </div>
-                  <button onClick={()=>setRevOpen(o=>!o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.muted,marginTop:3}}>faltan {vMon(Math.max(0,metaUF-gv.valUF),Math.max(0,m.meta-gv.val))} · {ventasDelAnio.length} ventas ›</button>
-                  {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:4}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
-                </>)
-              })()}
-            </div>
-            <div style={{flex:1,padding:'16px 14px',display:'flex',flexDirection:'column'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                <span style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase'}}>Desglose financiero</span>
-                <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?C.accent:C.muted,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
-              </div>
-              <div style={{display:'flex',gap:4,marginBottom:13}}>
-                {[['neto','Neto'],['fac','Facturado'],['cob','Cobrado']].map(([k,l])=>{ const on=dgl===k; return (
-                  <button key={k} onClick={()=>setDgl(k)} style={{flex:1,padding:'5px 2px',border:'none',borderRadius:7,background:on?C.accent:'#F5F7F9',color:on?'#fff':C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
-                )})}
-              </div>
-              {(()=>{
-                const pc = v => m.bruto>0?Math.round(v/m.bruto*100):0
-                const ufEq = v => ufRef>0?v/ufRef:0
-                const D = {
-                  neto:{lbl:`Neto firma · ${pc(m.neto)}%`, val:m.neto, valUF:m.netoUF, w:Math.min(100,pc(m.neto)), ctx:`bruto ${vMon(m.brutoUF,m.bruto)} − terceros ${vMon(m.costoUF,m.costo)} ›`, go:'sales'},
-                  fac:{lbl:`Facturado · ${pc(facturadoSel)}%`, val:facturadoSel, valUF:ufEq(facturadoSel), w:Math.min(100,pc(facturadoSel)), ctx:'del total vendido ›', go:'billing'},
-                  cob:{lbl:`Cobrado · ${pc(cobradoSel)}%`, val:cobradoSel, valUF:ufEq(cobradoSel), w:Math.min(100,pc(cobradoSel)), ctx:`${fmtMon(porCobrarSel)} por cobrar ›`, go:'billing'},
-                }[dgl]
-                return (<>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:11,color:C.muted}}>{D.lbl}</span><span style={{fontSize:24,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{vMon(D.valUF,D.val)}</span></div>
-                  <div style={{fontSize:9,color:'#A8B2B8',margin:'11px 0 4px',display:'flex',justifyContent:'space-between'}}><span>0</span><span>vendido {vMon(m.brutoUF,m.bruto)}</span></div>
-                  <div style={{height:9,borderRadius:6,background:'#F1F4F6',overflow:'hidden'}}><div style={{height:'100%',width:`${D.w}%`,background:dgl==='cob'?C.greenText:C.normal,borderRadius:6,transition:'width .3s'}}/></div>
-                  <button onClick={()=>setTab(D.go)} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:C.muted,marginTop:9,textAlign:'left',padding:0}}>{D.ctx}</button>
-                </>)
-              })()}
-              <div style={{flex:1,minHeight:8}}/>
-              <button onClick={()=>setTab('billing')} style={{fontSize:11,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'9px 11px',cursor:'pointer',border:'none',display:'flex',justifyContent:'space-between',alignItems:'center',width:'100%'}}><span><b>{fmtMon(porCobrarSel)} por cobrar</b></span><span>aging ›</span></button>
-            </div>
+                </div>
+                <div style={{fontSize:23,fontWeight:700,color:heroCol,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{vMon(heroUF,heroVal)}</div>
+                {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:1}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
+                <div style={{height:10,borderRadius:6,background:'#F1EFE8',overflow:'hidden',margin:'9px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:6,transition:'width .3s'}}/></div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10}}>
+                  <span style={{color:C.overdueText}}>faltan {vMon(faltanUF,faltanVal)}</span>
+                  <span style={{color:C.muted,fontWeight:600}}>meta {vMon(metaUF,m.meta)}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.border}`,marginTop:11,paddingTop:10}}>
+                  <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?C.accent:C.greenText}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Vendido':'Neto'}</div></div>
+                  <div style={{minWidth:0}}><div style={{...lblBig,color:C.muted}}>{vMon(m.costoUF,m.costo)}</div><div style={lblSm}>Terceros</div></div>
+                  <div onClick={()=>setTab('billing')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.overdueText}}>{fmtMon(porCobrarSel)}</div><div style={lblSm}>Por cobrar ›</div></div>
+                  <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.accent}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
+                </div>
+              </>)
+            })()}
           </div>
           {/* Trigger detalle de ventas del año (componen el Vendido) */}
           {revOpen&&(
