@@ -9057,10 +9057,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     {revOpen==='na'&&<div style={{background:C.bgSoft}}>
                       {revNoActivo.map(({c,gastos})=>(
                         <div key={c.id} style={{borderTop:`0.5px solid ${C.border}`}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',flexWrap:'wrap'}}>
                             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                             <span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 7px',flexShrink:0}}>{c.status==='Terminado'?'Archivado':c.status}</span>
                             <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                            {gastos.length>1&&<AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>{(async()=>{ for(const g of gastos){ await onAssignClientToExpense(g.id,cid) } })()}} label={`Mover los ${gastos.length}`} placeholder='Mover todos a…'/>}
                             {c.status==='Terminado'&&onToggleClientStatus&&<button onClick={()=>onToggleClientStatus(c)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.normal}`,background:'#fff',color:C.greenText,borderRadius:7,padding:'3px 9px',cursor:'pointer',flexShrink:0}}>Reactivar</button>}
                           </div>
                           {gastos.map(e=>{ const rendido=!!(e.render_id||e.client_render_id); return (
