@@ -33,11 +33,12 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 // cruce con clientes funcione en el Radar). Ajustar a tus etiquetas.
 const AREAS = ["Tributario", "IVA", "Reorganizaciones", "Donaciones", "Sucesorio", "Retail", "Family office"];
 
-// Fuentes oficiales (índices). CONFIRMAR las URLs reales por año en https://www.sii.cl/normativa_legislacion/
+// Fuentes oficiales (índices) — URLs verificadas (HTML estático, lista en tabla). Actualizar el año cuando cambie.
+// Nota: la jurisprudencia administrativa (oficios) del SII es JS-rendered → no se puede fetch directo; queda fuera
+// hasta resolver un render externo. Las circulares y resoluciones sí son estáticas.
 const FUENTES = [
-  { tipo: "circular",       url: "https://www.sii.cl/normativa_legislacion/circulares/2026/indcir2026.htm" },
-  { tipo: "resolucion",     url: "https://www.sii.cl/normativa_legislacion/resoluciones/2026/indresol2026.htm" },
-  { tipo: "jurisprudencia", url: "https://www.sii.cl/pagina/jurisprudencia/adminis/2026/indice2026.htm" },
+  { tipo: "circular",   url: "https://www.sii.cl/normativa_legislacion/circulares/2026/indcir2026.htm" },
+  { tipo: "resolucion", url: "https://www.sii.cl/normativa_legislacion/resoluciones/2026/res_ind2026.htm" },
 ];
 
 const CORS = {
@@ -50,12 +51,22 @@ const json = (b: unknown, s = 200) =>
 
 // Pasa el índice (texto plano) a la IA para extraer SOLO documentos reales + clasificar por área.
 async function clasificar(html: string, tipo: string) {
-  const limpio = html
+  // Los índices del SII son tablas con una fila por documento. Extraer las <tr> da señal
+  // limpia (número/fecha/título) y evita que el menú gigante del sitio tape la lista real.
+  const sinScripts = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .slice(0, 14000);
+    .replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const filas = [...sinScripts.matchAll(/<tr[\s\S]*?<\/tr>/gi)].map((m) => m[0]);
+  let texto: string;
+  if (filas.length > 3) {
+    texto = filas
+      .map((r) => r.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
+      .filter((t) => t.length > 12)
+      .join("\n");
+  } else {
+    texto = sinScripts.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  }
+  const limpio = texto.slice(0, 16000);
   const prompt =
     `Eres asistente tributario de un estudio de abogados chileno. Del siguiente ÍNDICE del SII (tipo: ${tipo}) ` +
     `extrae SOLO los documentos REALES que aparezcan, como un JSON array, sin inventar NADA. ` +
