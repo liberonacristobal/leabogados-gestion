@@ -8051,6 +8051,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                 ))}
               </div>
+              {concil.actualizar.length>0&&<div style={{maxHeight:190,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:9,marginBottom:9}}>
+                {concil.actualizar.map(({r,e,rendido},i)=>{ const cli=clients.find(c=>String(c.id)===String(r.client_id)); const cliOld=clients.find(c=>String(c.id)===String(e.client_id)); return (
+                  <div key={e.id} style={{padding:'7px 10px',borderTop:i?`0.5px solid ${C.border}`:'none',fontSize:11}}>
+                    <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||e.concept||'—'}</span><span style={{color:C.muted,flexShrink:0}}>${(r.monto||0).toLocaleString('es-CL')}</span></div>
+                    <div style={{color:C.done,marginTop:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>{rendido&&<span style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',background:C.ambarBg,color:C.coralText,borderRadius:20,padding:'1px 6px'}}>rendido</span>}<span>{cliOld?.name||'sin cliente'} → <b style={{color:C.accent}}>{(rendido&&noTocarRendidos)?'(solo categoría)':(cli?.name||'sin cliente')}</b> · {r.categoria||e.category||'Otro'}</span></div>
+                  </div>
+                )})}
+              </div>}
               {concil.rendidosN>0&&<label style={{display:'flex',gap:8,alignItems:'flex-start',background:C.ambarBg,borderRadius:8,padding:'8px 10px',marginBottom:9,cursor:'pointer'}}>
                 <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
                 <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}><b>{concil.rendidosN} ya rendido(s)</b> calzaron · no cambiarles el cliente (solo categoría) para no desincronizar su rendición</span>
