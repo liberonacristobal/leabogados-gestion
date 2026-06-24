@@ -2587,11 +2587,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     {porPagarTot>0&&<div style={{width:`${Math.round(porPagarTot/debe*100)}%`,background:C.normal}}/>}
                     {pendienteTot>0&&<div style={{width:`${Math.round(pendienteTot/debe*100)}%`,background:C.soon}}/>}
                   </div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',fontSize:12,marginBottom:6}}>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',fontSize:12,marginBottom:13}}>
                     <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.normal}}>●</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot)}</b> <span style={{color:C.muted}}>listo para pagar</span></span>
                     <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.soon}}>●</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(pendienteTot)}</b> <span style={{color:C.muted}}>en espera del cobro</span></span>
                   </div>
-                  <div style={{fontSize:10.5,color:C.muted,marginBottom:13}}>Pagado este año <b style={{color:C.text}}>{fmt(pagadoYr)}</b></div>
                 </>)})()}
                 {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
                 {grupos.map((g,gi)=>{
