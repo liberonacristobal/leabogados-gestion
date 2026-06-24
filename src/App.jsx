@@ -1706,9 +1706,11 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
       <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Proyección flujo de caja</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
-        <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginBottom:1}}>Total a cobrar · {hLbl}</div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-          <span style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(totalHorizon)}</span>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+          <div>
+            <span style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(totalHorizon)}</span>
+            <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>Por cobrar</div>
+          </div>
           <div style={{display:'flex',gap:4,flexShrink:0}}>
             {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
               <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'4px 11px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?C.azulBg:'transparent',color:horizon===v?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
@@ -2300,8 +2302,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               const lblBig = {fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}
               const lblSm = {fontSize:9,color:'#A8B2B8',textTransform:'uppercase',letterSpacing:.3}
               return (<>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:2}}>
-                  <span style={{fontSize:9,fontWeight:600,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase'}}>{neto?'Neto':'Vendido'} · {pctMeta}% de la meta</span>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                  <div>
+                    <div style={{fontSize:23,fontWeight:700,color:heroCol,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{vMon(heroUF,heroVal)}</div>
+                    <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>{neto?'Neto':'Vendido'} · {pctMeta}% de la meta</div>
+                  </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <div style={{display:'inline-flex',background:'#F1F4F6',borderRadius:20,padding:2}}>
                       {[['venta','Bruto'],['neto','Neto']].map(([k,l])=>{ const on=gaugeMode===k; const c=k==='neto'?C.greenText:C.accent; return (
@@ -2311,7 +2316,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?C.accent:C.muted,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
                   </div>
                 </div>
-                <div style={{fontSize:23,fontWeight:700,color:heroCol,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{vMon(heroUF,heroVal)}</div>
                 {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:1}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
                 <div style={{height:8.5,borderRadius:5,background:'#F1EFE8',overflow:'hidden',margin:'9px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:5,transition:'width .3s'}}/></div>
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:10}}>
@@ -2470,7 +2474,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{padding:'16px 20px 0'}}>
           <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cobrado {selYear} · por año de venta</div>
           <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
-            <div style={{fontSize:22,fontWeight:600,color:C.accent,marginBottom:10}}>{fmtMon(iv.total)}</div>
+            <div style={{fontSize:22,fontWeight:600,color:C.accent,lineHeight:1.05}}>{fmtMon(iv.total)}</div>
+            <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3,marginBottom:11}}>Cobrado este año</div>
             <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',marginBottom:12,background:'#F5F7F9'}}>
               {segs.filter(s=>s.val>0).map((s,i)=>(<div key={i} style={{width:`${(s.val/iv.total)*100}%`,background:s.col}}/>))}
             </div>
@@ -2494,7 +2499,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:11}}>
             <div>
               <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtMon(agingData.total)}</div>
-              <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>por cobrar{agingData.delta.monto!==0?` · ${agingData.delta.monto>0?'+':''}${fmtMon(agingData.delta.monto)} vs mes ant.`:''}</div>
+              <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>Por cobrar</div>
             </div>
             <button onClick={()=>setTop5Open(o=>!o)} style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:C.muted,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em',flexShrink:0}}>Detalle <span style={{fontSize:12,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span></button>
           </div>
@@ -2575,7 +2580,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cuentas por pagar · proveedores</div>
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
               <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot+pendienteTot)}</div>
-              <div style={{fontSize:11,color:C.muted,fontWeight:500,marginBottom:11}}>le debes a proveedores</div>
+              <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3,marginBottom:11}}>Le debes a proveedores</div>
                 {(()=>{ const debe=(porPagarTot+pendienteTot)||1; return (<>
                   <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',background:'#F1EFE8',marginBottom:9}}>
                     {porPagarTot>0&&<div style={{width:`${Math.round(porPagarTot/debe*100)}%`,background:C.normal}}/>}
