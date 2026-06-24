@@ -2466,7 +2466,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           ...(iv.sinMonto>0?[{lbl:'Sin año asignado',val:iv.sinMonto,col:C.soon,sin:true}]:[])]
         return (
         <div style={{padding:'16px 20px 0'}}>
-          <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Cobrado {selYear} · por año de venta</div>
+          <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Cobrado {selYear} · por año de venta</div>
           <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
             <div style={{fontSize:22,fontWeight:600,color:C.accent,marginBottom:10}}>{fmtMon(iv.total)}</div>
             <div style={{display:'flex',height:12,borderRadius:6,overflow:'hidden',marginBottom:12,background:'#F5F7F9'}}>
@@ -2488,86 +2488,65 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Aging de cartera */}
       <div style={{padding:'16px 20px 0'}}>
-        <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Aging de cartera</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Aging de cartera</div>
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:26,fontWeight:500,color:C.accent,lineHeight:1.1}}>{fmt(agingData.total)}</div>
-              <div style={{fontSize:10,color:C.done,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginTop:2}}>Por cobrar</div>
-            </div>
-            {agingData.delta.monto!==0&&(
-              <div style={{textAlign:'right',flexShrink:0}}>
-                <div style={{fontSize:11,color:C.done,fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase'}}>vs. mes anterior</div>
-                <div style={{fontSize:13,fontWeight:500,color:C.muted,marginTop:2}}>{agingData.delta.monto>0?'+':''}{fmt(agingData.delta.monto)}</div>
-              </div>
-            )}
+          <div style={{marginBottom:11}}>
+            <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtMon(agingData.total)}</div>
+            <div style={{fontSize:11,color:C.muted,fontWeight:500,marginTop:2}}>por cobrar{agingData.delta.monto!==0?` · ${agingData.delta.monto>0?'+':''}${fmtMon(agingData.delta.monto)} vs mes ant.`:''}</div>
           </div>
           <div style={{height:6,borderRadius:3,display:'flex',overflow:'hidden',background:C.border,marginBottom:12}}>
             <div style={{width:`${agingData.buckets.current.pct}%`,background:C.normal}}/>
             <div style={{width:`${agingData.buckets.warning.pct}%`,background:C.soon}}/>
             <div style={{width:`${agingData.buckets.overdue.pct}%`,background:C.overdue}}/>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:12}}>
-            {[['Al día','current',agingData.buckets.current,'#1D9E75'],['31-60 días','warning',agingData.buckets.warning,'#C77F18'],['+60 días','overdue',agingData.buckets.overdue,'#E24B4A']].map(([l,k,bk,col])=>{
-              const abierto=agingBucket===k, vacio=bk.monto===0
-              return (
-              <button key={l} onClick={()=>!vacio&&setAgingBucket(abierto?null:k)} style={{textAlign:'left',background:abierto?'#fff':'#F5F7F9',border:abierto?`1px solid ${col}`:'1px solid transparent',borderLeft:`3px solid ${col}`,borderRadius:abierto?8:0,padding:'10px 12px',cursor:vacio?'default':'pointer',width:'100%'}}>
-                <div style={{fontSize:11,color:C.done,display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>{l}{!vacio&&<span style={{fontSize:9,color:col,transform:abierto?'rotate(180deg)':'none',transition:'transform .15s'}}>{'▾'}</span>}</div>
-                <div style={{fontSize:13,fontWeight:500,color:vacio?C.done:col}}>{fmt(bk.monto)}</div>
-                <div style={{fontSize:11,color:C.done}}>{bk.pct}%</div>
-              </button>
+          <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12.5}}>
+            {[['Al día','current',C.greenText],['31-60','warning',C.soon],['+60 días','overdue',C.overdueText]].map(([l,k,col])=>{ const bk=agingData.buckets[k], abierto=agingBucket===k, vacio=bk.monto===0; return (
+              <span key={k} onClick={()=>!vacio&&setAgingBucket(abierto?null:k)} style={{cursor:vacio?'default':'pointer',color:abierto?col:C.muted,fontWeight:abierto?700:400}}><b style={{color:col}}>{bk.pct}%</b> {l}</span>
             )})}
           </div>
           {agingBucket&&agingData.buckets[agingBucket]?.items?.length>0&&(()=>{
             const col={current:C.normal,warning:C.soon,overdue:C.overdue}[agingBucket]
             const items=agingData.buckets[agingBucket].items
             return (
-              <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
+              <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',margin:'10px 0 2px'}}>
                 {items.map((it,i)=>(
                   <div key={it.id} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:i>0?`1px solid ${C.border}`:'none'}}>
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.nombre}</div>
-                      <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.concept||'—'}{it.dias>0?` · ${it.dias} días vencida`:it.due?` · vence ${fmtDate(it.due)}`:''}</div>
+                      <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.concept||'—'}{it.dias>0?` · ${it.dias} días vencida`:it.due?` · vence ${fmtDate(it.due)}`:''}</div>
                     </div>
-                    <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',flexShrink:0}}>{fmt(it.monto)}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',flexShrink:0}}>{fmtMon(it.monto)}</div>
                   </div>
                 ))}
               </div>
             )
           })()}
-          <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:14}}>
-            <div style={{background:'#F5F7F9',borderRadius:8,padding:'10px 12px'}}>
-              <div style={{fontSize:11,color:C.done}}>DSO</div>
-              <div style={{fontSize:16,fontWeight:500,color:C.accent}}>~{Math.round(Math.max(0,agingData.dso))} días</div>
-            </div>
-            <div style={{background:'#F5F7F9',borderRadius:8,padding:'10px 12px',minWidth:0}}>
-              <div style={{fontSize:11,color:C.done}}>Mayor exposición</div>
-              <div style={{fontSize:13,fontWeight:500,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{agingData.mayorExposicion.nombre}</div>
-              <div style={{fontSize:11,color:C.muted}}>{fmt(agingData.mayorExposicion.monto)}</div>
-            </div>
-            <div style={{background:'#F5F7F9',borderRadius:8,padding:'10px 12px'}}>
-              <div style={{fontSize:11,color:C.done}}>Concentración top 1</div>
-              <div style={{fontSize:16,fontWeight:500,color:C.accent}}>{agingData.concentracionTop1Pct.toFixed(1)}%</div>
-            </div>
-          </div>
-          <div style={{borderTop:'0.5px solid #E4E8EB',paddingTop:10}}>
-            <button onClick={()=>setTop5Open(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',background:'none',border:'none',padding:'4px 0',cursor:'pointer'}}>
-              <span style={{fontSize:11,color:C.done,fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase'}}>Top 5 clientes</span>
-              <span style={{fontSize:14,color:C.done,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>{'▾'}</span>
+          <div style={{borderTop:'0.5px solid #E4E8EB',marginTop:11,paddingTop:8}}>
+            <button onClick={()=>setTop5Open(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',background:'none',border:'none',padding:'3px 0',cursor:'pointer'}}>
+              <span style={{fontSize:11,color:C.muted,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>Detalle</span>
+              <span style={{fontSize:13,color:C.muted,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>{'▾'}</span>
             </button>
-            {top5Open&&agingData.top5.map((c,i)=>(
-              <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<agingData.top5.length-1?'0.5px solid #E4E8EB':'none'}}>
-                <div style={{width:30,height:30,borderRadius:'50%',background:C.border,color:C.muted,fontSize:10,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{c.iniciales}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:500,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</div>
-                  <div style={{fontSize:11,color:C.done}}>{c.facturas} factura{c.facturas!==1?'s':''}</div>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                  <span style={{fontSize:13,fontWeight:500,color:C.accent}}>{fmt(c.monto)}</span>
-                  <span style={{fontSize:10,padding:'2px 7px',borderRadius:3,background:c.bucketBg,color:c.bucketColor,whiteSpace:'nowrap'}}>{c.bucketLabel}</span>
-                </div>
+            {top5Open&&(<>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,margin:'9px 0 12px'}}>
+                <div style={{background:'#F5F7F9',borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted}}>DSO</div><div style={{fontSize:15,fontWeight:600,color:C.accent}}>~{Math.round(Math.max(0,agingData.dso))} días</div></div>
+                <div style={{background:'#F5F7F9',borderRadius:8,padding:'9px 11px',minWidth:0}}><div style={{fontSize:10,color:C.muted}}>Mayor exposición</div><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{agingData.mayorExposicion.nombre}</div><div style={{fontSize:10,color:C.muted}}>{fmtMon(agingData.mayorExposicion.monto)}</div></div>
+                <div style={{background:'#F5F7F9',borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted}}>Top 1</div><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{agingData.concentracionTop1Pct.toFixed(1)}%</div></div>
               </div>
-            ))}
+              <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:2}}>Top 5 clientes</div>
+              {agingData.top5.map((c,i)=>(
+                <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<agingData.top5.length-1?'0.5px solid #E4E8EB':'none'}}>
+                  <div style={{width:28,height:28,borderRadius:'50%',background:C.border,color:C.muted,fontSize:10,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{c.iniciales}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</div>
+                    <div style={{fontSize:11,color:C.muted}}>{c.facturas} factura{c.facturas!==1?'s':''}</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    <span style={{fontSize:13,fontWeight:500,color:C.accent}}>{fmtMon(c.monto)}</span>
+                    <span style={{fontSize:10,padding:'2px 7px',borderRadius:3,background:c.bucketBg,color:c.bucketColor,whiteSpace:'nowrap'}}>{c.bucketLabel}</span>
+                  </div>
+                </div>
+              ))}
+            </>)}
           </div>
         </div>
       </div>
@@ -2597,15 +2576,15 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{padding:'16px 20px 0'}}>
             <button onClick={()=>setOpenPagar(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openPagar?10:0}}>
               <span style={{fontSize:10,color:C.muted,transform:openPagar?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
-              <span style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em'}}>Cuentas por pagar a proveedores</span>
+              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Cuentas por pagar a proveedores</span>
               <span style={{fontSize:13,fontWeight:600,color:porPagarTot>0?C.normal:C.muted,marginLeft:'auto'}}>{fmt(porPagarTot)}</span>
             </button>
             {openPagar&&(
               <div>
                 <div style={{display:'flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
-                  <div style={{flex:1,padding:'11px 12px'}}><div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.06em'}}>Por pagar</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.normal}}>{fmt(porPagarTot)}</div></div>
-                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.06em'}}>Pendiente</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.soon}}>{fmt(pendienteTot)}</div></div>
-                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.06em'}}>Pagado {yr}</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.muted}}>{fmt(pagadoYr)}</div></div>
+                  <div style={{flex:1,padding:'11px 12px'}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Por pagar</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.normal}}>{fmt(porPagarTot)}</div></div>
+                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Pendiente</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.soon}}>{fmt(pendienteTot)}</div></div>
+                  <div style={{flex:1,padding:'11px 12px',borderLeft:`1px solid ${C.border}`}}><div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Pagado {yr}</div><div style={{fontSize:17,fontWeight:600,letterSpacing:-.4,marginTop:3,color:C.muted}}>{fmt(pagadoYr)}</div></div>
                 </div>
                 {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
                 {grupos.map((g,gi)=>{
@@ -2620,7 +2599,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                         <div style={{fontSize:11,color:C.done}}>{g.prov?.razon_social?.trim()||g.prov?.rut||''}</div>
                       </div>
                       <div style={{marginLeft:'auto',textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.06em'}}>Le debes</div>
+                        <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Le debes</div>
                         <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(g.total)}</div>
                         {ppCuentas.length>=2&&(
                           <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{marginTop:6,height:28,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:13,fontWeight:600,padding:'0 11px',cursor:'pointer',whiteSpace:'nowrap'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
