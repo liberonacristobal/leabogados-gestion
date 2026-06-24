@@ -7402,7 +7402,7 @@ function UndoConfirm({target,undoing,onCancel,onConfirm}) {
 
 function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImport,onConciliar,onUndoConciliar,bulkImports=[],onUndoImport,importAliases=[],onLearnAlias,onClose,onClientsUpdate,notaria=false,onCreateOccasional}) {
   const [tipo,setTipo] = useState('gasto') // gasto | fondo
-  const [modo,setModo] = useState('importar')   // importar | conciliar (conciliar = actualizar lo existente + importar solo lo nuevo)
+  const [modo,setModo] = useState('conciliar')   // siempre concilia: actualiza lo existente + importa solo lo nuevo (nunca duplica)
   const [noTocarRendidos,setNoTocarRendidos] = useState(true)  // en conciliar, no cambiar cliente de gastos ya rendidos
   const [showRend,setShowRend] = useState(false)   // ver detalle de rendidos que calzaron
   const [showDup,setShowDup] = useState(false)     // ver detalle de duplicados del archivo
@@ -7920,7 +7920,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const normOt = s=>String(s||'').replace(/\D/g,'')
     const tok = s=>new Set(String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').split(/[^a-z0-9]+/).filter(w=>w.length>2))
     const ov = (a,b)=>{ let n=0; a.forEach(w=>{ if(b.has(w)) n++ }); return n }
-    const live = (expenses||[]).filter(e=>!e.deleted_at)
+    const live = (expenses||[]).filter(e=>!e.deleted_at && (tipo==='fondo'?e.type==='fondo':e.type!=='fondo'))
     const byOt = {}; live.forEach(e=>{ const o=normOt(e.ot_number); if(o){(byOt[o]=byOt[o]||[]).push(e)} })
     const used = new Set(); const actualizar=[], nuevos=[]
     const pick = r=>{
@@ -7979,43 +7979,29 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Paso 1: tipo + subir archivo */}
       {!rows&&(
         <>
-          <div style={{fontSize:12,color:C.muted,marginBottom:notaria?14:10}}>{notaria?'Sube el Excel de notaría — la app reconoce las columnas y deja la categoría en Notaría.':'Sube un Excel — la app reconoce las columnas solas.'}</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-            {[['importar','Importar nuevo'],['conciliar','Actualizar existente']].map(([v,l])=>(
-              <button key={v} type='button' onClick={()=>setModo(v)} style={{padding:'9px 6px',borderRadius:8,border:`1.5px solid ${modo===v?C.accent:C.border}`,background:modo===v?C.azulBg:'transparent',color:modo===v?C.accent:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>
-            ))}
-          </div>
-          {modo==='conciliar'&&<div style={{fontSize:11,color:C.muted,background:C.bgSoft,borderRadius:8,padding:'8px 10px',marginBottom:12,lineHeight:1.45}}>Calza cada fila con un gasto ya cargado (por OT, o por fecha+monto). Lo que ya existe se <b style={{color:C.text}}>corrige en su lugar</b> (sin duplicar); solo lo nuevo se importa. Los gastos rendidos quedan protegidos.</div>}
-          {!notaria&&(
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-              {[['gasto','Gastos'],['fondo','Fondos']].map(([v,l])=>(
-                <button key={v} type='button' onClick={()=>setTipo(v)} style={{padding:'10px',borderRadius:8,border:`2px solid ${tipo===v?C.accent:C.border}`,background:tipo===v?C.azulBg:'transparent',color:tipo===v?C.accent:C.muted,fontSize:13,fontWeight:700,cursor:'pointer'}}>{l}</button>
-              ))}
-            </div>
-          )}
-          <label style={{display:'block',padding:notaria?'30px 24px':'24px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#F5F7F9'}}>
-            <input type='file' accept='.xlsx,.xls' onChange={onFile} style={{display:'none'}}/>
-            <div style={{fontSize:notaria?15:13,color:C.accent,fontWeight:600}}>{cargando?'Leyendo...':(notaria?'Seleccionar Excel de notaría':'Seleccionar archivo Excel')}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:4}}>{notaria?'.xlsx · categoría Notaría automática':'.xlsx o .xls'}</div>
-          </label>
-          <div style={{textAlign:'center',marginTop:12}}>
-            {!notaria&&(<>
-              <button type='button' onClick={descargarPlantilla} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>
-                {genPlantilla?'Generando plantilla...':'Descargar plantilla modelo (.xlsx)'}
-              </button>
-              <div style={{fontSize:10,color:C.muted,marginTop:3}}>Incluye hojas Gastos, Fondos e Instrucciones con ejemplos</div>
-            </>)}
-            <button type='button' onClick={descargarPlantillaNotaria} disabled={genPlantilla} style={{background:'none',border:'none',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',textDecoration:'underline',marginTop:notaria?0:8}}>
-              {genPlantilla?'Generando…':'Descargar modelo de notaría (.xlsx)'}
-            </button>
-            {!notaria&&<div style={{fontSize:10,color:C.muted,marginTop:3}}>Enfocado en notaría: Concepto · Subconcepto · OT, categoría Notaria precargada</div>}
+          {notaria
+            ? <label style={{display:'block',padding:'26px 24px',borderRadius:12,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:'#FAFBFC',marginBottom:12}}>
+                <input type='file' accept='.xlsx,.xls' onChange={onFile} style={{display:'none'}}/>
+                <div style={{fontSize:15,color:C.accent,fontWeight:700}}>{cargando?'Leyendo…':'Cargar Excel de notaría'}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3}}>.xlsx · categoría Notaría automática</div>
+              </label>
+            : <div style={{display:'flex',gap:9,marginBottom:12}}>
+                {[['gasto','Cargar gastos','Gastos del cliente'],['fondo','Cargar fondos','Abonos a fondo']].map(([v,t,h])=>(
+                  <label key={v} onClick={()=>setTipo(v)} style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,padding:'20px 10px',textAlign:'center',cursor:'pointer',background:'#FAFBFC'}}>
+                    <input type='file' accept='.xlsx,.xls' onChange={onFile} style={{display:'none'}}/>
+                    <div style={{fontSize:14,fontWeight:700,color:C.accent}}>{cargando?'Leyendo…':t}</div>
+                    <div style={{fontSize:10.5,color:C.muted,marginTop:3}}>{h}</div>
+                  </label>
+                ))}
+              </div>}
+          <div style={{textAlign:'center',fontSize:11,color:C.muted}}>
+            <button type='button' onClick={notaria?descargarPlantillaNotaria:descargarPlantilla} disabled={genPlantilla} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{genPlantilla?'Generando…':(notaria?'Descargar modelo de notaría':'Descargar plantilla')}</button>
+            {!notaria&&<> · <button type='button' onClick={descargarPlantillaNotaria} disabled={genPlantilla} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>notaría</button></>}
           </div>
           {bulkImports.length>0&&(
             <div style={{marginTop:18,paddingTop:14,borderTop:`0.5px solid ${C.border}`}}>
-              {notaria
-                ? <button type='button' onClick={()=>setShowRecientes(s=>!s)} style={{background:'none',border:'none',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}>Importaciones recientes ({bulkImports.length}) {showRecientes?'▴':'▾'}</button>
-                : <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Importaciones recientes</div>}
-              {(!notaria||showRecientes)&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:notaria?8:0}}>
+              <button type='button' onClick={()=>setShowRecientes(s=>!s)} style={{background:'none',border:'none',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',padding:0}}>Importaciones recientes ({bulkImports.length}) {showRecientes?'▴':'▾'}</button>
+              {showRecientes&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:8}}>
                 {bulkImports.map((b,i)=>(
                   <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:i<bulkImports.length-1?`0.5px solid ${C.border}`:'none'}}>
                     <div style={{flex:1,minWidth:0}}>
