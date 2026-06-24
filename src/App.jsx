@@ -2881,6 +2881,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 // El código calcula; el Resumen IA (claudeCall) se suma en una etapa siguiente.
 function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha}){
   const [openOpp,setOpenOpp] = useState(null)
+  const [iaResumen,setIaResumen] = useState(null)   // narrativa IA "foco de la semana"
+  const [iaBusy,setIaBusy] = useState(false)
   const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
   const yr = currentYear
   const hoy = new Date().toISOString().slice(0,10)
@@ -2915,6 +2917,19 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   ]
   const kpiCard = (label,val,col) => (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'8px 10px'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div><div style={{fontSize:16,fontWeight:600,color:col}}>{val}</div></div>)
 
+  // Etapa IA: narra y prioriza las oportunidades ya calculadas (cifras del código, IA solo el foco). Vía claude-proxy.
+  const correrIA = async () => {
+    setIaBusy(true)
+    try{
+      const resumenOpp = OPPS.map(o=> o.rows.length ? `${o.t} (${o.rows.length}): ${o.rows.slice(0,3).map(x=>`${x.c.name} ${o.metric(x)}`).join('; ')}` : null).filter(Boolean).join('. ')
+      const prompt = `Eres el copiloto estratégico del socio de un estudio de abogados chileno. Cifras YA calculadas (no inventes ni cambies números): vendido ${yr} ${fmtUFk(kpis.vendidoYTD)}, por cobrar ${fmt(kpis.porCobrar)}, cobrado ${yr} ${fmt(kpis.cobradoYTD)}. Oportunidades detectadas: ${resumenOpp||'sin oportunidades destacadas'}. Escribe 3 a 4 frases MUY concretas, en español de Chile, tono directo y estratégico, diciendo en qué enfocar esta semana y por qué, priorizando ingresos y cobranza. Menciona 2 o 3 clientes puntuales por nombre cuando aporte. Da el foco, no listes todo. Sin saludo, sin markdown, sin viñetas.`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
+      const txt = (data.content?.[0]?.text||'').trim()
+      setIaResumen(txt || 'No se pudo generar el resumen. Reintenta.')
+    }catch(e){ setIaResumen('No se pudo generar: '+(e?.message||'reintenta')) }
+    setIaBusy(false)
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -2929,6 +2944,21 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
       </div>
       <div style={{padding:'10px 20px 100px'}}>
+        <div style={{marginBottom:12}}>
+          {iaResumen ? (
+            <div style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px 14px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.05em'}}>✦ Foco de la semana</span>
+                <button onClick={correrIA} disabled={iaBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaBusy?.6:1}}>{iaBusy?'…':'Otra vez'}</button>
+              </div>
+              <div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{iaResumen}</div>
+            </div>
+          ) : (
+            <button onClick={correrIA} disabled={iaBusy} style={{width:'100%',background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:iaBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,color:C.accent,fontSize:13,fontWeight:600}}>
+              {iaBusy?'Analizando oportunidades…':'✦ Foco de la semana · Resumen IA'}
+            </button>
+          )}
+        </div>
         <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Oportunidades</div>
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
           {OPPS.map(o=>{ const open=openOpp===o.k; const n=o.rows.length; return (
@@ -2949,7 +2979,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         </div>
-        <div style={{marginTop:11,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · pronto la IA narra y prioriza · tú decides.</div>
+        <div style={{marginTop:11,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
       </div>
     </div>
   )
