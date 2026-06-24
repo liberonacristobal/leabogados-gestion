@@ -2934,6 +2934,26 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [pregBusy,setPregBusy] = useState(false)
   const [siiNov,setSiiNov] = useState([])           // Radar tributario: novedades del SII (Stage 7)
   const cargarSii = ()=> supabase.from('sii_novedades').select('*').then(({data})=>setSiiNov(data||[]),()=>{})
+  const [radarBusy,setRadarBusy] = useState(false)  // llamada a la edge function sii-radar (auto-ingesta)
+  const [radarMsg,setRadarMsg] = useState(null)
+  const actualizarRadar = async () => {
+    setRadarBusy(true); setRadarMsg(null)
+    try{
+      const {data:{session}} = await supabase.auth.getSession()
+      if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
+      const resp = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-radar',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},
+        body:JSON.stringify({})
+      })
+      const data = await resp.json().catch(()=>({}))
+      if(!resp.ok) throw new Error(data.error||('Error '+resp.status))
+      await cargarSii()
+      const errs=(data.errores||[]).length
+      setRadarMsg(`${data.inserted||0} nuevas${errs?` · ${errs} fuente(s) con error`:''}`)
+    }catch(e){ setRadarMsg('Error: '+(e?.message||'reintenta')) }
+    setRadarBusy(false)
+  }
   useEffect(()=>{ cargarSii() },[])
   const [addOpen,setAddOpen] = useState(false)      // "Agregar novedad SII"
   const [addForm,setAddForm] = useState({tipo:'circular',numero:'',fecha:'',titulo:'',url:'',resumen:'',prioridad:'media',areas:[]})
@@ -3154,7 +3174,11 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',margin:'18px 0 8px'}}>
           <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Radar tributario · SII</span>
-          <button onClick={()=>setAddOpen(true)} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,textTransform:'uppercase',letterSpacing:'.04em'}}>+ novedad</button>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            {radarMsg&&<span style={{fontSize:10,color:radarMsg.startsWith('Error')?C.overdue:C.greenText}}>{radarMsg}</span>}
+            <button onClick={actualizarRadar} disabled={radarBusy} style={{fontSize:10,fontWeight:600,color:radarBusy?C.done:C.azulInfo,background:'none',border:'none',cursor:radarBusy?'default':'pointer',padding:0,textTransform:'uppercase',letterSpacing:'.04em'}}>{radarBusy?'actualizando…':'↻ actualizar'}</button>
+            <button onClick={()=>setAddOpen(true)} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,textTransform:'uppercase',letterSpacing:'.04em'}}>+ novedad</button>
+          </div>
         </div>
         {radar.length===0
           ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px',fontSize:12,color:C.muted,textAlign:'center'}}>Sin novedades del SII cargadas aún · <span style={{color:C.azulInfo}}>la ingesta automática (Fase B) las traerá</span></div>
