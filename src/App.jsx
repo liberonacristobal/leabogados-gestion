@@ -1776,7 +1776,6 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
             </div>
           </div>
         )}
-        {activePoint==null&&<div style={{fontSize:10,color:C.done,textAlign:'center',marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>Toca un mes para ver las facturas que lo componen</div>}
         <div style={{borderTop:`1px solid ${C.border}`,marginTop:10,paddingTop:10}}>
           <div onClick={()=>setProjOpen(true)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.azulBg,borderRadius:9,padding:'10px 12px',cursor:'pointer'}}>
             <span style={{fontSize:12.5,color:C.accent,fontWeight:600}}>Proyección al 31 dic {anoCurr}</span>
