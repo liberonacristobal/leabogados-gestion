@@ -2888,6 +2888,9 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
   const [iaResumen,setIaResumen] = useState(null)   // narrativa IA "foco de la semana"
   const [iaBusy,setIaBusy] = useState(false)
+  const [pregunta,setPregunta] = useState('')       // "pregúntale al negocio"
+  const [respuesta,setRespuesta] = useState(null)
+  const [pregBusy,setPregBusy] = useState(false)
   const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
   const yr = currentYear
   const hoy = new Date().toISOString().slice(0,10)
@@ -2967,6 +2970,25 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     setIaBusy(false)
   }
 
+  // Pregúntale al negocio: pregunta libre → IA responde con un brief de los datos reales, blindada a no inventar.
+  const preguntarIA = async (qOverride) => {
+    const q = (typeof qOverride==='string'?qOverride:pregunta).trim()
+    if(!q) return
+    setPregBusy(true); setRespuesta(null)
+    try{
+      const brief = `Datos del estudio (NO inventes ni cambies cifras; si la respuesta no está en estos datos, dilo claramente):
+- Vendido ${yr}: ${fmtUFk(kpis.vendidoYTD)}; por cobrar ${fmt(kpis.porCobrar)}; cobrado ${fmt(kpis.cobradoYTD)}; crecimiento vs ${tendencias.prevYr}: ${tendencias.pctTot==null?'s/d':tendencias.pctTot+'%'}.
+- Cartera: ${carteraTot.activos} clientes activos, valor histórico ${fmtUFk(carteraTot.ufTotal)}. Sanos ${cartera.sano.length}, en riesgo ${cartera.riesgo.length}, dormidos ${cartera.dormido.length}, ocasionales ${cartera.ocasional.length}.
+- Servicios por área: ${servicios.slice(0,6).map(s=>`${s.area}: ${fmtUFk(s.uf)}, ticket ${fmtUFk(s.ticket)}, ${s.recPct}% recurrente`).join('; ')}.
+- Por abogado ${yr} (vs ${tendencias.prevYr}): ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct}%)`:''}`).join('; ')}.
+- Oportunidades: dormidos ${opp.dormidos.length} (${opp.dormidos.slice(0,3).map(x=>x.c.name).join(', ')||'—'}); cobranza vencida ${opp.cobranza.length}; cross-sell ${opp.crossSell.length}; sin recurrencia ${opp.sinRec.length}; win-back ${opp.winback.length}.`
+      const prompt = `Eres el analista de negocio de un estudio de abogados chileno. Responde la pregunta del socio USANDO SOLO los datos entregados (no inventes nombres ni cifras; si no está, dilo). Español de Chile, directo, máximo 4 frases, con cifras cuando aporten.\n\nPREGUNTA: ${q}\n\nDATOS:\n${brief}`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
+      setRespuesta((data.content?.[0]?.text||'').trim()||'No pude responder con los datos disponibles.')
+    }catch(e){ setRespuesta('No se pudo: '+(e?.message||'reintenta')) }
+    setPregBusy(false)
+  }
+
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -2995,6 +3017,19 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               {iaBusy?'Analizando oportunidades…':'✦ Foco de la semana · Resumen IA'}
             </button>
           )}
+        </div>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Pregúntale al negocio</div>
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:18}}>
+          <div style={{display:'flex',gap:8}}>
+            <input value={pregunta} onChange={e=>setPregunta(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')preguntarIA()}} placeholder='¿Qué quieres saber de tus números?' style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',minWidth:0,background:'#fff'}}/>
+            <button onClick={()=>preguntarIA()} disabled={pregBusy||!pregunta.trim()} style={{height:36,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:(pregBusy||!pregunta.trim())?'default':'pointer',flexShrink:0,opacity:(pregBusy||!pregunta.trim())?.5:1}}>{pregBusy?'…':'Preguntar'}</button>
+          </div>
+          {!respuesta&&!pregBusy&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:9}}>
+            {['¿Qué cliente estoy por perder?','¿Qué área conviene potenciar?','¿Dónde están mis oportunidades?'].map(q=>(
+              <button key={q} onClick={()=>{setPregunta(q);preguntarIA(q)}} style={{fontSize:11,color:C.muted,border:`1px solid ${C.border}`,background:'#fff',borderRadius:20,padding:'4px 10px',cursor:'pointer'}}>{q}</button>
+            ))}
+          </div>}
+          {respuesta&&<div style={{marginTop:10,fontSize:13,color:C.text,lineHeight:1.5,background:C.bgSoft,borderRadius:9,padding:'10px 12px'}}>{respuesta}</div>}
         </div>
         <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Oportunidades</div>
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
