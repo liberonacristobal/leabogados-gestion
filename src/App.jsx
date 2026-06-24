@@ -2315,7 +2315,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           </div>
           <div style={{display:'flex',gap:4}}>
             {['UF','CLP'].map(v=>{ const on=dashMoneda===v; return (
-              <button key={v} onClick={()=>setDashMoneda(v)} style={{padding:'3px 10px',borderRadius:6,border:on?`1.5px solid ${C.accent}`:'0.5px solid #E4E8EB',background:'#fff',color:on?C.accent:C.muted,fontSize:11,fontWeight:on?600:500,cursor:'pointer'}}>{v}</button>
+              <button key={v} onClick={()=>setDashMoneda(v)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{v}</button>
             )})}
           </div>
         </div>
