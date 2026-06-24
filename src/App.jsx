@@ -1610,6 +1610,7 @@ const META_CLP = 400000000
 
 function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[]}) {
   const [horizon,setHorizon] = useState(6)
+  const [cfVista,setCfVista] = useState('flujo')   // 'flujo' (3M/6M/12M) | 'dic' (proyección al 31-dic, inline)
   const [activePoint,setActivePoint] = useState(null)
   const [respF,setRespF] = useState('todos')
   const [projOpen,setProjOpen] = useState(false)
@@ -1703,26 +1704,55 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const tlabel = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase'}}>Proyección flujo de caja</span>
-        <button onClick={()=>setProjOpen(true)} title={`Proyección al 31 dic ${anoCurr}`} style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',cursor:'pointer',color:C.accent,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>
-          <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='16' y1='2' x2='16' y2='6'/></svg>
-          31 dic
-        </button>
-      </div>
+      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Proyección flujo de caja</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
           <div>
-            <span style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(totalHorizon)}</span>
-            <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>Por cobrar</div>
+            <span style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{cfVista==='dic'?fmtKpi(projTotalFilt):fmtKpi(totalHorizon)}</span>
+            <div style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'.05em',marginTop:3}}>{cfVista==='dic'?'Al 31 dic':'Por cobrar'}</div>
           </div>
           <div style={{display:'flex',gap:4,flexShrink:0}}>
-            {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>(
-              <button key={v} onClick={()=>{setHorizon(v);setActivePoint(null)}} style={{padding:'4px 11px',borderRadius:6,border:`1px solid ${horizon===v?C.accent:C.border}`,background:horizon===v?C.azulBg:'transparent',color:horizon===v?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
-            ))}
+            {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>{ const on=cfVista==='flujo'&&horizon===v; return (
+              <button key={v} onClick={()=>{setHorizon(v);setCfVista('flujo');setActivePoint(null)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
+            )})}
+            <button onClick={()=>setCfVista('dic')} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${cfVista==='dic'?C.soon:C.border}`,background:cfVista==='dic'?C.ambarBg:'transparent',color:cfVista==='dic'?C.coralText:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>31 dic</button>
           </div>
         </div>
+        {cfVista==='dic' ? (
+          <div style={{marginTop:11}}>
+            {projYearsDisp.length>1&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+              <select value={projYear} onChange={e=>{setProjYear(e.target.value);setProjResp(null)}} style={{fontSize:11,padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>
+                <option value='todos'>Año venta: todos</option>
+                {projYearsDisp.map(y=><option key={y} value={y}>Año venta {y}</option>)}
+              </select>
+            </div>}
+            {projPorAbogado.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin montos por cobrar al 31 dic.</div>}
+            {(()=>{ const maxV=Math.max(...projPorAbogado.map(x=>x.v),1); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
+              <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 2px',cursor:'pointer',opacity:projResp&&!on?.4:1}}>
+                <span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
+                <div style={{flex:1,height:8.5,borderRadius:5,background:C.bgSoft,overflow:'hidden'}}><div style={{width:`${Math.max(3,Math.round(v/maxV*100))}%`,height:'100%',background:pc.color||C.muted,borderRadius:5}}/></div>
+                <span style={{width:62,flexShrink:0,textAlign:'right',fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(v)}</span>
+              </div>
+            )})})()}
+            {projResp&&<div style={{marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+              <div style={{fontSize:9,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Sus facturas · hasta 31 dic</div>
+              {projFacturas.length===0&&<div style={{fontSize:12,color:C.muted}}>Sin facturas.</div>}
+              {projFacturas.map(b=>(
+                <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
+                    <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:9,fontWeight:600,color:b.status==='Programada'?C.muted:b.status==='Vencido'?C.overdueText:C.accent}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(saldoBill(b))}</div>
+                  </div>
+                </div>
+              ))}
+            </div>}
+          </div>
+        ) : (<>
         {(()=>{ const t=totalHorizon||1; const pe=Math.max(0,Math.min(100,Math.round(totalEmitido/t*100))); return (<>
           <div style={{display:'flex',height:8.5,borderRadius:5,overflow:'hidden',margin:'9px 0 6px',background:C.bgSoft}}>
             {totalEmitido>0&&<div style={{width:`${pe}%`,background:C.normal}}/>}
@@ -1786,9 +1816,10 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
             </div>
           </div>
         )}
+        </>)}
       </div>
 
-      {projOpen&&(
+      {false&&projOpen&&(
         <div onClick={()=>setProjOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
           <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:'#fff',borderRadius:'16px 16px 0 0',maxHeight:'86vh',overflowY:'auto',padding:'16px 18px 26px'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8}}>
