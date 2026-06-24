@@ -196,6 +196,12 @@ const _NOMBRES_F = new Set(['carmen','isabel','beatriz','raquel','mercedes','sol
 const _NOMBRES_M = new Set(['elias','tobias','jeremias','nicolas','tomas','matias','lucas','jonas','bautista','cosme','josemaria','agustin'])
 const generoF = name => { const n=_normTxt((name||'').trim().split(/\s+/)[0]); if(!n) return false; if(_NOMBRES_F.has(n)) return true; if(_NOMBRES_M.has(n)) return false; return n.endsWith('a') }
 const saludoCli = name => esPersona(name) ? `${generoF(name)?'Estimada':'Estimado'} ${(name||'').trim().split(/\s+/)[0]}` : 'Estimados'
+// Primitivo reutilizable: copia `text` al portapapeles al tocar, con feedback "copiado ✓" inline (sin toast global).
+function Copyable({text, children, title='Copiar', style}){
+  const [done,setDone] = useState(false)
+  const copy = e => { if(e&&e.stopPropagation) e.stopPropagation(); const v=String(text??'').trim(); if(!v) return; try{ navigator.clipboard?.writeText(v) }catch(_){}; setDone(true); setTimeout(()=>setDone(false),1200) }
+  return <span onClick={copy} title={title} style={{cursor:'pointer',...style}}>{children}{done&&<span style={{marginLeft:5,fontSize:9,fontWeight:600,color:C.greenText,whiteSpace:'nowrap'}}>copiado ✓</span>}</span>
+}
 // Chip de acción para cabeceras de pestaña (estilo aprobado: tintado suave, sin borde, redondeado). variant: soft|primary|green
 const chipBtn = (variant='soft') => ({height:24,padding:'0 12px',borderRadius:20,fontSize:12,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',whiteSpace:'nowrap',gap:5,boxSizing:'border-box',
   ...({
@@ -593,7 +599,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
               {openEnt&&entities.map(e=>(
                 <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:'1px solid #E4E8EB'}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(e.name)||'—'}</div>
-                  <div style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</div>
+                  {e.rut&&<Copyable text={e.rut} title='Copiar RUT' style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</Copyable>}
                   <Chev/>
                 </div>
               ))}
@@ -10853,7 +10859,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               {openEnt&&entities.map(e=>(
                 <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(e.name)||'—'}</div>
-                  <div style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</div>
+                  {e.rut&&<Copyable text={e.rut} title='Copiar RUT' style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</Copyable>}
                   <Chev/>
                 </div>
               ))}
