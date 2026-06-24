@@ -3127,13 +3127,18 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
       </div>
       <div style={{padding:'10px 20px 100px'}}>
         {/* HÉROE — Radar tributario · SII (varios focos + clientes a conversar) */}
-        <div style={{background:C.accent,borderRadius:14,padding:'13px 14px 7px',marginBottom:13}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-            <div>
-              <div style={{fontSize:9.5,fontWeight:700,color:'#9FC4DE',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Radar tributario · SII</div>
-              <div style={{fontSize:20,fontWeight:700,color:'#fff',lineHeight:1}}>{radar.length} foco{radar.length!==1?'s':''} activo{radar.length!==1?'s':''}</div>
+        <div style={{background:C.accent,borderRadius:14,padding:'13px 14px 7px',marginBottom:openFoco?9:13}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+            <div style={{display:'flex',alignItems:'center',gap:11,minWidth:0}}>
+              <span style={{width:38,height:38,borderRadius:11,background:'rgba(159,196,222,.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9FC4DE" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><line x1="12" y1="12" x2="19" y2="6"/></svg>
+              </span>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:9.5,fontWeight:700,color:'#9FC4DE',textTransform:'uppercase',letterSpacing:'.07em'}}>Radar tributario · SII</div>
+                <div style={{fontSize:19,fontWeight:700,color:'#fff',lineHeight:1.1}}>{radar.length} foco{radar.length!==1?'s':''} activo{radar.length!==1?'s':''}</div>
+              </div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:13,flexShrink:0,paddingTop:2}}>
+            <div style={{display:'flex',alignItems:'center',gap:13,flexShrink:0}}>
               <button onClick={actualizarRadar} disabled={radarBusy} title='Actualizar' style={{fontSize:14,color:'#9FC4DE',background:'none',border:'none',cursor:radarBusy?'default':'pointer',padding:0,lineHeight:1}}>{radarBusy?'…':'↻'}</button>
               <button onClick={()=>setAddOpen(true)} title='Agregar novedad' style={{fontSize:19,color:'#9FC4DE',background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:1}}>+</button>
             </div>
@@ -3142,30 +3147,32 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           {radar.length===0
             ? <div style={{fontSize:11.5,color:'#88A6B6',padding:'2px 0 9px',lineHeight:1.5}}>Sin novedades del SII aún · agrégalas con + o la ingesta automática.</div>
             : radar.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const op=openFoco===n.id; return (
-              <div key={n.id} style={{borderTop:'0.5px solid rgba(255,255,255,.13)'}}>
-                <div onClick={()=>setOpenFoco(op?null:n.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',cursor:'pointer'}}>
-                  <span style={{width:7,height:7,borderRadius:'50%',background:pr,flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12.5,color:'#EAF0F3',lineHeight:1.3}}>{n.titulo}</div>
-                    {(n.tipo||n.numero)&&<div style={{fontSize:9.5,color:'#88A6B6',marginTop:1}}>{((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim()}</div>}
-                  </div>
-                  <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:15,fontWeight:700,color:'#fff',lineHeight:1}}>{n.expuestos.length}</div>
-                    <div style={{fontSize:7.5,color:'#88A6B6',textTransform:'uppercase',letterSpacing:'.04em'}}>clientes</div>
-                  </div>
-                  <span style={{fontSize:13,color:'#6E93A6',flexShrink:0}}>{op?'⌃':'›'}</span>
+              <div key={n.id} onClick={()=>setOpenFoco(op?null:n.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'0.5px solid rgba(255,255,255,.13)',cursor:'pointer'}}>
+                <span style={{width:7,height:7,borderRadius:'50%',background:pr,flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,color:op?'#fff':'#EAF0F3',fontWeight:op?600:400,lineHeight:1.3}}>{n.titulo}</div>
+                  {(n.tipo||n.numero)&&<div style={{fontSize:9.5,color:'#88A6B6',marginTop:1}}>{((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim()}</div>}
                 </div>
-                {op&&<div style={{padding:'0 0 11px 17px'}}>
-                  {n.resumen&&<div style={{fontSize:11.5,color:'#C3D2DA',lineHeight:1.5,marginBottom:8}}>{n.resumen}</div>}
-                  {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:8}}>
-                    {n.expuestos.slice(0,8).map(c=>(<span key={c.id} onClick={(e)=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(c.id)}} style={{fontSize:11,color:'#EAF0F3',background:'rgba(255,255,255,.1)',borderRadius:20,padding:'3px 9px',cursor:'pointer'}}>{c.name}</span>))}
-                    {n.expuestos.length>8&&<span style={{fontSize:11,color:'#88A6B6',padding:'3px 4px'}}>+{n.expuestos.length-8}</span>}
-                  </div>}
-                  {n.url&&<a href={n.url} target='_blank' rel='noreferrer' onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#9FC4DE',textDecoration:'none'}}>{n.numero?n.numero:'Fuente'} · sii.cl ↗</a>}
-                </div>}
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{fontSize:15,fontWeight:700,color:'#fff',lineHeight:1}}>{n.expuestos.length}</div>
+                  <div style={{fontSize:7.5,color:'#88A6B6',textTransform:'uppercase',letterSpacing:'.04em'}}>clientes</div>
+                </div>
+                <span style={{fontSize:13,color:'#6E93A6',flexShrink:0}}>{op?'⌃':'›'}</span>
               </div>
             )})}
         </div>
+        {openFoco&&(()=>{ const n=radar.find(x=>String(x.id)===String(openFoco)); if(!n) return null; const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const tag=((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim(); return (
+          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:12,padding:'12px 14px',marginBottom:13}}>
+            <div style={{fontSize:9,fontWeight:700,color:pr,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>{tag||'SII'}{n.prioridad?` · prioridad ${n.prioridad}`:''}</div>
+            <div style={{fontSize:13.5,fontWeight:600,color:C.text,lineHeight:1.3,marginBottom:n.resumen?6:8}}>{n.titulo}</div>
+            {n.resumen&&<div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:9}}>{n.resumen}</div>}
+            {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:n.url?9:0}}>
+              {n.expuestos.slice(0,10).map(c=>(<span key={c.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:11.5,color:C.text,background:C.bgSoft,borderRadius:20,padding:'4px 10px',cursor:'pointer'}}>{c.name}</span>))}
+              {n.expuestos.length>10&&<span style={{fontSize:11,color:C.muted,padding:'4px 4px'}}>+{n.expuestos.length-10}</span>}
+            </div>}
+            {n.url&&<a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10.5,fontWeight:600,color:C.azulInfo,textDecoration:'none'}}>{n.numero?n.numero:'Fuente'} · sii.cl ↗</a>}
+          </div>
+        )})()}
 
         {/* ÍNDICE — lentes del negocio (una sección abierta a la vez) */}
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
