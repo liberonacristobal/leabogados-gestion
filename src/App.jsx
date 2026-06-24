@@ -2322,7 +2322,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               })()}
             </div>
             <div style={{flex:1,padding:'16px 14px',display:'flex',flexDirection:'column'}}>
-              <div style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>Desglose financiero</div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#A8B2B8',letterSpacing:.5,textTransform:'uppercase'}}>Desglose financiero</span>
+                <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:histOpen?C.accent:C.muted,padding:0,flexShrink:0}}><HistIcon/><Chev open={histOpen}/></button>
+              </div>
               <div style={{display:'flex',gap:4,marginBottom:13}}>
                 {[['neto','Neto'],['fac','Facturado'],['cob','Cobrado']].map(([k,l])=>{ const on=dgl===k; return (
                   <button key={k} onClick={()=>setDgl(k)} style={{flex:1,padding:'5px 2px',border:'none',borderRadius:7,background:on?C.accent:'#F5F7F9',color:on?'#fff':C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>
@@ -2375,30 +2378,25 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 )}
               </div>
             )}
-          {/* Trigger años anteriores */}
-          <div style={{borderTop:`1px solid ${C.border}`}}>
-            <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:5,width:'100%',padding:'8px 16px',background:'none',border:'none',cursor:'pointer',color:C.muted}}>
-              <HistIcon/><Chev open={histOpen}/>
-            </button>
-            {histOpen&&(
-              <div style={{padding:'0 16px 14px'}}>
-                <div style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,paddingBottom:4}}>
-                  <span>Año</span><span>Avance</span><span style={{textAlign:'right'}}>Neto · % meta</span>
-                </div>
-                {aniosDisponibles.map(y=>{ const my=metricasAnio(y); const esActual=y===currentYear; const col=esActual?C.accent:C.muted; const pctMetaNeto=my.meta>0?Math.round(my.neto/my.meta*100):0
-                  return (
-                  <div key={y} style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,alignItems:'center',padding:'7px 0',borderTop:'1px solid #E4E8EB'}}>
-                    <span style={{fontSize:12,fontWeight:500,color:col}}>{y}</span>
-                    <div style={{height:5,background:C.border,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,pctMetaNeto)}%`,borderRadius:3}}/></div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:C.text}}>{vMon(my.netoUF,my.neto)}</div>
-                      <div style={{fontSize:10,color:C.muted}}>{esActual?`${pctMetaNeto}% · en curso`:`${pctMetaNeto}% meta`}</div>
-                    </div>
-                  </div>
-                )})}
+          {/* Años anteriores: se abre con el icono junto a "Desglose financiero" */}
+          {histOpen&&(
+            <div style={{borderTop:`1px solid ${C.border}`,padding:'10px 16px 14px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,fontSize:9,color:C.done,textTransform:'uppercase',letterSpacing:.3,fontWeight:600,paddingBottom:4}}>
+                <span>Año</span><span>Avance</span><span style={{textAlign:'right'}}>Neto · % meta</span>
               </div>
-            )}
-          </div>
+              {aniosDisponibles.map(y=>{ const my=metricasAnio(y); const esActual=y===currentYear; const col=esActual?C.accent:C.muted; const pctMetaNeto=my.meta>0?Math.round(my.neto/my.meta*100):0
+                return (
+                <div key={y} style={{display:'grid',gridTemplateColumns:'42px 1fr auto',gap:10,alignItems:'center',padding:'7px 0',borderTop:'1px solid #E4E8EB'}}>
+                  <span style={{fontSize:12,fontWeight:500,color:col}}>{y}</span>
+                  <div style={{height:5,background:C.border,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',background:col,width:`${Math.min(100,pctMetaNeto)}%`,borderRadius:3}}/></div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:12,fontWeight:500,color:esActual?C.accent:C.text}}>{vMon(my.netoUF,my.neto)}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{esActual?`${pctMetaNeto}% · en curso`:`${pctMetaNeto}% meta`}</div>
+                  </div>
+                </div>
+              )})}
+            </div>
+          )}
         </div>
       </div>
 
@@ -17402,14 +17400,14 @@ export default function App() {
                 <span className='fecha-full' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaFull}</span>
                 <span className='fecha-short' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaShort}</span>
                 <div style={{width:1,height:18,background:C.border,flexShrink:0}}/>
-                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:32,height:32,borderRadius:6,background:C.ambarBg,border:`1px solid ${C.soon}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='15' height='15' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill={C.soon}/><rect x='5.5' y='4' width='3' height='9' rx='1' fill={C.soon}/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill={C.soon}/></svg>
+                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:28,height:28,borderRadius:6,background:C.ambarBg,border:`1px solid ${C.soon}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='13' height='13' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill={C.soon}/><rect x='5.5' y='4' width='3' height='9' rx='1' fill={C.soon}/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill={C.soon}/></svg>
                 </button>}
-                <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+                <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                 </button>
-                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
+                <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o)}} style={{width:28,height:28,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/></svg>
                 </button>
               </div>
             </div>
