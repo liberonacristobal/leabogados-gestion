@@ -177,6 +177,8 @@ const folioN = no => String(no||'').replace(/^factura\s*/i,'').trim()
 const folioDigits = no => String(no||'').replace(/\D/g,'')
 // Razón social del SII en MAYÚSCULAS SOLO para mostrar (el dato crudo NUNCA se toca; PDF/export legal usan la RS tal cual).
 const rsDisplay = s => s ? String(s).trim().toUpperCase() : s
+// Razón social del SII (suele venir en MAYÚSCULAS) → Title Case para mostrar, sin tocar el dato (canon nombres).
+const titleCase = s => { if(!s) return s; return String(s).trim().toLowerCase().replace(/\b[a-záéíóúñ]/g, m=>m.toUpperCase()).replace(/\b(Y|De|Del|La|Las|Los|E|En)\b/g, m=>m.toLowerCase()) }
 // Clave de glosa para aprender gasto→proyecto: palabras significativas (≥4) ordenadas, así "Certificado dominio CBR" matchea independiente del orden.
 const glosaKey = s => _normTxt(s).split(' ').filter(w=>w.length>=4).slice(0,5).sort().join(' ')
 // Clave de SERIE de facturas: glosa base sin "cuota N/M", "N/M", meses, años → para agrupar hermanas (1/3, 2/3, 3/3; o las mensuales) y no dejarlas huérfanas.
@@ -2119,6 +2121,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [cpExp,setCpExp] = useState(null)       // cuenta por pagar a proveedor con su origen desplegado
   const [openOficina,setOpenOficina] = useState(false)
   const [openPagar,setOpenPagar] = useState(true)
+  const [cpProvOpen,setCpProvOpen] = useState({})   // drill: facturas del proveedor desplegadas
   const [payTercero,setPayTercero] = useState(null)   // cuenta por pagar en el modal Pagar
   const [payGroup,setPayGroup] = useState(null)        // varias cuentas del mismo proveedor pagadas juntas
   const [payFecha,setPayFecha] = useState('')
@@ -2583,7 +2586,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <button onClick={()=>setOpenPagar(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,width:'100%',marginBottom:openPagar?10:0}}>
               <span style={{fontSize:10,color:C.muted,transform:openPagar?'rotate(90deg)':'none',transition:'transform .15s'}}>▸</span>
               <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Cuentas por pagar a proveedores</span>
-              <span style={{fontSize:13,fontWeight:600,color:porPagarTot>0?C.normal:C.muted,marginLeft:'auto'}}>{fmt(porPagarTot)}</span>
+              <span style={{fontSize:13,fontWeight:600,color:porPagarTot>0?C.normal:(pendienteTot>0?C.soon:C.muted),marginLeft:'auto',fontVariantNumeric:'tabular-nums'}}>{fmt(porPagarTot+pendienteTot)}</span>
             </button>
             {openPagar&&(
               <div>
@@ -2596,23 +2599,26 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 {grupos.map((g,gi)=>{
                   const ppCuentas=g.cuentas.filter(t=>t.estado==='por_pagar')
                   const ppTot=ppCuentas.reduce((a,t)=>a+(t.monto||0),0)
+                  const pkey=g.prov?.id||('g'+gi); const provOpen=!!cpProvOpen[pkey]
+                  const provNom=titleCase(tituloProv(g.prov)); const provRS=g.prov?.razon_social?.trim()
                   return (
                   <div key={gi} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',background:C.neutro||'#F5F7F9'}}>
+                    <div onClick={()=>setCpProvOpen(o=>({...o,[pkey]:!o[pkey]}))} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',background:C.neutro||'#F5F7F9',cursor:'pointer'}}>
                       <span style={{width:34,height:34,borderRadius:9,background:C.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{cIni(tituloProv(g.prov))}</span>
-                      <div style={{minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tituloProv(g.prov)}</div>
-                        <div style={{fontSize:11,color:C.done}}>{g.prov?.razon_social?.trim()||g.prov?.rut||''}</div>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{provNom}</div>
+                        {provRS&&titleCase(provRS)!==provNom&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(provRS)}</div>}
                       </div>
-                      <div style={{marginLeft:'auto',textAlign:'right',flexShrink:0}}>
+                      <div style={{textAlign:'right',flexShrink:0}}>
                         <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Le debes</div>
-                        <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(g.total)}</div>
+                        <div style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</div>
                         {ppCuentas.length>=2&&(
-                          <button onClick={()=>{setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{marginTop:6,height:28,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:13,fontWeight:600,padding:'0 11px',cursor:'pointer',whiteSpace:'nowrap'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
+                          <button onClick={e=>{e.stopPropagation();setPayGroup({prov:g.prov,cuentas:ppCuentas,total:ppTot});setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc('');setPayDocF('')}} style={{marginTop:6,height:28,borderRadius:7,background:C.normal,color:'#fff',border:'none',fontSize:13,fontWeight:600,padding:'0 11px',cursor:'pointer',whiteSpace:'nowrap'}}>Pagar las {ppCuentas.length} · {fmt(ppTot)}</button>
                         )}
                       </div>
+                      <span style={{fontSize:11,color:C.done,flexShrink:0,marginLeft:2}}>{provOpen?'▴':'▾'}</span>
                     </div>
-                    {ordCuentas(g.cuentas).map(t=>{
+                    {provOpen&&ordCuentas(g.cuentas).map(t=>{
                       const fac=(billing||[]).find(b=>String(b.id)===String(t.billing_id))
                       const cli=clients.find(c=>String(c.id)===String(fac?.client_id))
                       const venta=(sales||[]).find(s=>String(s.id)===String(t.sale_id))
@@ -2888,6 +2894,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha}){
   const [openOpp,setOpenOpp] = useState(null)
   const [openSeg,setOpenSeg] = useState(null)   // segmento de cartera abierto
+  const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
   const [iaResumen,setIaResumen] = useState(null)   // narrativa IA "foco de la semana"
   const [iaBusy,setIaBusy] = useState(false)
   const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
@@ -2895,7 +2902,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const hoy = new Date().toISOString().slice(0,10)
   const mesesDesde = d => { if(!d) return 999; const a=new Date(hoy), b=new Date(String(d).slice(0,10)); if(isNaN(b.getTime())) return 999; return (a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()) }
 
-  const {kpis, opp, cartera, carteraTot} = useMemo(()=>{
+  const {kpis, opp, cartera, carteraTot, servicios, serviciosTot} = useMemo(()=>{
     const reales = (clients||[]).filter(c=>!c.is_internal&&!c.is_occasional)
     const vh = id => ventaHistoricaUF(id, sales, ufRef)
     const ult = id => ultimaActividad(id, sales, billing, expenses)
@@ -2927,7 +2934,14 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     Object.keys(cartera).forEach(k=>cartera[k].sort((a,b)=>b.uf-a.uf))
     const ufSeg = k => cartera[k].reduce((a,x)=>a+x.uf,0)
     const carteraTot = {activos: cartera.sano.length+cartera.riesgo.length+cartera.dormido.length, ufTotal: ['sano','riesgo','dormido','ocasional'].reduce((a,k)=>a+ufSeg(k),0), ufSeg:{sano:ufSeg('sano'),riesgo:ufSeg('riesgo'),dormido:ufSeg('dormido'),ocasional:ufSeg('ocasional')}}
-    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot}
+
+    // Servicios y Precios: por área (venta, ticket, recurrencia, rango, clientes). Activo+Terminado.
+    const ventasReales = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status))
+    const areaAgg = {}
+    ventasReales.forEach(s=>{ const a=s.area||'Sin área'; const u=ventaUF(s,ufRef); if(!areaAgg[a]) areaAgg[a]={uf:0,n:0,rec:0,tickets:[],byCli:{}}; const A=areaAgg[a]; A.uf+=u; A.n++; if(esRecurrente(s)) A.rec++; if(u>0) A.tickets.push(u); if(s.client_id) A.byCli[s.client_id]=(A.byCli[s.client_id]||0)+u })
+    const servicios = Object.entries(areaAgg).map(([area,d])=>({ area, uf:d.uf, n:d.n, ticket:d.n?d.uf/d.n:0, recPct:d.n?Math.round(d.rec/d.n*100):0, min:d.tickets.length?Math.min(...d.tickets):0, max:d.tickets.length?Math.max(...d.tickets):0, clientes:Object.entries(d.byCli).map(([cid,uf])=>({cid,uf,name:((clients||[]).find(c=>String(c.id)===String(cid))||{}).name||'—'})).sort((a,b)=>b.uf-a.uf) })).sort((a,b)=>b.uf-a.uf)
+    const serviciosTot = {areas:servicios.length, uf:servicios.reduce((a,s)=>a+s.uf,0)}
+    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot, servicios, serviciosTot}
   },[sales,billing,clients,expenses,ufRef,yr])
 
   const OPPS = [
@@ -3035,6 +3049,35 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               {open&&rows.length>15&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'5px 0'}}>+{rows.length-15} más</div>}
             </div>
           )})}
+        </div>
+        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',margin:'18px 0 8px'}}>Servicios y Precios</div>
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
+            <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Áreas</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{serviciosTot.areas}</div></div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Vendido · histórico</div><div style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(serviciosTot.uf)}</div></div>
+          </div>
+          {servicios.map(s=>{ const open=openArea===s.area; const w=serviciosTot.uf>0?s.uf/serviciosTot.uf*100:0; return (
+            <div key={s.area} style={{borderTop:`0.5px solid ${C.border}`,padding:'10px 0 2px'}}>
+              <div onClick={()=>setOpenArea(open?null:s.area)} style={{cursor:'pointer'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.area}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.accent,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span>
+                </div>
+                <div style={{height:6,borderRadius:4,background:'#F1EFE8',overflow:'hidden',margin:'6px 0 5px'}}><div style={{width:`${Math.max(2,w)}%`,height:'100%',background:C.accent,borderRadius:4}}/></div>
+                <div style={{fontSize:10.5,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct}% recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
+              </div>
+              {open&&s.clientes.slice(0,8).map(c=>(
+                <div key={c.cid} onClick={()=>c.cid&&onOpenClientFicha&&onOpenClientFicha(c.cid)} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 0 6px 14px',borderTop:'0.5px solid #EEF1F3',cursor:'pointer'}}>
+                  <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                  <span style={{fontSize:11,color:C.muted,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(c.uf)}</span>
+                </div>
+              ))}
+            </div>
+          )})}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:C.ambarBg,borderRadius:9,padding:'9px 11px',marginTop:11}}>
+            <span style={{fontSize:11,color:C.coralText}}>Margen por área <span style={{color:C.soon}}>(necesita costo de venta)</span></span>
+            <span style={{fontSize:11,color:C.soon,fontWeight:600}}>por desbloquear</span>
+          </div>
         </div>
         <div style={{marginTop:14,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
       </div>
