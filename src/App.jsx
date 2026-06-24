@@ -9069,10 +9069,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                                 <span style={{fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rendido&&<span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>rendido</span>}{e.concept||'—'}</span>
                                 <div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}>
                                   <span style={{fontSize:11,color:C.muted}}>{fmt(e.amount)}</span>
-                                  <button onClick={()=>setRevPick(revPick===e.id?null:e.id)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.azulInfo,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>Cambiar</button>
+                                  <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Cambiar' placeholder='Buscar cliente…'/>
                                 </div>
                               </div>
-                              {revPick===e.id&&<div style={{marginTop:6}}><AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>{onAssignClientToExpense(e.id,cid);setRevPick(null)}} label='Cambiar' placeholder='Buscar cliente por nombre o RUT…'/></div>}
                             </div>
                           )})}
                         </div>
