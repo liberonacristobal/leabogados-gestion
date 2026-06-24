@@ -1703,7 +1703,13 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const tlabel = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Proyección flujo de caja</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <span style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase'}}>Proyección flujo de caja</span>
+        <button onClick={()=>setProjOpen(true)} title={`Proyección al 31 dic ${anoCurr}`} style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',cursor:'pointer',color:C.accent,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>
+          <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='16' y1='2' x2='16' y2='6'/></svg>
+          31 dic
+        </button>
+      </div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
@@ -1780,12 +1786,6 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
             </div>
           </div>
         )}
-        <div style={{borderTop:`1px solid ${C.border}`,marginTop:10,paddingTop:10}}>
-          <div onClick={()=>setProjOpen(true)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.azulBg,borderRadius:9,padding:'10px 12px',cursor:'pointer'}}>
-            <span style={{fontSize:12.5,color:C.accent,fontWeight:600}}>Proyección al 31 dic {anoCurr}</span>
-            <span style={{fontSize:13,color:C.accent,fontWeight:700,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtKpi(projTotalAll)} →</span>
-          </div>
-        </div>
       </div>
 
       {projOpen&&(
@@ -1805,14 +1805,15 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
                 {projYearsDisp.map(y=><option key={y} value={y}>Año venta {y}</option>)}
               </select>}
             </div>
-            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+            <div style={{display:'flex',flexDirection:'column',gap:3}}>
               {projPorAbogado.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin montos por cobrar al 31 dic.</div>}
-              {projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
-                <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:8,background:on?(pc.bg||C.azulBg):C.bgSoft,borderLeft:`3px solid ${pc.color||C.muted}`,borderRadius:'0 8px 8px 0',padding:'8px 11px',cursor:'pointer',opacity:projResp&&!on?.45:1}}>
-                  <span style={{flex:1,fontSize:12.5,color:on?(pc.color||C.accent):C.text,fontWeight:on?600:400}}>{r}</span>
-                  <span style={{fontSize:12.5,color:on?(pc.color||C.accent):C.text,fontWeight:500,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</span>
+              {(()=>{ const maxV=Math.max(...projPorAbogado.map(x=>x.v),1); return projPorAbogado.map(({r,v})=>{ const pc=personChip(r); const on=projResp===r; return (
+                <div key={r} onClick={()=>setProjResp(on?null:r)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 2px',cursor:'pointer',opacity:projResp&&!on?.4:1}}>
+                  <span style={{width:64,flexShrink:0,fontSize:12,color:on?(pc.color||C.accent):C.text,fontWeight:on?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r}</span>
+                  <div style={{flex:1,height:8.5,borderRadius:5,background:C.bgSoft,overflow:'hidden'}}><div style={{width:`${Math.max(3,Math.round(v/maxV*100))}%`,height:'100%',background:pc.color||C.muted,borderRadius:5}}/></div>
+                  <span style={{width:62,flexShrink:0,textAlign:'right',fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(v)}</span>
                 </div>
-              )})}
+              )})})()}
             </div>
             {projResp&&<div style={{marginTop:13,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
               <div style={{fontSize:9,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>Sus facturas · hasta 31 dic</div>
