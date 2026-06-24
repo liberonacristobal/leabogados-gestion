@@ -2925,6 +2925,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [openOpp,setOpenOpp] = useState(null)
   const [openSeg,setOpenSeg] = useState(null)   // segmento de cartera abierto
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
+  const [biSec,setBiSec] = useState(null)       // sección del índice abierta (hub): oport|cartera|servicios|tendencias|ia
+  const [openFoco,setOpenFoco] = useState(null) // foco del SII expandido en el héroe
   const [iaResumen,setIaResumen] = useState(null)   // narrativa IA "foco de la semana"
   const [iaBusy,setIaBusy] = useState(false)
   const [planAnio,setPlanAnio] = useState(null)     // "Plan del Año" (interno + outlook SII)
@@ -3124,35 +3126,70 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
         </div>
       </div>
       <div style={{padding:'10px 20px 100px'}}>
-        <div style={{marginBottom:12}}>
-          {iaResumen ? (
-            <div style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px 14px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8}}>
-                <span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.05em'}}>✦ Foco de la semana</span>
-                <button onClick={correrIA} disabled={iaBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaBusy?.6:1}}>{iaBusy?'…':'Otra vez'}</button>
-              </div>
-              <div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{iaResumen}</div>
+        {/* HÉROE — Radar tributario · SII (varios focos + clientes a conversar) */}
+        <div style={{background:C.accent,borderRadius:14,padding:'13px 14px 7px',marginBottom:13}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+            <div>
+              <div style={{fontSize:9.5,fontWeight:700,color:'#9FC4DE',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>Radar tributario · SII</div>
+              <div style={{fontSize:20,fontWeight:700,color:'#fff',lineHeight:1}}>{radar.length} foco{radar.length!==1?'s':''} activo{radar.length!==1?'s':''}{radar.length>0&&<span style={{fontSize:11,fontWeight:500,color:'#88A6B6'}}> · {radar.reduce((a,n)=>a+n.expuestos.length,0)} a conversar</span>}</div>
             </div>
-          ) : (
-            <button onClick={correrIA} disabled={iaBusy} style={{width:'100%',background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:iaBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,color:C.accent,fontSize:13,fontWeight:600}}>
-              {iaBusy?'Analizando oportunidades…':'✦ Foco de la semana · Resumen IA'}
-            </button>
-          )}
-        </div>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Pregúntale al negocio</div>
-        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:18}}>
-          <div style={{display:'flex',gap:8}}>
-            <input value={pregunta} onChange={e=>setPregunta(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')preguntarIA()}} placeholder='¿Qué quieres saber de tus números?' style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',minWidth:0,background:'#fff'}}/>
-            <button onClick={()=>preguntarIA()} disabled={pregBusy||!pregunta.trim()} style={{height:36,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:(pregBusy||!pregunta.trim())?'default':'pointer',flexShrink:0,opacity:(pregBusy||!pregunta.trim())?.5:1}}>{pregBusy?'…':'Preguntar'}</button>
+            <div style={{display:'flex',alignItems:'center',gap:13,flexShrink:0,paddingTop:2}}>
+              <button onClick={actualizarRadar} disabled={radarBusy} title='Actualizar' style={{fontSize:14,color:'#9FC4DE',background:'none',border:'none',cursor:radarBusy?'default':'pointer',padding:0,lineHeight:1}}>{radarBusy?'…':'↻'}</button>
+              <button onClick={()=>setAddOpen(true)} title='Agregar novedad' style={{fontSize:19,color:'#9FC4DE',background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:1}}>+</button>
+            </div>
           </div>
-          {!respuesta&&!pregBusy&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:9}}>
-            {['¿Qué cliente estoy por perder?','¿Qué área conviene potenciar?','¿Dónde están mis oportunidades?'].map(q=>(
-              <button key={q} onClick={()=>{setPregunta(q);preguntarIA(q)}} style={{fontSize:11,color:C.muted,border:`1px solid ${C.border}`,background:'#fff',borderRadius:20,padding:'4px 10px',cursor:'pointer'}}>{q}</button>
-            ))}
-          </div>}
-          {respuesta&&<div style={{marginTop:10,fontSize:13,color:C.text,lineHeight:1.5,background:C.bgSoft,borderRadius:9,padding:'10px 12px'}}>{respuesta}</div>}
+          {radarMsg&&<div style={{fontSize:10,color:radarMsg.startsWith('Error')?'#F3B0AE':'#9FE0C8',marginBottom:6}}>{radarMsg}</div>}
+          {radar.length===0
+            ? <div style={{fontSize:11.5,color:'#88A6B6',padding:'2px 0 9px',lineHeight:1.5}}>Sin novedades del SII aún · agrégalas con + o la ingesta automática.</div>
+            : radar.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const op=openFoco===n.id; return (
+              <div key={n.id} style={{borderTop:'0.5px solid rgba(255,255,255,.13)'}}>
+                <div onClick={()=>setOpenFoco(op?null:n.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',cursor:'pointer'}}>
+                  <span style={{width:7,height:7,borderRadius:'50%',background:pr,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,color:'#EAF0F3',lineHeight:1.3}}>{n.titulo}</div>
+                    {n.tipo&&<div style={{fontSize:9.5,color:'#88A6B6',marginTop:1,textTransform:'capitalize'}}>{n.tipo}{n.numero?` ${n.numero}`:''}</div>}
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:15,fontWeight:700,color:'#fff',lineHeight:1}}>{n.expuestos.length}</div>
+                    <div style={{fontSize:7.5,color:'#88A6B6',textTransform:'uppercase',letterSpacing:'.04em'}}>a conversar</div>
+                  </div>
+                  <span style={{fontSize:13,color:'#6E93A6',flexShrink:0}}>{op?'⌃':'›'}</span>
+                </div>
+                {op&&<div style={{padding:'0 0 11px 17px'}}>
+                  {n.resumen&&<div style={{fontSize:11.5,color:'#C3D2DA',lineHeight:1.5,marginBottom:8}}>{n.resumen}</div>}
+                  {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:8}}>
+                    {n.expuestos.slice(0,8).map(c=>(<span key={c.id} onClick={(e)=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(c.id)}} style={{fontSize:11,color:'#EAF0F3',background:'rgba(255,255,255,.1)',borderRadius:20,padding:'3px 9px',cursor:'pointer'}}>{c.name}</span>))}
+                    {n.expuestos.length>8&&<span style={{fontSize:11,color:'#88A6B6',padding:'3px 4px'}}>+{n.expuestos.length-8}</span>}
+                  </div>}
+                  {n.url&&<a href={n.url} target='_blank' rel='noreferrer' onClick={e=>e.stopPropagation()} style={{fontSize:10,color:'#9FC4DE',textDecoration:'none'}}>{n.numero?n.numero:'Fuente'} · sii.cl ↗</a>}
+                </div>}
+              </div>
+            )})}
+          {radar.length>0&&<div style={{fontSize:8.5,color:'#6E93A6',textAlign:'center',padding:'5px 0 4px'}}>Solo documentos reales del SII, citados · tú validas</div>}
         </div>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Oportunidades</div>
+
+        {/* ÍNDICE — lentes del negocio (una sección abierta a la vez) */}
+        <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+          {(()=>{ const oportN=OPPS.reduce((a,o)=>a+o.rows.length,0); const ico={fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'}; const SECS=[
+            {k:'oport',bg:C.azulBg,fg:C.azulInfo,t:'Oportunidades',sub:'dormidos · cobranza · cross-sell',ct:oportN,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg>},
+            {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Cartera · salud de clientes',sub:`${cartera.riesgo.length} en riesgo · ${cartera.dormido.length} dormidos`,ct:carteraTot.activos,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
+            {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
+            {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
+            {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
+          ]; return SECS.map((s,i)=>{ const open=biSec===s.k; return (
+            <div key={s.k} onClick={()=>setBiSec(open?null:s.k)} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',cursor:'pointer',background:open?C.bgSoft:'#fff',borderTop:i?`0.5px solid ${C.border}`:'none'}}>
+              <span style={{width:33,height:33,borderRadius:'50%',background:s.bg,color:s.fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{s.svg}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text}}>{s.t}</div>
+                {s.sub&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.sub}</div>}
+              </div>
+              {s.ct!=null&&<span style={{fontSize:14,fontWeight:700,color:s.ctCol||C.accent,flexShrink:0}}>{s.ct}</span>}
+              <span style={{fontSize:15,color:C.done,flexShrink:0}}>{open?'⌃':'›'}</span>
+            </div>
+          )}) })()}
+        </div>
+
+        {biSec==='oport'&&(<div style={{marginTop:12}}>
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
           {OPPS.map(o=>{ const open=openOpp===o.k; const n=o.rows.length; return (
             <div key={o.k} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${o.col}`,borderRadius:10,overflow:'hidden'}}>
@@ -3171,33 +3208,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               </div>}
             </div>
           )})}
-        </div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',margin:'18px 0 8px'}}>
-          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Radar tributario · SII</span>
-          <div style={{display:'flex',alignItems:'center',gap:12}}>
-            {radarMsg&&<span style={{fontSize:10,color:radarMsg.startsWith('Error')?C.overdue:C.greenText}}>{radarMsg}</span>}
-            <button onClick={actualizarRadar} disabled={radarBusy} style={{fontSize:10,fontWeight:600,color:radarBusy?C.done:C.azulInfo,background:'none',border:'none',cursor:radarBusy?'default':'pointer',padding:0,textTransform:'uppercase',letterSpacing:'.04em'}}>{radarBusy?'actualizando…':'↻ actualizar'}</button>
-            <button onClick={()=>setAddOpen(true)} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,textTransform:'uppercase',letterSpacing:'.04em'}}>+ novedad</button>
-          </div>
-        </div>
-        {radar.length===0
-          ? <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px',fontSize:12,color:C.muted,textAlign:'center'}}>Sin novedades del SII cargadas aún · <span style={{color:C.azulInfo}}>la ingesta automática (Fase B) las traerá</span></div>
-          : radar.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; return (
-            <div key={n.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:12,padding:'13px 14px',marginBottom:9}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-                <span style={{fontSize:13,fontWeight:600,color:C.text}}>{n.titulo}</span>
-                {n.tipo&&<span style={{fontSize:9,fontWeight:600,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0,textTransform:'capitalize'}}>{n.tipo}{n.numero?` ${n.numero}`:''}</span>}
-              </div>
-              {n.resumen&&<div style={{fontSize:11.5,color:C.muted,lineHeight:1.45,margin:'5px 0 8px'}}>{n.resumen}</div>}
-              <div style={{fontSize:9,color:'#99ABB4',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>{n.expuestos.length} cliente{n.expuestos.length!==1?'s':''} expuesto{n.expuestos.length!==1?'s':''}{(n.areas||[]).length?` · ${(n.areas||[]).join(', ')}`:''}</div>
-              {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-                {n.expuestos.slice(0,6).map(c=>(<span key={c.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:11,color:C.text,background:C.bgSoft,borderRadius:20,padding:'3px 9px',cursor:'pointer'}}>{c.name}</span>))}
-                {n.expuestos.length>6&&<span style={{fontSize:11,color:C.muted,padding:'3px 4px'}}>+{n.expuestos.length-6}</span>}
-              </div>}
-              {n.url&&<div style={{marginTop:9,borderTop:'0.5px solid #EEF1F3',paddingTop:8}}><a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.azulInfo,textDecoration:'none'}} onClick={e=>e.stopPropagation()}>{n.numero?`${n.numero}`:'Fuente'} · sii.cl ↗</a></div>}
-            </div>
-          )})}
-        {radar.length>0&&<div style={{fontSize:9.5,color:C.done,textAlign:'center',margin:'2px 0 4px'}}>Solo documentos reales del SII, citados · la IA resume, tú validas</div>}
+        </div></div>)}
         {addOpen&&(
           <div onClick={()=>!addBusy&&setAddOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
             <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:440,background:'#fff',borderRadius:14,maxHeight:'88vh',overflowY:'auto',padding:'16px 18px'}}>
@@ -3234,7 +3245,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           </div>
         )}
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Cartera · salud de clientes</div>
+        {biSec==='cartera'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes activos</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{carteraTot.activos}</div></div>
@@ -3269,7 +3280,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         </div>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Servicios y Precios</div>
+        </div>)}
+        {biSec==='servicios'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Áreas</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{serviciosTot.areas}</div></div>
@@ -3298,7 +3310,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             <span style={{fontSize:11,color:C.soon,fontWeight:600}}>por desbloquear</span>
           </div>
         </div>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Tendencias</div>
+        </div>)}
+        {biSec==='tendencias'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:11}}>
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Vendido {yr}</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{fmtUFk(tendencias.totCur)}</div></div>
@@ -3314,20 +3327,49 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         </div>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Plan del Año</div>
-        <div style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'13px 14px'}}>
-          {planAnio ? (<>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7,gap:8}}>
-              <span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.05em'}}>✦ Plan del año {yr}</span>
-              <button onClick={correrPlan} disabled={planBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:planBusy?.6:1}}>{planBusy?'…':'Otra vez'}</button>
+        </div>)}
+        {biSec==='ia'&&(<div style={{marginTop:12}}>
+          <div style={{marginBottom:12}}>
+            {iaResumen ? (
+              <div style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px 14px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8}}>
+                  <span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.05em'}}>✦ Foco de la semana</span>
+                  <button onClick={correrIA} disabled={iaBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaBusy?.6:1}}>{iaBusy?'…':'Otra vez'}</button>
+                </div>
+                <div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{iaResumen}</div>
+              </div>
+            ) : (
+              <button onClick={correrIA} disabled={iaBusy} style={{width:'100%',background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:iaBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,color:C.accent,fontSize:13,fontWeight:600}}>
+                {iaBusy?'Analizando oportunidades…':'✦ Foco de la semana · Resumen IA'}
+              </button>
+            )}
+          </div>
+          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:12}}>
+            <div style={{display:'flex',gap:8}}>
+              <input value={pregunta} onChange={e=>setPregunta(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')preguntarIA()}} placeholder='¿Qué quieres saber de tus números?' style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',minWidth:0,background:'#fff'}}/>
+              <button onClick={()=>preguntarIA()} disabled={pregBusy||!pregunta.trim()} style={{height:36,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:(pregBusy||!pregunta.trim())?'default':'pointer',flexShrink:0,opacity:(pregBusy||!pregunta.trim())?.5:1}}>{pregBusy?'…':'Preguntar'}</button>
             </div>
-            <div style={{fontSize:13,color:C.text,lineHeight:1.55}}>{planAnio}</div>
-          </>) : (
-            <button onClick={correrPlan} disabled={planBusy} style={{width:'100%',background:'none',border:'none',cursor:planBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,color:C.accent,fontSize:13,fontWeight:600,padding:'2px 0'}}>
-              {planBusy?'Sintetizando interno + SII…':'✦ Generar Plan del Año (interno + SII)'}
-            </button>
-          )}
-        </div>
+            {!respuesta&&!pregBusy&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:9}}>
+              {['¿Qué cliente estoy por perder?','¿Qué área conviene potenciar?','¿Dónde están mis oportunidades?'].map(q=>(
+                <button key={q} onClick={()=>{setPregunta(q);preguntarIA(q)}} style={{fontSize:11,color:C.muted,border:`1px solid ${C.border}`,background:'#fff',borderRadius:20,padding:'4px 10px',cursor:'pointer'}}>{q}</button>
+              ))}
+            </div>}
+            {respuesta&&<div style={{marginTop:10,fontSize:13,color:C.text,lineHeight:1.5,background:C.bgSoft,borderRadius:9,padding:'10px 12px'}}>{respuesta}</div>}
+          </div>
+          <div style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'13px 14px'}}>
+            {planAnio ? (<>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7,gap:8}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.05em'}}>✦ Plan del año {yr}</span>
+                <button onClick={correrPlan} disabled={planBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:planBusy?.6:1}}>{planBusy?'…':'Otra vez'}</button>
+              </div>
+              <div style={{fontSize:13,color:C.text,lineHeight:1.55}}>{planAnio}</div>
+            </>) : (
+              <button onClick={correrPlan} disabled={planBusy} style={{width:'100%',background:'none',border:'none',cursor:planBusy?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,color:C.accent,fontSize:13,fontWeight:600,padding:'2px 0'}}>
+                {planBusy?'Sintetizando interno + SII…':'✦ Generar Plan del Año (interno + SII)'}
+              </button>
+            )}
+          </div>
+        </div>)}
         <div style={{marginTop:14,fontSize:10,color:C.done,lineHeight:1.5,textAlign:'center'}}>El código calcula · la IA narra y prioriza · tú decides.</div>
       </div>
     </div>
