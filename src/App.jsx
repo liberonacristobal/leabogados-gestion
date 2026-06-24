@@ -1615,7 +1615,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const [respF,setRespF] = useState('todos')
   const [projOpen,setProjOpen] = useState(false)
   const [projResp,setProjResp] = useState(null)   // abogado seleccionado en el panel de proyección (null=todos)
-  const [projYear,setProjYear] = useState('todos')
+  const [projYear,setProjYear] = useState(String(new Date().getFullYear()))   // año de venta por default = año actual
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const respByClient = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
   const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
@@ -1716,7 +1716,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
             {[[3,'3M'],[6,'6M'],[12,'12M']].map(([v,l])=>{ const on=cfVista==='flujo'&&horizon===v; return (
               <button key={v} onClick={()=>{setHorizon(v);setCfVista('flujo');setActivePoint(null)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1}}>{l}</button>
             )})}
-            <button onClick={()=>setCfVista('dic')} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${cfVista==='dic'?C.soon:C.border}`,background:cfVista==='dic'?C.ambarBg:'transparent',color:cfVista==='dic'?C.coralText:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>31 dic</button>
+            <button onClick={()=>setCfVista('dic')} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${cfVista==='dic'?C.accent:C.border}`,background:cfVista==='dic'?C.azulBg:'transparent',color:cfVista==='dic'?C.accent:C.done,fontSize:11,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>31 dic</button>
           </div>
         </div>
         {cfVista==='dic' ? (
