@@ -1703,7 +1703,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const tlabel = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
   return (
     <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:10,fontWeight:600,color:C.done,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:8}}>Cash flow · proyección</div>
+      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Cash flow · proyección</div>
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:1}}>
@@ -2489,7 +2489,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Aging de cartera */}
       <div style={{padding:'16px 20px 0'}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Aging de cartera</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Antigüedad de cartera</span>
+          <button onClick={()=>setTop5Open(o=>!o)} style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:C.muted,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em'}}>Detalle <span style={{fontSize:12,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span></button>
+        </div>
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
           <div style={{marginBottom:11}}>
             <div style={{fontSize:25,fontWeight:600,color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmtMon(agingData.total)}</div>
@@ -2522,12 +2525,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               </div>
             )
           })()}
-          <div style={{borderTop:'0.5px solid #E4E8EB',marginTop:11,paddingTop:8}}>
-            <button onClick={()=>setTop5Open(o=>!o)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',background:'none',border:'none',padding:'3px 0',cursor:'pointer'}}>
-              <span style={{fontSize:11,color:C.muted,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>Detalle</span>
-              <span style={{fontSize:13,color:C.muted,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}>{'▾'}</span>
-            </button>
-            {top5Open&&(<>
+          {top5Open&&<div style={{borderTop:'0.5px solid #E4E8EB',marginTop:11,paddingTop:11}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,margin:'9px 0 12px'}}>
                 <div style={{background:'#F5F7F9',borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted}}>DSO</div><div style={{fontSize:15,fontWeight:600,color:C.accent}}>~{Math.round(Math.max(0,agingData.dso))} días</div></div>
                 <div style={{background:'#F5F7F9',borderRadius:8,padding:'9px 11px',minWidth:0}}><div style={{fontSize:10,color:C.muted}}>Mayor exposición</div><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{agingData.mayorExposicion.nombre}</div><div style={{fontSize:10,color:C.muted}}>{fmtMon(agingData.mayorExposicion.monto)}</div></div>
@@ -2547,8 +2545,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   </div>
                 </div>
               ))}
-            </>)}
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -3029,7 +3026,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </button>
           )}
         </div>
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Pregúntale al negocio</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Pregúntale al negocio</div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:18}}>
           <div style={{display:'flex',gap:8}}>
             <input value={pregunta} onChange={e=>setPregunta(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')preguntarIA()}} placeholder='¿Qué quieres saber de tus números?' style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',minWidth:0,background:'#fff'}}/>
@@ -3042,7 +3039,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           </div>}
           {respuesta&&<div style={{marginTop:10,fontSize:13,color:C.text,lineHeight:1.5,background:C.bgSoft,borderRadius:9,padding:'10px 12px'}}>{respuesta}</div>}
         </div>
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Oportunidades</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Oportunidades</div>
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
           {OPPS.map(o=>{ const open=openOpp===o.k; const n=o.rows.length; return (
             <div key={o.k} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${o.col}`,borderRadius:10,overflow:'hidden'}}>
@@ -3063,7 +3060,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
           )})}
         </div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',margin:'18px 0 8px'}}>
-          <span style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Radar tributario · SII</span>
+          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Radar tributario · SII</span>
           <span style={{fontSize:9,color:'#99ABB4'}}>fuente SII</span>
         </div>
         {radar.length===0
@@ -3084,7 +3081,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         {radar.length>0&&<div style={{fontSize:9.5,color:C.done,textAlign:'center',margin:'2px 0 4px'}}>Solo documentos reales del SII, citados · la IA resume, tú validas</div>}
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',margin:'18px 0 8px'}}>Cartera · salud de clientes</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Cartera · salud de clientes</div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes activos</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{carteraTot.activos}</div></div>
@@ -3119,7 +3116,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             </div>
           )})}
         </div>
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',margin:'18px 0 8px'}}>Servicios y Precios</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Servicios y Precios</div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Áreas</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{serviciosTot.areas}</div></div>
@@ -3148,7 +3145,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
             <span style={{fontSize:11,color:C.soon,fontWeight:600}}>por desbloquear</span>
           </div>
         </div>
-        <div style={{fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',margin:'18px 0 8px'}}>Tendencias</div>
+        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',margin:'18px 0 8px'}}>Tendencias</div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:11}}>
             <div><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Vendido {yr}</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{fmtUFk(tendencias.totCur)}</div></div>
