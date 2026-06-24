@@ -2066,7 +2066,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onEditTask,onCompleteTask,onPreviewTask}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -2123,7 +2123,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payDoc,setPayDoc] = useState('')          // N° documento fiscal del proveedor (factura/boleta)
   const [payDocF,setPayDocF] = useState('')        // fecha del documento
   const [payingNow,setPayingNow] = useState(false)
-  const [dashMoneda,setDashMoneda] = useState('CLP')   // switch global UF/CLP de los KPIs del dashboard
+  const [dashMoneda,setDashMoneda] = useState('UF')   // switch global UF/CLP de los KPIs del dashboard (default UF: este KPI usa UF de venta, no del día)
   const [dgl,setDgl] = useState('neto')   // pill del desglose financiero: neto | fac | cob
   const [gaugeMode,setGaugeMode] = useState('venta')   // velocímetro de meta: venta (vendido/meta) | neto (neto/meta)
   const [iaHoy,setIaHoy] = useState(null)       // resumen IA de "qué atender hoy"
@@ -2283,10 +2283,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             )})}
           </div>
         </div>
-        <div onClick={()=>setTab&&setTab('inteligencia')} style={{background:C.azulBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'11px 13px',marginBottom:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-          <div><div style={{fontSize:11,fontWeight:600,color:C.accent,textTransform:'uppercase',letterSpacing:'.04em'}}>Inteligencia de negocios</div><div style={{fontSize:12,color:C.muted,marginTop:1}}>Oportunidades y resumen del estudio</div></div>
-          <span style={{fontSize:15,color:C.accent}}>→</span>
-        </div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}>
           {/* Bloque único: izquierda velocímetro de meta · derecha desglose financiero */}
           <div style={{display:'flex',alignItems:'stretch'}}>
@@ -2381,12 +2377,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             )}
           {/* Trigger años anteriores */}
           <div style={{borderTop:`1px solid ${C.border}`}}>
-            <button onClick={()=>setHistOpen(o=>!o)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',gap:8}}>
-              <span style={{display:'flex',alignItems:'center',gap:6,color:C.done,fontSize:10,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}><HistIcon/>Años anteriores</span>
-              <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,color:C.muted}}>
-                {ufTxt&&<span style={{fontSize:11,fontWeight:600}}>{ufTxt}</span>}
-                <Chev open={histOpen}/>
-              </span>
+            <button onClick={()=>setHistOpen(o=>!o)} title='Años anteriores' style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:5,width:'100%',padding:'8px 16px',background:'none',border:'none',cursor:'pointer',color:C.muted}}>
+              <HistIcon/><Chev open={histOpen}/>
             </button>
             {histOpen&&(
               <div style={{padding:'0 16px 14px'}}>
@@ -2410,40 +2402,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         </div>
       </div>
 
-      {/* Qué atender hoy: pill colapsada (poco espacio); se despliega al tocar */}
-      <div style={{padding:'16px 20px 0'}}>
-        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          <button onClick={()=>setHoyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'11px 16px',background:'none',border:'none',cursor:'pointer',textAlign:'left'}}>
-            <span style={{width:9,height:9,borderRadius:'50%',background:atenderHoy.items[0]?.dot||C.normal,flexShrink:0}}/>
-            <span style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,flexShrink:0}}>Qué atender hoy</span>
-            {atenderHoy.items.length>0
-              ? <span style={{fontSize:11,fontWeight:700,color:'#fff',background:atenderHoy.items[0].sev===0?C.overdue:C.soon,borderRadius:20,padding:'0 7px',flexShrink:0}}>{atenderHoy.items.length}</span>
-              : <span style={{fontSize:11,color:C.greenText,fontWeight:600,flexShrink:0}}>Todo al día</span>}
-            {!hoyOpen&&atenderHoy.items.length>0&&<span style={{flex:1,minWidth:0,fontSize:11,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{iaHoy||atenderHoy.head}</span>}
-            <span style={{flex:hoyOpen||atenderHoy.items.length===0?1:'0 0 auto'}}/>
-            <Chev open={hoyOpen}/>
-          </button>
-          {hoyOpen&&atenderHoy.items.length>0&&(<>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 16px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}>
-              <span style={{fontSize:12,color:C.text,lineHeight:1.45}}>{iaHoy||atenderHoy.head}</span>
-              <button onClick={resumenHoyIA} disabled={iaHoyBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaHoyBusy?.6:1}}>{iaHoyBusy?'…':(iaHoy?'Otra vez':'Resumen IA')}</button>
-            </div>
-            {atenderHoy.items.map((it,i)=>(
-              <div key={i} onClick={()=>setTab(it.go)} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 16px',borderTop:i?'1px solid #F4F6F8':'none',cursor:'pointer'}}>
-                <span style={{width:9,height:9,borderRadius:'50%',background:it.dot,flexShrink:0}}/>
-                <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.lbl}</span>
-                <span style={{fontSize:12,color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{it.val}</span>
-                <span style={{color:'#C9D2D7',flexShrink:0}}>›</span>
-              </div>
-            ))}
-          </>)}
-        </div>
-      </div>
-
-      {/* Tareas del equipo — todas las activas agrupadas por persona (colapsable) */}
-      {(()=>{
+      {tareasOpen&&(()=>{
         const activas=(tasks||[]).filter(t=>t.status!=='Terminado')
-        if(!activas.length) return null
         const orden=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
         const me=user?.name
         const corte=tareasCorte
@@ -2457,33 +2417,54 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         base.forEach(t=>{ groupKey(t).forEach(w=>{ (porP[w]=porP[w]||[]).push(t) }) })
         const personas=Object.keys(porP).sort((a,b)=>{ const ia=orden.indexOf(a),ib=orden.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,'es') })
         const esVenc=t=>{ const d=daysLeft(t.due); return d!=null&&d<0 }
-        const vencTot=base.filter(esVenc).length
         return (
-        <div style={{padding:'16px 20px 0'}}>
-          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-            <button onClick={()=>setVerTareasEquipo(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'12px 16px',background:'none',border:'none',cursor:'pointer',textAlign:'left'}}>
-              <span style={{fontSize:14,fontWeight:600,color:C.text}}>Tareas del equipo <span style={{color:C.done,fontWeight:400}}>· {base.length} activas</span></span>
-              {vencTot>0&&<span style={{fontSize:10,fontWeight:600,background:C.overdueBg,color:C.overdueText,borderRadius:10,padding:'2px 9px'}}>{vencTot} vencida{vencTot!==1?'s':''}</span>}
-              <span style={{marginLeft:'auto'}}/><Chev open={verTareasEquipo}/>
-            </button>
-            {verTareasEquipo&&me&&<div style={{display:'flex',gap:6,padding:'9px 16px 4px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`}}>
+        <div onClick={onTareasClose} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:'#fff',borderRadius:'16px 16px 0 0',maxHeight:'88vh',overflowY:'auto',padding:'14px 16px 26px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+              <span style={{fontSize:15,color:C.text}}>Tareas</span>
+              <span onClick={onTareasClose} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
+            </div>
+
+            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginBottom:7}}>Hoy</div>
+            {atenderHoy.items.length===0
+              ? <div style={{fontSize:12,color:C.greenText,marginBottom:4}}>Todo al día — sin pendientes urgentes.</div>
+              : <>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:8}}>
+                    <span style={{fontSize:12,color:C.text,lineHeight:1.4}}>{iaHoy||atenderHoy.head}</span>
+                    <button onClick={resumenHoyIA} disabled={iaHoyBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaHoyBusy?.6:1}}>{iaHoyBusy?'…':(iaHoy?'Otra vez':'Resumen IA')}</button>
+                  </div>
+                  {atenderHoy.items.map((it,i)=>(
+                    <div key={i} onClick={()=>{onTareasClose&&onTareasClose();setTab(it.go)}} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 0',borderTop:i?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
+                      <span style={{width:8,height:8,borderRadius:'50%',background:it.dot,flexShrink:0}}/>
+                      <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.lbl}</span>
+                      <span style={{fontSize:12,color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{it.val}</span>
+                      <span style={{color:'#C9D2D7',flexShrink:0}}>›</span>
+                    </div>
+                  ))}
+                </>}
+
+            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,margin:'17px 0 9px'}}>Equipo</div>
+            {me&&<div style={{display:'flex',gap:6,marginBottom:12}}>
               {[['todas','Todas'],['delegaron','Me delegaron'],['delegue','Delegué']].map(([v,l])=>{ const on=corte===v; return <button key={v} onClick={()=>setTareasCorte(v)} style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button> })}
             </div>}
-            {verTareasEquipo&&personas.length===0&&<div style={{padding:'12px 16px',fontSize:11,color:C.muted,background:'#FAFBFC',borderTop:`1px solid ${C.border}`}}>{corte==='delegaron'?'No tienes tareas que te delegaron.':'No has delegado tareas a otros.'}</div>}
-            {verTareasEquipo&&personas.map(pn=>{
+            {personas.length===0
+              ? <div style={{fontSize:12,color:C.muted}}>{corte==='delegaron'?'No tienes tareas que te delegaron.':corte==='delegue'?'No has delegado tareas.':'Sin tareas activas.'}</div>
+              : <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+                  {personas.map(pn=>{ const arr=porP[pn]; const vn=arr.filter(esVenc).length; const pc=personChip(pn); const open=!!tareaPersOpen[pn]; return (
+                    <span key={pn} onClick={()=>setTareaPersOpen(o=>({...o,[pn]:!o[pn]}))} title={pn} style={{position:'relative',cursor:'pointer'}}>
+                      <span style={{width:38,height:38,borderRadius:'50%',background:pc.color,color:'#fff',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:open?`0 0 0 2px ${C.accent}`:(vn>0?`0 0 0 2px ${C.overdue}`:'none')}}>{INICIALES_RESP[pn]||pn.slice(0,2).toUpperCase()}</span>
+                      <span style={{position:'absolute',top:-4,right:-4,minWidth:16,height:16,padding:'0 4px',borderRadius:9,background:vn>0?C.overdue:C.muted,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{arr.length}</span>
+                    </span>
+                  )})}
+                </div>}
+            {personas.filter(pn=>tareaPersOpen[pn]).map(pn=>{
               const arr=porP[pn].slice().sort((a,b)=>{ const da=daysLeft(a.due),db=daysLeft(b.due); return (da==null?1e9:da)-(db==null?1e9:db) })
-              const vn=arr.filter(esVenc).length
-              const pc=personChip(pn); const open=!!tareaPersOpen[pn]
+              const pc=personChip(pn)
               return (
-                <div key={pn}>
-                  <div onClick={()=>setTareaPersOpen(o=>({...o,[pn]:!o[pn]}))} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 16px',background:'#FAFBFC',borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>
-                    <span style={{fontSize:11,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{pn}</span>
-                    <span style={{fontSize:11,color:C.muted}}>{arr.length} activa{arr.length!==1?'s':''}</span>
-                    {vn>0&&<span style={{fontSize:10,fontWeight:600,color:C.overdueText}}>· {vn} vencida{vn!==1?'s':''}</span>}
-                    <span style={{marginLeft:'auto',color:C.done,fontSize:12}}>{open?'▴':'▾'}</span>
-                  </div>
-                  {open&&arr.map(t=>{ const cl=clients.find(c=>String(c.id)===String(t.client_id)); return (
-                    <div key={t.id} onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 16px',borderTop:`1px solid #F2F5F7`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer'}}>
+                <div key={pn} style={{marginTop:13}}>
+                  <span style={{fontSize:11,fontWeight:700,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{pn}</span>
+                  {arr.map(t=>{ const cl=clients.find(c=>String(c.id)===String(t.client_id)); return (
+                    <div key={t.id} onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 0 8px 9px',borderTop:`1px solid #F2F5F7`,borderLeft:`3px solid ${urgencyColor(t.due,t.status)}`,cursor:'pointer',marginTop:6}}>
                       {bigDate(t.due,urgencyColor(t.due,t.status))}
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
@@ -16167,6 +16148,7 @@ export default function App() {
   const [billing,setBilling]=useState([])
   const [expenses,setExpenses]=useState([])
   const [tasks,setTasks]=useState([])
+  const [tareasOpen,setTareasOpen]=useState(false)   // sheet de tareas (Hoy + equipo) abierto desde el botón del header
   const [anticipos,setAnticipos]=useState([])
   const [conciliacion,setConciliacion]=useState([])   // filas conciliacion (respaldo bancario de facturas) — fuente del badge
   const [cartolaHasta,setCartolaHasta]=useState(null) // última fecha de cartola cargada (umbral pendiente vs sin conciliación)
@@ -17404,15 +17386,25 @@ export default function App() {
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
               <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-                {userRole==='admin'&&tab==='dashboard'&&(
-                  <button onClick={()=>setTab('tasks')} title='Ver tareas del equipo' style={{display:'flex',alignItems:'center',gap:4,height:24,padding:'0 9px',borderRadius:7,background:'#fff',border:`0.5px solid ${C.border}`,color:C.muted,fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+                {userRole==='admin'&&tab==='dashboard'&&(()=>{
+                  const act=(tasks||[]).filter(t=>t.status!=='Terminado')
+                  const venc=act.filter(t=>{const d=daysLeft(t.due);return d!=null&&d<0}).length
+                  const hoy=act.filter(t=>{const d=daysLeft(t.due);return d===0}).length
+                  const alert=venc>0
+                  return (
+                  <button onClick={()=>setTareasOpen(true)} title='Tareas' style={{position:'relative',display:'flex',alignItems:'center',gap:4,height:24,padding:'0 9px',borderRadius:7,background:alert?C.overdueBg:'#fff',border:`0.5px solid ${alert?'#F3C9C7':C.border}`,color:alert?C.overdueText:C.muted,fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
                     <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
                     Tareas
+                    {(venc>0||hoy>0)&&<span style={{position:'absolute',top:-6,right:-6,minWidth:15,height:15,padding:'0 4px',borderRadius:8,background:venc>0?C.overdue:C.soon,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{venc>0?venc:hoy}</span>}
                   </button>
-                )}
+                  )
+                })()}
                 <span className='fecha-full' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaFull}</span>
                 <span className='fecha-short' style={{fontSize:12,fontWeight:500,color:C.accent,whiteSpace:'nowrap'}}>{fechaShort}</span>
                 <div style={{width:1,height:18,background:C.border,flexShrink:0}}/>
+                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:32,height:32,borderRadius:6,background:C.ambarBg,border:`1px solid ${C.soon}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='15' height='15' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill={C.soon}/><rect x='5.5' y='4' width='3' height='9' rx='1' fill={C.soon}/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill={C.soon}/></svg>
+                </button>}
                 <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:32,height:32,borderRadius:6,background:'none',border:`0.5px solid ${C.border}`,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                 </button>
@@ -17488,7 +17480,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
