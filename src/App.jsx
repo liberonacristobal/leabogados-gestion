@@ -9087,10 +9087,24 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     </div>
                     {revOpen==='oc'&&<div style={{background:C.bgSoft}}>
                       {revOcasional.map(({c,gastos})=>(
-                        <div key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',borderTop:`0.5px solid ${C.border}`}}>
-                          <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
-                          <span style={{fontSize:9,fontWeight:600,color:C.grisText,background:'#F1EFE8',borderRadius:3,padding:'1px 6px',flexShrink:0}}>ocasional</span>
-                          <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                        <div key={c.id} style={{borderTop:`0.5px solid ${C.border}`}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px',flexWrap:'wrap'}}>
+                            <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                            <span style={{fontSize:9,fontWeight:600,color:C.grisText,background:'#F1EFE8',borderRadius:3,padding:'1px 6px',flexShrink:0}}>ocasional</span>
+                            <span style={{fontSize:10,color:C.muted,marginLeft:'auto',flexShrink:0}}>{gastos.length} · {fmt(gastos.reduce((a,e)=>a+(e.amount||0),0))}</span>
+                            {gastos.length>1&&<AsignarClienteInline bill={{}} clients={clients} onAssign={(_,cid)=>{(async()=>{ for(const g of gastos){ await onAssignClientToExpense(g.id,cid) } })()}} label={`Mover los ${gastos.length}`} placeholder='Mover todos a…'/>}
+                          </div>
+                          {gastos.map(e=>(
+                            <div key={e.id} style={{padding:'6px 13px 6px 22px',borderTop:`0.5px solid ${C.border}`}}>
+                              <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}>
+                                <span style={{fontSize:11.5,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
+                                <div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}>
+                                  <span style={{fontSize:11,color:C.muted}}>{fmt(e.amount)}</span>
+                                  <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Cambiar' placeholder='Buscar cliente…'/>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>}
