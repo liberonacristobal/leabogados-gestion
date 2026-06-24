@@ -16190,6 +16190,7 @@ export default function App() {
   const _hoyHdr = new Date()
   const fechaFull = _hoyHdr.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())
   const fechaShort = `${_hoyHdr.getDate()} ${MESES_ABR[_hoyHdr.getMonth()].toLowerCase()} ${_hoyHdr.getFullYear()}`
+  const fechaInline = `${_hoyHdr.getDate()} ${MESES_ABR[_hoyHdr.getMonth()].toLowerCase()}`   // fecha corta sin año, para el saludo
   const saleUploadRef = useRef(null)
   const saleDriveRef = useRef(null)
 
@@ -17382,7 +17383,7 @@ export default function App() {
         <div style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <div style={{position:'relative'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
-              <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
+              <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola, <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>! <span style={{fontSize:13,fontWeight:400,color:C.muted}}>· {fechaInline}</span></div>
               <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                 {userRole==='admin'&&tab==='dashboard'&&(()=>{
                   const act=(tasks||[]).filter(t=>t.status!=='Terminado')
