@@ -623,9 +623,10 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
                 <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>${gastos.toLocaleString('es-CL')}</div>
                 <button onClick={()=>onAddGasto(cl)} aria-label='Agregar gasto' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.overdue,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span></button>
               </div>
-              <div style={{background:saldo<0?C.overdueBg:saldo===0?'#F1EFE8':C.greenBg,borderRadius:8,padding:'8px 10px'}}>
+              <div style={{position:'relative',background:saldo<0?C.overdueBg:saldo===0?'#F1EFE8':C.greenBg,borderRadius:8,padding:'8px 10px'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
                 <div style={{fontSize:12,fontWeight:700,color:saldo<0?C.overdue:saldo===0?C.grisText:C.greenText}}>${saldo.toLocaleString('es-CL')}</div>
+                {saldo>0&&onAddFondo&&<button onClick={()=>onAddFondo(cl,true)} aria-label='Devolver saldo a favor' title='Devolver saldo a favor' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.normal,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='13 6 19 12 13 18'/></svg></span></button>}
               </div>
             </div>
             {clientExpenses.slice(0,8).map(e=>{
@@ -11740,7 +11741,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
               <div style={{fontSize:14,fontWeight:700,color:col}}>{v}</div>
               {go&&<span className="lf-chev" aria-hidden="true" style={{position:'absolute',top:9,right:10,fontSize:15,lineHeight:1,color:C.done}}>›</span>}
-              {l==='Saldo fondos'&&saldoFondos>0&&onAddFondo&&<button onClick={e=>{e.stopPropagation();onAddFondo(true)}} title='Devolver saldo a favor al cliente' style={{position:'absolute',top:'50%',right:9,transform:'translateY(-50%)',width:30,height:30,borderRadius:'50%',background:C.normal,border:'none',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 2px 6px rgba(29,158,117,.35)'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='13 6 19 12 13 18'/></svg></button>}
             </div>
           ))}
         </div>
@@ -11917,9 +11917,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS</div>
               <div style={{fontSize:13,fontWeight:600,color:C.overdue}}>{fmt(gastos)}</div>
             </div>
-            <div style={{background:saldoFondos<0?C.overdueBg:C.greenBg,borderRadius:8,padding:'8px 10px'}}>
+            <div style={{position:'relative',background:saldoFondos<0?C.overdueBg:C.greenBg,borderRadius:8,padding:'8px 10px'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
               <div style={{fontSize:13,fontWeight:600,color:saldoFondos<0?C.overdue:C.normal}}>{fmt(saldoFondos)}</div>
+              {saldoFondos>0&&onAddFondo&&<button onClick={()=>onAddFondo(true)} aria-label='Devolver saldo a favor' title='Devolver saldo a favor' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.normal,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='13 6 19 12 13 18'/></svg></span></button>}
             </div>
           </div>
           {clientExpenses.slice(0,5).map(e=>{
