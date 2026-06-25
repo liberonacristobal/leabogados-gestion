@@ -2864,8 +2864,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {/* Gestión Caja Chica — al final del Dashboard. Tarjeta por persona (Martina, Rodrigo) con saldo/sin liquidar/últ. gasto en paralelo. */}
-      {(()=>{
+      {/* Gestión Caja Chica retirada del Dashboard de admin (2026-06-25): la cubre el resumen "Caja chica sin liquidar" del sheet de Tareas. Bloque desactivado (queda el detalle por persona en Gastos › Caja chica). */}
+      {false && (()=>{
         // Caja chica activa = quienes tienen fondos en petty_cash (incluye a Rodrigo u otros); no lista fija.
         const ADMIN_NAMES=['Cristóbal','Erasmo']; const cajaUsers = [...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
         if(!cajaUsers.length) return null
