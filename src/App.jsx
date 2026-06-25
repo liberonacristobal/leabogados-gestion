@@ -7951,6 +7951,27 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     }catch(e){ alert('Error al conciliar: '+(e.message||e)) }
     setGuardando(false)
   }
+  // Acciones separadas (el usuario las hace por partes; volver a subir el archivo retoma sin duplicar).
+  const aplicarCorregir = async()=>{
+    if(!concil||!concil.actualizar.length) return
+    setGuardando(true)
+    try{
+      const actualizaciones = concil.actualizar.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } return a })
+      const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
+      setConcilBefore(res.before||null)
+      setResultado({concil:true, actualizados:res.actualizados, imported:0, batchId:null})
+    }catch(e){ alert('Error al corregir: '+(e.message||e)) }
+    setGuardando(false)
+  }
+  const aplicarImportar = async()=>{
+    if(!concil||!concil.nuevos.length) return
+    setGuardando(true)
+    try{
+      const res = await onConciliar([], concil.nuevos, {tipo, filename:fileName})
+      setResultado({concil:true, actualizados:0, imported:res.importados, batchId:res.batchId})
+    }catch(e){ alert('Error al importar: '+(e.message||e)) }
+    setGuardando(false)
+  }
 
   const inS = {padding:'7px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none',width:'100%'}
 
@@ -8057,6 +8078,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const tileOpen = concilOpen==='act'||concilOpen==='new'
             return (
             <div style={{marginBottom:10}}>
+              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{concil.actualizar.length} ya existen</b> (corregir) y <b>{concil.nuevos.length} nuevas</b> (importar). Haz una ahora y la otra después — al volver a subir el archivo, retoma sin duplicar.</div>
               {/* Tiles: el resultado de la carga */}
               <div style={{display:'flex',gap:8,marginBottom:tileOpen?0:10}}>
                 {[['act','Corregir',concil.actualizar.length,C.azulInfo,C.azulBg,'ya existen · sin duplicar'],['new','Nuevos',concil.nuevos.length,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
@@ -8081,7 +8103,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                 )})}
               </div>}
-              <button disabled={guardando||(concil.actualizar.length+concil.nuevos.length===0)} onClick={aplicarConcil} style={{width:'100%',padding:'11px',borderRadius:8,fontSize:13,fontWeight:600,cursor:(concil.actualizar.length+concil.nuevos.length)?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:(concil.actualizar.length+concil.nuevos.length)?1:.5}}>{guardando?'Aplicando…':`Aplicar · ${concil.actualizar.length} corregir · ${concil.nuevos.length} nuevos`}</button>
+              <div style={{display:'flex',gap:8,marginTop:2}}>
+                <button disabled={guardando||concil.actualizar.length===0} onClick={aplicarCorregir} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:concil.actualizar.length?'pointer':'default',border:'none',background:C.azulInfo,color:'#fff',opacity:(guardando||!concil.actualizar.length)?.5:1}}>{guardando?'…':`Corregir las ${concil.actualizar.length}`}</button>
+                <button disabled={guardando||concil.nuevos.length===0} onClick={aplicarImportar} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:concil.nuevos.length?'pointer':'default',border:'none',background:C.greenText,color:'#fff',opacity:(guardando||!concil.nuevos.length)?.5:1}}>{guardando?'…':`Importar las ${concil.nuevos.length}`}</button>
+              </div>
             </div>
             )})()}
           {modo!=='conciliar'&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
@@ -8100,6 +8125,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               )})}
             </div>}
           </div>}
+          {modo!=='conciliar'&&(<>
           {/* Resumen de abogados involucrados: tocar un nombre filtra las filas de ese responsable */}
           {(()=>{ const m={}; rows.forEach(r=>{ const k=respDeRow(r)||'__sin__'; m[k]=(m[k]||0)+1 }); const ents=Object.entries(m).sort((a,b)=>b[1]-a[1]); if(!ents.length) return null; return (
             <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
@@ -8219,6 +8245,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               )
             })}
           </div>
+          </>)}
           <button onClick={()=>setRows(null)} style={{width:'100%',padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver a subir otro archivo</button>
         </>
       )}
