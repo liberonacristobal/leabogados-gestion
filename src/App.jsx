@@ -2121,7 +2121,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -2175,6 +2175,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payRef,setPayRef] = useState('')
   const [verTareasEquipo,setVerTareasEquipo] = useState(false)
   const [tareaPersOpen,setTareaPersOpen] = useState({})
+  const [tareaHoyOpen,setTareaHoyOpen] = useState({})   // tiles "Hoy" desplegados (acordeón)
   const [tareasCorte,setTareasCorte] = useState('todas')   // tablero equipo: 'todas' | 'delegaron' | 'delegue'
   const [payDoc,setPayDoc] = useState('')          // N° documento fiscal del proveedor (factura/boleta)
   const [payDocF,setPayDocF] = useState('')        // fecha del documento
@@ -2289,20 +2290,22 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.client_rendered_at&&!e.paid_by_client).map(e=>e.client_id))]
     const propTardias = sales.filter(s=>s.status==='Propuesta'&&s.created_at&&Math.floor((Date.now()-new Date(s.created_at))/86400000)>14)
     const sum = arr => arr.reduce((a,b)=>a+(b.amount||0),0)
+    const cnD = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
+    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.client_rendered_at&&!e.paid_by_client).reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot} }).sort((a,b)=>b.v-a.v)
     const items = [
-      vencidas.length&&{sev:0,dot:C.overdue,lbl:'Facturas vencidas',val:`${vencidas.length} · ${fmtShort(sum(vencidas))}`,go:'billing',iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sum(vencidas))}`},
-      tareasVenc.length&&{sev:0,dot:C.overdue,lbl:'Tareas vencidas',val:`${tareasVenc.length}`,go:'tasks',iaTxt:`${tareasVenc.length} tareas vencidas`},
-      porCobrar7.length&&{sev:1,dot:C.soon,lbl:'Por cobrar esta semana',val:`${porCobrar7.length} · ${fmtShort(sum(porCobrar7))}`,go:'billing',iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sum(porCobrar7))})`},
-      cajaSinLiq.length&&{sev:1,dot:C.soon,lbl:'Caja chica sin liquidar',val:`${cajaSinLiq.length} · ${fmtN(sum(cajaSinLiq))}`,go:'expenses',iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
-      rendCli.length&&{sev:2,dot:C.normal,lbl:'Rendiciones por hacer',val:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,go:'expenses',iaTxt:`${rendCli.length} clientes con gastos por rendir`},
-      propTardias.length&&{sev:2,dot:C.done,lbl:'Propuestas tardías (+14d)',val:`${propTardias.length} · ${fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0)))}`,go:'sales',iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
+      vencidas.length&&{sev:0,dot:C.overdue,ico:'cash',lbl:'Facturas vencidas',sub:`${vencidas.length} factura${vencidas.length!==1?'s':''}`,amt:fmtShort(sum(vencidas)),go:'billing',navLbl:`Ver las ${vencidas.length}`,rows:vencidas.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(b.amount)})),iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sum(vencidas))}`},
+      tareasVenc.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Tareas vencidas',sub:`${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''}`,amt:'',go:'tasks',navLbl:`Ver las ${tareasVenc.length}`,rows:tareasVenc.slice(0,3).map(t=>({name:t.title||'Tarea',val:''})),iaTxt:`${tareasVenc.length} tareas vencidas`},
+      porCobrar7.length&&{sev:1,dot:C.soon,ico:'cash',lbl:'Por cobrar esta semana',sub:`${porCobrar7.length} factura${porCobrar7.length!==1?'s':''}`,amt:fmtShort(sum(porCobrar7)),go:'billing',navLbl:`Ver las ${porCobrar7.length}`,rows:porCobrar7.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(b.amount)})),iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sum(porCobrar7))})`},
+      cajaSinLiq.length&&{sev:1,dot:C.soon,ico:'wallet',lbl:'Caja chica sin liquidar',sub:`${cajaSinLiq.length} gasto${cajaSinLiq.length!==1?'s':''}`,amt:fmtN(sum(cajaSinLiq)),go:'expenses',navLbl:`Ver los ${cajaSinLiq.length}`,rows:cajaSinLiq.slice(0,3).map(e=>({name:e.concept||'—',val:fmtN(e.amount)})),iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
+      rendCli.length&&{sev:2,dot:C.normal,ico:'file',lbl:'Rendiciones por hacer',sub:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,amt:'',go:'expenses',navLbl:`Ver los ${rendCli.length}`,rows:rcRows.slice(0,3),iaTxt:`${rendCli.length} clientes con gastos por rendir`},
+      propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:''})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
     ].filter(Boolean).sort((a,b)=>a.sev-b.sev)
     const head = vencidas.length ? `Hoy prioriza la cobranza: ${fmtShort(sum(vencidas))} en ${vencidas.length} factura${vencidas.length!==1?'s':''} vencida${vencidas.length!==1?'s':''}.`
       : tareasVenc.length ? `Tienes ${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''} vencida${tareasVenc.length!==1?'s':''} por resolver.`
       : porCobrar7.length ? `Vence cobranza esta semana: ${fmtShort(sum(porCobrar7))} en ${porCobrar7.length}.`
       : items.length ? 'Pendientes menores por revisar.' : 'Todo al día.'
     return {items, head}
-  },[bb,tasks,expenses,sales,negatives,totalNeg])
+  },[bb,tasks,expenses,sales,negatives,totalNeg,clients])
 
   const resumenHoyIA = async()=>{
     if(!atenderHoy.items.length){ setIaHoy('Todo al día — sin pendientes urgentes.'); return }
@@ -2448,43 +2451,62 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         base.forEach(t=>{ groupKey(t).forEach(w=>{ (porP[w]=porP[w]||[]).push(t) }) })
         const personas=Object.keys(porP).sort((a,b)=>{ const ia=orden.indexOf(a),ib=orden.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,'es') })
         const esVenc=t=>{ const d=daysLeft(t.due); return d!=null&&d<0 }
+        const tone = d => d===C.overdue?{bg:'#FCEBEB',fg:'#A32D2D'}:d===C.soon?{bg:'#FAEEDA',fg:'#BA7517'}:d===C.normal?{bg:'#E1F5EE',fg:'#0F6E56'}:{bg:'#F1EFE8',fg:'#5F5E5A'}
+        const chevSvg = <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='6 9 12 15 18 9'/></svg>
+        const sparkSvg = <svg width='17' height='17' viewBox='0 0 24 24' fill='currentColor'><path d='M12 2l1.7 5.6L19 9l-5.3 1.4L12 16l-1.7-5.6L5 9l5.3-1.4z'/></svg>
+        const hoyIco = k => { const M={cash:<g><rect x='2.5' y='6' width='19' height='12' rx='2'/><circle cx='12' cy='12' r='2.6'/></g>,wallet:<g><rect x='3' y='6' width='18' height='13' rx='2.4'/><path d='M3 10h18'/></g>,file:<g><path d='M6 3h8l4 4v14H6z'/><path d='M14 3v4h4'/></g>,alert:<g><path d='M12 4l9 16H3z'/><path d='M12 10v4'/></g>,clock:<g><circle cx='12' cy='12' r='8.5'/><path d='M12 7.5V12l3 2'/></g>}; return <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round'>{M[k]||M.file}</svg> }
         return (
         <div onClick={onTareasClose} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
           <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:'#fff',borderRadius:'16px 16px 0 0',maxHeight:'88vh',overflowY:'auto',padding:'14px 16px 26px'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-              <span style={{fontSize:15,color:C.text}}>Tareas</span>
-              <span onClick={onTareasClose} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+              <span style={{fontSize:19,fontWeight:500,color:C.accent,letterSpacing:-.3}}>Tareas</span>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                {onAddTask&&<button onClick={()=>{onTareasClose&&onTareasClose();onAddTask()}} style={{display:'inline-flex',alignItems:'center',gap:8,background:C.accent,color:'#fff',border:'none',borderRadius:22,padding:'7px 14px 7px 7px',fontSize:13,fontWeight:600,cursor:'pointer'}}><span style={{width:23,height:23,borderRadius:'50%',background:'rgba(255,255,255,.17)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,lineHeight:1}}>+</span>Nueva tarea</button>}
+                <span onClick={onTareasClose} style={{fontSize:21,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
+              </div>
             </div>
 
-            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,marginBottom:7}}>Hoy</div>
+            {atenderHoy.items.length>0&&(
+              <div style={{display:'flex',alignItems:'center',gap:10,background:'#EEF4F8',borderRadius:12,padding:'11px 13px',marginBottom:16}}>
+                <span style={{color:C.azulInfo,flexShrink:0,display:'inline-flex'}}>{sparkSvg}</span>
+                <span style={{flex:1,fontSize:12.5,color:C.text,lineHeight:1.35}}>{iaHoy||atenderHoy.head}</span>
+                <button onClick={resumenHoyIA} disabled={iaHoyBusy} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,opacity:iaHoyBusy?.6:1}}>{iaHoyBusy?'…':(iaHoy?'Otra vez':'Resumen IA')}</button>
+              </div>
+            )}
+            <div style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.6,marginBottom:10}}>Hoy</div>
             {atenderHoy.items.length===0
-              ? <div style={{fontSize:12,color:C.greenText,marginBottom:4}}>Todo al día — sin pendientes urgentes.</div>
-              : <>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:8}}>
-                    <span style={{fontSize:12,color:C.text,lineHeight:1.4}}>{iaHoy||atenderHoy.head}</span>
-                    <button onClick={resumenHoyIA} disabled={iaHoyBusy} style={{...chipBtn('soft'),flexShrink:0,opacity:iaHoyBusy?.6:1}}>{iaHoyBusy?'…':(iaHoy?'Otra vez':'Resumen IA')}</button>
-                  </div>
-                  {atenderHoy.items.map((it,i)=>(
-                    <div key={i} onClick={()=>{onTareasClose&&onTareasClose();setTab(it.go)}} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 0',borderTop:i?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
-                      <span style={{width:8,height:8,borderRadius:'50%',background:it.dot,flexShrink:0}}/>
-                      <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.lbl}</span>
-                      <span style={{fontSize:12,color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{it.val}</span>
-                      <span style={{color:'#C9D2D7',flexShrink:0}}>›</span>
+              ? <div style={{fontSize:13,color:C.greenText,marginBottom:4}}>Todo al día — sin pendientes urgentes.</div>
+              : <div style={{display:'flex',flexDirection:'column',gap:9}}>
+                  {atenderHoy.items.map((it,i)=>{ const open=!!tareaHoyOpen[it.lbl]; const tn=tone(it.dot); return (
+                    <div key={i} style={{border:`0.5px solid ${open?tn.fg:C.border}`,background:open?'#FCFBFA':'#fff',borderRadius:13,padding:'12px 13px'}}>
+                      <div onClick={()=>setTareaHoyOpen(o=>({...o,[it.lbl]:!o[it.lbl]}))} style={{display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}>
+                        <span style={{width:37,height:37,borderRadius:11,background:tn.bg,color:tn.fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{hoyIco(it.ico)}</span>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>{it.lbl}</div><div style={{fontSize:11,color:C.muted}}>{it.sub}</div></div>
+                        {it.amt&&<div style={{fontSize:15.5,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{it.amt}</div>}
+                        <span style={{color:C.done,flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .15s',display:'inline-flex'}}>{chevSvg}</span>
+                      </div>
+                      {open&&<div style={{margin:'11px 0 1px 49px',display:'flex',flexDirection:'column',gap:9}}>
+                        {it.rows.map((r,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:12.5}}><span style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>{r.val?<span style={{color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.val}</span>:null}</div>)}
+                        <span onClick={()=>{onTareasClose&&onTareasClose();setTab(it.go)}} style={{fontSize:11.5,color:C.accent,fontWeight:600,cursor:'pointer'}}>{it.navLbl} →</span>
+                      </div>}
                     </div>
-                  ))}
-                </>}
+                  )})}
+                </div>}
 
-            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.4,margin:'17px 0 9px'}}>Equipo</div>
-            {me&&<div style={{display:'flex',gap:6,marginBottom:12}}>
-              {[['todas','Todas'],['delegaron','Me delegaron'],['delegue','Delegué']].map(([v,l])=>{ const on=corte===v; return <button key={v} onClick={()=>setTareasCorte(v)} style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button> })}
-            </div>}
+            <div style={{height:0.5,background:'#EEF1F3',margin:'18px 0 14px'}}/>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:13}}>
+              <span style={{fontSize:10,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.6}}>Equipo</span>
+              {me&&<div style={{display:'flex',gap:6}}>
+                {[['todas','Todas'],['delegaron','Me delegaron'],['delegue','Delegué']].map(([v,l])=>{ const on=corte===v; return <button key={v} onClick={()=>setTareasCorte(v)} style={{fontSize:11,fontWeight:500,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button> })}
+              </div>}
+            </div>
             {personas.length===0
               ? <div style={{fontSize:12,color:C.muted}}>{corte==='delegaron'?'No tienes tareas que te delegaron.':corte==='delegue'?'No has delegado tareas.':'Sin tareas activas.'}</div>
-              : <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+              : <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                   {personas.map(pn=>{ const arr=porP[pn]; const vn=arr.filter(esVenc).length; const pc=personChip(pn); const open=!!tareaPersOpen[pn]; return (
-                    <span key={pn} onClick={()=>setTareaPersOpen(o=>({...o,[pn]:!o[pn]}))} title={pn} style={{position:'relative',cursor:'pointer'}}>
-                      <span style={{width:38,height:38,borderRadius:'50%',background:pc.color,color:'#fff',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:open?`0 0 0 2px ${C.accent}`:(vn>0?`0 0 0 2px ${C.overdue}`:'none')}}>{INICIALES_RESP[pn]||pn.slice(0,2).toUpperCase()}</span>
-                      <span style={{position:'absolute',top:-4,right:-4,minWidth:16,height:16,padding:'0 4px',borderRadius:9,background:vn>0?C.overdue:C.muted,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{arr.length}</span>
+                    <span key={pn} onClick={()=>setTareaPersOpen(o=>({...o,[pn]:!o[pn]}))} title={pn} style={{display:'inline-flex',alignItems:'center',gap:7,background:open?pc.color:pc.bg,color:open?'#fff':pc.color,borderRadius:20,padding:'5px 7px 5px 12px',fontSize:12.5,fontWeight:500,cursor:'pointer'}}>
+                      {pn}
+                      <span style={{background:open?'rgba(255,255,255,.25)':(vn>0?C.overdue:pc.color),color:'#fff',borderRadius:10,minWidth:19,height:19,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10.5,fontWeight:600,padding:'0 5px'}}>{arr.length}</span>
                     </span>
                   )})}
                 </div>}
@@ -18722,7 +18744,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
