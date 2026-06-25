@@ -9787,9 +9787,9 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
               <div><label style={flabel}>Fecha</label><input type='date' value={f.date} onChange={e=>up('date',e.target.value)} style={{...inp,fontSize:12,padding:'0 8px'}}/></div>
             </div>
 
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:13}}>
+            {!esDev&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:13}}>
               {[100000,300000,500000,1000000].map(m=>(<button key={m} onClick={()=>up('amount',String(m))} style={pill(String(m)===f.amount)}>{fmtCLP0(m)}</button>))}
-            </div>
+            </div>}
 
             <div style={{marginBottom:18}}>
               <label style={flabel}>Descripción <span style={{textTransform:'none',letterSpacing:0,color:C.done}}>· opcional</span></label>
