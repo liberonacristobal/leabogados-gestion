@@ -1840,8 +1840,8 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
       </div>
 
       {false&&projOpen&&(
-        <div onClick={()=>setProjOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:'#fff',borderRadius:'16px 16px 0 0',maxHeight:'86vh',overflowY:'auto',padding:'16px 18px 26px'}}>
+        <div onClick={()=>setProjOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:440,background:'#fff',borderRadius:18,maxHeight:'86vh',overflowY:'auto',padding:'16px 18px 22px',boxShadow:'0 12px 40px rgba(0,0,0,.18)'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8}}>
               <span style={{fontSize:15,color:C.text}}>Proyección de ingresos{projResp?` · ${projResp}`:''}</span>
               {projResp
