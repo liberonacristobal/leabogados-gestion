@@ -8431,6 +8431,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const toggleSel = id => setRevSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
   const [revDupConfirm,setRevDupConfirm] = useState(null)   // confirmación si al mover hay gastos iguales en el destino
   const [showHist,setShowHist] = useState(false)   // historial de reasignaciones (trazabilidad)
+  const [showDescuadres,setShowDescuadres] = useState(false)   // worklist de descuadres (desde la card Saldo negativo)
+  const [descOpen,setDescOpen] = useState(null)   // cliente expandido en el worklist de descuadres
   const doMove = async (ids,cid)=>{ for(const id of ids){ await onAssignClientToExpense(id,cid) } setRevSel(new Set()); setRevDupConfirm(null) }
   // Mover los seleccionados a un cliente; si el destino ya tiene iguales (monto+descripción+categoría), pide confirmación.
   const revMoverA = (cid)=>{
@@ -9049,6 +9051,48 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
           const cards=[['neg','Saldo negativo',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','Saldo a favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
+            {showDescuadres&&(
+              <div style={{marginBottom:12}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+                  <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Descuadres</span>
+                  <span onClick={()=>setShowDescuadres(false)} style={{fontSize:17,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.4}}>La oficina adelantó más de lo que hay en fondos. Registra el fondo por reembolsar (o confírmalo).</div>
+                {(()=>{ const ord=[...negL].sort((a,b)=>saldoDe(a)-saldoDe(b)); const tot=ord.reduce((a,c)=>a+saldoDe(c),0); if(ord.length===0) return <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:18,textAlign:'center',fontSize:12.5,color:C.greenText}}>Sin descuadres · todo cuadra.</div>; return (<>
+                  <div style={{display:'flex',gap:8,marginBottom:10}}>
+                    <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:18,fontWeight:700,color:C.overdueText}}>{ord.length}</div><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.04em'}}>Clientes</div></div>
+                    <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:11,padding:'9px 12px'}}><div style={{fontSize:18,fontWeight:700,color:C.overdueText}}>{fmtShort(tot)}</div><div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.04em'}}>Por revisar</div></div>
+                  </div>
+                  <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                    {ord.map((c,i)=>{ const b=balances[c.id]||{}; const op=descOpen===c.id; const gs=(expenses||[]).filter(e=>String(e.client_id)===String(c.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo); return (
+                      <div key={c.id} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
+                        <div onClick={()=>setDescOpen(op?null:c.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',cursor:'pointer',background:op?C.bgSoft:'#fff'}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                            <div style={{fontSize:10,color:C.muted,marginTop:1}}>gastos {fmtShort(b.gastos||0)} · fondos {fmtShort(b.fondos||0)}</div>
+                          </div>
+                          <span style={{fontSize:14,fontWeight:700,color:C.overdueText,flexShrink:0}}>{fmtShort(saldoDe(c))}</span>
+                          <span style={{fontSize:13,color:C.done,flexShrink:0}}>{op?'⌃':'›'}</span>
+                        </div>
+                        {op&&<div style={{background:'#FBFCFD'}}>
+                          {gs.slice(0,12).map(e=>(
+                            <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 13px 5px 24px',borderTop:`0.5px solid ${C.border}`,fontSize:11}}>
+                              <span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</span>
+                              <span style={{color:C.muted,flexShrink:0}}>{fmt(e.amount)}</span>
+                            </div>
+                          ))}
+                          {gs.length>12&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'5px'}}>+{gs.length-12} gastos más</div>}
+                          <div style={{display:'flex',gap:7,padding:'8px 13px 9px 24px'}}>
+                            <button onClick={()=>onAddFondo&&onAddFondo(c)} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.normal}`,background:'#fff',color:C.greenText,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>+ Registrar fondo</button>
+                            <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(c.id)} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Ficha</button>
+                          </div>
+                        </div>}
+                      </div>
+                    )})}
+                  </div>
+                </>)})()}
+              </div>
+            )}
             {showRevision&&(
               <div style={{marginBottom:10}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7}}>
@@ -9161,7 +9205,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {cards.map(([k,lbl,tot,n,col,tint,brd])=>{
                 const active=saldoFilter===k
                 return (
-                  <div key={k} onClick={()=>{setSaldoFilter(active?'todos':k);setVerTodos(false)}} className='lf-kpi' style={{flex:1,minWidth:0,display:'flex',alignItems:'stretch',background:active?tint:'#fff',border:`${active?2:1}px solid ${active?brd:C.border}`,borderRadius:12,overflow:'hidden',cursor:'pointer'}}>
+                  <div key={k} onClick={()=>{ if(k==='neg'){ setShowDescuadres(true);setDescOpen(null) } else { setSaldoFilter(active?'todos':k);setVerTodos(false) } }} className='lf-kpi' style={{flex:1,minWidth:0,display:'flex',alignItems:'stretch',background:active?tint:'#fff',border:`${active?2:1}px solid ${active?brd:C.border}`,borderRadius:12,overflow:'hidden',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0,padding:'8px 10px'}}>
                       <div style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:'0.03em',fontWeight:600}}>{lbl}</div>
                       <div style={{fontSize:14,fontWeight:700,color:col,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(tot)}</div>
