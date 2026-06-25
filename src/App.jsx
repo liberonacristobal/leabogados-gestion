@@ -7433,8 +7433,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [posibleDec,setPosibleDec] = useState({})             // decisión por posible duplicado: rowId → 'omitir' | 'cargar'
   const [posOpen,setPosOpen] = useState(true)                 // grupo "posibles duplicados" abierto
   const [posExp,setPosExp] = useState(null)                   // rowId del posible con la comparación expandida
-  const [cajaOwner,setCajaOwner] = useState('')               // dueño de la caja chica: estos gastos van a su caja (created_by = su email)
-  const CAJA_EMAIL = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const [cajaOwner,setCajaOwner] = useState('')               // dueño de la caja chica: estos gastos van a su caja (created_by = su NOMBRE, igual que un gasto normal)
   const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Memoria del lote: persiste reasignaciones de calce y "forzar nuevo" por huella de fila (cliente+monto+glosa),
   // para que al re-subir el MISMO archivo se retomen tus decisiones (filosofía: la app aprende, no repite).
@@ -8211,7 +8210,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {tipo!=='fondo'&&<div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.4px'}}>Caja chica de</span>
                 <button onClick={()=>setCajaOwner('')} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:cajaOwner===''?`1px solid ${C.accent}`:`1px solid ${C.border}`,background:cajaOwner===''?C.bgSoft:'#fff',color:cajaOwner===''?C.accent:C.muted}}>— Ninguno</button>
-                {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{ const pc=personChip(m); const em=CAJA_EMAIL[m]; const on=cajaOwner===em; return <button key={m} onClick={()=>setCajaOwner(on?'':em)} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${pc.color}`:`1px solid ${C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted}}>{m}</button> })}
+                {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{ const pc=personChip(m); const on=cajaOwner===m; return <button key={m} onClick={()=>setCajaOwner(on?'':m)} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${pc.color}`:`1px solid ${C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted}}>{m}</button> })}
                 {cajaOwner&&<span style={{fontSize:10,color:C.greenText,fontWeight:600,flexBasis:'100%'}}>Los gastos nuevos quedan a su nombre → entran a su caja chica.</span>}
               </div>}
               {/* Tiles: el resultado de la carga */}
