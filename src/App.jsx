@@ -8571,6 +8571,18 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,notaria_liquidado_at:nuevo}:x))
     } catch(err){ alert('Error: '+err.message) }
   }
+  const [estadoFor,setEstadoFor] = useState(null)   // id del gasto con el menú "Estado" abierto
+  // Clasifica un gasto antiguo de cliente: histórico (no descuenta el saldo) o descuenta. modo null = deshacer (vuelve al default que sí descuenta).
+  const marcarEstado = async(e, modo) => {
+    const patch = modo==='historico' ? {pagado_cliente_at:new Date().toISOString(), no_descuenta_saldo:true}
+                : modo==='descuenta' ? {pagado_cliente_at:new Date().toISOString(), no_descuenta_saldo:false}
+                : {pagado_cliente_at:null, no_descuenta_saldo:false}
+    try {
+      const {error} = await supabase.from('expenses').update(patch).eq('id',e.id)
+      if(error) throw error
+      if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
+    } catch(err){ alert('Error: '+err.message) }
+  }
   const [asignandoRS,setAsignandoRS] = useState(null) // client_id cuyo selector de RS esta abierto
   const [expandRend,setExpandRend] = useState(null)   // id de la rendición con el detalle desplegado
 
@@ -8948,6 +8960,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     const xBtn={background:'none',border:'none',cursor:'pointer',color:'inherit',fontSize:11,lineHeight:1,padding:'0 0 0 5px',fontWeight:700}
     const chipAdd={height:24,padding:'0 11px',borderRadius:20,border:`0.5px solid ${C.muted}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}
     const chipPerson={height:24,padding:'0 11px',borderRadius:20,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:500,cursor:'pointer'}
+    const icoReloj = ()=><svg width="9" height="11" viewBox="0 0 9 11" style={{verticalAlign:'-1px',flexShrink:0}}><path d="M1 1H8L4.5 5.5L8 10H1L4.5 5.5Z" fill="currentColor"/></svg>
+    const icoBaja = ()=><svg width="9" height="10" viewBox="0 0 9 10" style={{verticalAlign:'-1px',flexShrink:0}}><path d="M4.5 1V8.2M4.5 8.2 2.2 5.9M4.5 8.2 6.8 5.9" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    const chipEstado={fontSize:10,padding:'2px 9px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600,cursor:'pointer',border:'none'}
+    const showEstado = !isFondo && !e.personal_de && e.client_id && !esOficina(e.client_id) && isImported && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && isAdmin
     return (
       <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isDev?C.azulInfo:isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
@@ -8964,7 +8980,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):alert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>✓ Caja chica</button>}
               {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
               {isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Carga masiva</span>}
-              {!isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Gasto histórico</span>}
+              {!isFondo&&e.pagado_cliente_at
+                ? (isAdmin
+                  ? <button onClick={ev=>{ev.stopPropagation();marcarEstado(e,null)}} title='Pagado · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:e.no_descuenta_saldo?'#F1EFE8':C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
+                  : <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:e.no_descuenta_saldo?'#F1EFE8':C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado</span>)
+                : !isFondo&&e.no_descuenta_saldo&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Gasto histórico</span>}
               {e.personal_de&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:10,padding:'1px 8px',borderRadius:20,background:pc.bg,color:pc.color,fontWeight:700}}>Personal · {e.personal_de}</span>})()}
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
@@ -9045,6 +9065,24 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>
             {!isFondo&&e.category==='Notaria'&&!e.ot_number&&!e.notaria_liquidado_at&&!e.notaria_render_id&&!e.rendered_at&&isAdmin&&(
               <button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Marcar como pagado a la notaría (sale de "por pagar" y de caja chica)' style={{fontSize:10,padding:'1px 7px',borderRadius:3,border:`0.5px solid ${C.coralText}`,background:'#fff',color:C.coralText,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Marcar pagado</button>
+            )}
+            {showEstado && (
+              <div style={{position:'relative'}} onClick={stop}>
+                <button onClick={()=>setEstadoFor(estadoFor===e.id?null:e.id)} style={chipEstado}>Estado ▾</button>
+                {estadoFor===e.id && <>
+                  <div onClick={()=>setEstadoFor(null)} style={{position:'fixed',inset:0,zIndex:90}}/>
+                  <div style={{position:'absolute',top:26,right:0,zIndex:100,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,minWidth:188,overflow:'hidden',boxShadow:'0 4px 14px rgba(0,0,0,.1)'}}>
+                    <div onClick={()=>{marcarEstado(e,'historico');setEstadoFor(null)}} style={{padding:'8px 11px',borderBottom:`0.5px solid ${C.azulBg}`,borderLeft:`3px solid ${C.muted}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{color:C.grisText,display:'inline-flex'}}>{icoReloj()}</span>
+                      <div><div style={{fontSize:12,color:C.grisText,fontWeight:600}}>Histórico</div><div style={{fontSize:10,color:C.muted}}>no descuenta el saldo</div></div>
+                    </div>
+                    <div onClick={()=>{marcarEstado(e,'descuenta');setEstadoFor(null)}} style={{padding:'8px 11px',borderLeft:`3px solid ${C.normal}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{color:C.greenText,display:'inline-flex'}}>{icoBaja()}</span>
+                      <div><div style={{fontSize:12,color:C.greenText,fontWeight:600}}>Descuenta</div><div style={{fontSize:10,color:C.muted}}>sí baja el saldo</div></div>
+                    </div>
+                  </div>
+                </>}
+              </div>
             )}
           </div>
         </div>
