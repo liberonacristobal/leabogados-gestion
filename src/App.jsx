@@ -8977,7 +8977,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     const icoReloj = ()=><svg width="9" height="11" viewBox="0 0 9 11" style={{verticalAlign:'-1px',flexShrink:0}}><path d="M1 1H8L4.5 5.5L8 10H1L4.5 5.5Z" fill="currentColor"/></svg>
     const icoBaja = ()=><svg width="9" height="10" viewBox="0 0 9 10" style={{verticalAlign:'-1px',flexShrink:0}}><path d="M4.5 1V8.2M4.5 8.2 2.2 5.9M4.5 8.2 6.8 5.9" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
     const chipEstado={fontSize:10,padding:'2px 9px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600,cursor:'pointer',border:'none'}
-    const showEstado = !isFondo && !e.personal_de && e.client_id && !esOficina(e.client_id) && isImported && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && isAdmin
+    const showEstado = !isFondo && !e.personal_de && !e.created_by && e.client_id && !esOficina(e.client_id) && isImported && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && isAdmin
     return (
       <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isDev?C.azulInfo:isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
@@ -9247,7 +9247,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       </div>
       {open&&rend.map(renderMov)}
     </div>) }
-  const gastosClasificar = (expenses||[]).filter(e=> e.type==='gasto' && e.bulk_import_id && e.client_id && !e.personal_de && !esOficina(e.client_id) && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && !e.deleted_at)
+  const gastosClasificar = (expenses||[]).filter(e=> e.type==='gasto' && e.bulk_import_id && e.client_id && !e.personal_de && !e.created_by && !esOficina(e.client_id) && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && !e.deleted_at)
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
