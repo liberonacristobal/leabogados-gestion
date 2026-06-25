@@ -8953,7 +8953,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <div style={{display:'flex',gap:6}}>
             {cl&&!r.anulada_at&&<button onClick={()=>{setRendEdit(r);setRendEntityIds([]);setRendicionClient(cl)}} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Editar</button>}
             <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
-            {cl&&!r.anulada_at&&<button onClick={async()=>{ const now=r.devolucion_at?null:new Date().toISOString(); try{ await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',r.id); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,devolucion_at:now}:x)) }catch(e){ alert('No se pudo marcar: '+(e.message||e)) } }} title={r.devolucion_at?'Quitar la marca de devolución':'Marcar que ya enviaste la devolución (sin reenviar correo)'} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${r.devolucion_at?C.greenText:C.border}`,background:'#fff',color:r.devolucion_at?C.greenText:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.devolucion_at?'Devolución ✓':'Marcar devolución'}</button>}
+            {cl&&!r.anulada_at&&<button onClick={async()=>{ const now=r.devolucion_at?null:new Date().toISOString(); try{ await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',r.id); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,devolucion_at:now}:x)) }catch(e){ alert('No se pudo marcar: '+(e.message||e)) } }} title={r.devolucion_at?'Quitar la marca de devolución':'Marcar que ya enviaste la devolución (sin reenviar correo)'} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${r.devolucion_at?C.greenText:C.border}`,background:r.devolucion_at?C.greenBg:'#fff',color:r.devolucion_at?C.greenText:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.devolucion_at?'Devolución enviada':'Marcar devolución enviada'}</button>}
             {cl&&!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar':'Enviar'}</button>}
           </div>
         </div>}
@@ -11993,6 +11993,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                         : r.sent_at
                         ? <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:2}}>Enviada {fmtFechaTS(r.sent_at)}</div>
                         : <div style={{fontSize:10,fontWeight:600,color:C.soon,marginTop:2}}>Pendiente de envío</div>}
+                      {r.devolucion_at&&<div style={{fontSize:10,fontWeight:600,color:C.accent,marginTop:2}}>Devolución enviada</div>}
                     </div>
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
