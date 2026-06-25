@@ -7411,6 +7411,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [concilOpen,setConcilOpen] = useState(null)  // sección del acordeón de conciliación abierta
   const [concilExcl,setConcilExcl] = useState(()=>new Set())  // filas destildadas (se excluyen de corregir/importar)
   const toggleExcl = k => setConcilExcl(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
+  const [concilQ,setConcilQ] = useState('')                   // buscador dentro de las listas de conciliación
+  const [concilGrp,setConcilGrp] = useState(()=>new Set())    // grupos (cliente) expandidos
+  const toggleGrp = k => setConcilGrp(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
@@ -8079,12 +8082,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const sinCli=concil.nuevos.filter(r=>!r.client_id&&!r.personal_de)
             const nCorr=corregirSel().length, nNuev=nuevosSel().length   // lo realmente tildado
             const cn=(r)=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); return c?.name||r?.clientName||r?.nombre||'sin cliente' }
-            const lista=(items,kind)=>(<div style={{background:'#FBFCFD',maxHeight:240,overflowY:'auto'}}>
-              {kind==='rend'&&<label style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
-                <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
-                <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su liquidación de caja chica</span>
-              </label>}
-              {items.slice(0,300).map((it,j)=>{ const r=it.r||it, e=it.e, rendido=it.rendido; const selectable=(kind==='act'||kind==='new'); const exKey=kind==='act'?('c_'+(e&&e.id)):('n_'+r.id); const checked=!selectable||!concilExcl.has(exKey); return (
+            const lista=(items,kind)=>{
+              const q=concilQ.trim().toLowerCase()
+              const vis = q ? items.filter(it=>{const r=it.r||it; return (cn(r)+' '+(r.concepto||'')).toLowerCase().includes(q)}) : items
+              const selectable=(kind==='act'||kind==='new')
+              const exKeyOf=it=>{const r=it.r||it,e=it.e; return kind==='act'?('c_'+(e&&e.id)):('n_'+r.id)}
+              const renderItem=(it,j)=>{ const r=it.r||it, e=it.e, rendido=it.rendido; const exKey=exKeyOf(it); const checked=!selectable||!concilExcl.has(exKey); return (
                 <div key={(e&&e.id)||(r.id+'_'+j)} style={{padding:'7px 13px',borderTop:j?`0.5px solid ${C.border}`:'none',fontSize:11,display:'flex',gap:9,alignItems:'flex-start',opacity:selectable&&!checked?.45:1}}>
                   {selectable&&<input type='checkbox' checked={checked} onChange={()=>toggleExcl(exKey)} title={checked?'Incluida — destilda para omitir':'Omitida'} style={{marginTop:2,flexShrink:0,cursor:'pointer'}}/>}
                   <div style={{flex:1,minWidth:0}}>
@@ -8103,9 +8106,32 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>}
                   </div>
                 </div>
-              )})}
-              {items.length>300&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'7px'}}>+{items.length-300} más</div>}
-            </div>)
+              ) }
+              const groupable=(kind==='act'||kind==='new'||kind==='ok'||kind==='rend')&&vis.length>6
+              const grupos=(()=>{ const g={}; vis.forEach(it=>{const r=it.r||it; const k=cn(r); (g[k]=g[k]||[]).push(it)}); return Object.entries(g).sort((a,b)=>b[1].length-a[1].length) })()
+              return (<div style={{background:'#FBFCFD',maxHeight:320,overflowY:'auto'}}>
+                {kind==='rend'&&<label style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
+                  <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
+                  <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su liquidación de caja chica</span>
+                </label>}
+                {items.length>8&&<input value={concilQ} onChange={e=>setConcilQ(e.target.value)} placeholder='Buscar cliente o concepto…' style={{width:'calc(100% - 20px)',margin:'8px 10px',padding:'6px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,outline:'none',boxSizing:'border-box'}}/>}
+                {vis.length===0
+                  ? <div style={{padding:'14px',fontSize:11,color:C.muted,textAlign:'center'}}>Sin resultados{concilQ?` para «${concilQ}»`:''}</div>
+                  : !groupable
+                  ? vis.slice(0,300).map(renderItem)
+                  : grupos.map(([gname,gitems])=>{ const gkey=kind+'|'+gname; const gopen=concilGrp.has(gkey); const tot=gitems.reduce((s,it)=>s+((it.r||it).monto||0),0); const allOff=selectable&&gitems.every(it=>concilExcl.has(exKeyOf(it))); return (
+                    <div key={gname}>
+                      <div onClick={()=>toggleGrp(gkey)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 13px',background:'#EEF2F4',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+                        {selectable&&<input type='checkbox' checked={!allOff} onClick={ev=>ev.stopPropagation()} onChange={()=>setConcilExcl(p=>{const n=new Set(p); gitems.forEach(it=>{const k=exKeyOf(it); allOff?n.delete(k):n.add(k)}); return n})} style={{flexShrink:0,cursor:'pointer'}}/>}
+                        <span style={{flex:1,fontSize:12.5,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gname}</span>
+                        <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{gitems.length} · ${tot.toLocaleString('es-CL')}</span>
+                        <span style={{fontSize:12,color:C.done,flexShrink:0}}>{gopen?'⌃':'›'}</span>
+                      </div>
+                      {gopen&&gitems.map(renderItem)}
+                    </div>
+                  )})}
+              </div>)
+            }
             const avisos=[
               {k:'ok', t:'Ya correctos · nada que hacer', n:concil.yaCorrecto.length, col:C.greenText, items:concil.yaCorrecto},
               {k:'rend', t:'Ya liquidados · protegidos', n:rend.length, col:C.coralText, items:rend},
