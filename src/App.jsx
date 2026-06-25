@@ -7977,6 +7977,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     // ¿Esta actualización CAMBIA algo? Si el gasto ya tiene el cliente/RS/categoría del archivo, no hay nada que corregir.
     const cambia = ({r,e,rendido})=>{
       if(cajaOwner && String(e.created_by||'')!==String(cajaOwner)) return true   // re-asignar el gasto a la caja chica de cajaOwner (aunque ya exista)
+      if(r.paid_by_client!==undefined && Boolean(e.paid_by_client)!==Boolean(r.paid_by_client)) return true   // aplicar la columna "Caja chica sí/no"
       const newCat = tipo==='fondo'?'Fondo':(r.categoria||e.category)
       if(String(e.category||'')!==String(newCat||'')) return true
       if(rendido&&noTocarRendidos) return false   // protegido: solo se tocaría la categoría (ya igual ⇒ sin cambios)
@@ -8026,7 +8027,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const sel=corregirSel(); if(!sel.length) return
     setGuardando(true)
     try{
-      const actualizaciones = sel.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } if(cajaOwner) a.created_by=cajaOwner; return a })
+      const actualizaciones = sel.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } if(cajaOwner) a.created_by=cajaOwner; if(r.paid_by_client!==undefined) a.paid_by_client=r.paid_by_client; return a })
       const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
       setConcilBefore(res.before||null)
       setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:nuevosSel().length}))
@@ -17667,17 +17668,18 @@ export default function App() {
     const before=[]
     for(const a of (actualizaciones||[])){
       const ex=(expenses||[]).find(e=>String(e.id)===String(a.id))
-      before.push({id:a.id, client_id:ex?.client_id??null, entity_id:ex?.entity_id??null, category:ex?.category??null, created_by:ex?.created_by??null})
+      before.push({id:a.id, client_id:ex?.client_id??null, entity_id:ex?.entity_id??null, category:ex?.category??null, created_by:ex?.created_by??null, paid_by_client:ex?.paid_by_client??null})
       const patch={}
       if('client_id' in a) patch.client_id=a.client_id
       if('entity_id' in a) patch.entity_id=a.entity_id
       if('category' in a) patch.category=a.category
       if('created_by' in a) patch.created_by=a.created_by
+      if('paid_by_client' in a) patch.paid_by_client=a.paid_by_client
       if(Object.keys(patch).length===0) continue
       const {error}=await supabase.from('expenses').update(patch).eq('id',a.id)
       if(error) throw error
     }
-    setExpenses(p=>p.map(e=>{ const a=(actualizaciones||[]).find(x=>String(x.id)===String(e.id)); if(!a) return e; const n={...e}; if('client_id' in a)n.client_id=a.client_id; if('entity_id' in a)n.entity_id=a.entity_id; if('category' in a)n.category=a.category; if('created_by' in a)n.created_by=a.created_by; return n }))
+    setExpenses(p=>p.map(e=>{ const a=(actualizaciones||[]).find(x=>String(x.id)===String(e.id)); if(!a) return e; const n={...e}; if('client_id' in a)n.client_id=a.client_id; if('entity_id' in a)n.entity_id=a.entity_id; if('category' in a)n.category=a.category; if('created_by' in a)n.created_by=a.created_by; if('paid_by_client' in a)n.paid_by_client=a.paid_by_client; return n }))
     let importados=0, batchId=null, omitidos=0
     if(nuevos&&nuevos.length){ const res=await handleBulkImport(nuevos,{tipo,filename,cajaOwner}); importados=res.imported; batchId=res.batchId; omitidos=(res.dupOmit||0)+(res.otDupOmit||0) }
     return {actualizados:(actualizaciones||[]).length, importados, batchId, before, omitidos}
@@ -17686,8 +17688,8 @@ export default function App() {
   // Revertir las correcciones de una conciliación (vuelve cliente/entity/categoría a su valor previo).
   const handleUndoConciliar=useCallback(async(before)=>{
     try{
-      for(const b of (before||[])){ const patch={client_id:b.client_id,entity_id:b.entity_id,category:b.category}; if('created_by' in b) patch.created_by=b.created_by; const {error}=await supabase.from('expenses').update(patch).eq('id',b.id); if(error) throw error }
-      setExpenses(p=>p.map(e=>{ const b=(before||[]).find(x=>String(x.id)===String(e.id)); return b?{...e,client_id:b.client_id,entity_id:b.entity_id,category:b.category,...(('created_by' in b)?{created_by:b.created_by}:{})}:e }))
+      for(const b of (before||[])){ const patch={client_id:b.client_id,entity_id:b.entity_id,category:b.category}; if('created_by' in b) patch.created_by=b.created_by; if('paid_by_client' in b) patch.paid_by_client=b.paid_by_client; const {error}=await supabase.from('expenses').update(patch).eq('id',b.id); if(error) throw error }
+      setExpenses(p=>p.map(e=>{ const b=(before||[]).find(x=>String(x.id)===String(e.id)); return b?{...e,client_id:b.client_id,entity_id:b.entity_id,category:b.category,...(('created_by' in b)?{created_by:b.created_by}:{}),...(('paid_by_client' in b)?{paid_by_client:b.paid_by_client}:{})}:e }))
       return true
     }catch(e){ alert('No se pudo revertir: '+(e.message||e)); return false }
   },[])
