@@ -18666,8 +18666,8 @@ export default function App() {
                   </button>
                   )
                 })()}
-                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:28,height:28,borderRadius:'50%',background:C.soon,border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='15' height='15' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill='#fff'/><rect x='5.5' y='4' width='3' height='9' rx='1' fill='#fff'/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill='#fff'/></svg>
+                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <span style={{width:21,height:21,borderRadius:'50%',background:C.soon,display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='12' height='12' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill='#fff'/><rect x='5.5' y='4' width='3' height='9' rx='1' fill='#fff'/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill='#fff'/></svg></span>
                 </button>}
                 <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
