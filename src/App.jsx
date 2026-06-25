@@ -9695,6 +9695,8 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const [clientQ,setClientQ] = useState('')
   const [f,setF] = useState({sale_id:'',project:'',entity_id:'',amount:'',date:hoy,concept:''})
+  const [esDev,setEsDev] = useState(false)   // modo devolución de fondos (saldo a favor → salida)
+  const [rendN,setRendN] = useState('')      // N° de rendición asociada a la devolución
   const up=(k,v)=>setF(p=>({...p,[k]:v}))
   const clientEnts = useMemo(()=>selectedClient?(clientEntities||[]).filter(e=>e.client_id===selectedClient.id):[],[clientEntities,selectedClient])
   const clientSales = useMemo(()=>selectedClient?(sales||[]).filter(s=>s.client_id===selectedClient.id&&s.title):[],[sales,selectedClient])
@@ -9708,12 +9710,13 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none'}
   const pill = on => ({fontSize:12,padding:'5px 12px',borderRadius:20,cursor:'pointer',border:on?'1px solid #003C50':`0.5px solid ${C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
-  const canSave = selectedClient && (parseInt(f.amount)||0)>0 && f.project?.trim() && (clientEnts.length===0 || f.entity_id)
-  const guardar = () => onSave({client_id:selectedClient.id,type:'fondo',amount:parseInt(f.amount),concept:f.concept,date:f.date,category:'Fondo',entity_id:f.entity_id||null,project:f.project?.trim()||null,sale_id:f.sale_id||null})
+  const canSave = selectedClient && (parseInt(f.amount)||0)>0 && (esDev || f.project?.trim()) && (clientEnts.length===0 || f.entity_id)
+  const guardar = () => onSave({client_id:selectedClient.id,type:'fondo',amount:(esDev?-1:1)*parseInt(f.amount),concept:(esDev&&!f.concept.trim())?`Devolución de fondos · saldo a favor Rendición N°${rendN||'—'}`:f.concept,date:f.date,category:'Fondo',entity_id:f.entity_id||null,project:f.project?.trim()||null,sale_id:f.sale_id||null})
+  const correoDev = () => `Asunto: Devolución de fondos · Rendición N°${rendN||''} — ${selectedClient?.name||''}\n\nEstimado ${(selectedClient?.name||'').split(' ')[0]},\n\nJunto con saludar, y como complemento a la Rendición N°${rendN||''} que te enviamos, te confirmamos la devolución del saldo a favor por ${fmt(parseInt(f.amount)||0)}, correspondiente a los fondos no utilizados de dicha rendición.\n\nLa transferencia se realizó con fecha ${fmtFechaDMY(f.date)}. Adjuntamos el comprobante para tu registro.\n\nQuedamos atentos a cualquier consulta.\n\nSaludos cordiales,`
   return (
     <>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
-        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar fondo{selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}</span>
+        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>{esDev?'Registrar devolución':'Registrar fondo'}{selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}</span>
         <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
@@ -9733,7 +9736,18 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
           </div>
         ) : (
           <>
-            {balance!==null&&<div style={{fontSize:11,color:balance<0?C.overdue:C.normal,marginBottom:11}}>Saldo actual {fmt(balance)}</div>}
+            {balance!==null&&<div style={{fontSize:11,color:balance<0?C.overdue:C.normal,marginBottom:11}}>Saldo actual {fmt(balance)}{esDev&&balance>0?<span style={{color:C.muted}}> · a favor del cliente</span>:''}</div>}
+
+            <div style={{display:'flex',gap:6,marginBottom:13}}>
+              {[['Fondo recibido',false],['Devolución de fondos',true]].map(([l,v])=>(
+                <button key={l} onClick={()=>{ setEsDev(v); if(v&&balance>0&&!f.amount) up('amount',String(Math.round(balance))) }} style={pill(esDev===v)}>{l}</button>
+              ))}
+            </div>
+            {esDev&&<div style={{background:C.bgSoft,borderRadius:8,padding:'10px 12px',marginBottom:13}}>
+              <label style={flabel}>Rendición N°</label>
+              <input value={rendN} onChange={e=>setRendN(e.target.value)} placeholder='1' style={{...inp,maxWidth:120}}/>
+              <div style={{fontSize:11,color:C.muted,marginTop:7,lineHeight:1.45}}>Se registra como <b style={{color:C.text}}>salida de fondo</b> (lleva el saldo a 0). Después de guardar, adjunta el comprobante de transferencia al movimiento.</div>
+            </div>}
 
             <div style={{marginBottom:13}}>
               <label style={flabel}>Proyecto <span style={{color:C.overdue}}>*</span></label>
@@ -9772,9 +9786,10 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
           </>
         )}
 
+        {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<Copyable text={correoDev()} title='Copiar correo de devolución' style={{display:'block',textAlign:'center',fontSize:12,fontWeight:600,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'9px',marginBottom:10,cursor:'pointer'}}>✦ Copiar correo de devolución</Copyable>}
         <div style={{display:'flex',gap:8}}>
           <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-          <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar fondo'}</button>
+          <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':(esDev?'Guardar devolución':'Guardar fondo')}</button>
         </div>
       </div>
     </>
