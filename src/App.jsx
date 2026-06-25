@@ -16279,7 +16279,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let pool=cs
     if(pr){ const r=pool.filter(f=>crNormRut(f.receptor_rut)===pr); if(r.length) pool=r }
     if(pool.length===1) return pool[0]
-    const sm=pool.filter(f=>(f.issued_at||'').slice(0,7)===pm); return sm.length===1?sm[0]:null }
+    const sm=pool.filter(f=>(f.issued_at||'').slice(0,7)===pm); if(sm.length===1) return sm[0]
+    // Desempate saldo-safe: entre facturas del MISMO cliente y MISMO monto exacto, el saldo del cliente baja igual sea cual sea → elegimos la más cercana al pago (cs ya viene ordenado por cercanía emisión→pago). No afecta ninguna cifra de saldo/total.
+    return (sm.length?sm:pool)[0] }
   const tieneCand = m => esConciliable(m) && candidatos(m).length>0
   // Sugerencia de cliente por MONTO: para abonos sin identificar (depósitos sin RUT), busca una factura de algún
   // cliente cuyo saldo calce EXACTO con el abono y caiga en la ventana de fecha. Solo sugiere si el cliente es ÚNICO.
@@ -16744,7 +16746,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(intSet.size){ const idsInt=[...intSet]; const { error:ei } = await supabase.from('cartola_movimientos').update({es_interno:true,estado:'interno'}).in('id',idsInt); if(ei) throw ei; setMovs(p=>p.map(x=>intSet.has(x.id)?{...x,es_interno:true,estado:'interno'}:x)); nInt=idsInt.length/2 }
       // 1.5) Auto-identificar abonos sin cliente cuando UNA sola factura (de un único cliente) calza el monto EXACTO en la ventana de fecha (clientePorMonto, mismo criterio que la sugerencia manual). No aprende alias: la id por monto no se propaga a otros movimientos. El paso 2 los concilia.
       const idMap={}
-      movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&!m.cliente_id&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&!intSet.has(m.id)).forEach(m=>{ const cm=clientePorMonto(m); if(cm) idMap[m.id]=String(cm.cid) })
+      const _inwinId=(payT,iso)=>{ if(!payT||!iso) return true; const d=(payT-new Date(iso.slice(0,10)+'T12:00').getTime())/86400000; return d>=-3&&d<=60 }
+      movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&!m.cliente_id&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&!intSet.has(m.id)).forEach(m=>{
+        const cm=clientePorMonto(m); if(cm){ idMap[m.id]=String(cm.cid); return }
+        // Por NOMBRE (estricto-único) PERO solo si está corroborado por una factura del monto exacto en ventana → evita falsos positivos.
+        const cid=resolverNombre(m.nombre_contraparte); if(!cid) return
+        const amt=m.monto||0; if(amt<=0) return
+        const payT=m.fecha?new Date(m.fecha+'T12:00').getTime():null
+        if(facturasConSaldo.some(b=>String(b.client_id)===String(cid)&&Math.abs(saldoFactura(b)-amt)<=TOL&&_inwinId(payT,b.issued_at))) idMap[m.id]=String(cid)
+      })
       const idIds=Object.keys(idMap)
       if(idIds.length){ for(const mid of idIds){ const { error:ie } = await supabase.from('cartola_movimientos').update({cliente_id:idMap[mid]}).eq('id',mid); if(ie) throw ie } setMovs(p=>p.map(x=> idMap[x.id]?{...x,cliente_id:idMap[x.id]}:x)) }
       // 2) Conciliación exacta (excluye los recién marcados internos; incluye los recién identificados por monto). Gastos no se toca (suele ser fondo). FIFO para recurrentes.
