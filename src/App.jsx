@@ -7417,6 +7417,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [concilMatch,setConcilMatch] = useState({})           // override de calce manual: rowId → gastoId
   const [forzarNuevo,setForzarNuevo] = useState(()=>new Set())// filas forzadas a importarse como nuevas (no calzar)
   const [matchPick,setMatchPick] = useState(null)             // rowId con el selector "otro calce" abierto
+  const [chgFilter,setChgFilter] = useState('all')            // filtro de Corregir: all | cli (cambian cliente) | cat (cambian categoría)
   const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
@@ -8090,9 +8091,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const cn=(r)=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); return c?.name||r?.clientName||r?.nombre||'sin cliente' }
             // Otros gastos del mismo cliente y monto (candidatos a re-calzar una fila mal emparejada).
             const candidatosDe=(r)=>(expenses||[]).filter(e=>!e.deleted_at && (tipo==='fondo'?e.type==='fondo':e.type!=='fondo') && String(e.client_id||'')===String(r.client_id||'') && (e.amount||0)===(r.monto||0))
+            const chgCli=it=>{const r=it.r||it,e=it.e,rendido=it.rendido; return e&&!(rendido&&noTocarRendidos)&&String(e.client_id||'')!==String(r.client_id||e.client_id||'')}
+            const chgCat=it=>{const r=it.r||it,e=it.e; return e&&String(e.category||'')!==String((tipo==='fondo'?'Fondo':(r.categoria||e.category))||'')}
             const lista=(items,kind)=>{
               const q=concilQ.trim().toLowerCase()
-              const vis = q ? items.filter(it=>{const r=it.r||it; return (cn(r)+' '+(r.concepto||'')).toLowerCase().includes(q)}) : items
+              let vis = q ? items.filter(it=>{const r=it.r||it; return (cn(r)+' '+(r.concepto||'')).toLowerCase().includes(q)}) : items
+              if(kind==='act'&&chgFilter!=='all') vis = vis.filter(chgFilter==='cli'?chgCli:chgCat)
               const selectable=(kind==='act'||kind==='new')
               const exKeyOf=it=>{const r=it.r||it,e=it.e; return kind==='act'?('c_'+(e&&e.id)):('n_'+r.id)}
               const renderItem=(it,j)=>{ const r=it.r||it, e=it.e, rendido=it.rendido; const exKey=exKeyOf(it); const checked=!selectable||!concilExcl.has(exKey); return (
@@ -8133,6 +8137,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su liquidación de caja chica</span>
                 </label>}
                 {items.length>8&&<input value={concilQ} onChange={e=>setConcilQ(e.target.value)} placeholder='Buscar cliente o concepto…' style={{width:'calc(100% - 20px)',margin:'8px 10px',padding:'6px 10px',borderRadius:7,border:`1px solid ${C.border}`,fontSize:11,outline:'none',boxSizing:'border-box'}}/>}
+                {kind==='act'&&items.length>1&&(()=>{ const nc=items.filter(chgCli).length, nt=items.filter(chgCat).length; return (nc>0&&nt>0)?<div style={{display:'flex',gap:6,padding:'2px 10px 8px',flexWrap:'wrap'}}>{[['all','Todas',items.length],['cli','Cambian cliente',nc],['cat','Cambian categoría',nt]].map(([k,l,n])=>{ const on=chgFilter===k; return <button key={k} onClick={()=>setChgFilter(on&&k!=='all'?'all':k)} style={{fontSize:10,padding:'3px 9px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${C.azulInfo}`:`1px solid ${C.border}`,background:on?C.azulBg:'#fff',color:on?C.azulInfo:C.muted,fontWeight:on?600:400}}>{l} {n}</button> })}</div>:null })()}
                 {vis.length===0
                   ? <div style={{padding:'14px',fontSize:11,color:C.muted,textAlign:'center'}}>Sin resultados{concilQ?` para «${concilQ}»`:''}</div>
                   : !groupable
