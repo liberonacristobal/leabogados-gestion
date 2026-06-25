@@ -7854,7 +7854,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       parsed.forEach(r=>{ if(counts[keyOf(r)]>1) r.dup=true })
       setRows(parsed)
       // Retomar decisiones del lote (reasignaciones / forzar nuevo) guardadas para el mismo archivo.
-      if(modo==='conciliar'){ try{ const saved=JSON.parse(localStorage.getItem('carga_dec_v1')||'{}'); const mm={}; const ff=new Set(); parsed.forEach(r=>{ const k=rowKeyHuella(r); if(saved.match&&saved.match[k]) mm[r.id]=saved.match[k]; if(Array.isArray(saved.forzar)&&saved.forzar.includes(k)) ff.add(r.id) }); if(Object.keys(mm).length) setConcilMatch(mm); if(ff.size) setForzarNuevo(ff) }catch(_){} }
+      if(modo==='conciliar'){ try{ const saved=JSON.parse(localStorage.getItem('carga_dec_v1')||'{}'); const mm={}; const ff=new Set(); const pd={}; parsed.forEach(r=>{ const k=rowKeyHuella(r); if(saved.match&&saved.match[k]) mm[r.id]=saved.match[k]; if(Array.isArray(saved.forzar)&&saved.forzar.includes(k)) ff.add(r.id); if(saved.posdec&&saved.posdec[k]) pd[r.id]=saved.posdec[k] }); if(Object.keys(mm).length) setConcilMatch(mm); if(ff.size) setForzarNuevo(ff); if(Object.keys(pd).length) setPosibleDec(pd) }catch(_){} }
       setCargando(false)
       runMatching(parsed)   // enriquece con fuzzy + IA (async, vuelve a setRows)
       return
@@ -7984,7 +7984,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const corregirSel = () => (concil?.corregir||[]).filter(a=>!concilExcl.has('c_'+a.e.id))
   const nuevosSel = () => [...(concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id)), ...(concil?.posibles||[]).filter(p=>posibleDec[p.r.id]==='cargar').map(p=>p.r)]
   const posiblesPend = () => (concil?.posibles||[]).filter(p=>!posibleDec[p.r.id]).length   // posibles aún por decidir
-  useEffect(()=>{ if(!rows||modo!=='conciliar') return; try{ const m={}; Object.entries(concilMatch).forEach(([rid,gid])=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r&&gid) m[rowKeyHuella(r)]=gid }); const f=[]; forzarNuevo.forEach(rid=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r) f.push(rowKeyHuella(r)) }); localStorage.setItem('carga_dec_v1',JSON.stringify({match:m,forzar:f})) }catch(_){} },[concilMatch,forzarNuevo,rows,modo])
+  useEffect(()=>{ if(!rows||modo!=='conciliar') return; try{ const m={}; Object.entries(concilMatch).forEach(([rid,gid])=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r&&gid) m[rowKeyHuella(r)]=gid }); const f=[]; forzarNuevo.forEach(rid=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r) f.push(rowKeyHuella(r)) }); const pd={}; Object.entries(posibleDec).forEach(([rid,dec])=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r&&dec) pd[rowKeyHuella(r)]=dec }); localStorage.setItem('carga_dec_v1',JSON.stringify({match:m,forzar:f,posdec:pd})) }catch(_){} },[concilMatch,forzarNuevo,posibleDec,rows,modo])
   const [concilBefore,setConcilBefore] = useState(null)
   const aplicarConcil = async()=>{
     if(!concil) return
