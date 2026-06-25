@@ -835,6 +835,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const [newNota,setNewNota] = useState('')
   const [newDeliveredBy,setNewDeliveredBy] = useState('Cristóbal')
   const [showNuevaCaja,setShowNuevaCaja] = useState(false)
+  const [editCajaId,setEditCajaId] = useState(null)   // caja entregada en edición (petty_cash)
   const [cajaOtra,setCajaOtra] = useState(false)
   const [fDesde,setFDesde] = useState('')
   const [fHasta,setFHasta] = useState('')
@@ -1056,19 +1057,25 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
     if(!newMonto||isNaN(parseInt(newMonto))) return
     setSaving(true)
     try {
-      const {data,error} = await supabase.from('petty_cash').insert({
-        user_name: me,
-        amount: parseInt(newMonto),
-        delivered_at: newFecha,
-        delivered_by: newDeliveredBy||null,
-        notes: newNota||null
-      }).select().single()
-      if(error) throw error
-      setPettyCash(p=>[data,...p])
-      setNewMonto(''); setNewNota('')
-      setNewFecha(new Date().toISOString().slice(0,10))
-      setShowNuevaCaja(false)
+      const patch = { amount: parseInt(newMonto), delivered_at: newFecha, delivered_by: newDeliveredBy||null, notes: newNota||null }
+      if(editCajaId){
+        const {data,error} = await supabase.from('petty_cash').update(patch).eq('id',editCajaId).select().single()
+        if(error) throw error
+        setPettyCash(p=>p.map(x=>x.id===editCajaId?data:x))
+      } else {
+        const {data,error} = await supabase.from('petty_cash').insert({user_name:me, ...patch}).select().single()
+        if(error) throw error
+        setPettyCash(p=>[data,...p])
+      }
+      setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setEditCajaId(null); setShowNuevaCaja(false)
     } catch(e) { alert('Error: '+e.message) }
+    setSaving(false)
+  }
+  const handleBorrarCaja = async() => {
+    if(!editCajaId || !confirm('¿Eliminar esta caja entregada? Hazlo solo si la registraste por error (no borra los gastos, solo el monto entregado).')) return
+    setSaving(true)
+    try { const {error} = await supabase.from('petty_cash').delete().eq('id',editCajaId); if(error) throw error; setPettyCash(p=>p.filter(x=>x.id!==editCajaId)); setNewMonto(''); setNewNota(''); setEditCajaId(null); setShowNuevaCaja(false) }
+    catch(e) { alert('Error: '+e.message) }
     setSaving(false)
   }
 
@@ -1326,13 +1333,13 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           <div style={{borderTop:'0.5px solid #F5F7F9',padding:'11px 14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
               <span style={secLbl}>Cajas entregadas</span>
-              <button onClick={()=>{ setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy('Cristóbal'); setShowNuevaCaja(true) }} style={{height:26,padding:'0 12px',border:'none',borderRadius:8,background:C.accent,color:'#fff',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Nueva Caja</button>
+              <button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy('Cristóbal'); setCajaOtra(false); setShowNuevaCaja(true) }} style={{height:26,padding:'0 12px',border:'none',borderRadius:8,background:C.accent,color:'#fff',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Nueva Caja</button>
             </div>
             {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas.</div>}
-            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; return (
-              <div key={p.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'0.5px solid #F5F7F9'}}>
+            {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at; return (
+              <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||'Cristóbal'); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'0.5px solid #F5F7F9',cursor:editable?'pointer':'default'}}>
                 <div style={{minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmtCLP(p.amount)}</div>
+                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmtCLP(p.amount)}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>editar</span>}</div>
                   <div style={{fontSize:10,color:C.done,marginTop:1}}>Entregado por {p.delivered_by||'—'}{p.delivered_at?` · ${fmtD(p.delivered_at)}`:''}</div>
                 </div>
                 <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,flexShrink:0,background:activa?C.greenBg:'#F5F7F9',color:activa?C.normal:C.done}}>{activa?'Activa':'Cerrada'}</span>
@@ -1459,7 +1466,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           <div onClick={()=>!saving&&setShowNuevaCaja(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px 16px'}}>
             <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:360,padding:'18px 20px 20px',maxHeight:'85vh',overflowY:'auto'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-                <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Nueva caja chica <span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{me}</span></span>
+                <span style={{fontSize:16,fontWeight:600,color:C.accent}}>{editCajaId?'Editar caja chica':'Nueva caja chica'} <span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{me}</span></span>
                 <button onClick={()=>!saving&&setShowNuevaCaja(false)} style={{background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:0}}>
                   <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
                 </button>
@@ -1504,9 +1511,10 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               </div>
 
               <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>setShowNuevaCaja(false)} disabled={saving} style={{flex:1,height:44,borderRadius:10,border:'0.5px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                <button onClick={handleNuevaCaja} disabled={saving||!newMonto} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:newMonto?'pointer':'not-allowed',opacity:(saving||!newMonto)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{saving?<Spin/>:null}{saving?'Guardando...':'Registrar caja'}</button>
+                <button onClick={()=>{setShowNuevaCaja(false);setEditCajaId(null)}} disabled={saving} style={{flex:1,height:44,borderRadius:10,border:'0.5px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button onClick={handleNuevaCaja} disabled={saving||!newMonto} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:newMonto?'pointer':'not-allowed',opacity:(saving||!newMonto)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{saving?<Spin/>:null}{saving?'Guardando...':(editCajaId?'Guardar cambios':'Registrar caja')}</button>
               </div>
+              {editCajaId&&<button onClick={handleBorrarCaja} disabled={saving} style={{width:'100%',marginTop:10,height:38,borderRadius:10,border:'none',background:'none',color:C.overdue,fontSize:12,fontWeight:600,cursor:'pointer'}}>Eliminar esta caja</button>}
             </div>
           </div>
         )
