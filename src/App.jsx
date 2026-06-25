@@ -7414,6 +7414,10 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [concilQ,setConcilQ] = useState('')                   // buscador dentro de las listas de conciliación
   const [concilGrp,setConcilGrp] = useState(()=>new Set())    // grupos (cliente) expandidos
   const toggleGrp = k => setConcilGrp(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
+  const [concilMatch,setConcilMatch] = useState({})           // override de calce manual: rowId → gastoId
+  const [forzarNuevo,setForzarNuevo] = useState(()=>new Set())// filas forzadas a importarse como nuevas (no calzar)
+  const [matchPick,setMatchPick] = useState(null)             // rowId con el selector "otro calce" abierto
+  const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
@@ -7932,6 +7936,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const used = new Set(); const actualizar=[], nuevos=[]
     // Devuelve {g:gasto, via:'ot'|'fecha'|'cliente', score:palabrasGlosa} o null.
     const pick = r=>{
+      if(concilMatch[r.id]){ const g=live.find(e=>!used.has(e.id)&&String(e.id)===String(concilMatch[r.id])); if(g) return {g,via:'manual'} }
       const o=normOt(r.ot); if(o&&byOt[o]){ const c=byOt[o].find(e=>!used.has(e.id)); if(c) return {g:c,via:'ot'} }
       if(r.fecha){ const cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
         if(cands.length===1) return {g:cands[0],via:'fecha'}
@@ -7940,7 +7945,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       if(r.client_id){ const cm=live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.client_id||'')===String(r.client_id)); if(cm.length){ const rt=tok(r.concepto); let best=null,bn=-1; cm.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); if(bn>=1) return {g:best,via:'cliente',score:bn} } }
       return null
     }
-    ;(rows||[]).filter(r=>!r.error&&(r.monto||0)>0).forEach(r=>{ const m=pick(r); if(m){ used.add(m.g.id); actualizar.push({r,e:m.g,rendido:!!(m.g.render_id||m.g.client_render_id),via:m.via,score:m.score}) } else nuevos.push(r) })
+    ;(rows||[]).filter(r=>!r.error&&(r.monto||0)>0).forEach(r=>{ if(forzarNuevo.has(r.id)){ nuevos.push(r); return } const m=pick(r); if(m){ used.add(m.g.id); actualizar.push({r,e:m.g,rendido:!!(m.g.render_id||m.g.client_render_id),via:m.via,score:m.score}) } else nuevos.push(r) })
     // ¿Esta actualización CAMBIA algo? Si el gasto ya tiene el cliente/RS/categoría del archivo, no hay nada que corregir.
     const cambia = ({r,e,rendido})=>{
       const newCat = tipo==='fondo'?'Fondo':(r.categoria||e.category)
@@ -7953,7 +7958,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const corregir = actualizar.filter(cambia)
     const yaCorrecto = actualizar.filter(a=>!cambia(a))
     return {actualizar, corregir, yaCorrecto, nuevos, rendidosN: actualizar.filter(a=>a.rendido).length}
-  },[modo,rows,expenses,tipo,noTocarRendidos])
+  },[modo,rows,expenses,tipo,noTocarRendidos,concilMatch,forzarNuevo])
   // Lo realmente seleccionado (las filas que el usuario dejó tildadas). Clave: c_<gastoId> / n_<rowId>.
   const corregirSel = () => (concil?.corregir||[]).filter(a=>!concilExcl.has('c_'+a.e.id))
   const nuevosSel = () => (concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id))
@@ -8083,6 +8088,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const sinCli=concil.nuevos.filter(r=>!r.client_id&&!r.personal_de)
             const nCorr=corregirSel().length, nNuev=nuevosSel().length   // lo realmente tildado
             const cn=(r)=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); return c?.name||r?.clientName||r?.nombre||'sin cliente' }
+            // Otros gastos del mismo cliente y monto (candidatos a re-calzar una fila mal emparejada).
+            const candidatosDe=(r)=>(expenses||[]).filter(e=>!e.deleted_at && (tipo==='fondo'?e.type==='fondo':e.type!=='fondo') && String(e.client_id||'')===String(r.client_id||'') && (e.amount||0)===(r.monto||0))
             const lista=(items,kind)=>{
               const q=concilQ.trim().toLowerCase()
               const vis = q ? items.filter(it=>{const r=it.r||it; return (cn(r)+' '+(r.concepto||'')).toLowerCase().includes(q)}) : items
@@ -8097,7 +8104,15 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   {kind==='act'&&(()=>{ const newCat=tipo==='fondo'?'Fondo':(r.categoria||e.category); const catChg=String(e.category||'')!==String(newCat||''); const newCli=r.client_id||e.client_id; const cliChg=!(rendido&&noTocarRendidos)&&String(e.client_id||'')!==String(newCli||''); const nm=id=>{const c=clients.find(x=>String(x.id)===String(id));return c?.name||'Sin cliente'}; return (catChg||cliChg)?<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:3}}>{cliChg&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:10,background:C.azulBg,color:C.azulInfo}}>cliente: {nm(e.client_id)} → {nm(newCli)}</span>}{catChg&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:10,background:'#FDF2E7',color:'#9A5B12'}}>cat: {e.category||'—'} → {newCat}</span>}</div>:null })()}
                   {kind==='act'&&it.via&&(()=>{ const c=it.via==='ot'?{l:'OT exacta',bg:C.greenBg,fg:C.greenText}:it.via==='fecha'?{l:'fecha + monto',bg:C.azulBg,fg:C.azulInfo}:((it.score||0)>=2?{l:'cliente + monto + glosa',bg:C.azulBg,fg:C.azulInfo}:{l:`glosa parcial · ${it.score||0} palabra${(it.score||0)!==1?'s':''}`,bg:C.ambarBg,fg:C.soonText}); return <div><span style={{display:'inline-block',marginTop:3,fontSize:8.5,fontWeight:700,padding:'1px 6px',borderRadius:8,background:c.bg,color:c.fg}}>calzó: {c.l}</span></div> })()}
                   {kind==='new'&&<div style={{marginTop:3,fontSize:9.5,color:C.greenText,fontWeight:600}}>nuevo{r.categoria?` · ${r.categoria}`:''}</div>}
-                  {(kind==='act'||kind==='new')&&<div onClick={ev=>ev.stopPropagation()} style={{marginTop:5}}><select value={CAT_OPCIONES.includes(r.categoria)?r.categoria:''} onChange={e=>editarCampo(r.id,'categoria',e.target.value)} style={{fontSize:10,padding:'3px 6px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,outline:'none'}}><option value=''>Categoría…</option>{CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>}
+                  {(kind==='act'||kind==='new')&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:10,alignItems:'center',marginTop:5,flexWrap:'wrap'}}>
+                    <select value={CAT_OPCIONES.includes(r.categoria)?r.categoria:''} onChange={e=>editarCampo(r.id,'categoria',e.target.value)} style={{fontSize:10,padding:'3px 6px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,outline:'none'}}><option value=''>Categoría…</option>{CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                    {kind==='act'&&candidatosDe(r).length>1&&<button onClick={()=>setMatchPick(matchPick===r.id?null:r.id)} style={{fontSize:9.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>otro calce ({candidatosDe(r).length})</button>}
+                    {kind==='act'&&<button onClick={()=>toggleForzar(r.id)} style={{fontSize:9.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>tratar como nuevo →</button>}
+                    {kind==='new'&&forzarNuevo.has(r.id)&&<button onClick={()=>toggleForzar(r.id)} style={{fontSize:9.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>← volver a calzar</button>}
+                  </div>}
+                  {kind==='act'&&matchPick===r.id&&<div onClick={ev=>ev.stopPropagation()} style={{marginTop:5,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px',maxHeight:140,overflowY:'auto'}}>
+                    {candidatosDe(r).map(c=>{ const sel=String(c.id)===String(e.id); return <div key={c.id} onClick={()=>{ setConcilMatch(p=>({...p,[r.id]:c.id})); setMatchPick(null) }} style={{padding:'5px 7px',borderRadius:5,cursor:'pointer',background:sel?C.azulBg:'transparent',fontSize:10,color:C.text,lineHeight:1.35}}><b style={{color:C.text}}>{c.concept||'—'}</b><span style={{color:C.muted}}> · {c.category||'—'}{c.date?' · '+String(c.date).slice(0,10):''}{sel?' · actual':''}</span></div> })}
+                  </div>}
                   {kind==='sin'&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:7}}>
                     <div style={{flex:'1 1 150px',minWidth:0}}><AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Asignar cliente'/></div>
                     {r.nombre&&onCreateOccasional&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} title={`Crear ocasional "${r.nombre}"`} style={{flexShrink:0,fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${ocasPick===r.id?C.accent:C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional {ocasPick===r.id?'▴':'▾'}</button>}
@@ -8171,7 +8186,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>}
               {(nCorr>0||nNuev>0)&&(()=>{ const sel=corregirSel(); const cliN=sel.filter(({r,e,rendido})=>!(rendido&&noTocarRendidos)&&String(e.client_id||'')!==String(r.client_id||e.client_id||'')).length; const catN=sel.filter(({r,e})=>String(e.category||'')!==String((tipo==='fondo'?'Fondo':(r.categoria||e.category))||'')).length; const totC=sel.reduce((s,a)=>s+(a.r.monto||0),0); const totN=nuevosSel().reduce((s,r)=>s+(r.monto||0),0); const dud=sel.filter(a=>a.via==='cliente'&&(a.score||0)<2).length; const xMonto=rows.length-(concil.actualizar.length+concil.nuevos.length); return <div style={{fontSize:10.5,color:C.muted,marginBottom:8,lineHeight:1.5,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}>{nCorr>0&&<div>Al corregir: <b style={{color:C.azulInfo}}>{cliN}</b> cambian cliente · <b style={{color:'#9A5B12'}}>{catN}</b> cambian categoría · {fmt(totC)}</div>}{nNuev>0&&<div style={{marginTop:nCorr>0?2:0}}>Al importar: <b style={{color:C.greenText}}>{nNuev}</b> gastos nuevos · {fmt(totN)}</div>}{dud>0&&<div style={{marginTop:3,color:C.soonText,fontWeight:600}}>● {dud} calzaron por glosa parcial — conviene revisarlos antes</div>}<div style={{marginTop:4,paddingTop:4,borderTop:`0.5px solid ${C.border}`,color:C.done}}>{rows.length} filas = {concil.corregir.length} corregir + {concil.yaCorrecto.length} ya OK + {concil.nuevos.length} nuevas{xMonto>0?` + ${xMonto} sin monto`:''}</div></div> })()}
               <div style={{display:'flex',gap:8,marginTop:2}}>
-                <button disabled={guardando||nCorr===0} onClick={aplicarCorregir} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:nCorr?'pointer':'default',border:'none',background:C.azulInfo,color:'#fff',opacity:(guardando||!nCorr)?.5:1}}>{guardando?'…':(nCorr?`Corregir las ${nCorr}`:'Nada que corregir')}</button>
+                {(()=>{ const dud=corregirSel().filter(a=>a.via==='cliente'&&(a.score||0)<2).length; const needRev=dud>0&&concilOpen!=='act'; return <button disabled={guardando||nCorr===0} onClick={()=>needRev?setConcilOpen('act'):aplicarCorregir()} title={needRev?'Revisa los calces por glosa parcial antes de aplicar':''} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:nCorr?'pointer':'default',border:'none',background:needRev?C.soonText:C.azulInfo,color:'#fff',opacity:(guardando||!nCorr)?.5:1}}>{guardando?'…':(nCorr?(needRev?`Revisar ${dud} dudosos`:`Corregir las ${nCorr}`):'Nada que corregir')}</button> })()}
                 <button disabled={guardando||nNuev===0} onClick={aplicarImportar} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:nNuev?'pointer':'default',border:'none',background:C.greenText,color:'#fff',opacity:(guardando||!nNuev)?.5:1}}>{guardando?'…':`Importar las ${nNuev}`}</button>
               </div>
             </div>
