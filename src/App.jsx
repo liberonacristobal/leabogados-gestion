@@ -7418,6 +7418,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [forzarNuevo,setForzarNuevo] = useState(()=>new Set())// filas forzadas a importarse como nuevas (no calzar)
   const [matchPick,setMatchPick] = useState(null)             // rowId con el selector "otro calce" abierto
   const [chgFilter,setChgFilter] = useState('all')            // filtro de Corregir: all | cli (cambian cliente) | cat (cambian categoría)
+  const [posibleDec,setPosibleDec] = useState({})             // decisión por posible duplicado: rowId → 'omitir' | 'cargar'
+  const [posOpen,setPosOpen] = useState(true)                 // grupo "posibles duplicados" abierto
+  const [posExp,setPosExp] = useState(null)                   // rowId del posible con la comparación expandida
   const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Memoria del lote: persiste reasignaciones de calce y "forzar nuevo" por huella de fila (cliente+monto+glosa),
   // para que al re-subir el MISMO archivo se retomen tus decisiones (filosofía: la app aprende, no repite).
@@ -7964,11 +7967,16 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     }
     const corregir = actualizar.filter(cambia)
     const yaCorrecto = actualizar.filter(a=>!cambia(a))
-    return {actualizar, corregir, yaCorrecto, nuevos, rendidosN: actualizar.filter(a=>a.rendido).length}
+    // Posibles duplicados: un "nuevo" CON cliente que tiene un gasto de mismo cliente+monto en el sistema
+    // (no calzó fuerte porque glosa/fecha difieren). Orden: cliente → monto → descripción.
+    const posibles=[], nuevosLimpios=[]
+    nuevos.forEach(r=>{ if(!r.client_id){ nuevosLimpios.push(r); return } const near=live.find(e=>!used.has(e.id)&&(e.amount||0)===(r.monto||0)&&String(e.client_id||'')===String(r.client_id)); if(near) posibles.push({r,e:near}); else nuevosLimpios.push(r) })
+    return {actualizar, corregir, yaCorrecto, nuevos:nuevosLimpios, posibles, rendidosN: actualizar.filter(a=>a.rendido).length}
   },[modo,rows,expenses,tipo,noTocarRendidos,concilMatch,forzarNuevo])
   // Lo realmente seleccionado (las filas que el usuario dejó tildadas). Clave: c_<gastoId> / n_<rowId>.
   const corregirSel = () => (concil?.corregir||[]).filter(a=>!concilExcl.has('c_'+a.e.id))
-  const nuevosSel = () => (concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id))
+  const nuevosSel = () => [...(concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id)), ...(concil?.posibles||[]).filter(p=>posibleDec[p.r.id]==='cargar').map(p=>p.r)]
+  const posiblesPend = () => (concil?.posibles||[]).filter(p=>!posibleDec[p.r.id]).length   // posibles aún por decidir
   useEffect(()=>{ if(!rows||modo!=='conciliar') return; try{ const m={}; Object.entries(concilMatch).forEach(([rid,gid])=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r&&gid) m[rowKeyHuella(r)]=gid }); const f=[]; forzarNuevo.forEach(rid=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r) f.push(rowKeyHuella(r)) }); localStorage.setItem('carga_dec_v1',JSON.stringify({match:m,forzar:f})) }catch(_){} },[concilMatch,forzarNuevo,rows,modo])
   const [concilBefore,setConcilBefore] = useState(null)
   const aplicarConcil = async()=>{
@@ -8171,7 +8179,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const tileOpen = concilOpen==='act'||concilOpen==='new'
             return (
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya correctas</b></>:''} y <b>{nNuev} nuevas</b> (importar). Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
+              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya correctas</b></>:''}, <b>{nNuev} nuevas</b>{concil.posibles.length>0?<> y <b style={{color:'#9A5B12'}}>{concil.posibles.length} posibles duplicados</b> a revisar</>:''}. Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
               {/* Tiles: el resultado de la carga */}
               <div style={{display:'flex',gap:8,marginBottom:tileOpen?0:10}}>
                 {[['act','Corregir',nCorr,C.azulInfo,C.azulBg,'cambian algo'],['new','Nuevos',nNuev,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
@@ -8183,6 +8191,39 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                 )})}
               </div>
               {tileOpen&&<div style={{border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px',overflow:'hidden',marginBottom:10}}>{lista(concilOpen==='act'?concil.corregir:concil.nuevos, concilOpen)}</div>}
+              {concil.posibles.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+                <div onClick={()=>setPosOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',cursor:'pointer',background:posOpen?'#FEF6EE':'#fff'}}>
+                  <span style={{width:9,height:9,borderRadius:'50%',background:C.soon,flexShrink:0}}/>
+                  <span style={{flex:1,fontSize:12.5,fontWeight:600,color:C.text,minWidth:0}}>Posibles duplicados<span style={{display:'block',fontSize:10,color:C.muted,fontWeight:400}}>mismo cliente y monto · glosa o fecha distinta</span></span>
+                  <span style={{fontSize:14,fontWeight:700,color:C.soonText}}>{concil.posibles.length}</span>
+                  <span style={{fontSize:13,color:C.done}}>{posOpen?'⌃':'›'}</span>
+                </div>
+                {posOpen&&<div style={{background:'#FBFCFD',maxHeight:340,overflowY:'auto'}}>
+                  {concil.posibles.map((p,j)=>{ const r=p.r, e=p.e; const dec=posibleDec[r.id]; const exp=posExp===r.id; const cliName=(clients.find(c=>String(c.id)===String(r.client_id))||{}).name||r.clientName||r.nombre||'—'; const newCat=tipo==='fondo'?'Fondo':(r.categoria||e.category); const glosaEq=String((r.concepto||'').toLowerCase().trim())===String((e.concept||'').toLowerCase().trim()); const bdg=dec==='omitir'?{l:'omitido',bg:C.greenBg,fg:C.greenText}:dec==='cargar'?{l:'se carga',bg:C.azulBg,fg:C.azulInfo}:{l:'posible',bg:'#FEF6EE',fg:C.soonText}; return (
+                    <div key={r.id} style={{borderTop:j?`0.5px solid ${C.border}`:'none',opacity:dec==='omitir'?.55:1}}>
+                      <div onClick={()=>setPosExp(exp?null:r.id)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 13px',cursor:'pointer'}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:dec==='omitir'?'line-through':'none'}}>{cliName} · {r.concepto||'—'}</div>
+                          <div style={{fontSize:10,color:C.muted}}>{r.fecha?String(r.fecha).slice(0,10):'sin fecha'}{newCat?' · '+newCat:''}</div>
+                        </div>
+                        <span style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(r.monto)}</span>
+                        <span style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.2px',padding:'2px 7px',borderRadius:9,flexShrink:0,background:bdg.bg,color:bdg.fg}}>{bdg.l}</span>
+                        <span style={{fontSize:12,color:C.done,flexShrink:0}}>{exp?'⌃':'›'}</span>
+                      </div>
+                      {exp&&<div style={{background:'#fff',padding:'8px 13px 11px',borderTop:`0.5px solid ${C.border}`,fontSize:11,lineHeight:1.5}}>
+                        <div style={{display:'flex',gap:8,marginBottom:3}}><span style={{color:C.muted,minWidth:64}}>Cliente</span><b style={{color:C.greenText}}>{cliName}</b><span style={{color:C.muted}}>= mismo</span></div>
+                        <div style={{display:'flex',gap:8,marginBottom:3}}><span style={{color:C.muted,minWidth:64}}>Monto</span><b style={{color:C.greenText}}>{fmt(r.monto)}</b><span style={{color:C.muted}}>= en sistema</span></div>
+                        <div style={{display:'flex',gap:8,marginBottom:3,minWidth:0}}><span style={{color:C.muted,minWidth:64,flexShrink:0}}>Glosa</span><b style={{color:glosaEq?C.greenText:C.overdue,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'}</b><span style={{color:C.muted,flexShrink:0}}>{glosaEq?'= igual':`≠ "${(e.concept||'—').slice(0,24)}"`}</span></div>
+                        <div style={{display:'flex',gap:8,marginBottom:8}}><span style={{color:C.muted,minWidth:64}}>En sistema</span><span style={{color:C.muted}}>ya cargado{e.date?' · '+String(e.date).slice(0,10):''}{e.rendered_at?' · caja chica':''}</span></div>
+                        <div style={{display:'flex',gap:8}}>
+                          <button onClick={()=>setPosibleDec(d=>({...d,[r.id]:dec==='omitir'?undefined:'omitir'}))} style={{flex:1,fontSize:10.5,fontWeight:700,borderRadius:7,padding:'7px',cursor:'pointer',border:dec==='omitir'?`1px solid ${C.greenText}`:`1px solid ${C.border}`,background:dec==='omitir'?C.greenBg:'#fff',color:dec==='omitir'?C.greenText:C.muted}}>Es el mismo · omitir</button>
+                          <button onClick={()=>setPosibleDec(d=>({...d,[r.id]:dec==='cargar'?undefined:'cargar'}))} style={{flex:1,fontSize:10.5,fontWeight:700,borderRadius:7,padding:'7px',cursor:'pointer',border:'none',background:dec==='cargar'?C.azulInfo:C.greenText,color:'#fff'}}>Es otro · cargar igual</button>
+                        </div>
+                      </div>}
+                    </div>
+                  )})}
+                </div>}
+              </div>}
               {avisos.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
                 {avisos.map((s,i)=>{ const open=concilOpen===s.k; return (
                   <div key={s.k} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
@@ -8196,7 +8237,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                 )})}
               </div>}
-              {(nCorr>0||nNuev>0)&&(()=>{ const sel=corregirSel(); const cliN=sel.filter(({r,e,rendido})=>!(rendido&&noTocarRendidos)&&String(e.client_id||'')!==String(r.client_id||e.client_id||'')).length; const catN=sel.filter(({r,e})=>String(e.category||'')!==String((tipo==='fondo'?'Fondo':(r.categoria||e.category))||'')).length; const totC=sel.reduce((s,a)=>s+(a.r.monto||0),0); const totN=nuevosSel().reduce((s,r)=>s+(r.monto||0),0); const dud=sel.filter(a=>a.via==='cliente'&&(a.score||0)<2).length; const xMonto=rows.length-(concil.actualizar.length+concil.nuevos.length); return <div style={{fontSize:10.5,color:C.muted,marginBottom:8,lineHeight:1.5,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}>{nCorr>0&&<div>Al corregir: <b style={{color:C.azulInfo}}>{cliN}</b> cambian cliente · <b style={{color:'#9A5B12'}}>{catN}</b> cambian categoría · {fmt(totC)}</div>}{nNuev>0&&<div style={{marginTop:nCorr>0?2:0}}>Al importar: <b style={{color:C.greenText}}>{nNuev}</b> gastos nuevos · {fmt(totN)}</div>}{dud>0&&<div style={{marginTop:3,color:C.soonText,fontWeight:600}}>● {dud} calzaron por glosa parcial — conviene revisarlos antes</div>}<div style={{marginTop:4,paddingTop:4,borderTop:`0.5px solid ${C.border}`,color:C.done}}>{rows.length} filas = {concil.corregir.length} corregir + {concil.yaCorrecto.length} ya OK + {concil.nuevos.length} nuevas{xMonto>0?` + ${xMonto} sin monto`:''}</div></div> })()}
+              {(nCorr>0||nNuev>0||concil.posibles.length>0)&&(()=>{ const posPend=posiblesPend(); const sel=corregirSel(); const cliN=sel.filter(({r,e,rendido})=>!(rendido&&noTocarRendidos)&&String(e.client_id||'')!==String(r.client_id||e.client_id||'')).length; const catN=sel.filter(({r,e})=>String(e.category||'')!==String((tipo==='fondo'?'Fondo':(r.categoria||e.category))||'')).length; const totC=sel.reduce((s,a)=>s+(a.r.monto||0),0); const totN=nuevosSel().reduce((s,r)=>s+(r.monto||0),0); const dud=sel.filter(a=>a.via==='cliente'&&(a.score||0)<2).length; const xMonto=rows.length-(concil.actualizar.length+concil.nuevos.length+concil.posibles.length); return <div style={{fontSize:10.5,color:C.muted,marginBottom:8,lineHeight:1.5,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}>{nCorr>0&&<div>Al corregir: <b style={{color:C.azulInfo}}>{cliN}</b> cambian cliente · <b style={{color:'#9A5B12'}}>{catN}</b> cambian categoría · {fmt(totC)}</div>}{nNuev>0&&<div style={{marginTop:nCorr>0?2:0}}>Al importar: <b style={{color:C.greenText}}>{nNuev}</b> gastos nuevos · {fmt(totN)}</div>}{dud>0&&<div style={{marginTop:3,color:C.soonText,fontWeight:600}}>● {dud} calzaron por glosa parcial — conviene revisarlos antes</div>}{posPend>0&&<div style={{marginTop:3,color:C.soonText,fontWeight:600}}>● {posPend} posible{posPend!==1?'s':''} duplicado{posPend!==1?'s':''} sin decidir — revísalos arriba</div>}<div style={{marginTop:4,paddingTop:4,borderTop:`0.5px solid ${C.border}`,color:C.done}}>{rows.length} filas = {concil.corregir.length} corregir + {concil.yaCorrecto.length} ya OK + {concil.nuevos.length} nuevas{concil.posibles.length>0?` + ${concil.posibles.length} posibles`:''}{xMonto>0?` + ${xMonto} sin monto`:''}</div></div> })()}
               <div style={{display:'flex',gap:8,marginTop:2}}>
                 {(()=>{ const dud=corregirSel().filter(a=>a.via==='cliente'&&(a.score||0)<2).length; const needRev=dud>0&&concilOpen!=='act'; return <button disabled={guardando||nCorr===0} onClick={()=>needRev?setConcilOpen('act'):aplicarCorregir()} title={needRev?'Revisa los calces por glosa parcial antes de aplicar':''} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:nCorr?'pointer':'default',border:'none',background:needRev?C.soonText:C.azulInfo,color:'#fff',opacity:(guardando||!nCorr)?.5:1}}>{guardando?'…':(nCorr?(needRev?`Revisar ${dud} dudosos`:`Corregir las ${nCorr}`):'Nada que corregir')}</button> })()}
                 <button disabled={guardando||nNuev===0} onClick={aplicarImportar} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:nNuev?'pointer':'default',border:'none',background:C.greenText,color:'#fff',opacity:(guardando||!nNuev)?.5:1}}>{guardando?'…':`Importar las ${nNuev}`}</button>
