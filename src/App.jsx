@@ -10310,6 +10310,18 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const [cambiarCli,setCambiarCli] = useState(false)   // el cliente vive en el encabezado; reasignar es una acción discreta
   return (
     <>
+      {/* Cliente tappable arriba: abre buscador para reasignar el gasto a otro cliente. */}
+      {!personalOn&&(cambiarCli
+        ? <div style={{marginBottom:8,background:C.azulBg,borderRadius:8,padding:'9px 11px'}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:5}}>Reasignar a otro cliente</div>
+            <ClientePicker clients={clients} onPick={cid=>{setF(p=>({...p,client_id:cid,entity_id:null}));setCambiarCli(false)}}/>
+            <button type='button' onClick={()=>setCambiarCli(false)} style={{marginTop:5,fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0}}>cancelar</button>
+          </div>
+        : <div onClick={()=>{ if(f.client_render_id||f.render_id||f.notaria_render_id){ alert('Este gasto está en una rendición/liquidación. Reábrela antes de moverlo a otro cliente.'); return } setCambiarCli(true) }} title='Tocar para cambiar de cliente' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8,padding:'8px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',cursor:'pointer'}}>
+            <div style={{minWidth:0}}><div style={{fontSize:9,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>Cliente</div><div style={{fontSize:13,color:client?.name?C.accent:C.overdue,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name||'Sin cliente'}</div></div>
+            <span style={{fontSize:11,color:C.azulInfo,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>Cambiar ▾</span>
+          </div>
+      )}
       {/* Fila 1: Categoría · Monto · Fecha (categoría no aplica a fondos). Fecha = botón-calendario breve. */}
       <div style={{display:'grid',gridTemplateColumns:isFondo?'1fr 1fr':'1.05fr 1fr 0.92fr',gap:7,marginBottom:8}}>
         {!isFondo&&(
@@ -10356,10 +10368,6 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
               <select value={f.entity_id||''} onChange={e=>up('entity_id',e.target.value||null)} style={{...fInp,cursor:'pointer'}}><option value=''>— Sin asignar —</option>{rsList.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${e.rut}`:''}</option>)}</select>
             </FloatFld>
           )}
-          {/* Cambiar el cliente mueve el gasto; limpia la RS para que se reasigne a las del nuevo cliente. */}
-          {cambiarCli
-            ? <ClientePicker clients={clients} onPick={cid=>{setF(p=>({...p,client_id:cid,entity_id:null}));setCambiarCli(false)}}/>
-            : <button type='button' onClick={()=>setCambiarCli(true)} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Cambiar cliente</button>}
         </div>
       )}
       {(f.client_render_id||f.render_id||f.notaria_render_id)&&<div style={{fontSize:10,color:C.overdue,marginTop:4}}>Este gasto está en una rendición/liquidación: reábrela antes de moverlo a otro cliente.</div>}
