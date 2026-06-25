@@ -9690,7 +9690,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   )
 }
 
-function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,preClient}) {
+function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,onClose,saving,preClient}) {
   const hoy = new Date().toISOString().slice(0,10)
   const [selectedClient,setSelectedClient] = useState(preClient||null)
   const [clientQ,setClientQ] = useState('')
@@ -9712,7 +9712,23 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
   const pill = on => ({fontSize:12,padding:'5px 12px',borderRadius:20,cursor:'pointer',border:on?'1px solid #003C50':`0.5px solid ${C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
   const canSave = selectedClient && (parseInt(f.amount)||0)>0 && (esDev || f.project?.trim()) && (clientEnts.length===0 || f.entity_id)
   const guardar = () => onSave({client_id:selectedClient.id,type:'fondo',amount:(esDev?-1:1)*parseInt(f.amount),concept:(esDev&&!f.concept.trim())?`Devolución de fondos · saldo a favor Rendición N°${rendN||'—'}`:f.concept,date:f.date,category:'Fondo',entity_id:f.entity_id||null,project:f.project?.trim()||null,sale_id:f.sale_id||null})
-  const correoDev = () => `Asunto: Devolución de fondos · Rendición N°${rendN||''} — ${selectedClient?.name||''}\n\nEstimado ${(selectedClient?.name||'').split(' ')[0]},\n\nJunto con saludar, y como complemento a la Rendición N°${rendN||''} que te enviamos, te confirmamos la devolución del saldo a favor por ${fmt(parseInt(f.amount)||0)}, correspondiente a los fondos no utilizados de dicha rendición.\n\nLa transferencia se realizó con fecha ${fmtFechaDMY(f.date)}. Adjuntamos el comprobante para tu registro.\n\nQuedamos atentos a cualquier consulta.\n\nSaludos cordiales,`
+  const asuntoDev = () => `Devolución de fondos · Rendición N°${rendN||''} — ${selectedClient?.name||''}`
+  const cuerpoDev = () => `Estimado ${(selectedClient?.name||'').split(' ')[0]},\n\nJunto con saludar, y como complemento a la Rendición N°${rendN||''} que te enviamos, te confirmamos la devolución del saldo a favor por ${fmt(parseInt(f.amount)||0)}, correspondiente a los fondos no utilizados de dicha rendición.\n\nLa transferencia se realizó con fecha ${fmtFechaDMY(f.date)}. Adjuntamos el comprobante para tu registro.\n\nQuedamos atentos a cualquier consulta.\n\nSaludos cordiales,`
+  const correoDev = () => `Asunto: ${asuntoDev()}\n\n${cuerpoDev()}`
+  // Destinatario: el email al que se envió la rendición de este cliente (la N° elegida, o la última a cliente).
+  const rendDest = useMemo(()=>{
+    if(!selectedClient) return ''
+    const rs=(rendiciones||[]).filter(r=>String(r.client_id)===String(selectedClient.id)&&r.tipo==='cliente')
+    const byN=rendN&&rs.find(r=>String(r.correlativo)===String(rendN))
+    const r=byN||[...rs].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]
+    return r?.dirigido_email||''
+  },[rendiciones,selectedClient,rendN])
+  const enviarDev = () => {
+    const to=rendDest, su=encodeURIComponent(asuntoDev()), body=encodeURIComponent(cuerpoDev())
+    const url=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${su}&body=${body}`
+    const w=window.open(url,'_blank')
+    if(!w) window.location.href=`mailto:${to}?subject=${su}&body=${body}`
+  }
   return (
     <>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
@@ -9786,7 +9802,13 @@ function FondoForm({clients,expenses,sales,clientEntities,onSave,onClose,saving,
           </>
         )}
 
-        {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<Copyable text={correoDev()} title='Copiar correo de devolución' style={{display:'block',textAlign:'center',fontSize:12,fontWeight:600,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'9px',marginBottom:10,cursor:'pointer'}}>✦ Copiar correo de devolución</Copyable>}
+        {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<div style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:C.muted,marginBottom:6,lineHeight:1.45}}>Se abrirá el correo {rendDest?<>a <b style={{color:C.text}}>{rendDest}</b> (destinatario de la Rendición N°{rendN||''})</>:<>(agrega el destinatario — no encontré el de esa rendición)</>}. Adjunta ahí el comprobante de transferencia y envía.</div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={enviarDev} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>✉ Enviar devolución</button>
+            <Copyable text={correoDev()} title='Copiar correo' style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,cursor:'pointer'}}>Copiar</Copyable>
+          </div>
+        </div>}
         <div style={{display:'flex',gap:8}}>
           <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':(esDev?'Guardar devolución':'Guardar fondo')}</button>
@@ -18308,7 +18330,7 @@ export default function App() {
         )}
         {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
-        {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
         {modal?.type==='ajuste'&&<Modal title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
