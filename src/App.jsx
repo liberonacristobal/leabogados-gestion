@@ -7935,8 +7935,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       return null
     }
     ;(rows||[]).filter(r=>!r.error&&(r.monto||0)>0).forEach(r=>{ const m=pick(r); if(m){ used.add(m.id); actualizar.push({r,e:m,rendido:!!(m.render_id||m.client_render_id)}) } else nuevos.push(r) })
-    return {actualizar, nuevos, rendidosN: actualizar.filter(a=>a.rendido).length}
-  },[modo,rows,expenses])
+    // ¿Esta actualización CAMBIA algo? Si el gasto ya tiene el cliente/RS/categoría del archivo, no hay nada que corregir.
+    const cambia = ({r,e,rendido})=>{
+      const newCat = tipo==='fondo'?'Fondo':(r.categoria||e.category)
+      if(String(e.category||'')!==String(newCat||'')) return true
+      if(rendido&&noTocarRendidos) return false   // protegido: solo se tocaría la categoría (ya igual ⇒ sin cambios)
+      if(String(e.client_id||'')!==String(r.client_id||e.client_id||'')) return true
+      if(String(e.entity_id||'')!==String(r.entity_id||'')) return true
+      return false
+    }
+    const corregir = actualizar.filter(cambia)
+    const yaCorrecto = actualizar.filter(a=>!cambia(a))
+    return {actualizar, corregir, yaCorrecto, nuevos, rendidosN: actualizar.filter(a=>a.rendido).length}
+  },[modo,rows,expenses,tipo,noTocarRendidos])
   const [concilBefore,setConcilBefore] = useState(null)
   const aplicarConcil = async()=>{
     if(!concil) return
@@ -7955,10 +7966,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   }
   // Acciones separadas (el usuario las hace por partes; volver a subir el archivo retoma sin duplicar).
   const aplicarCorregir = async()=>{
-    if(!concil||!concil.actualizar.length) return
+    if(!concil||!concil.corregir.length) return
     setGuardando(true)
     try{
-      const actualizaciones = concil.actualizar.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } return a })
+      const actualizaciones = concil.corregir.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } return a })
       const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
       setConcilBefore(res.before||null)
       setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:concil.nuevos.length}))
@@ -7970,7 +7981,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     setGuardando(true)
     try{
       const res = await onConciliar([], concil.nuevos, {tipo, filename:fileName})
-      setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:concil.actualizar.length)}))
+      setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:concil.corregir.length)}))
     }catch(e){ alert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
@@ -8085,6 +8096,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {items.length>300&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'7px'}}>+{items.length-300} más</div>}
             </div>)
             const avisos=[
+              {k:'ok', t:'Ya correctos · nada que hacer', n:concil.yaCorrecto.length, col:C.greenText, items:concil.yaCorrecto},
               {k:'rend', t:'Ya liquidados · protegidos', n:rend.length, col:C.coralText, items:rend},
               {k:'sin', t:'Quedan sin cliente', n:sinCli.length, col:C.overdueText, items:sinCli},
               {k:'dup', t:'Duplicados del archivo · se omite 1', n:dups.length, col:C.soon, items:dups},
@@ -8092,10 +8104,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const tileOpen = concilOpen==='act'||concilOpen==='new'
             return (
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{concil.actualizar.length} ya existen</b> (corregir) y <b>{concil.nuevos.length} nuevas</b> (importar). Haz una ahora y la otra después — al volver a subir el archivo, retoma sin duplicar.</div>
+              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{concil.corregir.length} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya correctas</b></>:''} y <b>{concil.nuevos.length} nuevas</b> (importar). Haz una parte ahora y otra después — al re-subir el archivo retoma sin duplicar ni rehacer lo ya hecho.</div>
               {/* Tiles: el resultado de la carga */}
               <div style={{display:'flex',gap:8,marginBottom:tileOpen?0:10}}>
-                {[['act','Corregir',concil.actualizar.length,C.azulInfo,C.azulBg,'ya existen · sin duplicar'],['new','Nuevos',concil.nuevos.length,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
+                {[['act','Corregir',concil.corregir.length,C.azulInfo,C.azulBg,'cambian algo'],['new','Nuevos',concil.nuevos.length,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
                   <div key={k} onClick={()=>setConcilOpen(on?null:k)} style={{flex:1,background:bg,borderRadius:on?'12px 12px 0 0':12,padding:'12px',cursor:'pointer',border:`1px solid ${on?col:bg}`,borderBottom:on?'none':`1px solid ${bg}`}}>
                     <div style={{fontSize:25,fontWeight:800,color:col,lineHeight:1}}>{n}</div>
                     <div style={{fontSize:11,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:'.03em',marginTop:3}}>{l}</div>
@@ -8103,7 +8115,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                 )})}
               </div>
-              {tileOpen&&<div style={{border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px',overflow:'hidden',marginBottom:10}}>{lista(concilOpen==='act'?concil.actualizar:concil.nuevos, concilOpen)}</div>}
+              {tileOpen&&<div style={{border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px',overflow:'hidden',marginBottom:10}}>{lista(concilOpen==='act'?concil.corregir:concil.nuevos, concilOpen)}</div>}
               {avisos.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
                 {avisos.map((s,i)=>{ const open=concilOpen===s.k; return (
                   <div key={s.k} style={{borderTop:i?`0.5px solid ${C.border}`:'none'}}>
@@ -8118,7 +8130,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                 )})}
               </div>}
               <div style={{display:'flex',gap:8,marginTop:2}}>
-                <button disabled={guardando||concil.actualizar.length===0} onClick={aplicarCorregir} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:concil.actualizar.length?'pointer':'default',border:'none',background:C.azulInfo,color:'#fff',opacity:(guardando||!concil.actualizar.length)?.5:1}}>{guardando?'…':`Corregir las ${concil.actualizar.length}`}</button>
+                <button disabled={guardando||concil.corregir.length===0} onClick={aplicarCorregir} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:concil.corregir.length?'pointer':'default',border:'none',background:C.azulInfo,color:'#fff',opacity:(guardando||!concil.corregir.length)?.5:1}}>{guardando?'…':(concil.corregir.length?`Corregir las ${concil.corregir.length}`:'Nada que corregir')}</button>
                 <button disabled={guardando||concil.nuevos.length===0} onClick={aplicarImportar} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:concil.nuevos.length?'pointer':'default',border:'none',background:C.greenText,color:'#fff',opacity:(guardando||!concil.nuevos.length)?.5:1}}>{guardando?'…':`Importar las ${concil.nuevos.length}`}</button>
               </div>
             </div>
