@@ -18666,7 +18666,7 @@ export default function App() {
                   </button>
                   )
                 })()}
-                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                {userRole==='admin'&&<button onClick={()=>setTab('inteligencia')} title='Inteligencia de negocios' aria-label='Inteligencia de negocios' style={{width:28,height:28,borderRadius:'50%',background:C.ambarBg,border:'none',padding:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='15' height='15' viewBox='0 0 14 14'><rect x='1' y='7' width='3' height='6' rx='1' fill={C.soon}/><rect x='5.5' y='4' width='3' height='9' rx='1' fill={C.soon}/><rect x='10' y='1.5' width='3' height='11.5' rx='1' fill={C.soon}/></svg>
                 </button>}
                 <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
