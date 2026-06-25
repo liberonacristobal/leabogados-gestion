@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
 import mammoth from 'mammoth'
 import * as pdfjsLib from 'pdfjs-dist'
@@ -4856,23 +4857,26 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',placeholder='Buscar cliente...'}) {
   const [open,setOpen] = useState(false)
   const [q,setQ] = useState('')
-  const matches = useMemo(()=>{ if(!q.trim()) return []; const t=q.toLowerCase(); return clients.filter(c=>c.name.toLowerCase().includes(t)||(c.rut||'').toLowerCase().includes(t)||(c.razon_social||'').toLowerCase().includes(t)).sort((a,b)=>a.name.localeCompare(b.name,'es')).slice(0,6) },[q,clients])
+  const wrapRef = useRef(null)
+  const [pos,setPos] = useState(null)
+  const matches = useMemo(()=>{ if(!q.trim()) return []; const t=q.toLowerCase(); return (clients||[]).filter(c=>(c.name||'').toLowerCase().includes(t)||(c.rut||'').toLowerCase().includes(t)).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,8) },[q,clients])
+  // El dropdown va por PORTAL con position:fixed para no quedar recortado por contenedores con overflow (listas/modales).
+  useEffect(()=>{ if(open&&wrapRef.current){ const r=wrapRef.current.getBoundingClientRect(); setPos({top:r.bottom+4,left:r.left,width:Math.max(r.width,200)}) } },[open,q,matches.length])
   if(!open) return (
     <button onClick={()=>setOpen(true)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
   )
   return (
-    <div style={{position:'relative',minWidth:180}}>
-      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={placeholder} style={{width:'100%',padding:'6px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:12,boxSizing:'border-box',outline:'none'}}/>
-      {matches.length>0&&(
-        <div style={{position:'absolute',top:'100%',right:0,left:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
-          {matches.map(c=>(
+    <div ref={wrapRef} style={{position:'relative',minWidth:180}}>
+      <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onBlur={()=>setTimeout(()=>setOpen(false),180)} placeholder={placeholder} style={{width:'100%',padding:'6px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'#F5F7F9',color:C.text,fontSize:12,boxSizing:'border-box',outline:'none'}}/>
+      {open&&q.trim()&&pos&&createPortal(
+        <div style={{position:'fixed',top:pos.top,left:pos.left,width:pos.width,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 6px 22px rgba(0,0,0,.18)',zIndex:99999,maxHeight:240,overflowY:'auto'}}>
+          {matches.length>0 ? matches.map(c=>(
             <div key={c.id} onMouseDown={()=>{onAssign(bill,c.id);setOpen(false);setQ('')}} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:12}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
               <div style={{fontWeight:500}}>{c.name}</div>
               {c.rut&&<div style={{fontSize:10,color:C.muted}}>{c.rut}</div>}
             </div>
-          ))}
-        </div>
-      )}
+          )) : <div style={{padding:'8px 12px',fontSize:12,color:C.muted}}>Sin clientes que calcen con «{q}»</div>}
+        </div>, document.body)}
     </div>
   )
 }
@@ -8178,7 +8182,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>)
             }
             const avisos=[
-              {k:'ok', t:'Ya correctos · nada que hacer', n:concil.yaCorrecto.length, col:C.greenText, items:concil.yaCorrecto},
+              {k:'ok', t:'Ya cargados · sin cambios', n:concil.yaCorrecto.length, col:C.greenText, items:concil.yaCorrecto},
               {k:'rend', t:'Ya liquidados · protegidos', n:rend.length, col:C.coralText, items:rend},
               {k:'sin', t:'Quedan sin cliente', n:sinCli.length, col:C.overdueText, items:sinCli},
               {k:'dup', t:'Duplicados del archivo · se omite 1', n:dups.length, col:C.soon, items:dups},
@@ -8186,7 +8190,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const tileOpen = concilOpen==='act'||concilOpen==='new'
             return (
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya correctas</b></>:''}, <b>{nNuev} nuevas</b>{concil.posibles.length>0?<> y <b style={{color:'#9A5B12'}}>{concil.posibles.length} posibles duplicados</b> a revisar</>:''}. Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
+              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya cargadas</b></>:''}, <b>{nNuev} nuevas</b>{concil.posibles.length>0?<> y <b style={{color:'#9A5B12'}}>{concil.posibles.length} posibles duplicados</b> a revisar</>:''}. Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
               {tipo!=='fondo'&&<div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.4px'}}>Caja chica de</span>
                 <button onClick={()=>setCajaOwner('')} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:cajaOwner===''?`1px solid ${C.accent}`:`1px solid ${C.border}`,background:cajaOwner===''?C.bgSoft:'#fff',color:cajaOwner===''?C.accent:C.muted}}>— Ninguno</button>
