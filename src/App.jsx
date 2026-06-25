@@ -7976,6 +7976,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     ;(rows||[]).filter(r=>!r.error&&(r.monto||0)>0).forEach(r=>{ if(forzarNuevo.has(r.id)){ nuevos.push(r); return } const m=pick(r); if(m){ used.add(m.g.id); actualizar.push({r,e:m.g,rendido:!!(m.g.render_id||m.g.client_render_id),via:m.via,score:m.score}) } else nuevos.push(r) })
     // ¿Esta actualización CAMBIA algo? Si el gasto ya tiene el cliente/RS/categoría del archivo, no hay nada que corregir.
     const cambia = ({r,e,rendido})=>{
+      if(cajaOwner && String(e.created_by||'')!==String(cajaOwner)) return true   // re-asignar el gasto a la caja chica de cajaOwner (aunque ya exista)
       const newCat = tipo==='fondo'?'Fondo':(r.categoria||e.category)
       if(String(e.category||'')!==String(newCat||'')) return true
       if(rendido&&noTocarRendidos) return false   // protegido: solo se tocaría la categoría (ya igual ⇒ sin cambios)
@@ -7983,7 +7984,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       if(String(e.entity_id||'')!==String(r.entity_id||'')) return true
       return false
     }
-    const corregir = actualizar.filter(cambia)
+    let corregir = actualizar.filter(cambia)
     let yaCorrecto = actualizar.filter(a=>!cambia(a))
     // CONSISTENCIA con el anti-duplicados del import (mismo keyOf exacto): un "nuevo" idéntico a uno
     // que ya existe se reclasifica a "Ya cargados" (no se importa); un duplicado dentro del archivo se
@@ -7992,13 +7993,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const keyEx = e=>`${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}|${(e.subconcept||'').trim().toLowerCase()}|${(e.ot_number||'').trim().toLowerCase()}`
     const keyRow = r=>`${r.client_id||''}|${r.monto||0}|${r.fecha||''}|${composed(r).trim().toLowerCase()}|${(r.subconcepto||'').trim().toLowerCase()}|${(r.ot||'').trim().toLowerCase()}`
     const usedEx=new Set(), seenK=new Set(), nuevosK=[]
-    nuevos.forEach(r=>{ const k=keyRow(r); const ex=live.find(e=>!used.has(e.id)&&!usedEx.has(e.id)&&keyEx(e)===k); if(ex){ usedEx.add(ex.id); yaCorrecto=[...yaCorrecto,{r,e:ex}] } else if(seenK.has(k)){ /* duplicado dentro del archivo: el import lo omite, acá no se cuenta */ } else { seenK.add(k); nuevosK.push(r) } })
+    nuevos.forEach(r=>{ const k=keyRow(r); const ex=live.find(e=>!used.has(e.id)&&!usedEx.has(e.id)&&keyEx(e)===k); if(ex){ usedEx.add(ex.id); const it={r,e:ex,rendido:!!(ex.render_id||ex.client_render_id)}; if(cambia(it)) corregir=[...corregir,it]; else yaCorrecto=[...yaCorrecto,it] } else if(seenK.has(k)){ /* duplicado dentro del archivo: el import lo omite, acá no se cuenta */ } else { seenK.add(k); nuevosK.push(r) } })
     // Posibles duplicados: un "nuevo" CON cliente que tiene un gasto de mismo cliente+monto en el sistema
     // (no calzó fuerte porque glosa/fecha difieren). Orden: cliente → monto → descripción.
     const posibles=[], nuevosLimpios=[]
     nuevosK.forEach(r=>{ if(!r.client_id){ nuevosLimpios.push(r); return } const near=live.find(e=>!used.has(e.id)&&!usedEx.has(e.id)&&(e.amount||0)===(r.monto||0)&&String(e.client_id||'')===String(r.client_id)); if(near) posibles.push({r,e:near}); else nuevosLimpios.push(r) })
     return {actualizar, corregir, yaCorrecto, nuevos:nuevosLimpios, posibles, rendidosN: actualizar.filter(a=>a.rendido).length}
-  },[modo,rows,expenses,tipo,noTocarRendidos,concilMatch,forzarNuevo])
+  },[modo,rows,expenses,tipo,noTocarRendidos,concilMatch,forzarNuevo,cajaOwner])
   // Lo realmente seleccionado (las filas que el usuario dejó tildadas). Clave: c_<gastoId> / n_<rowId>.
   const corregirSel = () => (concil?.corregir||[]).filter(a=>!concilExcl.has('c_'+a.e.id))
   const nuevosSel = () => [...(concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id)), ...(concil?.posibles||[]).filter(p=>posibleDec[p.r.id]==='cargar').map(p=>p.r)]
@@ -8025,7 +8026,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const sel=corregirSel(); if(!sel.length) return
     setGuardando(true)
     try{
-      const actualizaciones = sel.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } return a })
+      const actualizaciones = sel.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } if(cajaOwner) a.created_by=cajaOwner; return a })
       const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
       setConcilBefore(res.before||null)
       setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:nuevosSel().length}))
@@ -17666,16 +17667,17 @@ export default function App() {
     const before=[]
     for(const a of (actualizaciones||[])){
       const ex=(expenses||[]).find(e=>String(e.id)===String(a.id))
-      before.push({id:a.id, client_id:ex?.client_id??null, entity_id:ex?.entity_id??null, category:ex?.category??null})
+      before.push({id:a.id, client_id:ex?.client_id??null, entity_id:ex?.entity_id??null, category:ex?.category??null, created_by:ex?.created_by??null})
       const patch={}
       if('client_id' in a) patch.client_id=a.client_id
       if('entity_id' in a) patch.entity_id=a.entity_id
       if('category' in a) patch.category=a.category
+      if('created_by' in a) patch.created_by=a.created_by
       if(Object.keys(patch).length===0) continue
       const {error}=await supabase.from('expenses').update(patch).eq('id',a.id)
       if(error) throw error
     }
-    setExpenses(p=>p.map(e=>{ const a=(actualizaciones||[]).find(x=>String(x.id)===String(e.id)); if(!a) return e; const n={...e}; if('client_id' in a)n.client_id=a.client_id; if('entity_id' in a)n.entity_id=a.entity_id; if('category' in a)n.category=a.category; return n }))
+    setExpenses(p=>p.map(e=>{ const a=(actualizaciones||[]).find(x=>String(x.id)===String(e.id)); if(!a) return e; const n={...e}; if('client_id' in a)n.client_id=a.client_id; if('entity_id' in a)n.entity_id=a.entity_id; if('category' in a)n.category=a.category; if('created_by' in a)n.created_by=a.created_by; return n }))
     let importados=0, batchId=null, omitidos=0
     if(nuevos&&nuevos.length){ const res=await handleBulkImport(nuevos,{tipo,filename,cajaOwner}); importados=res.imported; batchId=res.batchId; omitidos=(res.dupOmit||0)+(res.otDupOmit||0) }
     return {actualizados:(actualizaciones||[]).length, importados, batchId, before, omitidos}
@@ -17684,8 +17686,8 @@ export default function App() {
   // Revertir las correcciones de una conciliación (vuelve cliente/entity/categoría a su valor previo).
   const handleUndoConciliar=useCallback(async(before)=>{
     try{
-      for(const b of (before||[])){ const {error}=await supabase.from('expenses').update({client_id:b.client_id,entity_id:b.entity_id,category:b.category}).eq('id',b.id); if(error) throw error }
-      setExpenses(p=>p.map(e=>{ const b=(before||[]).find(x=>String(x.id)===String(e.id)); return b?{...e,client_id:b.client_id,entity_id:b.entity_id,category:b.category}:e }))
+      for(const b of (before||[])){ const patch={client_id:b.client_id,entity_id:b.entity_id,category:b.category}; if('created_by' in b) patch.created_by=b.created_by; const {error}=await supabase.from('expenses').update(patch).eq('id',b.id); if(error) throw error }
+      setExpenses(p=>p.map(e=>{ const b=(before||[]).find(x=>String(x.id)===String(e.id)); return b?{...e,client_id:b.client_id,entity_id:b.entity_id,category:b.category,...(('created_by' in b)?{created_by:b.created_by}:{})}:e }))
       return true
     }catch(e){ alert('No se pudo revertir: '+(e.message||e)); return false }
   },[])
