@@ -8061,18 +8061,27 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const lista=(items,kind)=>(<div style={{background:'#FBFCFD',maxHeight:240,overflowY:'auto'}}>
               {kind==='rend'&&<label style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
                 <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
-                <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su rendición</span>
+                <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su liquidación de caja chica</span>
               </label>}
               {items.slice(0,300).map((it,j)=>{ const r=it.r||it, e=it.e; return (
                 <div key={(e&&e.id)||(r.id+'_'+j)} style={{padding:'7px 13px',borderTop:j?`0.5px solid ${C.border}`:'none',fontSize:11}}>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(r)}</span><span style={{color:C.muted,flexShrink:0}}>${(r.monto||0).toLocaleString('es-CL')}</span></div>
                   <div style={{color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'}{e?<span style={{color:C.done}}> · → {r.categoria||e.category||'Otro'}</span>:''}{kind==='dup'?<span style={{color:C.done}}> · {r.fecha?String(r.fecha).slice(0,10):'sin fecha'}</span>:''}</div>
+                  {kind==='sin'&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:7}}>
+                    <div style={{flex:'1 1 150px',minWidth:0}}><AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Asignar cliente'/></div>
+                    {r.nombre&&onCreateOccasional&&<button onClick={()=>setOcasPick(ocasPick===r.id?null:r.id)} title={`Crear ocasional "${r.nombre}"`} style={{flexShrink:0,fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${ocasPick===r.id?C.accent:C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional {ocasPick===r.id?'▴':'▾'}</button>}
+                  </div>}
+                  {kind==='sin'&&ocasPick===r.id&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:6}}>
+                    <span style={{fontSize:10,color:C.muted,fontWeight:600}}>«{r.nombre}» · responsable:</span>
+                    {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
+                    <button onClick={()=>crearOcasional(r,null)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:'#F1EFE8',color:C.grisText,border:'none'}}>Sin responsable</button>
+                  </div>}
                 </div>
               )})}
               {items.length>300&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'7px'}}>+{items.length-300} más</div>}
             </div>)
             const avisos=[
-              {k:'rend', t:'Ya rendidos · protegidos', n:rend.length, col:C.coralText, items:rend},
+              {k:'rend', t:'Ya liquidados · protegidos', n:rend.length, col:C.coralText, items:rend},
               {k:'sin', t:'Quedan sin cliente', n:sinCli.length, col:C.overdueText, items:sinCli},
               {k:'dup', t:'Duplicados del archivo · se omite 1', n:dups.length, col:C.soon, items:dups},
             ].filter(s=>s.n>0)
