@@ -18243,20 +18243,10 @@ export default function App() {
     }catch(e){alert('Error: '+e.message); return null}
   },[])
 
+  // Una rendición NO genera factura/cobro de reembolso (regla: los reembolsos de gastos nunca se facturan).
   const handleRendicionComplete=useCallback(async(r)=>{
     setRendiciones(p=>[r,...p])
-    if(!r.total||r.total<=0) return
-    if(!confirm(`Rendición enviada.\n\n¿Crear cobro por reembolso de gastos ($${fmtN(r.total)})?`)) return
-    const today=new Date().toISOString().slice(0,10)
-    // Razón social del reembolso: la del gasto rendido; si no, la única RS del cliente
-    const gEnt=expenses.find(e=>e.client_render_id===r.id&&e.entity_id)
-    const entsCli=clientEntities.filter(x=>x.client_id===r.client_id)
-    const ent=(gEnt&&clientEntities.find(x=>x.id===gEnt.entity_id))||(entsCli.length===1?entsCli[0]:null)
-    const newBill={client_id:r.client_id,entity_id:ent?.id||null,receptor_name:ent?.name||null,receptor_rut:ent?.rut||null,billing_type:'reembolso',concept:`Reembolso gastos ${r.periodo||''}`.trim(),amount:r.total,status:'Pendiente',issued_at:today,due:dueFromIssued(today),notes:`Rendición ID ${r.id} · ${r.n_gastos||0} gasto(s)`}
-    const {data,error}=await supabase.from('billing').insert(newBill).select().single()
-    if(error){alert('No se pudo crear el cobro: '+error.message);return}
-    setBilling(p=>[data,...p])
-  },[expenses,clientEntities])
+  },[])
 
   const overdueN=useMemo(()=>{
     return billing.filter(b=>b.status==='Vencido').length
