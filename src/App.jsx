@@ -8022,7 +8022,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     setGuardando(true)
     try{
       const res = await onConciliar([], sel, {tipo, filename:fileName, cajaOwner:cajaOwner||null})
-      setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:corregirSel().length)}))
+      setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, omitidos:res.omitidos||0, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:corregirSel().length)}))
     }catch(e){ alert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
@@ -8034,7 +8034,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       <div style={{width:54,height:54,borderRadius:'50%',background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',margin:'4px auto 12px'}}>
         <svg width='27' height='27' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>
       </div>
-      <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.concil?`${resultado.actualizados} corregido(s) · ${resultado.imported} nuevo(s)`:`${resultado.imported} ${tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)`}</div>
+      <div style={{fontSize:17,fontWeight:600,color:C.text,marginBottom:resultado.omitidos>0?6:12,fontFamily:"'DM Sans',sans-serif"}}>{resultado.concil?`${resultado.actualizados} corregido(s) · ${resultado.imported} nuevo(s)`:`${resultado.imported} ${tipo==='fondo'?'fondo(s)':'gasto(s)'} importado(s)`}</div>
+      {resultado.omitidos>0&&<div style={{fontSize:12,color:C.soonText,marginBottom:12,lineHeight:1.4}}><b>{resultado.omitidos} omitido(s)</b> porque ya existían idénticos (mismo cliente, monto, fecha y glosa) — duplicados evitados.</div>}
       <div style={{display:'flex',flexWrap:'wrap',gap:7,justifyContent:'center',marginBottom:18}}>
         {resultado.sinCliente>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinCliente}</b> sin cliente</span>}
         {resultado.sinFecha>0&&<span style={{fontSize:11,color:C.muted,background:'#F5F7F9',borderRadius:20,padding:'4px 11px'}}><b style={{color:C.text}}>{resultado.sinFecha}</b> sin fecha</span>}
@@ -17660,9 +17661,9 @@ export default function App() {
       if(error) throw error
     }
     setExpenses(p=>p.map(e=>{ const a=(actualizaciones||[]).find(x=>String(x.id)===String(e.id)); if(!a) return e; const n={...e}; if('client_id' in a)n.client_id=a.client_id; if('entity_id' in a)n.entity_id=a.entity_id; if('category' in a)n.category=a.category; return n }))
-    let importados=0, batchId=null
-    if(nuevos&&nuevos.length){ const res=await handleBulkImport(nuevos,{tipo,filename,cajaOwner}); importados=res.imported; batchId=res.batchId }
-    return {actualizados:(actualizaciones||[]).length, importados, batchId, before}
+    let importados=0, batchId=null, omitidos=0
+    if(nuevos&&nuevos.length){ const res=await handleBulkImport(nuevos,{tipo,filename,cajaOwner}); importados=res.imported; batchId=res.batchId; omitidos=(res.dupOmit||0)+(res.otDupOmit||0) }
+    return {actualizados:(actualizaciones||[]).length, importados, batchId, before, omitidos}
   },[expenses, handleBulkImport])
 
   // Revertir las correcciones de una conciliación (vuelve cliente/entity/categoría a su valor previo).
