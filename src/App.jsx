@@ -8583,6 +8583,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
     } catch(err){ alert('Error: '+err.message) }
   }
+  // Clasifica en lote los gastos seleccionados en el overlay "Clasificar pagos".
+  const clasifBulk = async(modo) => {
+    const ids=[...selClasif]; if(!ids.length) return
+    const patch = modo==='historico' ? {pagado_cliente_at:new Date().toISOString(), no_descuenta_saldo:true} : {pagado_cliente_at:new Date().toISOString(), no_descuenta_saldo:false}
+    try {
+      const {error}=await supabase.from('expenses').update(patch).in('id',ids)
+      if(error) throw error
+      if(setExpenses) setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,...patch}:x))
+      setSelClasif(new Set())
+    } catch(err){ alert('Error: '+err.message) }
+  }
   const [asignandoRS,setAsignandoRS] = useState(null) // client_id cuyo selector de RS esta abierto
   const [expandRend,setExpandRend] = useState(null)   // id de la rendición con el detalle desplegado
 
@@ -8670,6 +8681,10 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // ── Liquidación de NOTARÍA (sección dentro de Gastos): gastos categoría Notaria que la oficina paga a la notaría ──
   // Marca propia notaria_render_id (independiente de caja chica y de la rendición al cliente). La preparan los limited; visible para admin.
   const [showNotaria,setShowNotaria] = useState(false)
+  const [showClasificar,setShowClasificar] = useState(false)   // overlay "Clasificar pagos" (histórico/descuenta en lote)
+  const [selClasif,setSelClasif] = useState(()=>new Set())
+  const [clasifSearch,setClasifSearch] = useState('')
+  const [clasifOpen,setClasifOpen] = useState(()=>new Set())
   const [selNota,setSelNota] = useState(()=>new Set())
   const [excepNota,setExcepNota] = useState(()=>new Set())   // clientes con "Permitir adelanto" activado (excepción explícita)
   const [notaSending,setNotaSending] = useState(false)
@@ -9233,6 +9248,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       </div>
       {open&&rend.map(renderMov)}
     </div>) }
+  const gastosClasificar = (expenses||[]).filter(e=> e.type==='gasto' && e.bulk_import_id && e.client_id && !e.personal_de && !esOficina(e.client_id) && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && !e.deleted_at)
   return (
     <div>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -9273,6 +9289,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <button onClick={()=>{setNotaMenuOpen(false);onAdd()}} style={chipBtn('primary')}>+ Gastos</button>
             <button onClick={()=>{setNotaMenuOpen(false);onAddFondo()}} style={chipBtn('green')}>+ Fondo</button>
             <button onClick={()=>{setNotaMenuOpen(false);onBulk(false)}} style={chipBtn('soft')}>Carga masiva</button>
+            {gastosClasificar.length>0&&<button onClick={()=>{setNotaMenuOpen(false);setShowClasificar(true);setSelClasif(new Set());setClasifSearch('');setClasifOpen(new Set())}} style={chipBtn('soft')}>Clasificar pagos · {gastosClasificar.length}</button>}
             {((orphans.length+revN(revNoActivo)+revN(revOcasional))>0||expenseAudit.length>0)&&<button onClick={()=>{setNotaMenuOpen(false);setShowRevision(true)}} style={chipBtn('soft')}>Gastos por revisar{(orphans.length+revN(revNoActivo)+revN(revOcasional))>0?` · ${orphans.length+revN(revNoActivo)+revN(revOcasional)}`:''}</button>}
           </div>
         )}
@@ -9897,6 +9914,58 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           {fichaHistorial}
         </div>
       )}
+
+      {showClasificar&&(()=>{
+        const q=clasifSearch.trim().toLowerCase()
+        const cn=cid=>clients.find(c=>String(c.id)===String(cid))?.name||'Cliente'
+        const elf=q?gastosClasificar.filter(e=>(cn(e.client_id)+' '+(e.concept||'')).toLowerCase().includes(q)):gastosClasificar
+        const byCli={}; elf.forEach(e=>{(byCli[e.client_id]=byCli[e.client_id]||[]).push(e)})
+        const grupos=Object.entries(byCli).map(([cid,items])=>({cid,items,total:items.reduce((a,e)=>a+(e.amount||0),0),name:cn(cid)})).sort((a,b)=>a.name.localeCompare(b.name))
+        const chk=(on,sz)=><span style={{width:sz||16,height:sz||16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+        const toggleGrp=g=>setClasifOpen(p=>{const n=new Set(p);n.has(g.cid)?n.delete(g.cid):n.add(g.cid);return n})
+        return (
+        <div style={{position:'fixed',inset:0,zIndex:1000,background:C.bg,display:'flex',flexDirection:'column'}}>
+          <div style={{padding:'16px 20px 10px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+            <button onClick={()=>{setShowClasificar(false);setSelClasif(new Set())}} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
+            <div>
+              <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Clasificar pagos</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1}}>{gastosClasificar.length} gasto{gastosClasificar.length!==1?'s':''} antiguo{gastosClasificar.length!==1?'s':''} de carga masiva por clasificar</div>
+            </div>
+          </div>
+          <div style={{flex:1,overflowY:'auto',padding:'10px 20px 24px'}}>
+            <ChipSearch value={clasifSearch} onChange={e=>setClasifSearch(e.target.value)} placeholder='Buscar cliente o concepto...' style={{marginBottom:10}}/>
+            {grupos.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Nada por clasificar.</div>}
+            {grupos.map(g=>{ const open=clasifOpen.has(g.cid); const allSel=g.items.every(e=>selClasif.has(e.id)); const someSel=g.items.some(e=>selClasif.has(e.id)); return (
+              <div key={g.cid} style={{background:'#fff',border:`0.5px solid ${open?C.done:C.border}`,borderRadius:9,padding:'10px 12px',marginBottom:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <button onClick={()=>setSelClasif(p=>{const n=new Set(p);g.items.forEach(e=>allSel?n.delete(e.id):n.add(e.id));return n})} title={allSel?'Quitar todos':'Seleccionar todos'} style={{background:'none',border:'none',padding:0,cursor:'pointer',display:'inline-flex'}}>{chk(allSel||someSel,20)}</button>
+                  <div onClick={()=>toggleGrp(g)} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.name}</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:1}}>{g.items.length} gasto{g.items.length!==1?'s':''} · {fmt(g.total)}</div>
+                  </div>
+                  <svg onClick={()=>toggleGrp(g)} width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .15s',cursor:'pointer'}}><polyline points='6 9 12 15 18 9'/></svg>
+                </div>
+                {open&&<div style={{marginTop:9,paddingTop:8,borderTop:`0.5px solid ${C.border}`,display:'flex',flexDirection:'column',gap:9}}>
+                  {g.items.map(e=>{ const on=selClasif.has(e.id); return (
+                    <div key={e.id} onClick={()=>setSelClasif(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
+                      {chk(on)}
+                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                      <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
+                    </div>) })}
+                </div>}
+              </div>
+            )})}
+          </div>
+          {selClasif.size>0&&(
+            <div style={{flexShrink:0,padding:'12px 16px',borderTop:`1px solid ${C.border}`,background:C.accent,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+              <span style={{fontSize:12,color:'#fff',fontWeight:600}}>{selClasif.size} seleccionado{selClasif.size!==1?'s':''}</span>
+              <div style={{display:'flex',gap:6}}>
+                <button onClick={()=>clasifBulk('historico')} style={{fontSize:12,padding:'7px 13px',borderRadius:20,background:'#F1EFE8',color:C.grisText,fontWeight:600,border:'none',cursor:'pointer'}}>Histórico</button>
+                <button onClick={()=>clasifBulk('descuenta')} style={{fontSize:12,padding:'7px 13px',borderRadius:20,background:C.greenBg,color:C.greenText,fontWeight:600,border:'none',cursor:'pointer'}}>Descuenta</button>
+              </div>
+            </div>
+          )}
+        </div>) })()}
 
       {/* Barras inferiores de rendir eliminadas — se usa el botón "↓ Rendir" del encabezado */}
 
