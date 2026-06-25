@@ -11310,6 +11310,8 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
   const [body,setBody]=useState(`Estimado ${(client?.name||'').split(' ')[0]},\n\nJunto con saludar, y como complemento a la Rendición N° ${corr} que te enviamos, te confirmamos la devolución del saldo a favor por ${fmt(amount)}, correspondiente a los fondos no utilizados de dicha rendición.\n\nLa transferencia se realizó con fecha ${fmtFechaDMY(fecha)}. Adjuntamos el comprobante para tu registro.\n\nQuedamos atentos a cualquier consulta.\n\nSaludos cordiales,`)
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setFichaContacts((data||[]).filter(c=>c.email)) },()=>{})
+    // "Para" = el destinatario real de la rendición (dirigido_email; si no, el último "Para" aprendido del cliente).
+    if(!rend?.dirigido_email) supabase.from('learnings').select('value').eq('kind','rendicion_para').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value) setPara(p=>(!p||p===(client?.email||''))?String(data.value).trim():p) },()=>{})
     supabase.from('learnings').select('value').eq('kind','rendicion_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(prev=>[...new Set([...prev,...ems])]) } },()=>{})
     return ()=>{alive=false}
   },[client?.id])
@@ -11336,13 +11338,13 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     setSending(true)
     const _strip=u=>String(u||'').replace(/^data:[^,]+,/,'')
     const logosInline=[{cid:'lealogow',b64:_strip(logoBlanco),mime:'image/png'},{cid:'lealogoc',b64:_strip(logoColor),mime:'image/png'}]
-    const ccStr=[...cc,...(studioOn?studioEmails:[])].filter(Boolean).join(', ')
+    const ccStr=[...cc,...(studioOn?studioEmails:[])].filter(e=>e&&e.toLowerCase()!==(para||'').trim().toLowerCase()).join(', ')
     const atts=comp?[{base64:comp.b64,name:comp.name,mime:comp.mime}]:[]
     let sent=false,err=null
     try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:ccStr,subject:asunto,bodyText:body,bodyHtml:buildHtml(body,true),inlineImages:logosInline,attachments:atts}); sent=true } }catch(e){ err=e }
     if(!sent){ try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; alert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 } }
     setSending(false)
-    if(sent){ try{ if(cc.length) await supabase.from('learnings').upsert({kind:'rendicion_cc',key:String(client.id),value:cc.join(', ')},{onConflict:'kind,key'}) }catch(_){} onClose&&onClose() }
+    if(sent){ try{ if(cc.length) await supabase.from('learnings').upsert({kind:'rendicion_cc',key:String(client.id),value:cc.join(', ')},{onConflict:'kind,key'}) }catch(_){} try{ if((para||'').trim()) await supabase.from('learnings').upsert({kind:'rendicion_para',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){} onClose&&onClose() }
     else alert('No se pudo enviar el correo de devolución.\n'+(err?.message||err||'—'))
   }
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
@@ -11362,9 +11364,9 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
         </div>
         <div style={{marginBottom:12}}>
           <label style={flabel}>CC</label>
-          {cc.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
-            {cc.map(e=><span key={e} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 7px 3px 10px',fontSize:12}}>{e}<button onClick={()=>removeCc(e)} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button></span>)}
-          </div>}
+          {(()=>{ const ccVis=cc.filter(e=>e&&e.toLowerCase()!==(para||'').trim().toLowerCase()); return ccVis.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+            {ccVis.map(e=><span key={e} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 7px 3px 10px',fontSize:12}}>{e}<button onClick={()=>removeCc(e)} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button></span>)}
+          </div> })()}
           <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>ccInput.trim()&&addCc(ccInput)} placeholder='Agregar correo y Enter' style={inp}/>
           {sugCc.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>{sugCc.slice(0,6).map(c=><button key={c.email} onClick={()=>addCc(c.email)} style={{fontSize:11,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre||c.email}</button>)}</div>}
           {studioEmails.length>0&&<label style={{display:'flex',gap:7,alignItems:'center',marginTop:8,fontSize:11,color:C.muted,cursor:'pointer'}}><input type='checkbox' checked={studioOn} onChange={e=>setStudioOn(e.target.checked)}/>Copia al estudio ({studioEmails.join(', ')})</label>}
@@ -11565,10 +11567,12 @@ Saludos cordiales,`
         const {data:mx}=await supabase.from('rendiciones').select('correlativo').eq('client_id',r.client_id).not('correlativo','is',null).order('correlativo',{ascending:false}).limit(1).maybeSingle()
         corr = ((mx&&mx.correlativo)||0)+1
       }
-      const {error:seErr}=await supabase.from('rendiciones').update({sent_at:now, correlativo:corr}).eq('id',r.id)
+      const {error:seErr}=await supabase.from('rendiciones').update({sent_at:now, correlativo:corr, dirigido_email:(para||'').trim()||r.dirigido_email||null}).eq('id',r.id)
       if(seErr) console.error('No se pudo marcar la rendición como enviada:',seErr.message)
       else onSent && onSent(r.id, now, corr)
       try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(_){}
+      // Recordar el destinatario "Para" de la rendición → lo reusa la devolución (que va al mismo).
+      try{ if((para||'').trim()){ await supabase.from('learnings').delete().eq('kind','rendicion_para').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_para',key:String(r.client_id),value:para.trim(),meta:{}}) } }catch(_){}
       try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
       alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
