@@ -2456,8 +2456,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         const sparkSvg = <svg width='17' height='17' viewBox='0 0 24 24' fill='currentColor'><path d='M12 2l1.7 5.6L19 9l-5.3 1.4L12 16l-1.7-5.6L5 9l5.3-1.4z'/></svg>
         const hoyIco = k => { const M={cash:<g><rect x='2.5' y='6' width='19' height='12' rx='2'/><circle cx='12' cy='12' r='2.6'/></g>,wallet:<g><rect x='3' y='6' width='18' height='13' rx='2.4'/><path d='M3 10h18'/></g>,file:<g><path d='M6 3h8l4 4v14H6z'/><path d='M14 3v4h4'/></g>,alert:<g><path d='M12 4l9 16H3z'/><path d='M12 10v4'/></g>,clock:<g><circle cx='12' cy='12' r='8.5'/><path d='M12 7.5V12l3 2'/></g>}; return <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round'>{M[k]||M.file}</svg> }
         return (
-        <div onClick={onTareasClose} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:480,background:'#fff',borderRadius:'16px 16px 0 0',maxHeight:'88vh',overflowY:'auto',padding:'14px 16px 26px'}}>
+        <div onClick={onTareasClose} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:440,background:'#fff',borderRadius:18,maxHeight:'88vh',overflowY:'auto',padding:'16px 18px 22px',boxShadow:'0 12px 40px rgba(0,0,0,.18)'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
               <span style={{fontSize:19,fontWeight:500,color:C.accent,letterSpacing:-.3}}>Tareas</span>
               <div style={{display:'flex',alignItems:'center',gap:12}}>
