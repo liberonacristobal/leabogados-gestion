@@ -7409,6 +7409,8 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [showRend,setShowRend] = useState(false)   // ver detalle de rendidos que calzaron
   const [showDup,setShowDup] = useState(false)     // ver detalle de duplicados del archivo
   const [concilOpen,setConcilOpen] = useState(null)  // sección del acordeón de conciliación abierta
+  const [concilExcl,setConcilExcl] = useState(()=>new Set())  // filas destildadas (se excluyen de corregir/importar)
+  const toggleExcl = k => setConcilExcl(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
@@ -7948,6 +7950,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const yaCorrecto = actualizar.filter(a=>!cambia(a))
     return {actualizar, corregir, yaCorrecto, nuevos, rendidosN: actualizar.filter(a=>a.rendido).length}
   },[modo,rows,expenses,tipo,noTocarRendidos])
+  // Lo realmente seleccionado (las filas que el usuario dejó tildadas). Clave: c_<gastoId> / n_<rowId>.
+  const corregirSel = () => (concil?.corregir||[]).filter(a=>!concilExcl.has('c_'+a.e.id))
+  const nuevosSel = () => (concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id))
   const [concilBefore,setConcilBefore] = useState(null)
   const aplicarConcil = async()=>{
     if(!concil) return
@@ -7966,22 +7971,22 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   }
   // Acciones separadas (el usuario las hace por partes; volver a subir el archivo retoma sin duplicar).
   const aplicarCorregir = async()=>{
-    if(!concil||!concil.corregir.length) return
+    const sel=corregirSel(); if(!sel.length) return
     setGuardando(true)
     try{
-      const actualizaciones = concil.corregir.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } return a })
+      const actualizaciones = sel.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } return a })
       const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
       setConcilBefore(res.before||null)
-      setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:concil.nuevos.length}))
+      setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:nuevosSel().length}))
     }catch(e){ alert('Error al corregir: '+(e.message||e)) }
     setGuardando(false)
   }
   const aplicarImportar = async()=>{
-    if(!concil||!concil.nuevos.length) return
+    const sel=nuevosSel(); if(!sel.length) return
     setGuardando(true)
     try{
-      const res = await onConciliar([], concil.nuevos, {tipo, filename:fileName})
-      setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:concil.corregir.length)}))
+      const res = await onConciliar([], sel, {tipo, filename:fileName})
+      setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:corregirSel().length)}))
     }catch(e){ alert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
@@ -8072,14 +8077,17 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           {modo==='conciliar'&&concil&&(()=>{
             const rend=concil.actualizar.filter(a=>a.rendido)
             const sinCli=concil.nuevos.filter(r=>!r.client_id&&!r.personal_de)
+            const nCorr=corregirSel().length, nNuev=nuevosSel().length   // lo realmente tildado
             const cn=(r)=>{ const c=clients.find(x=>String(x.id)===String(r.client_id)); return c?.name||r?.clientName||r?.nombre||'sin cliente' }
             const lista=(items,kind)=>(<div style={{background:'#FBFCFD',maxHeight:240,overflowY:'auto'}}>
               {kind==='rend'&&<label style={{display:'flex',gap:8,alignItems:'flex-start',padding:'9px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>
                 <input type='checkbox' checked={noTocarRendidos} onChange={e=>setNoTocarRendidos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>
                 <span style={{fontSize:11,color:C.coralText,lineHeight:1.4}}>No cambiarles el cliente (solo corregir categoría) para no desincronizar su liquidación de caja chica</span>
               </label>}
-              {items.slice(0,300).map((it,j)=>{ const r=it.r||it, e=it.e; return (
-                <div key={(e&&e.id)||(r.id+'_'+j)} style={{padding:'7px 13px',borderTop:j?`0.5px solid ${C.border}`:'none',fontSize:11}}>
+              {items.slice(0,300).map((it,j)=>{ const r=it.r||it, e=it.e; const selectable=(kind==='act'||kind==='new'); const exKey=kind==='act'?('c_'+(e&&e.id)):('n_'+r.id); const checked=!selectable||!concilExcl.has(exKey); return (
+                <div key={(e&&e.id)||(r.id+'_'+j)} style={{padding:'7px 13px',borderTop:j?`0.5px solid ${C.border}`:'none',fontSize:11,display:'flex',gap:9,alignItems:'flex-start',opacity:selectable&&!checked?.45:1}}>
+                  {selectable&&<input type='checkbox' checked={checked} onChange={()=>toggleExcl(exKey)} title={checked?'Incluida — destilda para omitir':'Omitida'} style={{marginTop:2,flexShrink:0,cursor:'pointer'}}/>}
+                  <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(r)}</span><span style={{color:C.muted,flexShrink:0}}>${(r.monto||0).toLocaleString('es-CL')}</span></div>
                   <div style={{color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'}{e?<span style={{color:C.done}}> · → {r.categoria||e.category||'Otro'}</span>:''}{kind==='dup'?<span style={{color:C.done}}> · {r.fecha?String(r.fecha).slice(0,10):'sin fecha'}</span>:''}</div>
                   {kind==='sin'&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:7}}>
@@ -8091,6 +8099,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
                     <button onClick={()=>crearOcasional(r,null)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:'#F1EFE8',color:C.grisText,border:'none'}}>Sin responsable</button>
                   </div>}
+                  </div>
                 </div>
               )})}
               {items.length>300&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'7px'}}>+{items.length-300} más</div>}
@@ -8104,10 +8113,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             const tileOpen = concilOpen==='act'||concilOpen==='new'
             return (
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{concil.corregir.length} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya correctas</b></>:''} y <b>{concil.nuevos.length} nuevas</b> (importar). Haz una parte ahora y otra después — al re-subir el archivo retoma sin duplicar ni rehacer lo ya hecho.</div>
+              <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya correctas</b></>:''} y <b>{nNuev} nuevas</b> (importar). Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
               {/* Tiles: el resultado de la carga */}
               <div style={{display:'flex',gap:8,marginBottom:tileOpen?0:10}}>
-                {[['act','Corregir',concil.corregir.length,C.azulInfo,C.azulBg,'cambian algo'],['new','Nuevos',concil.nuevos.length,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
+                {[['act','Corregir',nCorr,C.azulInfo,C.azulBg,'cambian algo'],['new','Nuevos',nNuev,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
                   <div key={k} onClick={()=>setConcilOpen(on?null:k)} style={{flex:1,background:bg,borderRadius:on?'12px 12px 0 0':12,padding:'12px',cursor:'pointer',border:`1px solid ${on?col:bg}`,borderBottom:on?'none':`1px solid ${bg}`}}>
                     <div style={{fontSize:25,fontWeight:800,color:col,lineHeight:1}}>{n}</div>
                     <div style={{fontSize:11,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:'.03em',marginTop:3}}>{l}</div>
@@ -8130,8 +8139,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                 )})}
               </div>}
               <div style={{display:'flex',gap:8,marginTop:2}}>
-                <button disabled={guardando||concil.corregir.length===0} onClick={aplicarCorregir} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:concil.corregir.length?'pointer':'default',border:'none',background:C.azulInfo,color:'#fff',opacity:(guardando||!concil.corregir.length)?.5:1}}>{guardando?'…':(concil.corregir.length?`Corregir las ${concil.corregir.length}`:'Nada que corregir')}</button>
-                <button disabled={guardando||concil.nuevos.length===0} onClick={aplicarImportar} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:concil.nuevos.length?'pointer':'default',border:'none',background:C.greenText,color:'#fff',opacity:(guardando||!concil.nuevos.length)?.5:1}}>{guardando?'…':`Importar las ${concil.nuevos.length}`}</button>
+                <button disabled={guardando||nCorr===0} onClick={aplicarCorregir} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:nCorr?'pointer':'default',border:'none',background:C.azulInfo,color:'#fff',opacity:(guardando||!nCorr)?.5:1}}>{guardando?'…':(nCorr?`Corregir las ${nCorr}`:'Nada que corregir')}</button>
+                <button disabled={guardando||nNuev===0} onClick={aplicarImportar} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:12.5,fontWeight:700,cursor:nNuev?'pointer':'default',border:'none',background:C.greenText,color:'#fff',opacity:(guardando||!nNuev)?.5:1}}>{guardando?'…':`Importar las ${nNuev}`}</button>
               </div>
             </div>
             )})()}
