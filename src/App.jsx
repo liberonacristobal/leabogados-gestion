@@ -8684,6 +8684,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [selClasif,setSelClasif] = useState(()=>new Set())
   const [clasifSearch,setClasifSearch] = useState('')
   const [clasifOpen,setClasifOpen] = useState(()=>new Set())
+  const [movMode,setMovMode] = useState(false)   // "Mover varios" desplegable en la ficha del cliente
+  const [movSel,setMovSel] = useState(()=>new Set())
   const [selNota,setSelNota] = useState(()=>new Set())
   const [excepNota,setExcepNota] = useState(()=>new Set())   // clientes con "Permitir adelanto" activado (excepción explícita)
   const [notaSending,setNotaSending] = useState(false)
@@ -9310,6 +9312,38 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             return <><KpiRow oficina={{total,porPagar,pagado}}/><OficinaCostPanel expenses={expenses} clientId={selectedClient.id}/></>
           }
           return <KpiRow bal={rb.total}/>
+        })()}
+
+        {selectedClient && !esOficina(selectedClient.id) && (()=>{
+          const movibles = (expenses||[]).filter(e=> String(e.client_id)===String(selectedClient.id) && e.type==='gasto' && !e.deleted_at && !e.client_render_id && !e.render_id && !e.notaria_render_id)
+          if(movibles.length===0) return null
+          return (
+            <div style={{marginBottom:8}}>
+              <div style={{display:'flex',justifyContent:'flex-end'}}>
+                <button onClick={()=>{setMovMode(o=>!o);setMovSel(new Set())}} style={{...chipBtn('soft'),fontWeight:500,whiteSpace:'nowrap'}}>Mover varios {movMode?'▴':'▾'}</button>
+              </div>
+              {movMode && (
+                <div style={{marginTop:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
+                  <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:7}}>Marca los gastos que NO son de {selectedClient.name} y muévelos a otro cliente.</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:7,maxHeight:280,overflowY:'auto'}}>
+                    {movibles.map(e=>{ const on=movSel.has(e.id); return (
+                      <div key={e.id} onClick={()=>setMovSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
+                        <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+                        {e.ot_number&&<span style={{color:C.azulInfo,fontWeight:600,flexShrink:0}}>{fmtOt(e.ot_number)}</span>}
+                        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                        <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
+                      </div>) })}
+                  </div>
+                  {movSel.size>0 && (
+                    <div style={{marginTop:9,paddingTop:9,borderTop:`0.5px solid ${C.border}`}}>
+                      <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:5}}>Mover {movSel.size} gasto{movSel.size!==1?'s':''} a:</div>
+                      <ClientePicker clients={clients.filter(c=>String(c.id)!==String(selectedClient.id))} onPick={async cid=>{ for(const id of [...movSel]){ await onAssignClientToExpense(id,cid) } setMovSel(new Set()); setMovMode(false) }}/>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
         })()}
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
@@ -17857,9 +17891,9 @@ export default function App() {
       const key=(exp?.concept||'').toLowerCase().trim()
       const iguales = key.length>2 ? (expenses||[]).filter(e=>!e.client_id && (e.concept||'').toLowerCase().trim()===key).map(e=>e.id) : []
       const ids = [...new Set([expenseId, ...iguales])]
-      const {error} = await supabase.from('expenses').update({client_id:clientId}).in('id',ids)
+      const {error} = await supabase.from('expenses').update({client_id:clientId, entity_id:null}).in('id',ids)
       if(error) throw error
-      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:clientId}:e))
+      setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:clientId,entity_id:null}:e))
       // Trazabilidad: registra cada reasignación (from→to). No rompe si la tabla expense_audit no existe aún.
       try{
         const rows = ids.map(id=>{ const e=(expenses||[]).find(x=>x.id===id); return { expense_id:id, from_client_id:e?.client_id||null, to_client_id:clientId, concept:e?.concept||null, amount:e?.amount??null, moved_by:user?.name||null } }).filter(r=>String(r.from_client_id)!==String(r.to_client_id))
