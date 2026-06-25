@@ -2461,7 +2461,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
               <span style={{fontSize:19,fontWeight:500,color:C.accent,letterSpacing:-.3}}>Tareas</span>
               <div style={{display:'flex',alignItems:'center',gap:12}}>
-                {onAddTask&&<button onClick={()=>{onTareasClose&&onTareasClose();onAddTask()}} style={{display:'inline-flex',alignItems:'center',gap:8,background:C.accent,color:'#fff',border:'none',borderRadius:22,padding:'7px 14px 7px 7px',fontSize:13,fontWeight:600,cursor:'pointer'}}><span style={{width:23,height:23,borderRadius:'50%',background:'rgba(255,255,255,.17)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,lineHeight:1}}>+</span>Nueva tarea</button>}
+                {onAddTask&&<button onClick={()=>{onTareasClose&&onTareasClose();onAddTask()}} style={{display:'inline-flex',alignItems:'center',gap:7,background:C.muted,color:'#fff',border:'none',borderRadius:20,padding:'7px 14px',fontSize:13,fontWeight:600,cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='5' y='4' width='14' height='17' rx='2'/><rect x='9' y='2.5' width='6' height='3.5' rx='1'/><path d='M8.5 11.5l1.5 1.5 3-3'/><line x1='8.5' y1='16' x2='15.5' y2='16'/></svg>Nueva tarea</button>}
                 <span onClick={onTareasClose} style={{fontSize:21,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
               </div>
             </div>
