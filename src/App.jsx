@@ -9723,23 +9723,8 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
   const pill = on => ({fontSize:12,padding:'5px 12px',borderRadius:20,cursor:'pointer',border:on?'1px solid #003C50':`0.5px solid ${C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
   const canSave = selectedClient && (parseInt(f.amount)||0)>0 && (esDev || f.project?.trim()) && (clientEnts.length===0 || f.entity_id)
   const guardar = () => onSave({client_id:selectedClient.id,type:'fondo',amount:(esDev?-1:1)*parseInt(f.amount),concept:(esDev&&!f.concept.trim())?`Devolución de fondos · saldo a favor Rendición N°${rendN||'—'}`:f.concept,date:f.date,category:'Fondo',entity_id:f.entity_id||null,project:f.project?.trim()||null,sale_id:f.sale_id||null})
-  const asuntoDev = () => `Devolución de fondos · Rendición N°${rendN||''} — ${selectedClient?.name||''}`
-  const cuerpoDev = () => `Estimado ${(selectedClient?.name||'').split(' ')[0]},\n\nJunto con saludar, y como complemento a la Rendición N°${rendN||''} que te enviamos, te confirmamos la devolución del saldo a favor por ${fmt(parseInt(f.amount)||0)}, correspondiente a los fondos no utilizados de dicha rendición.\n\nLa transferencia se realizó con fecha ${fmtFechaDMY(f.date)}. Adjuntamos el comprobante para tu registro.\n\nQuedamos atentos a cualquier consulta.\n\nSaludos cordiales,`
-  const correoDev = () => `Asunto: ${asuntoDev()}\n\n${cuerpoDev()}`
-  // Destinatario: el email al que se envió la rendición de este cliente (la N° elegida, o la última a cliente).
-  const rendDest = useMemo(()=>{
-    if(!selectedClient) return ''
-    const rs=(rendiciones||[]).filter(r=>String(r.client_id)===String(selectedClient.id)&&r.tipo==='cliente')
-    const byN=rendN&&rs.find(r=>String(r.correlativo)===String(rendN))
-    const r=byN||[...rs].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]
-    return r?.dirigido_email||''
-  },[rendiciones,selectedClient,rendN])
-  const enviarDev = () => {
-    const to=rendDest, su=encodeURIComponent(asuntoDev()), body=encodeURIComponent(cuerpoDev())
-    const url=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${su}&body=${body}`
-    const w=window.open(url,'_blank')
-    if(!w) window.location.href=`mailto:${to}?subject=${su}&body=${body}`
-  }
+  // Al guardar una devolución, el padre abre DevolucionEmailModal (correo con formato + comprobante).
+  // El N° de rendición viaja dentro del concepto ("Rendición N°X") para que el padre arme el correo.
   return (
     <>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
@@ -9813,13 +9798,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
           </>
         )}
 
-        {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:C.muted,marginBottom:6,lineHeight:1.45}}>Se abrirá el correo {rendDest?<>a <b style={{color:C.text}}>{rendDest}</b> (destinatario de la Rendición N°{rendN||''})</>:<>(agrega el destinatario — no encontré el de esa rendición)</>}. Adjunta ahí el comprobante de transferencia y envía.</div>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={enviarDev} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>✉ Enviar devolución</button>
-            <Copyable text={correoDev()} title='Copiar correo' style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,cursor:'pointer'}}>Copiar</Copyable>
-          </div>
-        </div>}
+        {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.45,background:C.greenBg,borderRadius:8,padding:'9px 11px'}}>Al guardar, se abre el <b style={{color:C.accent}}>correo de devolución</b> con el formato de la rendición y los destinatarios — solo adjuntas el comprobante y envías.</div>}
         <div style={{display:'flex',gap:8}}>
           <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':(esDev?'Guardar devolución':'Guardar fondo')}</button>
@@ -11309,6 +11288,112 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
 }
 
 // Popup de correo para enviar una rendición al cliente (mailto + marca sent_at)
+// Correo de DEVOLUCIÓN de fondos: mismo motor/formato que la rendición (logo, firma, destinatarios desde
+// contactos + CC aprendido), pero adjuntando el COMPROBANTE de transferencia en vez del PDF de rendición.
+function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose}){
+  const myEmail=(user?.email||'').toLowerCase()
+  const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const toEmail=x=>{ if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
+  const corr=rend?.correlativo||rendN||''
+  const [para,setPara]=useState(rend?.dirigido_email||client?.email||'')
+  const [cc,setCc]=useState([])
+  const [ccInput,setCcInput]=useState('')
+  const [studioOn,setStudioOn]=useState(true)
+  const studioEmails=useMemo(()=>{ const set=new Set(); const resp=toEmail(client?.abogado_responsable); if(resp) set.add(resp); set.delete(myEmail); return [...set] },[client?.abogado_responsable,myEmail])
+  const [fichaContacts,setFichaContacts]=useState([])
+  const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
+  const [comp,setComp]=useState(null)   // comprobante: {name,mime,b64}
+  const [sending,setSending]=useState(false)
+  const asunto=`Devolución de fondos${corr?` · Rendición N° ${corr}`:''} — ${client?.name||''}`
+  const [body,setBody]=useState(`Estimado ${(client?.name||'').split(' ')[0]},\n\nJunto con saludar, y como complemento a la Rendición N° ${corr} que te enviamos, te confirmamos la devolución del saldo a favor por ${fmt(amount)}, correspondiente a los fondos no utilizados de dicha rendición.\n\nLa transferencia se realizó con fecha ${fmtFechaDMY(fecha)}. Adjuntamos el comprobante para tu registro.\n\nQuedamos atentos a cualquier consulta.\n\nSaludos cordiales,`)
+  useEffect(()=>{ if(!client?.id) return; let alive=true
+    supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setFichaContacts((data||[]).filter(c=>c.email)) },()=>{})
+    supabase.from('learnings').select('value').eq('kind','rendicion_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(prev=>[...new Set([...prev,...ems])]) } },()=>{})
+    return ()=>{alive=false}
+  },[client?.id])
+  useEffect(()=>{ if(!myEmail) return; let alive=true
+    supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setFirma(prev=>({...prev,...JSON.parse(data.value)})) }catch(_){} } },()=>{})
+    return ()=>{alive=false}
+  },[myEmail])
+  const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
+  const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
+  const onFile=ev=>{ const f=ev.target.files&&ev.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>setComp({name:f.name,mime:f.type||'application/octet-stream',b64:String(rd.result).replace(/^data:[^,]+,/,'')}); rd.readAsDataURL(f) }
+  const buildHtml=(text,useCid=true)=>{
+    const A='#003C50',A4='#E4E8EB',MUTED='#537281',BG='#F7F9FA'
+    const logoW=useCid?'cid:lealogow':`${location.origin}/le-logo-blanco.png`
+    const logoC=useCid?'cid:lealogoc':`${location.origin}/le-logo-color.png`
+    const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    let out='',box=[]
+    const flush=()=>{ if(box.length){ out+=`<div style="background-color:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.indexOf(':'); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+1).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
+    String(text).split('\n').forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()?`<p style="margin:0 0 10px">${esc(l)}</p>`:'' } }); flush()
+    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${logoW}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">Devolución de fondos${corr?` · Rendición N° ${corr}`:''}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma,logoC,'es')}</div></div>`
+  }
+  const enviar=async()=>{
+    if(!para.trim()){ alert('Falta el destinatario (Para).'); return }
+    if(!comp && !confirm('No adjuntaste el comprobante de transferencia. ¿Enviar igual?')) return
+    setSending(true)
+    const _strip=u=>String(u||'').replace(/^data:[^,]+,/,'')
+    const logosInline=[{cid:'lealogow',b64:_strip(logoBlanco),mime:'image/png'},{cid:'lealogoc',b64:_strip(logoColor),mime:'image/png'}]
+    const ccStr=[...cc,...(studioOn?studioEmails:[])].filter(Boolean).join(', ')
+    const atts=comp?[{base64:comp.b64,name:comp.name,mime:comp.mime}]:[]
+    let sent=false,err=null
+    try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:ccStr,subject:asunto,bodyText:body,bodyHtml:buildHtml(body,true),inlineImages:logosInline,attachments:atts}); sent=true } }catch(e){ err=e }
+    if(!sent){ try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; alert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 } }
+    setSending(false)
+    if(sent){ try{ if(cc.length) await supabase.from('learnings').upsert({kind:'rendicion_cc',key:String(client.id),value:cc.join(', ')},{onConflict:'kind,key'}) }catch(_){} onClose&&onClose() }
+    else alert('No se pudo enviar el correo de devolución.\n'+(err?.message||err||'—'))
+  }
+  const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
+  const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
+  const sugCc=fichaContacts.filter(c=>c.email&&c.email.toLowerCase()!==(para||'').toLowerCase()&&!cc.includes(c.email.toLowerCase()))
+  return (
+    <Modal hideHeader onClose={onClose} closeOnBackdrop={false}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 20px 14px',borderBottom:`0.5px solid ${C.border}`}}>
+        <span style={{fontSize:16,fontWeight:600,color:C.accent}}>Enviar devolución{client&&<><span style={{color:C.done,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{client.name}</span></>}</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></button>
+      </div>
+      <div style={{padding:'16px 20px 20px'}}>
+        {!rend&&<div style={{fontSize:11,color:C.soonText,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:12}}>No encontré la rendición de este cliente para sacar el destinatario — agrégalo a mano abajo.</div>}
+        <div style={{marginBottom:12}}>
+          <label style={flabel}>Para</label>
+          <input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={inp}/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={flabel}>CC</label>
+          {cc.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+            {cc.map(e=><span key={e} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 7px 3px 10px',fontSize:12}}>{e}<button onClick={()=>removeCc(e)} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button></span>)}
+          </div>}
+          <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>ccInput.trim()&&addCc(ccInput)} placeholder='Agregar correo y Enter' style={inp}/>
+          {sugCc.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>{sugCc.slice(0,6).map(c=><button key={c.email} onClick={()=>addCc(c.email)} style={{fontSize:11,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre||c.email}</button>)}</div>}
+          {studioEmails.length>0&&<label style={{display:'flex',gap:7,alignItems:'center',marginTop:8,fontSize:11,color:C.muted,cursor:'pointer'}}><input type='checkbox' checked={studioOn} onChange={e=>setStudioOn(e.target.checked)}/>Copia al estudio ({studioEmails.join(', ')})</label>}
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={flabel}>Comprobante de transferencia</label>
+          {comp?(
+            <div style={{display:'flex',alignItems:'center',gap:8,background:C.greenBg,borderRadius:8,padding:'9px 11px'}}>
+              <span style={{fontSize:12,color:C.greenText,fontWeight:600,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>✓ {comp.name}</span>
+              <button onClick={()=>setComp(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:12}}>Quitar</button>
+            </div>
+          ):(
+            <label style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,border:`1px dashed ${C.muted}`,borderRadius:8,padding:'12px',cursor:'pointer',color:C.accent,fontSize:12,fontWeight:600}}>
+              <input type='file' accept='image/*,application/pdf' onChange={onFile} style={{display:'none'}}/>
+              + Adjuntar comprobante (PDF o imagen)
+            </label>
+          )}
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={flabel}>Mensaje</label>
+          <textarea value={body} onChange={e=>setBody(e.target.value)} style={{width:'100%',minHeight:150,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:C.text,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box',lineHeight:1.5}}/>
+        </div>
+        <details style={{marginBottom:14}}><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildHtml(body,false)}}/></details>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button disabled={sending||!para.trim()} onClick={enviar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:para.trim()?'pointer':'not-allowed',opacity:(sending||!para.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending?<Spin/>:null}{sending?'Enviando...':'Enviar devolución'}</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
 function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose}) {
   const det = (expenses||[]).filter(e=>e.client_render_id===r.id).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const [attachSet,setAttachSet] = useState(new Set())   // gastos de esta rendición con comprobante de respaldo
@@ -16954,6 +17039,7 @@ export default function App() {
   const [saving,setSaving]=useState(false)
   const [tab,setTab]=useState('dashboard')
   const [modal,setModal]=useState(null)
+  const [devEmail,setDevEmail]=useState(null)   // {client,amount,fecha,rend,rendN} → abre DevolucionEmailModal tras guardar una devolución
   const [openFichaId,setOpenFichaId]=useState(null)   // abrir la Ficha→Financiero de un cliente desde otra vista (ej. Facturación)
   const [navOrigin,setNavOrigin]=useState(null)   // origen del salto cross-link → el ← vuelve ahí. DEBE ir antes de handleBackOrigin: su dep array [navOrigin] se evalúa en render (TDZ si va después → pantalla negra)
   const handleOpenClientFicha=useCallback((cid)=>{ if(cid){ setNavOrigin(tab!=='clients'?tab:null); setOpenFichaId(cid); setTab('clients') } },[tab])
@@ -18341,7 +18427,8 @@ export default function App() {
         )}
         {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
         {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
-        {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
+        {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null}/></Modal>}
+        {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} onClose={()=>setDevEmail(null)}/>}
         {modal?.type==='ajuste'&&<Modal title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='expenseEdit'&&<Modal title={(()=>{ const cn=modal.data?.client_id?(clients.find(c=>String(c.id)===String(modal.data.client_id))?.name||null):null; const tipo=modal.data?.type==='fondo'?'Editar fondo':'Editar gasto'; return <><span style={{color:C.accent}}>{tipo}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ExpenseEditForm expense={modal.data} clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} onSave={handleSaveExpense} onClose={()=>setModal(null)} onDelete={handleDeleteExpense} saving={saving} user={user} onAttachChange={(delta,item)=>setExpenseAttachments(p=>delta>0?[...p,{id:item.id,expense_id:item.expense_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='clienteDrive'&&<Modal title='Importar clientes desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
