@@ -8663,7 +8663,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [notaSend,setNotaSend] = useState(null)   // rendición en el sheet "Enviar a notaría" (o null)
   const [compFile,setCompFile] = useState(null)   // comprobante de transferencia adjunto (File)
   const [notaResp,setNotaResp] = useState(null)   // filtro de pendientes por abogado responsable del cliente ('__sin__'=sin responsable)
-  const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&!e.notaria_liquidado_at&&!e.paid_by_client&&(Number(e.amount)||0)>1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
+  const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&!e.notaria_liquidado_at&&(Number(e.amount)||0)>1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   // Gastos de notaría por $1 (o menos): escrituras/trabajos anulados, solo orden — no se liquidan, se pueden eliminar.
   const notariaAnulados = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)<=1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   const [notaAnulOpen,setNotaAnulOpen] = useState(false)
@@ -8677,7 +8677,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.no_descuenta_saldo)
     const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo').reduce((a,e)=>a+(e.amount||0),0)
     const pagado=g.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
-    const esNotaPend=e=>e.category==='Notaria'&&!e.notaria_render_id   // lo que se liquida ahora a la notaría (no se reserva)
+    const esNotaPend=e=>e.category==='Notaria'&&!e.notaria_render_id&&!e.notaria_liquidado_at   // lo que se liquida ahora a la notaría (no se reserva)
     const resItems=g.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at&&!esNotaPend(e))
     const reservado=resItems.reduce((a,e)=>a+(e.amount||0),0)
     return { fondo, pagado, reservado, resItems, disp: Math.max(0, fondo-pagado-reservado) }
