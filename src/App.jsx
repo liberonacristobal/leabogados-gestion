@@ -4083,6 +4083,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   const generarCobros = () => {
     if(!f.client_id||!totalCLP) return []
     const cobros = []
+    // Vencimiento estándar: día 1 del mes de cada cuota (se emite del 1 al 5). El día del "Inicio cobro" no importa, solo su mes.
+    const mesISO=(inicio,i)=>{ const [yy,mm]=inicio.split('-').map(Number); let cy=yy, cm=mm+i; while(cm>12){cm-=12;cy++} return `${cy}-${String(cm).padStart(2,'0')}-01` }
     if(cobroType==='mensual' && mensualInicio) {
       const [y,m] = mensualInicio.split('-').map(Number); let cy=y, cm=m
       for(let i=0;i<12;i++){ cobros.push({monto:Math.round(totalCLP), fecha:`${cy}-${String(cm).padStart(2,'0')}-01`, label:`Mensual ${MONTHS[cm-1]} ${cy}`}); cm++; if(cm>12){cm=1;cy++} }
@@ -4090,7 +4092,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       const arr = calcCuotasDist()
       if(arr.length){
         const totR = Math.round(totalCLP); let acc=0
-        arr.forEach((c,i)=>{ const mm = moneda==='CLP'?Math.round(c.m):Math.round(c.m*ufVal); acc+=mm; const d=new Date(cobroInicio+'T12:00'); d.setMonth(d.getMonth()+i); cobros.push({monto:mm, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${arr.length}`}) }
+        arr.forEach((c,i)=>{ const mm = moneda==='CLP'?Math.round(c.m):Math.round(c.m*ufVal); acc+=mm; cobros.push({monto:mm, fecha:mesISO(cobroInicio,i), label:`Cuota ${i+1}/${arr.length}`}) }
         )
         cobros[cobros.length-1].monto += (totR-acc)   // cuadra el total exacto (residuo de redondeo)
       }
@@ -4098,7 +4100,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       const mc = Math.round(totalCLP/nCuotas)
       const totR = Math.round(totalCLP)
       // La última cuota absorbe el residuo de redondeo para que la suma de cuotas == total exacto.
-      for(let i=0;i<nCuotas;i++) { const d=new Date(cobroInicio+'T12:00'); d.setMonth(d.getMonth()+i); cobros.push({monto: i===nCuotas-1?(totR-mc*(nCuotas-1)):mc, fecha:d.toISOString().slice(0,10), label:`Cuota ${i+1}/${nCuotas}`}) }
+      for(let i=0;i<nCuotas;i++) { cobros.push({monto: i===nCuotas-1?(totR-mc*(nCuotas-1)):mc, fecha:mesISO(cobroInicio,i), label:`Cuota ${i+1}/${nCuotas}`}) }
     } else if(cobroType==='porcentaje') {
       tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:t.fecha, label:`${t.pct}%`}) })
     } else if(cobroType==='personalizada') {
@@ -4167,7 +4169,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       if(newFmt==='cuotas'&&newCobroInicio&&newNCuotas>0&&totalC>0){
         const mc=Math.round(totalC/newNCuotas)
         const totR=Math.round(totalC)
-        for(let i=0;i<newNCuotas;i++){const d=new Date(newCobroInicio+'T12:00');d.setMonth(d.getMonth()+i);nuevasCuotas.push({due:d.toISOString().slice(0,10),amount:i===newNCuotas-1?(totR-mc*(newNCuotas-1)):mc,concept:`${sale.title} — Cuota ${i+1}/${newNCuotas}`})}
+        for(let i=0;i<newNCuotas;i++){const [yy,mm]=newCobroInicio.split('-').map(Number);let cy=yy,cm=mm+i;while(cm>12){cm-=12;cy++}nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:i===newNCuotas-1?(totR-mc*(newNCuotas-1)):mc,concept:`${sale.title} — Cuota ${i+1}/${newNCuotas}`})}
       } else if(newFmt==='mensual'&&newVig&&totalC>0){
         const [y,m]=newVig.split('-').map(Number);let cy=y,cm=m
         for(let i=0;i<12;i++){nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:Math.round(totalC),concept:`${sale.title} — Mensual ${MONTHS[cm-1]} ${cy}`});cm++;if(cm>12){cm=1;cy++}}
