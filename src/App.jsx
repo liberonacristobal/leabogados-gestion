@@ -7419,6 +7419,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [matchPick,setMatchPick] = useState(null)             // rowId con el selector "otro calce" abierto
   const [chgFilter,setChgFilter] = useState('all')            // filtro de Corregir: all | cli (cambian cliente) | cat (cambian categoría)
   const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+  // Memoria del lote: persiste reasignaciones de calce y "forzar nuevo" por huella de fila (cliente+monto+glosa),
+  // para que al re-subir el MISMO archivo se retomen tus decisiones (filosofía: la app aprende, no repite).
+  const rowKeyHuella = r=>`${r.client_id||r.nombre||''}|${r.monto||0}|${(r.concepto||'').toLowerCase().replace(/\s+/g,' ').trim().slice(0,40)}`
   const [showRecientes,setShowRecientes] = useState(false)   // modo notaría: importaciones recientes plegadas
   const [rows,setRows] = useState(null)    // null = sin cargar
   const [fileName,setFileName] = useState('')
@@ -7840,6 +7843,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       parsed.forEach(r=>{ const k=keyOf(r); counts[k]=(counts[k]||0)+1 })
       parsed.forEach(r=>{ if(counts[keyOf(r)]>1) r.dup=true })
       setRows(parsed)
+      // Retomar decisiones del lote (reasignaciones / forzar nuevo) guardadas para el mismo archivo.
+      if(modo==='conciliar'){ try{ const saved=JSON.parse(localStorage.getItem('carga_dec_v1')||'{}'); const mm={}; const ff=new Set(); parsed.forEach(r=>{ const k=rowKeyHuella(r); if(saved.match&&saved.match[k]) mm[r.id]=saved.match[k]; if(Array.isArray(saved.forzar)&&saved.forzar.includes(k)) ff.add(r.id) }); if(Object.keys(mm).length) setConcilMatch(mm); if(ff.size) setForzarNuevo(ff) }catch(_){} }
       setCargando(false)
       runMatching(parsed)   // enriquece con fuzzy + IA (async, vuelve a setRows)
       return
@@ -7963,6 +7968,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   // Lo realmente seleccionado (las filas que el usuario dejó tildadas). Clave: c_<gastoId> / n_<rowId>.
   const corregirSel = () => (concil?.corregir||[]).filter(a=>!concilExcl.has('c_'+a.e.id))
   const nuevosSel = () => (concil?.nuevos||[]).filter(r=>!concilExcl.has('n_'+r.id))
+  useEffect(()=>{ if(!rows||modo!=='conciliar') return; try{ const m={}; Object.entries(concilMatch).forEach(([rid,gid])=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r&&gid) m[rowKeyHuella(r)]=gid }); const f=[]; forzarNuevo.forEach(rid=>{ const r=rows.find(x=>String(x.id)===String(rid)); if(r) f.push(rowKeyHuella(r)) }); localStorage.setItem('carga_dec_v1',JSON.stringify({match:m,forzar:f})) }catch(_){} },[concilMatch,forzarNuevo,rows,modo])
   const [concilBefore,setConcilBefore] = useState(null)
   const aplicarConcil = async()=>{
     if(!concil) return
