@@ -7961,7 +7961,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const actualizaciones = concil.actualizar.map(({r,e,rendido})=>{ const a={id:e.id, category:(tipo==='fondo'?'Fondo':(r.categoria||e.category))}; if(!(rendido&&noTocarRendidos)){ a.client_id=r.client_id||e.client_id; a.entity_id=r.entity_id||null } return a })
       const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
       setConcilBefore(res.before||null)
-      setResultado({concil:true, actualizados:res.actualizados, imported:0, batchId:null})
+      setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:concil.nuevos.length}))
     }catch(e){ alert('Error al corregir: '+(e.message||e)) }
     setGuardando(false)
   }
@@ -7970,7 +7970,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     setGuardando(true)
     try{
       const res = await onConciliar([], concil.nuevos, {tipo, filename:fileName})
-      setResultado({concil:true, actualizados:0, imported:res.importados, batchId:res.batchId})
+      setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:concil.actualizar.length)}))
     }catch(e){ alert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
@@ -7990,6 +7990,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {resultado.otDupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:'#FFF8E1',borderRadius:20,padding:'4px 11px'}}><b>{resultado.otDupOmit}</b> con OT ya cargada</span>}
       </div>
       {resultado.sinCliente>0&&<div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.45}}>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</div>}
+      {/* Parte por parte: tras Corregir queda el paso de Importar (y viceversa), sin perder el otro */}
+      {resultado.corregirDone&&!resultado.importarDone&&resultado.nuevosPend>0&&<button disabled={guardando} onClick={aplicarImportar} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora importa las ${resultado.nuevosPend} nuevas →`}</button>}
+      {resultado.importarDone&&!resultado.corregirDone&&resultado.actualizarPend>0&&<button disabled={guardando} onClick={aplicarCorregir} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.azulInfo,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora corrige las ${resultado.actualizarPend} →`}</button>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
       {resultado.concil&&concilBefore&&concilBefore.length>0&&<button onClick={async()=>{ if(confirm('¿Revertir las correcciones de cliente/categoría a como estaban antes?')){ const ok=await onUndoConciliar(concilBefore); if(ok){ setConcilBefore(null); onClose() } } }} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Revertir correcciones ({concilBefore.length})</button>}
       {resultado.batchId&&resultado.imported>0&&<button onClick={()=>setUndoTarget({batchId:resultado.batchId,count:resultado.imported})} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Deshacer importación</button>}
@@ -12850,10 +12853,13 @@ async function liquidacionExcelB64({gastos, clients, titulo, sub}){
 // Envío desde la CUENTA DE OFICINA vía edge function (SMTP). Fallback cuando el usuario no tiene
 // el permiso gmail.send: la rendición/liquidación se envía igual, con el PDF adjunto.
 async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName, attachments}){
+  // El SMTP del servidor (denomailer) trata un string "a@x, b@x" como UNA dirección y rebota
+  // ("not a valid RFC 5321 address"). Mandar los destinatarios SIEMPRE como array de correos.
+  const arr = v => v==null||v==='' ? null : (Array.isArray(v)?v:String(v).split(/[,;]+/).map(s=>s.trim()).filter(Boolean))
   const res = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
-    body:JSON.stringify({mail:{to, cc:cc||null, subject, html:html||null, text:text||null, pdfBase64:pdfBase64||null, pdfName:pdfName||null, attachments:attachments||null}})
+    body:JSON.stringify({mail:{to:arr(to), cc:arr(cc), subject, html:html||null, text:text||null, pdfBase64:pdfBase64||null, pdfName:pdfName||null, attachments:attachments||null}})
   })
   if(!res.ok){ let m=''; try{ m=(await res.json()).error||'' }catch(_){} throw new Error('Servidor '+res.status+(m?': '+m:'')) }
   return true
