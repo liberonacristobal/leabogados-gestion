@@ -7481,8 +7481,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
         {header:'Subconcepto',key:'subconcepto',width:32},
         {header:'OT',key:'ot',width:12},
         {header:'Categoría',key:'categoria',width:16},
+        {header:'Caja chica',key:'caja_chica',width:13},
       ]
-      g.addRow({rut:'76.123.456-7',nombre:'Inmobiliaria Andes SpA',fecha:new Date(2026,5,3),monto:45000,concepto:'Inscripción en Conservador de Bienes Raíces',categoria:'CBR'})
+      g.addRow({rut:'76.123.456-7',nombre:'Inmobiliaria Andes SpA',fecha:new Date(2026,5,3),monto:45000,concepto:'Inscripción en Conservador de Bienes Raíces',categoria:'CBR',caja_chica:'sí'})
       g.addRow({rut:'12.345.678-9',nombre:'Juan Pérez Soto',fecha:new Date(2026,5,5),monto:18000,concepto:'Transporte a notaría',categoria:'Otro'})
       g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura pública',subconcepto:'Compraventa lote 4, Chicureo',ot:'OT-1284',categoria:'Notaria'})
       g.addRow({rut:'77.700.111-2',nombre:'Comercial Sur Ltda.',fecha:new Date(2026,5,8),monto:30000,concepto:'Escritura pública',subconcepto:'Constitución de sociedad',ot:'OT-1290',categoria:'Notaria'})
@@ -7491,7 +7492,8 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
       estilarHeader(g)
       g.getCell('A1').note='Acepta RUT con o sin puntos/guión (ej: 76.123.456-7 o 761234567)'
       g.getCell('D1').note='Monto en pesos, mayor a 0 y sin decimales'
-      for(let r=2;r<=200;r++) g.getCell('F'+r).dataValidation={type:'list',allowBlank:true,formulae:[cats]}
+      g.getCell('I1').note='sí = pagado con cargo a la caja chica · no = pagado por el cliente. Déjalo vacío si no aplica.'
+      for(let r=2;r<=200;r++){ g.getCell('F'+r).dataValidation={type:'list',allowBlank:true,formulae:[cats]}; g.getCell('I'+r).dataValidation={type:'list',allowBlank:true,formulae:['"sí,no"']} }
 
       // Hoja Fondos
       const f = wb.addWorksheet('Fondos')
@@ -7760,6 +7762,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     monto:     ['monto','importe','valor','amount','total'],
     notas:     ['notas','nota','observaciones','observación','observacion','comments'],
     proyecto:  ['proyecto','propuesta','propuesta - proyecto','project'],
+    caja_chica:['caja chica','pagado caja chica','pagado con caja chica','con cargo a caja chica','cargo caja chica','pagado con cargo a caja chica','pagada caja chica','caja chica (si/no)','caja chica si/no','¿caja chica?'],
   }
   // Mapea un valor de categoría de la planilla a una categoría válida del sistema (mantiene Registro Civil).
   const CAT_SINONIMOS = {
@@ -7800,6 +7803,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const proyecto = String(getField('proyecto')||'').trim()
         const fecha = parseFecha(getField('fecha'))
         const monto = parseMonto(getField('monto'))
+        const cajaRaw = norm(getField('caja_chica'))   // "sí"=pagado con caja chica (paid_by_client=false); "no"=sin caja chica (true)
+        const paidByClient = cajaRaw==='' ? undefined : /^(no|false|n|0|nro|na)$/.test(cajaRaw)
         if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return null  // fila vacía
         const categoria = tipo==='fondo' ? 'Fondo' : (notaria && !String(getField('categoria')||'').trim() ? 'Notaria' : mapCategoria(getField('categoria')))
         // Gasto personal de un miembro de la oficina: "Personal · Martín" / "Personal: Martín" → personal_de (no es cliente).
@@ -7814,7 +7819,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         if(monto==null) error='Monto vacío o inválido'
         else if(monto<0) error='Monto negativo no permitido'
         else if(monto===0) error='Monto debe ser mayor a 0'
-        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, categoria, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='name_exact'?95:100):undefined), error, dup:false}
+        return {id:idx, rut, nombre, fecha, monto, concepto, subconcepto, ot, notas, proyecto, categoria, paid_by_client:paidByClient, client_id:cli?.id||null, clientName:cli?.name||null, personal_de:personalDe||null, entity_id: entId || (ents.length===1?ents[0].id:null), matchMethod: personalDe?'personal':(cli?method:undefined), confidence: personalDe?100:(cli?(method==='name_exact'?95:100):undefined), error, dup:false}
       }
       // VÍA 1 (principal): por objeto, encabezado en la primera fila, columnas por alias. Robusta.
       let parsed = []
@@ -8122,7 +8127,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   <div style={{color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.concepto||'—'}{kind==='dup'?<span style={{color:C.done}}> · {r.fecha?String(r.fecha).slice(0,10):'sin fecha'}</span>:(kind!=='act'&&kind!=='new'&&e)?<span style={{color:C.done}}> · → {r.categoria||e.category||'Otro'}</span>:''}</div>
                   {kind==='act'&&(()=>{ const newCat=tipo==='fondo'?'Fondo':(r.categoria||e.category); const catChg=String(e.category||'')!==String(newCat||''); const newCli=r.client_id||e.client_id; const cliChg=!(rendido&&noTocarRendidos)&&String(e.client_id||'')!==String(newCli||''); const nm=id=>{const c=clients.find(x=>String(x.id)===String(id));return c?.name||'Sin cliente'}; return (catChg||cliChg)?<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:3}}>{cliChg&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:10,background:C.azulBg,color:C.azulInfo}}>cliente: {nm(e.client_id)} → {nm(newCli)}</span>}{catChg&&<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:10,background:'#FDF2E7',color:'#9A5B12'}}>cat: {e.category||'—'} → {newCat}</span>}</div>:null })()}
                   {kind==='act'&&it.via&&(()=>{ const c=it.via==='ot'?{l:'OT exacta',bg:C.greenBg,fg:C.greenText}:it.via==='fecha'?{l:'fecha + monto',bg:C.azulBg,fg:C.azulInfo}:((it.score||0)>=2?{l:'cliente + monto + glosa',bg:C.azulBg,fg:C.azulInfo}:{l:`glosa parcial · ${it.score||0} palabra${(it.score||0)!==1?'s':''}`,bg:C.ambarBg,fg:C.soonText}); return <div><span style={{display:'inline-block',marginTop:3,fontSize:8.5,fontWeight:700,padding:'1px 6px',borderRadius:8,background:c.bg,color:c.fg}}>calzó: {c.l}</span></div> })()}
-                  {kind==='new'&&<div style={{marginTop:3,fontSize:9.5,color:C.greenText,fontWeight:600}}>nuevo{r.categoria?` · ${r.categoria}`:''}</div>}
+                  {kind==='new'&&<div style={{marginTop:3,fontSize:9.5,color:C.greenText,fontWeight:600}}>nuevo{r.categoria?` · ${r.categoria}`:''}{r.paid_by_client!==undefined?<span style={{color:r.paid_by_client?C.soonText:C.accent}}> · {r.paid_by_client?'pagó cliente':'caja chica'}</span>:''}</div>}
                   {(kind==='act'||kind==='new')&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:10,alignItems:'center',marginTop:5,flexWrap:'wrap'}}>
                     <select value={CAT_OPCIONES.includes(r.categoria)?r.categoria:''} onChange={e=>editarCampo(r.id,'categoria',e.target.value)} style={{fontSize:10,padding:'3px 6px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,outline:'none'}}><option value=''>Categoría…</option>{CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}</select>
                     {kind==='act'&&candidatosDe(r).length>1&&<button onClick={()=>setMatchPick(matchPick===r.id?null:r.id)} style={{fontSize:9.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>otro calce ({candidatosDe(r).length})</button>}
@@ -17597,7 +17602,8 @@ export default function App() {
         category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
         date:r.fecha||null, project:r.proyecto||null, sale_id:null,
         personal_de: r.personal_de||null,
-        paid_by_client: tipo!=='fondo'&&r.categoria==='Notaria'&&!r.personal_de,
+        // Columna "pagado con caja chica" (sí→false / no→true) manda; si no viene, default Notaría=true. Fondos/personal=false.
+        paid_by_client: (tipo!=='fondo'&&!r.personal_de) ? (r.paid_by_client!==undefined ? r.paid_by_client : r.categoria==='Notaria') : false,
         // Carga masiva NO entra a caja chica: la pertenencia se deriva de created_by, así que se deja null
         // (el importador queda registrado en bulk_imports.created_by). El admin la clasifica luego con la pill:
         // caja chica de una persona, o pagada con fondos del cliente. A futuro las masivas son solo Notaría (ya excluidas).
