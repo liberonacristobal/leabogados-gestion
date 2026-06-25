@@ -7977,11 +7977,19 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       return false
     }
     const corregir = actualizar.filter(cambia)
-    const yaCorrecto = actualizar.filter(a=>!cambia(a))
+    let yaCorrecto = actualizar.filter(a=>!cambia(a))
+    // CONSISTENCIA con el anti-duplicados del import (mismo keyOf exacto): un "nuevo" idéntico a uno
+    // que ya existe se reclasifica a "Ya cargados" (no se importa); un duplicado dentro del archivo se
+    // cuenta una sola vez. Así el conteo del preview = lo que realmente importa (regla: consistencia).
+    const composed = r=>{ const s=(r.subconcepto||'').trim(), b=(r.concepto||'').trim(); return (!r.conceptoFix&&s&&!b.toLowerCase().includes(s.toLowerCase()))?`${b} — ${s}`:b }
+    const keyEx = e=>`${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}|${(e.subconcept||'').trim().toLowerCase()}|${(e.ot_number||'').trim().toLowerCase()}`
+    const keyRow = r=>`${r.client_id||''}|${r.monto||0}|${r.fecha||''}|${composed(r).trim().toLowerCase()}|${(r.subconcepto||'').trim().toLowerCase()}|${(r.ot||'').trim().toLowerCase()}`
+    const usedEx=new Set(), seenK=new Set(), nuevosK=[]
+    nuevos.forEach(r=>{ const k=keyRow(r); const ex=live.find(e=>!used.has(e.id)&&!usedEx.has(e.id)&&keyEx(e)===k); if(ex){ usedEx.add(ex.id); yaCorrecto=[...yaCorrecto,{r,e:ex}] } else if(seenK.has(k)){ /* duplicado dentro del archivo: el import lo omite, acá no se cuenta */ } else { seenK.add(k); nuevosK.push(r) } })
     // Posibles duplicados: un "nuevo" CON cliente que tiene un gasto de mismo cliente+monto en el sistema
     // (no calzó fuerte porque glosa/fecha difieren). Orden: cliente → monto → descripción.
     const posibles=[], nuevosLimpios=[]
-    nuevos.forEach(r=>{ if(!r.client_id){ nuevosLimpios.push(r); return } const near=live.find(e=>!used.has(e.id)&&(e.amount||0)===(r.monto||0)&&String(e.client_id||'')===String(r.client_id)); if(near) posibles.push({r,e:near}); else nuevosLimpios.push(r) })
+    nuevosK.forEach(r=>{ if(!r.client_id){ nuevosLimpios.push(r); return } const near=live.find(e=>!used.has(e.id)&&!usedEx.has(e.id)&&(e.amount||0)===(r.monto||0)&&String(e.client_id||'')===String(r.client_id)); if(near) posibles.push({r,e:near}); else nuevosLimpios.push(r) })
     return {actualizar, corregir, yaCorrecto, nuevos:nuevosLimpios, posibles, rendidosN: actualizar.filter(a=>a.rendido).length}
   },[modo,rows,expenses,tipo,noTocarRendidos,concilMatch,forzarNuevo])
   // Lo realmente seleccionado (las filas que el usuario dejó tildadas). Clave: c_<gastoId> / n_<rowId>.
