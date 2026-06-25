@@ -7421,6 +7421,8 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [posibleDec,setPosibleDec] = useState({})             // decisión por posible duplicado: rowId → 'omitir' | 'cargar'
   const [posOpen,setPosOpen] = useState(true)                 // grupo "posibles duplicados" abierto
   const [posExp,setPosExp] = useState(null)                   // rowId del posible con la comparación expandida
+  const [cajaOwner,setCajaOwner] = useState('')               // dueño de la caja chica: estos gastos van a su caja (created_by = su email)
+  const CAJA_EMAIL = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
   const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Memoria del lote: persiste reasignaciones de calce y "forzar nuevo" por huella de fila (cliente+monto+glosa),
   // para que al re-subir el MISMO archivo se retomen tus decisiones (filosofía: la app aprende, no repite).
@@ -8015,7 +8017,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const sel=nuevosSel(); if(!sel.length) return
     setGuardando(true)
     try{
-      const res = await onConciliar([], sel, {tipo, filename:fileName})
+      const res = await onConciliar([], sel, {tipo, filename:fileName, cajaOwner:cajaOwner||null})
       setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:corregirSel().length)}))
     }catch(e){ alert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
@@ -8185,6 +8187,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             return (
             <div style={{marginBottom:10}}>
               <div style={{fontSize:11.5,color:'#26424E',background:C.azulBg,borderRadius:9,padding:'10px 12px',marginBottom:10,lineHeight:1.5}}>De <b>{rows.length} filas</b>: <b>{nCorr} por corregir</b>{concil.yaCorrecto.length>0?<>, <b>{concil.yaCorrecto.length} ya correctas</b></>:''}, <b>{nNuev} nuevas</b>{concil.posibles.length>0?<> y <b style={{color:'#9A5B12'}}>{concil.posibles.length} posibles duplicados</b> a revisar</>:''}. Destilda las que no quieras; haz una parte ahora y otra después — al re-subir retoma sin duplicar ni rehacer lo hecho.</div>
+              {tipo!=='fondo'&&<div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
+                <span style={{fontSize:10,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.4px'}}>Caja chica de</span>
+                <button onClick={()=>setCajaOwner('')} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:cajaOwner===''?`1px solid ${C.accent}`:`1px solid ${C.border}`,background:cajaOwner===''?C.bgSoft:'#fff',color:cajaOwner===''?C.accent:C.muted}}>— Ninguno</button>
+                {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{ const pc=personChip(m); const em=CAJA_EMAIL[m]; const on=cajaOwner===em; return <button key={m} onClick={()=>setCajaOwner(on?'':em)} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${pc.color}`:`1px solid ${C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted}}>{m}</button> })}
+                {cajaOwner&&<span style={{fontSize:10,color:C.greenText,fontWeight:600,flexBasis:'100%'}}>Los gastos nuevos quedan a su nombre → entran a su caja chica.</span>}
+              </div>}
               {/* Tiles: el resultado de la carga */}
               <div style={{display:'flex',gap:8,marginBottom:tileOpen?0:10}}>
                 {[['act','Corregir',nCorr,C.azulInfo,C.azulBg,'cambian algo'],['new','Nuevos',nNuev,C.greenText,C.greenBg,'a importar']].map(([k,l,n,col,bg,h])=>{ const on=concilOpen===k; return (
@@ -17582,7 +17590,7 @@ export default function App() {
 
   // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
   // Devuelve resumen. Cada gasto queda marcado con bulk_import_id para poder deshacer (commit 5).
-  const handleBulkImport=useCallback(async(filas,{tipo,filename})=>{
+  const handleBulkImport=useCallback(async(filas,{tipo,filename,cajaOwner})=>{
     const keyOf = e => `${e.client_id||''}|${e.amount||0}|${e.date||''}|${(e.concept||'').trim().toLowerCase()}|${(e.subconcept||'').trim().toLowerCase()}|${(e.ot_number||'').trim().toLowerCase()}`
     const vistos = new Set((expenses||[]).map(keyOf))
     // Dedupe por OT: la OT es única por trámite. Si una OT ya existe (no borrada), se omite aunque cambie monto/texto.
@@ -17607,7 +17615,7 @@ export default function App() {
         // Carga masiva NO entra a caja chica: la pertenencia se deriva de created_by, así que se deja null
         // (el importador queda registrado en bulk_imports.created_by). El admin la clasifica luego con la pill:
         // caja chica de una persona, o pagada con fondos del cliente. A futuro las masivas son solo Notaría (ya excluidas).
-        created_by: null, bulk_import_id:batchId,
+        created_by: cajaOwner||null, bulk_import_id:batchId,   // dueño de la caja chica si se eligió en el preview
       }
       const ot = normOt(row.ot_number)
       if(ot && otVistos.has(ot)){ otDupOmit++; continue }   // OT ya cargada → no duplicar
@@ -17634,7 +17642,7 @@ export default function App() {
 
   // Conciliar una carga: ACTUALIZA en su lugar los gastos que ya existen (cliente/categoría) e IMPORTA solo los nuevos.
   // Evita duplicar y preserva los movimientos ya rendidos. Devuelve también los valores previos (para deshacer las correcciones).
-  const handleConciliarCarga=useCallback(async(actualizaciones, nuevos, {tipo,filename})=>{
+  const handleConciliarCarga=useCallback(async(actualizaciones, nuevos, {tipo,filename,cajaOwner})=>{
     const before=[]
     for(const a of (actualizaciones||[])){
       const ex=(expenses||[]).find(e=>String(e.id)===String(a.id))
@@ -17649,7 +17657,7 @@ export default function App() {
     }
     setExpenses(p=>p.map(e=>{ const a=(actualizaciones||[]).find(x=>String(x.id)===String(e.id)); if(!a) return e; const n={...e}; if('client_id' in a)n.client_id=a.client_id; if('entity_id' in a)n.entity_id=a.entity_id; if('category' in a)n.category=a.category; return n }))
     let importados=0, batchId=null
-    if(nuevos&&nuevos.length){ const res=await handleBulkImport(nuevos,{tipo,filename}); importados=res.imported; batchId=res.batchId }
+    if(nuevos&&nuevos.length){ const res=await handleBulkImport(nuevos,{tipo,filename,cajaOwner}); importados=res.imported; batchId=res.batchId }
     return {actualizados:(actualizaciones||[]).length, importados, batchId, before}
   },[expenses, handleBulkImport])
 
