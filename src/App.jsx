@@ -7944,7 +7944,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const pick = r=>{
       if(concilMatch[r.id]){ const g=live.find(e=>!used.has(e.id)&&String(e.id)===String(concilMatch[r.id])); if(g) return {g,via:'manual'} }
       const o=normOt(r.ot); if(o&&byOt[o]){ const c=byOt[o].find(e=>!used.has(e.id)); if(c) return {g:c,via:'ot'} }
-      if(r.fecha){ const cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
+      if(r.fecha){ let cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
+        if(r.client_id){ const sc=cands.filter(e=>String(e.client_id||'')===String(r.client_id)); if(sc.length) cands=sc }  // mismo cliente primero (evita calce cruzado, clave en fondos sin OT)
         if(cands.length===1) return {g:cands[0],via:'fecha'}
         if(cands.length>1){ const rt=tok(r.concepto); let best=cands[0],bn=-1; cands.forEach(e=>{ const n=ov(tok(e.concept),rt); if(n>bn){bn=n;best=e} }); return {g:best,via:'fecha',score:bn} } }
       // Sin OT ni fecha que calce (históricos sin fecha): cliente + monto + glosa (≥1 palabra en común).
