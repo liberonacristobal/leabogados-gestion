@@ -11770,11 +11770,22 @@ function FacturaEmailModal({factura, client, user, onSent, onClose}) {
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
+    supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value) setPara(String(data.value).trim()) },()=>{})   // destinatario de facturas aprendido (prima sobre client.email)
     return ()=>{alive=false} },[client?.id])
   useEffect(()=>{ let alive=true; supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setFirma(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{}); return ()=>{alive=false} },[myEmail])
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
+  const [iaBusy,setIaBusy]=useState(false)
+  // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
+  const redactarIA=async()=>{ setIaBusy(true)
+    try{
+      const prompt=`Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(factura.amount)}\n- Glosa/servicio (puede venir abreviada): ${glosa||'servicios legales prestados'}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir de la glosa de forma natural y profesional; NO menciones vencimiento ni plazos de pago; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (saludo + 1 o 2 párrafos), sin asunto ni firma.`
+      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
+      const txt=(data.content?.[0]?.text||'').trim()
+      if(txt) setBody(txt)
+    }catch(e){ alert('No se pudo redactar: '+(e?.message||e)) }
+    setIaBusy(false) }
   const buildHtml=()=>`<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,'es')}</div></div>`
   const enviar=async()=>{
     if(!para.trim()){ alert('Falta el destinatario.'); return }
@@ -11784,6 +11795,7 @@ function FacturaEmailModal({factura, client, user, onSent, onClose}) {
       if(!token){ alert('No se pudo conectar a Gmail. Reingresa con tu correo @leabogados.cl.'); setSending(false); return }
       await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:body,bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
+      if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       const at=new Date().toISOString()
       try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',factura.id) }catch(_){}
       onSent&&onSent(factura.id,at); onClose()
@@ -11802,7 +11814,13 @@ function FacturaEmailModal({factura, client, user, onSent, onClose}) {
           <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>addCc(ccInput)} placeholder='+ correo' style={{flex:1,minWidth:90,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></div>
       </div>
       <div><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e=>setAsunto(e.target.value)} style={fInp}/></div>
-      <div><div style={lbl}>MENSAJE</div><textarea value={body} onChange={e=>setBody(e.target.value)} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/></div>
+      <div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
+          <span style={{fontSize:10,color:C.muted,fontWeight:600}}>MENSAJE</span>
+          <button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':'✦ Redactar con IA'}</button>
+        </div>
+        <textarea value={body} onChange={e=>setBody(e.target.value)} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
+      </div>
       <div><div style={lbl}>PDF DE LA FACTURA (DTE con timbre)</div>
         {pdf? <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span><button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
           : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>}
