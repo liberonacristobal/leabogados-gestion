@@ -1735,7 +1735,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
       const over = activePoint===firstFut ? pending.filter(b=>b.due<m.key.slice(0,7)+'-01') : []
       const emit = pending.filter(b=>b.due?.startsWith(m.key))
       const prog = programadas.filter(b=>b.due?.startsWith(m.key))
-      items = [...over,...emit].map(b=>({b,tag:b.status==='Vencido'?'Vencido':'Emitido',col:b.status==='Vencido'?C.overdue:C.accent}))
+      items = [...over,...emit].map(b=>({b,tag:b.status==='Vencido'?'Vencido':'Emitido',col:estadoCobro(b).color}))
         .concat(prog.map(b=>({b,tag:'Programado',col:C.muted})))
     }
     items.sort((a,b)=>(b.b.amount||0)-(a.b.amount||0))
@@ -1787,7 +1787,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
                     <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:9,fontWeight:600,color:b.status==='Programada'?C.muted:b.status==='Vencido'?C.overdueText:C.accent}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
+                    <div style={{fontSize:9,fontWeight:600,color:estadoCobro(b).text}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
                     <div style={{fontSize:12.5,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtKpi(saldoBill(b))}</div>
                   </div>
                 </div>
@@ -1898,7 +1898,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
                     <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:9,fontWeight:600,color:b.status==='Programada'?C.muted:b.status==='Vencido'?C.overdueText:C.accent}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
+                    <div style={{fontSize:9,fontWeight:600,color:estadoCobro(b).text}}>{b.status==='Programada'?'programada':b.status==='Vencido'?'vencida':'por cobrar'}</div>
                     <div style={{fontSize:12.5,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(saldoBill(b))}</div>
                   </div>
                 </div>
@@ -12538,7 +12538,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                           <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
                           <div style={{fontSize:10,color:C.muted,display:'flex',gap:6,marginTop:2,alignItems:'center'}}>
                             <span>{b.invoice_no||'—'}</span><span>·</span>
-                            <Pill label={b.status} bg={pagada?C.normal:b.status==='Vencido'?C.overdue:b.status==='Programada'?C.done:b.status==='Anulada'?C.done:C.soon} small/>
+                            <Pill label={b.status} bg={estadoCobro(b).color} small/>
                           </div>
                         </div>
                         <div style={{fontSize:13,fontWeight:600,color:pagada?C.greenText:C.text,flexShrink:0}}>{fmt(b.amount)}</div>
