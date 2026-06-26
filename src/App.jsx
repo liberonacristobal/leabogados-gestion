@@ -6154,6 +6154,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         )}
       </div>
       {/* FAB "Nueva factura" retirado a pedido del usuario (alta manual de cobros queda en la ficha del cliente → Financiero) */}
+      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
     </div>
   )
 }
@@ -7098,7 +7099,6 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           </div>
         )}
       </div>
-      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
     </>
   )
 }
