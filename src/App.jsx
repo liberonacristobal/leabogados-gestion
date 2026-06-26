@@ -6075,67 +6075,59 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
               {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
             </div>
-            {list.map(({c,arr})=>{
-            const visible=arr.filter(matchEst)
-            if(!visible.length) return null
-            const open=openClients.has(c.id)
-            const nP=arr.filter(b=>b.status==='Programada').length
-            const nE=arr.filter(b=>b.invoice_no&&estadoReal(b)==='Pendiente').length
-            const nV=arr.filter(b=>b.invoice_no&&estadoReal(b)==='Vencido').length
-            const nPag=arr.filter(b=>['Pagado','Anticipada'].includes(b.status)).length
-            const pend=arr.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0)
-            const prox=arr.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))[0]
-            // ⚠ Conciliar: programadas con una emitida REAL equivalente. MISMO criterio que el modal de conciliación (NUNCA monto+mes suelto): folio con dígitos + match de cuota (N/M) o período en la glosa + tolerancia (25% si cuota, 6% si solo período). Así el conteo del chip calza con lo que muestra el modal.
-            // Helpers locales (los del modal viven en otro componente): cuota N/M y período (AAAA-MM) desde la glosa.
-            const cuotaNM = cc => { const m=String(cc||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
-            const _mesMap={enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
-            const concPeriodo = cc => { const s=String(cc||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_mesMap)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_mesMap[k]).padStart(2,'0')}` } return null }
-            const realesC=arr.filter(b=>b.issued_at&&b.status!=='Programada'&&b.status!=='Anulada')
-            const conciliables=new Set()
-            arr.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).forEach(p=>{ const a=p.amount||0; if(!a) return; const pcu=cuotaNM(p.concept), pper=concPeriodo(p.concept); const hit=realesC.some(r=>{ if(!/\d/.test(folioN(r.invoice_no||''))) return false; const rcu=cuotaNM(r.concept), rper=concPeriodo(r.concept); const sameCu=!!(pcu&&rcu&&pcu.n===rcu.n); const samePer=!!(pper&&rper&&pper===rper); if(!sameCu&&!samePer) return false; const dM=a?Math.abs((r.amount||0)-a)/a:1; return dM<=(sameCu?0.25:0.06) }); if(hit) conciliables.add(p.id) })
-            const rsList=(clientEntities||[]).filter(e=>String(e.client_id)===String(c.id))
-            const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
-            const GRUPOS=[['Vencidas',b=>b.invoice_no&&estadoReal(b)==='Vencido',ESTADO_COBRO.vencido.color,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Por cobrar',b=>b.invoice_no&&estadoReal(b)==='Pendiente',ESTADO_COBRO.porCobrar.color,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Por facturar',b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status),ESTADO_COBRO.porFacturar.color,(a,b)=>(a.due||'').localeCompare(b.due||'')],['Pagadas',b=>['Pagado','Anticipada'].includes(b.status),ESTADO_COBRO.cobrado.color,(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')],['Anuladas',b=>b.status==='Anulada',ESTADO_COBRO.anulada.color,()=>0]]
-            const defColapsado=lbl=> lbl==='Pagadas'||lbl==='Anuladas'
-            const renderGrupos=(facts,sk)=> GRUPOS.map(([lbl,pred,col,srt])=>{ const gr=facts.filter(pred).sort(srt); if(!gr.length) return null; const key=`${sk}|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:!defColapsado(lbl); const sub=gr.reduce((a,b)=>a+(['Vencidas','Por cobrar'].includes(lbl)?saldoBill(b):montoDe(b)),0); const _ec=Object.values(ESTADO_COBRO).find(x=>x.color===col)||{bg:C.bgWarm,text:C.grisText}; const ch={bg:_ec.bg,fg:_ec.text}; return (
-              <div key={key}>
-                <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',margin:'7px 0 4px'}}>
-                  <span style={{fontSize:9.5,fontWeight:700,background:ch.bg,color:ch.fg,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
-                  <span style={{fontSize:10,fontWeight:700,background:ch.bg,color:ch.fg,borderRadius:14,padding:'2px 9px'}}>{fmt(sub)}</span>
-                </div>
-                {isOpen&&gr.map(b=>fila(b,conciliables.has(b.id),c))}
-              </div>
-            )})
-            return (
-              <div key={c.id} style={{border:`1px solid ${nV>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
-                <div onClick={()=>toggleClient(c.id)} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>{pend>0&&<span style={{fontSize:13,fontWeight:600,color:nV>0?C.overdue:C.accent,flexShrink:0}}>{fmt(pend)}</span>}</div>
-                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.multi||rs.name!==c.name||rs.rut)?<div style={{fontSize:9,color:rs.multi?C.soonText:C.muted,fontWeight:rs.multi?600:400,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
-                  <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap',alignItems:'center'}}>
-                    {nP>0&&<span style={{fontSize:9,background:'#F1EFE8',color:C.grisText,borderRadius:9,padding:'1px 7px'}}>{nP} prog</span>}
-                    {nE>0&&<span style={{fontSize:9,background:C.azulBg,color:C.accent,borderRadius:9,padding:'1px 7px'}}>{nE} emit</span>}
-                    {nV>0&&<span style={{fontSize:9,background:C.overdueBg,color:C.overdueText,borderRadius:9,padding:'1px 7px'}}>{nV} venc</span>}
-                    {nPag>0&&<span style={{fontSize:9,background:C.greenBg,color:C.greenText,borderRadius:9,padding:'1px 7px'}}>{nPag} pag</span>}
-                    {conciliables.size>0&&<span onClick={(e)=>{e.stopPropagation();onConciliar&&onConciliar(c)}} style={{fontSize:9,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:9,padding:'1px 7px',fontWeight:600,cursor:'pointer'}}>⚠ {conciliables.size} conciliar</span>}
-                    {onOpenClientFicha&&c.id&&c.id!=='__none__'&&<span onClick={(e)=>{e.stopPropagation();onOpenClientFicha(c.id)}} style={{marginLeft:'auto',fontSize:9,color:C.accent,fontWeight:700,cursor:'pointer'}}>Ficha →</span>}
+            {(()=>{
+              // ETAPA 2 — dos secciones de primer nivel: Cuentas por cobrar (emitida con saldo) y Por facturar (sin folio). Dentro, agrupado por cliente, la más antigua pendiente primero. Cobradas/anuladas colapsadas. Color por canon estadoCobro.
+              const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
+              const esCobrar=b=>b.invoice_no&&['Pendiente','Vencido'].includes(estadoReal(b))
+              const esFacturar=b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)
+              const esCerrada=b=>['Pagado','Anticipada','Anulada'].includes(b.status)
+              const oldKey=b=>venceDe(b)||b.due||b.issued_at||'2999-12-31'
+              const clienteCard=(c,fs,sk,money,srt)=>{
+                const sorted=[...fs].sort(srt); const sub=fs.reduce((a,b)=>a+money(b),0); const key=sk+'|'+c.id
+                const open=groupOpen[key]!==undefined?groupOpen[key]:true; const rs=rsLabel(c.id,clients,clientEntities)
+                return (<div key={c.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'9px 11px',marginBottom:8}}>
+                  <div onClick={()=>setGroupOpen(p=>({...p,[key]:!open}))} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
+                    <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:C.muted,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(sub)}</span>
                   </div>
-                  {prox&&<div style={{fontSize:9,color:C.muted,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Próxima a emitir: {prox.concept||'—'} · {fmtDate(prox.due)}</div>}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6,marginTop:1,minHeight:13}}>
+                    {(rs.multi||rs.name!==c.name||rs.rut)?<span style={{fontSize:9,color:rs.multi?C.soonText:C.muted,fontWeight:rs.multi?600:400,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</span>:<span style={{minWidth:0}}/>}
+                    {onOpenClientFicha&&c.id&&c.id!=='__none__'&&<span onClick={(e)=>{e.stopPropagation();onOpenClientFicha(c.id)}} style={{fontSize:9,color:C.accent,fontWeight:700,cursor:'pointer',flexShrink:0}}>Ficha →</span>}
+                  </div>
+                  {open&&<div style={{marginTop:6}}>{sorted.map(b=>fila(b,yaFacturadasIds.has(b.id),c))}</div>}
+                </div>)
+              }
+              const seccion=(titulo,colTit,pred,money,srt,venc)=>{
+                const cs=list.map(({c,arr})=>({c,fs:arr.filter(b=>pred(b)&&matchEst(b))})).filter(x=>x.fs.length)
+                if(!cs.length) return null
+                cs.sort((a,b)=>{ const ma=a.fs.reduce((m,x)=>oldKey(x)<m?oldKey(x):m,'9999'); const mb=b.fs.reduce((m,x)=>oldKey(x)<m?oldKey(x):m,'9999'); return ma.localeCompare(mb) })
+                const tot=cs.reduce((s,x)=>s+x.fs.reduce((a,b)=>a+money(b),0),0)
+                return (<div style={{marginBottom:16}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'0 2px 8px'}}>
+                    <span style={{fontSize:12,fontWeight:700,color:colTit,letterSpacing:.3,textTransform:'uppercase'}}>{titulo}</span>
+                    <div style={{textAlign:'right'}}><div style={{fontSize:15,fontWeight:700,color:colTit}}>{fmt(tot)}</div>{venc>0&&<div style={{fontSize:10,color:C.overdue,fontWeight:600}}>vencido {fmt(venc)}</div>}</div>
+                  </div>
+                  {cs.map(({c,fs})=>clienteCard(c,fs,titulo,money,srt))}
+                </div>)
+              }
+              const srtCobrar=(a,b)=>oldKey(a).localeCompare(oldKey(b))
+              const srtFacturar=(a,b)=>(a.due||a.issued_at||'').localeCompare(b.due||b.issued_at||'')
+              const srtCerr=(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')
+              const vencGlobal=list.reduce((s,{arr})=>s+arr.filter(b=>esCobrar(b)&&estadoReal(b)==='Vencido'&&matchEst(b)).reduce((a,b)=>a+saldoBill(b),0),0)
+              const secCobrar=seccion('Cuentas por cobrar',C.accent,esCobrar,saldoBill,srtCobrar,vencGlobal)
+              const secFacturar=seccion('Por facturar',C.muted,esFacturar,montoDe,srtFacturar,0)
+              const cerr=list.map(({c,arr})=>({c,fs:arr.filter(b=>esCerrada(b)&&matchEst(b))})).filter(x=>x.fs.length)
+              const ccOpen=groupOpen.__cerradas===true
+              const secCerr=cerr.length?(<div style={{marginBottom:8}}>
+                <div onClick={()=>setGroupOpen(p=>({...p,__cerradas:!ccOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'0 2px 8px',cursor:'pointer'}}>
+                  <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:'uppercase'}}>Cobradas y anuladas {ccOpen?'▾':'▸'}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:C.muted}}>{cerr.reduce((s,x)=>s+x.fs.length,0)}</span>
                 </div>
-                {open&&<div style={{padding:'0 11px 9px'}}>{
-                  rsList.length>=2 ? (()=>{
-                    const byRS={}; visible.forEach(b=>{ const e=efEntity(b); const k=e?String(e.id):'sin'; (byRS[k]=byRS[k]||[]).push(b) })
-                    const order=[...rsList.map(e=>String(e.id)),'sin'].filter(k=>byRS[k]&&byRS[k].length)
-                    return order.map(k=>{ const facts=byRS[k]; const ent=rsList.find(e=>String(e.id)===k); const recep=facts.map(b=>b.receptor_name).find(Boolean); const recepRut=facts.map(b=>b.receptor_rut).find(Boolean); const rsName=ent?`${ent.name}${ent.rut?` · ${ent.rut}`:''}`:(recep?`${recep}${recepRut?` · ${recepRut}`:''}`:'Sin razón social'); const rsPend=facts.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0); return (
-                      <div key={k} style={{marginTop:6}}>
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:k==='sin'?'#FFF8E1':C.azulBg,borderRadius:7,padding:'5px 9px'}}><span style={{fontSize:11,fontWeight:700,color:k==='sin'?C.soonText:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsName}</span>{rsPend>0&&<span style={{fontSize:9,color:C.muted,flexShrink:0,marginLeft:6}}>pend. {fmt(rsPend)}</span>}</div>
-                        {renderGrupos(facts, c.id+'|'+k)}
-                      </div>
-                    )})
-                  })() : renderGrupos(visible, c.id)
-                }</div>}
-              </div>
-            )
-          })}</div>)
+                {ccOpen&&cerr.map(({c,fs})=>clienteCard(c,fs,'cerr',b=>b.amount||0,srtCerr))}
+              </div>):null
+              if(!secCobrar&&!secFacturar&&!secCerr) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
+              return <>{secCobrar}{secFacturar}{secCerr}</>
+            })()}</div>)
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
