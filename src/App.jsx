@@ -5420,6 +5420,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const esEmitida = b => b.invoice_no && b.status!=='Programada' && b.status!=='Anulada'
   // Estado de envío por correo de una factura emitida: null si no aplica; si no, {txt,col}.
   const envioBadge = b => { if(!esEmitida(b)) return null; if(b.email_sent_at){ const d=Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000); return {txt:d>0?`Enviada · ${d}d`:'Enviada',col:C.greenText} } return {txt:'Sin enviar',col:C.coralText} }
+  const [cobranzaOpen,setCobranzaOpen] = useState(false)
+  const venceG = b => b.due || (b.issued_at ? (()=>{const x=new Date(b.issued_at+'T00:00:00'); x.setDate(x.getDate()+30); return x.toISOString().slice(0,10)})() : '')
+  const esVencidaG = b => b.status==='Vencido' || (b.status==='Pendiente' && venceG(b) && venceG(b) < new Date().toISOString().slice(0,10))
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   const recordarCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -5672,6 +5675,28 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </button>
           )})}
         </div>}
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&filter!=='terceros'&&(()=>{
+          const lista=bb.filter(b=>!b.deleted_at&&esEmitida(b)&&b.email_sent_at&&saldoBill(b)>0&&!['Pagado','Anulada','Anticipada'].includes(b.status))
+            .map(b=>({b,dias:Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000),venc:esVencidaG(b)}))
+            .sort((a,z)=>z.dias-a.dias)
+          if(!lista.length) return null
+          const tot=lista.reduce((a,x)=>a+saldoBill(x.b),0)
+          return (<div style={{background:'#FCF3F2',border:'0.5px solid #F3D6D4',borderRadius:11,padding:'9px 12px',marginBottom:9}}>
+            <div onClick={()=>setCobranzaOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+              <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.overdue} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M10 5a2 2 0 0 1 4 0c4 1 4 5 4 7l1 3H5l1-3c0-2 0-6 4-7'/><path d='M9 18a3 3 0 0 0 6 0'/></svg>
+              <span style={{fontSize:12.5,fontWeight:700,color:C.coralText,flex:1}}>{lista.length} {lista.length===1?'factura enviada sin pago':'facturas enviadas sin pago'} · {fmt(tot)}</span>
+              <span style={{fontSize:10,color:C.muted}}>{cobranzaOpen?'▲':'▼'}</span>
+            </div>
+            {cobranzaOpen&&<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+              {lista.map(({b,dias,venc})=>{ const cl=clients.find(x=>x.id===b.client_id); return (
+                <div key={b.id} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:'0.5px solid #F3D6D4'}}>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>Enviada hace {dias}d{venc?' · vencida':''} · {fmt(saldoBill(b))}</div></div>
+                  <button onClick={()=>recordarCobro(b)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'4px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Recordar</button>
+                </div>
+              )})}
+            </div>}
+          </div>)
+        })()}
         {filter!=='resumen'&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9,flexWrap:'wrap'}}>
           <span onClick={()=>{setFilter('resumen');clearSel()}} title='Volver al resumen' style={{fontSize:16,color:C.accent,cursor:'pointer',flexShrink:0,lineHeight:1}}>←</span>
           <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
