@@ -5430,6 +5430,37 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [recordadoMap,setRecordadoMap] = useState({})
   useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','factura_recordado').then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ m[r.key]=r.value }); setRecordadoMap(m) } },()=>{}); return ()=>{alive=false} },[])
   const diasDesde = iso => iso ? Math.floor((Date.now()-new Date(iso).getTime())/86400000) : null
+  // "Buscar pago": trae los abonos del banco (cartola) a Facturación para conciliar cada factura desde aquí. Reusa el calce exacto (monto = saldo, TOL=0) + el RUT del receptor; la marca-pagada va por onStatusChange (probada).
+  const nrG = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+  const efClientIdG = b => b.client_id || (b.receptor_rut ? (clientEntities.find(e=>nrG(e.rut)===nrG(b.receptor_rut))?.client_id) : null) || null
+  const [abonos,setAbonos] = useState([])
+  useEffect(()=>{ let alive=true; supabase.from('cartola_movimientos').select('*').eq('tipo','abono').neq('es_interno',true).order('fecha',{ascending:false}).then(({data})=>{ if(alive&&data) setAbonos(data) },()=>{}); return ()=>{alive=false} },[])
+  const [pagosFor,setPagosFor] = useState(null)   // factura.id cuyo "Buscar pago" está abierto
+  const [pagoBusy,setPagoBusy] = useState(false)
+  // Abonos del banco que CALZAN exacto con el saldo de la factura, del mismo cliente o RUT del receptor, no conciliados.
+  const pagosDe = b => { const cid=efClientIdG(b); const rut=nrG(b.receptor_rut); const saldo=saldoBill(b)
+    return abonos.filter(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); if(m.estado==='conciliado'||resto<=0) return false; const mc=cid&&String(m.cliente_id)===String(cid); const mr=rut&&nrG(m.rut_contraparte)===rut; return (mc||mr)&&resto===saldo })
+      .map(m=>({m, rut:!!(rut&&nrG(m.rut_contraparte)===rut)}))
+      .sort((a,z)=>(z.rut?1:0)-(a.rut?1:0)||String(z.m.fecha||'').localeCompare(String(a.m.fecha||''))) }
+  // Concilia un abono con una factura (calce exacto = pago total): inserta la conciliación + marca el movimiento + deja la factura pagada (onStatusChange).
+  const conciliarPago = async(m, b) => {
+    if(pagoBusy) return
+    if(!confirm(`¿Conciliar el pago de ${fmt(m.monto)} (${fmtDate(m.fecha)}) con la Factura N° ${folioN(b.invoice_no)}? Quedará pagada y enlazada al movimiento del banco.`)) return
+    setPagoBusy(true)
+    try{
+      const aplicado=saldoBill(b)
+      const ins=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'factura',factura_id:b.id,monto_aplicado:aplicado,origen:'manual',marco_pago:true}).select().single()
+      if(ins.error) throw ins.error
+      const movAplicado=(m.monto_conciliado||0)+aplicado
+      const estado=((m.monto||0)-movAplicado)<=0?'conciliado':'parcial'
+      await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',m.id)
+      setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
+      await onStatusChange(b.id,'Pagado',m.fecha)
+      setPagosFor(null)
+      alert('Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.')
+    }catch(e){ alert('No se pudo conciliar: '+(e.message||e)) }
+    setPagoBusy(false)
+  }
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   const recordarCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -5906,6 +5937,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
                 {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
                 {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
+                {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>setPagosFor(pagosFor===b.id?null:b.id)} style={{fontSize:10,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Buscar pago</button>}
+                {pagosFor===b.id&&(()=>{ const ps=pagosDe(b); return (<div style={{width:'100%',marginTop:6,background:C.tealBg,borderRadius:9,padding:'8px 10px'}}>
+                  {ps.length===0
+                    ? <div style={{fontSize:10,color:C.tealText}}>Sin pagos del banco que calcen con {fmt(saldoBill(b))}. {onConciliar&&<span onClick={()=>onConciliar(clients.find(c=>String(c.id)===String(efClientIdG(b))))} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Ver en Conciliación →</span>}</div>
+                    : <><div style={{fontSize:9,color:C.tealText,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,marginBottom:5}}>Pagos del banco que calzan · {fmt(saldoBill(b))}</div>
+                      {ps.map(({m,rut})=>(<div key={m.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:`1px solid ${rut?C.normal:C.border}`,borderRadius:8,padding:'7px 9px',marginBottom:5}}>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:rut?C.greenText:C.soonText}}>{rut?'CALCE EXACTO · mismo RUT':'MISMO MONTO'}</div><div style={{fontSize:11,color:C.text,marginTop:2}}>{fmtDate(m.fecha)} · <b>{fmt(m.monto)}</b></div><div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}{m.n_operacion?` · Op ${m.n_operacion}`:''}</div></div>
+                        <button disabled={pagoBusy} onClick={()=>conciliarPago(m,b)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.normal,border:'none',borderRadius:20,padding:'5px 12px',cursor:pagoBusy?'default':'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Conciliar pago</button>
+                      </div>))}</>}
+                </div>)})()}
               </div>}
             </div>
           )}
@@ -6128,6 +6169,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
                 {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
                 {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
+                {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>setPagosFor(pagosFor===b.id?null:b.id)} style={{fontSize:10,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Buscar pago</button>}
+                {pagosFor===b.id&&(()=>{ const ps=pagosDe(b); return (<div style={{width:'100%',marginTop:6,background:C.tealBg,borderRadius:9,padding:'8px 10px'}}>
+                  {ps.length===0
+                    ? <div style={{fontSize:10,color:C.tealText}}>Sin pagos del banco que calcen con {fmt(saldoBill(b))}. {onConciliar&&<span onClick={()=>onConciliar(clients.find(c=>String(c.id)===String(efClientIdG(b))))} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Ver en Conciliación →</span>}</div>
+                    : <><div style={{fontSize:9,color:C.tealText,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,marginBottom:5}}>Pagos del banco que calzan · {fmt(saldoBill(b))}</div>
+                      {ps.map(({m,rut})=>(<div key={m.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:`1px solid ${rut?C.normal:C.border}`,borderRadius:8,padding:'7px 9px',marginBottom:5}}>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:rut?C.greenText:C.soonText}}>{rut?'CALCE EXACTO · mismo RUT':'MISMO MONTO'}</div><div style={{fontSize:11,color:C.text,marginTop:2}}>{fmtDate(m.fecha)} · <b>{fmt(m.monto)}</b></div><div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}{m.n_operacion?` · Op ${m.n_operacion}`:''}</div></div>
+                        <button disabled={pagoBusy} onClick={()=>conciliarPago(m,b)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.normal,border:'none',borderRadius:20,padding:'5px 12px',cursor:pagoBusy?'default':'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Conciliar pago</button>
+                      </div>))}</>}
+                </div>)})()}
               </div>}
             </div>
           )}
