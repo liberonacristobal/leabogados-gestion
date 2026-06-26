@@ -11438,12 +11438,16 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
-    const monto='$'+(b.amount||0).toLocaleString('es-CL')
+    const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
     const venc=b.due?fmtFechaDMY(b.due):''
-    if(!confirm(`¿Enviar recordatorio de cobro a ${to} por ${folio} (${monto})?`)) return
-    const texto=`Estimados,\n\nLes recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.\n\nQuedamos atentos a su confirmación. Saludos cordiales,\nLiberona Escala Abogados`
-    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Les recordamos amablemente el pago pendiente de <b>${esc(folio)}</b>${b.concept?` (${esc(b.concept)})`:''} por <b>${monto}</b>${venc?`, con vencimiento <b>${venc}</b>`:''}.<br><br>Quedamos atentos a su confirmación. Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
-    try{ await sendMailServer({to, subject:`Recordatorio de cobro — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
+    const vencida = b.status==='Vencido' || (b.status==='Pendiente' && b.due && b.due < new Date().toISOString().slice(0,10))   // tono: amable al día, firme si venció
+    if(!confirm(`¿Enviar recordatorio ${vencida?'(firme) ':'(amable) '}de cobro a ${to} por ${folio} (${monto})?`)) return
+    const apertura=vencida
+      ? `Nos dirigimos a ustedes para hacer presente que ${folio}${b.concept?` (${b.concept})`:''}, por ${monto}, se encuentra pendiente y vencida${venc?` (venció el ${venc})`:''}. Les agradeceremos regularizar el pago a la brevedad.`
+      : `Les recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.`
+    const texto=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\nLiberona Escala Abogados`
+    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${DATOS_PAGO_HTML}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
+    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Registrar pago (total o parcial/abono). Si el monto recibido < saldo → queda "abonado" (paid_amount) y la factura sigue pendiente.
