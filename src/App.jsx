@@ -76,6 +76,8 @@ const bigDate = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul',
 let _respaldoCache = {}
 const setRespaldoCache = m => { _respaldoCache = m || {} }
 const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) return 0; const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.max(0,(b.amount||0)-abonado) }
+// Por cobrar de un conjunto de facturas — FUENTE ÚNICA del "por cobrar" del cliente (lista, ficha Resumen y Financiero deben coincidir). Solo cuentas por cobrar REALES: emitidas con folio, Pendiente/Vencido, saldo pendiente (saldoBill). Excluye sin-folio (eso es "por facturar"), anticipadas, anuladas y reembolsos.
+const porCobrarBills = bills => (bills||[]).filter(b=>b && !b.deleted_at && b.billing_type!=='reembolso' && b.invoice_no && ['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
 // CANON DE COLOR POR ESTADO DE COBRO — fuente única (un color por estado, sin duplicados ni hex sueltos). Cada estado: {label, color (línea/borde/cifra), bg (fondo de badge), text (texto sobre bg)}.
 const ESTADO_COBRO = {
   vencido:     {label:'Vencido',      color:C.overdue,  bg:C.overdueBg, text:C.overdueText},
@@ -2169,7 +2171,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const cobradoDelFacturado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
   const tasaCobro = facturado>0 ? Math.min(100,Math.round((cobradoDelFacturado/facturado)*100)) : 0
 
-  const porCobrar = bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
+  const porCobrar = bb.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
   // KPIs accionables del Dashboard (mismo criterio que Facturación). Tappables → tab Facturación.
   const kpiPendiente = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
@@ -11404,7 +11406,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const facturas=useMemo(()=>clientBilling.filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&b.status!=='Programada'),[clientBilling])
   const facturado=facturas.reduce((s,b)=>s+(b.amount||0),0)
   const pagadoTot=facturas.reduce((s,b)=>s+(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0)),0)
-  const porCobrar=facturado-pagadoTot
+  const porCobrar=porCobrarBills(clientBilling)
   const fg=fgCliente(expenses,client.id)
   const aFavor=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
   const hoy=new Date();hoy.setHours(0,0,0,0)
@@ -11416,7 +11418,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const kpi=(label,val,sub,col,corner)=>(<div style={{background:'#F5F7F9',borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
   return (<div style={{padding:'14px 20px 40px'}}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:12}}>
-      {kpi('Por cobrar',porCobrar,`facturado ${fmt(facturado)} − pagado ${fmt(pagadoTot)}`,porCobrar>0?C.overdueText:C.greenText)}
+      {kpi('Por cobrar',porCobrar,'facturas emitidas sin pagar',porCobrar>0?C.accent:C.greenText)}
       {kpi('Saldo fondos',fg.saldo,`fondos ${fmt(fg.fondos)} − gastos ${fmt(fg.gastos)}`,fg.saldo<0?C.overdueText:C.greenText,onAjuste&&<button onClick={()=>onAjuste(client)} title='Ajustar saldo' style={{position:'absolute',top:4,right:6,background:'none',border:'none',color:C.done,cursor:'pointer',fontSize:13,lineHeight:1,padding:2}}>⋯</button>)}
       {kpi('A favor',aFavor,'anticipos disponibles',aFavor>0?C.greenText:C.muted)}
     </div>
@@ -11587,7 +11589,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const real = all.filter(b=>b.billing_type!=='reembolso')
   const facturado = real.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
-  const porCobrar = real.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
+  const porCobrar = porCobrarBills(real)
   const programado = real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
   const overdueTot = real.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
 
@@ -12381,7 +12383,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const vendidoUF = clientSales.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const facturado = clientBilling.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
-  const porCobrar = clientBilling.filter(b=>['Pendiente','Vencido'].includes(b.status))
+  const porCobrar = clientBilling.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
   // Saldo del cliente: fuente única (fgCliente) — mismo criterio (todo lo no-fondo es gasto) que la lista de Gastos y el Dashboard.
   const {fondos, gastos, saldo:saldoFondos} = fgCliente(expenses, client.id)
@@ -12912,7 +12914,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         {cl.map(c=>{
           const ended=c.status==='Terminado'
           const activeSales=sales.filter(s=>s.client_id===c.id&&s.status==='Activo').length
-          const cp=billing.filter(b=>b.client_id===c.id&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+(b.amount||0),0)
+          const cp=porCobrarBills(billing.filter(b=>b.client_id===c.id))
           const hasOverdue=billing.some(b=>b.client_id===c.id&&b.status==='Vencido')
           const balance=balances[c.id]||0
           const tareasC=tareasDe[c.id]||0
