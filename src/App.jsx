@@ -5883,7 +5883,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
           if(q.trim()) rows=rows.filter(b=>{ const c=clients.find(x=>x.id===b.client_id); return (c?.name||'').toLowerCase().includes(q.toLowerCase()) })
           if(soloSinEnviar) rows=rows.filter(sinEnviar)
-          const byC={}; rows.forEach(b=>{ const cid=b.client_id||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
+          // Cruce de información: una factura del SII/PDF trae el RUT del receptor. Si falta el link explícito (entity_id/client_id), se resuelve por ese RUT contra las razones sociales conocidas (client_entities). Así muestra a quién pertenece sin reasignar a mano.
+          const nr=r=>String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+          const efEntity=b=>{ if(b.entity_id){ const e=clientEntities.find(x=>String(x.id)===String(b.entity_id)); if(e) return e } if(b.receptor_rut){ const k=nr(b.receptor_rut); if(k){ const e=clientEntities.find(x=>nr(x.rut)===k); if(e) return e } } return null }
+          const efClientId=b=> b.client_id || efEntity(b)?.client_id || null
+          const byC={}; rows.forEach(b=>{ const cid=efClientId(b)||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
           const list=Object.entries(byC).map(([cid,arr])=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
           const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const col=er==='Vencido'?C.overdue:er==='Pendiente'?C.soon:(er==='Pagado'||er==='Anticipada')?C.normal:C.muted; const ui=ufInfoDe(b); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
@@ -5961,7 +5965,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 </div>
                 {open&&<div style={{padding:'0 11px 9px'}}>{
                   rsList.length>=2 ? (()=>{
-                    const byRS={}; visible.forEach(b=>{ const k=b.entity_id?String(b.entity_id):'sin'; (byRS[k]=byRS[k]||[]).push(b) })
+                    const byRS={}; visible.forEach(b=>{ const e=efEntity(b); const k=e?String(e.id):'sin'; (byRS[k]=byRS[k]||[]).push(b) })
                     const order=[...rsList.map(e=>String(e.id)),'sin'].filter(k=>byRS[k]&&byRS[k].length)
                     return order.map(k=>{ const facts=byRS[k]; const ent=rsList.find(e=>String(e.id)===k); const recep=facts.map(b=>b.receptor_name).find(Boolean); const recepRut=facts.map(b=>b.receptor_rut).find(Boolean); const rsName=ent?`${ent.name}${ent.rut?` · ${ent.rut}`:''}`:(recep?`${recep}${recepRut?` · ${recepRut}`:''}`:'Sin razón social'); const rsPend=facts.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+montoDe(b),0); return (
                       <div key={k} style={{marginTop:6}}>
