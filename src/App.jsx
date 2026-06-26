@@ -98,6 +98,33 @@ const estadoCobro = (b, opts={}) => {
   if(!b.invoice_no) return opts.yaFact ? ESTADO_COBRO.yaFacturada : ESTADO_COBRO.porFacturar
   return esVencidaB(b) ? ESTADO_COBRO.vencido : ESTADO_COBRO.porCobrar
 }
+// Iconos SVG inline (la app NO tiene Tabler; iconos como SVG stroke, estilo Feather). Set mínimo para las secciones de la ficha.
+const _ICON_PATHS = {
+  building:'M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M3 21h18M9 7h1M9 11h1M9 15h1M14 7h1M14 11h1M14 15h1',
+  file:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8',
+  briefcase:'M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16',
+  wallet:'M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01',
+  check:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+  users:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 0 1 0-8 4 4 0 0 1 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7',
+  id:'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM2 10h20M6 15h4',
+  mail:'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-10 6L2 7',
+  exchange:'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3',
+  clock:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3 2',
+  alert:'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',
+}
+const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
+// Sección colapsable con icono — patrón único de la ficha (colapsada por defecto, una línea con resumen; se despliega el detalle).
+const IconSection = ({icon, iconColor, title, summary, summaryColor, open, onToggle, last, children}) => (
+  <div style={{borderBottom:last?'none':`0.5px solid ${C.bgWarm}`, background:open?C.bgPanel:'transparent'}}>
+    <div onClick={onToggle} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',cursor:'pointer'}}>
+      <SIcon n={icon} s={17} c={iconColor||C.muted}/>
+      <span style={{fontSize:12,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</span>
+      {summary!=null&&<span style={{fontSize:11,color:summaryColor||C.muted,fontWeight:summaryColor&&summaryColor!==C.muted?600:400,whiteSpace:'nowrap',flexShrink:0}}>{summary}</span>}
+      <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+    </div>
+    {open&&<div style={{padding:'0 12px 12px 39px'}}>{children}</div>}
+  </div>
+)
 // La cartola/conciliación bancaria solo tiene movimientos desde esta fecha; pagos anteriores se ingresaron a mano (no hay banco que los respalde).
 const RESPALDO_CUTOFF = '2025-02-06'
 // Estado de respaldo bancario de una factura PAGADA — fuente ÚNICA del badge "verificada/pendiente/sin conciliación".
@@ -10984,6 +11011,8 @@ function ContactoTab({client, entities, onSaveFields}) {
 
   const dirty = fields.some(k=>(form[k]||'')!==(client[k]||''))
   const set = (k,v)=>setForm(f=>({...f,[k]:v}))
+  const [sec,setSec] = useState({})   // colapso de las secciones-icono (colapsadas por defecto)
+  const tog = k => setSec(s=>({...s,[k]:!s[k]}))
   const guardar = async ()=>{
     setSavingF(true)
     try{ await onSaveFields(client.id, form) }catch(e){/* avisado en handler */}
@@ -11040,85 +11069,84 @@ function ContactoTab({client, entities, onSaveFields}) {
 
   return (
     <div style={{padding:'16px 20px 60px'}}>
-      {/* Identificación */}
-      <div style={card}>
-        {sTitle('Identificación')}
-        <div style={{display:'grid',gap:10}}>
-          <div>
-            <label style={lbl}>Nombre cliente</label>
-            <input value={client.name||'—'} disabled style={{...inp,background:'#F5F7F9',color:C.muted}}/>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Para cambiarlo, usa "Editar".</div>
+      <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+        <IconSection icon='id' title='Identificación' summary={client.rut||'sin RUT'} open={sec.id} onToggle={()=>tog('id')}>
+          <div style={{display:'grid',gap:10,paddingTop:4}}>
+            <div>
+              <label style={lbl}>Nombre cliente</label>
+              <input value={client.name||'—'} disabled style={{...inp,background:'#F5F7F9',color:C.muted}}/>
+              <div style={{fontSize:10,color:C.muted,marginTop:3}}>Para cambiarlo, usa "Editar".</div>
+            </div>
+            {field('RUT','rut','12.345.678-9')}
           </div>
-          {field('RUT','rut','12.345.678-9')}
-        </div>
+          {dirty&&(
+            <div style={{display:'flex',gap:8,marginTop:12}}>
+              <button onClick={()=>setForm(fromClient())} disabled={savingF} style={{flex:1,padding:'9px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Descartar</button>
+              <button onClick={guardar} disabled={savingF} style={{flex:2,padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:savingF?.6:1}}>{savingF?'Guardando...':'Guardar cambios'}</button>
+            </div>
+          )}
+        </IconSection>
         {entities&&entities.length>0&&(
-          <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-            <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Razones sociales facturadas</div>
-            {entities.map(e=>(
-              <div key={e.id} style={{display:'flex',justifyContent:'space-between',padding:'3px 0'}}>
-                <span style={{fontSize:12,color:C.text}}>{e.name||'—'}</span>
-                <span style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</span>
+          <IconSection icon='building' title='Razones sociales facturadas' summary={entities.length} open={sec.rs} onToggle={()=>tog('rs')}>
+            <div style={{paddingTop:4}}>
+              {entities.map(e=>(
+                <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:`0.5px solid ${C.bgWarm}`}}>
+                  <span style={{fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(e.name)||'—'}</span>
+                  <Copyable text={e.rut} title='Copiar RUT'><span style={{fontSize:11,color:C.muted,fontFamily:'monospace',whiteSpace:'nowrap',flexShrink:0,marginLeft:8}}>{e.rut}</span></Copyable>
+                </div>
+              ))}
+            </div>
+          </IconSection>
+        )}
+        <IconSection icon='users' title='Personas de contacto' summary={loadingC?'…':(contacts.length||'—')} open={sec.personas} onToggle={()=>tog('personas')}>
+          <div style={{paddingTop:4}}>
+            {!showAdd&&<button onClick={()=>{setEdit(null);setCForm({nombre:'',cargo:'',email:'',telefono:''});setShowAdd(true)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:6}}>+ Agregar</button>}
+            {loadingC&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Cargando...</div>}
+            {!loadingC&&contacts.length===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin contactos.</div>}
+            {[...contacts].sort((a,b)=>(b.principal?1:0)-(a.principal?1:0)).map(c=>(
+              <div key={c.id} style={{display:'flex',gap:10,alignItems:'center',padding:'9px 0',borderBottom:`0.5px solid ${C.bgWarm}`}}>
+                <button onClick={()=>togglePrincipal(c)} title={c.principal?'Principal':'Marcar principal'} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,lineHeight:1,color:c.principal?C.soon:'#CBD5DB',flexShrink:0,padding:0}}>{c.principal?'★':'☆'}</button>
+                <div style={{width:34,height:34,borderRadius:'50%',background:C.azulBg,color:C.accent,fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nombre}{c.principal&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:'#FFF8E1',padding:'1px 7px',borderRadius:20,marginLeft:5,textTransform:'uppercase',letterSpacing:.3}}>Principal</span>}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
+                  <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap'}}>
+                    {c.email&&<a href={`mailto:${c.email}`} style={{color:C.accent,textDecoration:'none'}}>{c.email}</a>}
+                    {c.telefono&&<Copyable text={c.telefono} title='Copiar teléfono'>{c.telefono}</Copyable>}
+                  </div>
+                </div>
+                <button onClick={()=>startEdit(c)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,padding:4}}>Editar</button>
+                <button onClick={()=>eliminarContacto(c)} style={{background:'none',border:'none',color:C.overdue,cursor:'pointer',fontSize:13,padding:4}}>Eliminar</button>
               </div>
             ))}
+            {showAdd&&(
+              <div style={{marginTop:10,padding:'12px',borderRadius:10,background:'#F5F7F9',border:`1px solid ${C.border}`}}>
+                <div style={{display:'grid',gap:8}}>
+                  <input autoFocus value={cForm.nombre} onChange={e=>setCForm(f=>({...f,nombre:e.target.value}))} placeholder="Nombre *" style={inp}/>
+                  <input value={cForm.cargo} onChange={e=>setCForm(f=>({...f,cargo:e.target.value}))} placeholder="Cargo" style={inp}/>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <input value={cForm.email} onChange={e=>setCForm(f=>({...f,email:e.target.value}))} placeholder="Email" style={inp}/>
+                    <input value={cForm.telefono} onChange={e=>setCForm(f=>({...f,telefono:e.target.value}))} placeholder="Teléfono" style={inp}/>
+                  </div>
+                  <div style={{display:'flex',gap:8,marginTop:2}}>
+                    <button onClick={resetC} disabled={savingC} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                    <button onClick={guardarContacto} disabled={savingC||!cForm.nombre.trim()} style={{flex:2,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(savingC||!cForm.nombre.trim())?.6:1}}>{savingC?'Guardando...':(edit?'Guardar':'Agregar')}</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </IconSection>
+        <IconSection icon='mail' title='Destinatario de facturas' summary={(()=>{const p=contacts.find(c=>c.principal)||contacts[0];return p?(p.nombre||'').split(/\s+/)[0]:'—'})()} open={sec.dest} onToggle={()=>tog('dest')} last>
+          <DestinatarioFacturasCard client={client} contacts={contacts} embedded/>
+        </IconSection>
       </div>
-
-      {dirty&&(
-        <div style={{display:'flex',gap:8,marginBottom:20}}>
-          <button onClick={()=>setForm(fromClient())} disabled={savingF} style={{flex:1,padding:'10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Descartar</button>
-          <button onClick={guardar} disabled={savingF} style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:savingF?.6:1}}>{savingF?'Guardando...':'Guardar cambios'}</button>
-        </div>
-      )}
-
-      {/* Personas de contacto */}
-      <div style={card}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600}}>Personas de contacto</div>
-          {!showAdd&&<button onClick={()=>{setEdit(null);setCForm({nombre:'',cargo:'',email:'',telefono:''});setShowAdd(true)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Agregar</button>}
-        </div>
-        {loadingC&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Cargando...</div>}
-        {!loadingC&&contacts.length===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin contactos.</div>}
-        {[...contacts].sort((a,b)=>(b.principal?1:0)-(a.principal?1:0)).map(c=>(
-          <div key={c.id} style={{display:'flex',gap:10,alignItems:'center',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
-            <button onClick={()=>togglePrincipal(c)} title={c.principal?'Principal':'Marcar principal'} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,lineHeight:1,color:c.principal?C.soon:'#CBD5DB',flexShrink:0,padding:0}}>{c.principal?'★':'☆'}</button>
-            <div style={{width:34,height:34,borderRadius:'50%',background:C.azulBg,color:C.accent,fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nombre}{c.principal&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:'#FFF8E1',padding:'1px 7px',borderRadius:20,marginLeft:5,textTransform:'uppercase',letterSpacing:.3}}>Principal</span>}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
-              <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap'}}>
-                {c.email&&<a href={`mailto:${c.email}`} style={{color:C.accent,textDecoration:'none'}}>{c.email}</a>}
-                {c.telefono&&<Copyable text={c.telefono} title='Copiar teléfono'>{c.telefono}</Copyable>}
-              </div>
-            </div>
-            <button onClick={()=>startEdit(c)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,padding:4}}>Editar</button>
-            <button onClick={()=>eliminarContacto(c)} style={{background:'none',border:'none',color:C.overdue,cursor:'pointer',fontSize:13,padding:4}}>Eliminar</button>
-          </div>
-        ))}
-        {showAdd&&(
-          <div style={{marginTop:10,padding:'12px',borderRadius:10,background:'#F5F7F9',border:`1px solid ${C.border}`}}>
-            <div style={{display:'grid',gap:8}}>
-              <input autoFocus value={cForm.nombre} onChange={e=>setCForm(f=>({...f,nombre:e.target.value}))} placeholder="Nombre *" style={inp}/>
-              <input value={cForm.cargo} onChange={e=>setCForm(f=>({...f,cargo:e.target.value}))} placeholder="Cargo" style={inp}/>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                <input value={cForm.email} onChange={e=>setCForm(f=>({...f,email:e.target.value}))} placeholder="Email" style={inp}/>
-                <input value={cForm.telefono} onChange={e=>setCForm(f=>({...f,telefono:e.target.value}))} placeholder="Teléfono" style={inp}/>
-              </div>
-              <div style={{display:'flex',gap:8,marginTop:2}}>
-                <button onClick={resetC} disabled={savingC} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-                <button onClick={guardarContacto} disabled={savingC||!cForm.nombre.trim()} style={{flex:2,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(savingC||!cForm.nombre.trim())?.6:1}}>{savingC?'Guardando...':(edit?'Guardar':'Agregar')}</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-      <DestinatarioFacturasCard client={client} contacts={contacts}/>
     </div>
   )
 }
 
 // "Destinatario de facturas" de la ficha: fija el Para (1 contacto) + CC del cliente, auto-guardado en learnings
 // (factura_to / factura_cc) — el mismo dato que el modal de envío aprende y reusa. Así se puede fijar sin mandar una factura.
-function DestinatarioFacturasCard({client, contacts=[]}){
+function DestinatarioFacturasCard({client, contacts=[], embedded=false}){
   const [to,setTo]=useState('')
   const [cc,setCc]=useState([])
   const [ccInput,setCcInput]=useState('')
@@ -11132,13 +11160,13 @@ function DestinatarioFacturasCard({client, contacts=[]}){
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(to||'').toLowerCase()) saveCc([...cc,e]); setCcInput('') }
   const conEmail=(contacts||[]).filter(c=>c.email)
   const inpS={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#fff',boxSizing:'border-box'}
-  return (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginTop:12}}>
-    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+  return (<div style={embedded?{}:{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginTop:12}}>
+    {!embedded&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
       <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,flex:1}}>Destinatario de facturas</div>
       {saved&&<span style={{fontSize:10,color:C.greenText,fontWeight:600}}>guardado ✓</span>}
       <span style={{fontSize:9,color:C.muted,background:C.bgWarm,borderRadius:10,padding:'2px 8px'}}>se aprende del envío</span>
-    </div>
-    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:4}}>Para</div>
+    </div>}
+    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:4}}>Para {embedded&&saved&&<span style={{color:C.greenText}}>· guardado ✓</span>}{embedded&&<span style={{fontWeight:400,color:C.done}}> · se aprende del envío</span>}</div>
     {conEmail.length>0
       ? <select value={to} onChange={e=>saveTo(e.target.value)} style={inpS}>
           <option value=''>— Elegir contacto —</option>
