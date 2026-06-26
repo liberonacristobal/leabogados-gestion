@@ -11758,13 +11758,13 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
 function FacturaEmailModal({factura, client, user, onSent, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
-  const venc=factura.due?fmtFechaDMY(factura.due):''
+  const glosa=(factura.concept||'').trim()
   const [para,setPara]=useState(client?.email||'')
   const [cc,setCc]=useState([]); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [asunto,setAsunto]=useState(`Factura ${folio} · ${client?.name||''}`)
-  const [body,setBody]=useState(`Estimados,\n\nAdjuntamos la factura ${folio} por ${fmtN(factura.amount)}${venc?`, con vencimiento ${venc}`:''}.\n\nCualquier consulta quedamos atentos.`)
+  const [body,setBody]=useState(`Estimados,\n\nJunto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`)
   const [pdf,setPdf]=useState(null)
   const [sending,setSending]=useState(false)
   useEffect(()=>{ if(!client?.id) return; let alive=true
