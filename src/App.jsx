@@ -5278,6 +5278,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
   const [groupOpen,setGroupOpen] = useState({})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
+  const [rsSel,setRsSel] = useState({})   // filtro por razón social dentro de cada cliente: clientId → entityId | 'all'
   // Navegación por estado: todas las KPI cards / tabs de estado llevan al MISMO acordeón "Por cliente" filtrado por ese estado (vistas coherentes, no listas viejas distintas).
   const ESTADO_MAP={emitidas:['Pendiente','Vencido'],programadas:['Programada'],vencido:['Vencido'],pagado:['Pagado']}
   const irAEstado = fl => { setFilter('clientes'); setEstSel(new Set(ESTADO_MAP[fl]||[])) }
@@ -6037,12 +6038,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const byC={}; rows.forEach(b=>{ const cid=efClientId(b)||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
           const list=Object.entries(byC).map(([cid,arr])=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
-          const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const col=estadoCobro(b,{yaFact:conciliable}).color; const ui=ufInfoDe(b); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
+          const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const col=estadoCobro(b,{yaFact:conciliable}).color; const ui=ufInfoDe(b); const rsN=(()=>{ const e=efEntity(b); if(e?.name) return rsDisplay(e.name); if(b.receptor_name) return rsDisplay(b.receptor_name); if(cli&&cli.id){ const rl=rsLabel(cli.id,clients,clientEntities); if(rl.multi) return 'Sin razón social'; if(rl.name&&rl.name!==cli.name) return rsDisplay(rl.name) } return null })(); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',marginBottom:5,overflow:'hidden'}}>
               <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{rsN&&<span style={{color:C.muted,fontWeight:500}}> · {rsN}</span>}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?(b.concept||'—'):''}{ui?`${b.invoice_no?' · ':''}${fmtUF(ui.uf)}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}{conciliable&&!b.invoice_no&&<span style={{color:C.soonText,fontWeight:700}}> · ⚠ ya facturada</span>}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ const hayAb=saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status); return <><div style={{fontSize:13,fontWeight:600,color:hayAb?(er==='Vencido'?C.overdueText:C.accent):C.text}}>{fmt(hayAb?saldoBill(b):(ui?ui.clpHoy:b.amount))}</div>{hayAb&&<div style={{fontSize:9,color:C.muted}}>de {fmt(ui?ui.clpHoy:b.amount)}</div>}</> })()}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
@@ -6076,57 +6077,60 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
             </div>
             {(()=>{
-              // ETAPA 2 — dos secciones de primer nivel: Cuentas por cobrar (emitida con saldo) y Por facturar (sin folio). Dentro, agrupado por cliente, la más antigua pendiente primero. Cobradas/anuladas colapsadas. Color por canon estadoCobro.
+              // Vista por cliente: clientes COLAPSADOS (solo nombre + total). Al abrir → filtro por razón social + acordeones por estado (Por cobrar [vencidas primero] / Por facturar / Cobradas / Anuladas), cada factura con su RS. Aging contable: vencida más antigua primero.
               const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
               const esCobrar=b=>b.invoice_no&&['Pendiente','Vencido'].includes(estadoReal(b))
               const esFacturar=b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)
-              const esCerrada=b=>['Pagado','Anticipada','Anulada'].includes(b.status)
               const oldKey=b=>venceDe(b)||b.due||b.issued_at||'2999-12-31'
-              const clienteCard=(c,fs,sk,money,srt)=>{
-                const sorted=[...fs].sort(srt); const sub=fs.reduce((a,b)=>a+money(b),0); const key=sk+'|'+c.id
-                const open=groupOpen[key]!==undefined?groupOpen[key]:true; const rs=rsLabel(c.id,clients,clientEntities)
-                return (<div key={c.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'9px 11px',marginBottom:8}}>
-                  <div onClick={()=>setGroupOpen(p=>({...p,[key]:!open}))} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
-                    <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:C.muted,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(sub)}</span>
+              const ESTADOS=[
+                ['Por cobrar', esCobrar, ESTADO_COBRO.porCobrar.color, saldoBill, (a,b)=>oldKey(a).localeCompare(oldKey(b)), true],
+                ['Por facturar', esFacturar, ESTADO_COBRO.porFacturar.color, montoDe, (a,b)=>(a.due||a.issued_at||'').localeCompare(b.due||b.issued_at||''), false],
+                ['Cobradas', b=>['Pagado','Anticipada'].includes(b.status), ESTADO_COBRO.cobrado.color, b=>b.amount||0, (a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''), false],
+                ['Anuladas', b=>b.status==='Anulada', ESTADO_COBRO.anulada.color, b=>b.amount||0, ()=>0, false],
+              ]
+              const cards=list.map(({c,arr})=>{
+                const visible=arr.filter(matchEst)
+                if(!visible.length) return null
+                const cOpen=openClients.has(c.id)
+                const porCobrar=visible.filter(esCobrar).reduce((a,b)=>a+saldoBill(b),0)
+                const porFacturar=visible.filter(esFacturar).reduce((a,b)=>a+montoDe(b),0)
+                const headMonto=porCobrar>0?porCobrar:porFacturar
+                const headColor=porCobrar>0?C.accent:C.muted
+                const rsMap={}; visible.forEach(b=>{ const e=efEntity(b); const id=e?String(e.id):'sin'; if(!rsMap[id]) rsMap[id]={id,name:e?rsDisplay(e.name):(b.receptor_name?rsDisplay(b.receptor_name):'Sin razón social')} })
+                const rsArr=Object.values(rsMap)
+                const rsActiva=rsSel[c.id]||'all'
+                const facturas=rsActiva==='all'?visible:visible.filter(b=>{ const e=efEntity(b); return (e?String(e.id):'sin')===rsActiva })
+                const rsHead=rsLabel(c.id,clients,clientEntities)
+                return (<div key={c.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'10px 12px',marginBottom:7}}>
+                  <div onClick={()=>toggleClient(c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,cursor:'pointer'}}>
+                    <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {cOpen?'▾':'▸'}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:headColor,flexShrink:0,whiteSpace:'nowrap'}}>{fmt(headMonto)}</span>
                   </div>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6,marginTop:1,minHeight:13}}>
-                    {(rs.multi||rs.name!==c.name||rs.rut)?<span style={{fontSize:9,color:rs.multi?C.soonText:C.muted,fontWeight:rs.multi?600:400,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</span>:<span style={{minWidth:0}}/>}
+                    {(rsHead.multi||rsHead.name!==c.name||rsHead.rut)?<span style={{fontSize:9,color:rsHead.multi?C.soonText:C.muted,fontWeight:rsHead.multi?600:400,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsHead.multi?`${rsHead.multi} razones sociales`:`${rsDisplay(rsHead.name)}${rsHead.rut?` · ${rsHead.rut}`:''}`}</span>:<span style={{minWidth:0}}/>}
                     {onOpenClientFicha&&c.id&&c.id!=='__none__'&&<span onClick={(e)=>{e.stopPropagation();onOpenClientFicha(c.id)}} style={{fontSize:9,color:C.accent,fontWeight:700,cursor:'pointer',flexShrink:0}}>Ficha →</span>}
                   </div>
-                  {open&&<div style={{marginTop:6}}>{sorted.map(b=>fila(b,yaFacturadasIds.has(b.id),c))}</div>}
+                  {cOpen&&<div style={{marginTop:8}}>
+                    {rsArr.length>=2&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8}}>
+                      {[{id:'all',name:'Todas las RS'},...rsArr].map(r=>{ const on=rsActiva===r.id; return <span key={r.id} onClick={()=>setRsSel(p=>({...p,[c.id]:r.id}))} style={{fontSize:9,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,whiteSpace:'nowrap'}}>{r.name}</span> })}
+                    </div>}
+                    {ESTADOS.map(([lbl,pred,col,money,srt,defOpen])=>{
+                      const gr=facturas.filter(pred).sort(srt); if(!gr.length) return null
+                      const key=`${c.id}|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:defOpen
+                      const sub=gr.reduce((a,b)=>a+money(b),0); const _ec=Object.values(ESTADO_COBRO).find(x=>x.color===col)||{bg:C.bgWarm,text:C.grisText}
+                      return (<div key={key} style={{marginBottom:6}}>
+                        <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}}>
+                          <span style={{fontSize:9.5,fontWeight:700,background:_ec.bg,color:_ec.text,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
+                          <span style={{fontSize:11,fontWeight:700,color:_ec.text}}>{fmt(sub)}</span>
+                        </div>
+                        {isOpen&&gr.map(b=>fila(b,yaFacturadasIds.has(b.id),c))}
+                      </div>)
+                    })}
+                  </div>}
                 </div>)
-              }
-              const seccion=(titulo,colTit,pred,money,srt,venc)=>{
-                const cs=list.map(({c,arr})=>({c,fs:arr.filter(b=>pred(b)&&matchEst(b))})).filter(x=>x.fs.length)
-                if(!cs.length) return null
-                cs.sort((a,b)=>{ const ma=a.fs.reduce((m,x)=>oldKey(x)<m?oldKey(x):m,'9999'); const mb=b.fs.reduce((m,x)=>oldKey(x)<m?oldKey(x):m,'9999'); return ma.localeCompare(mb) })
-                const tot=cs.reduce((s,x)=>s+x.fs.reduce((a,b)=>a+money(b),0),0)
-                return (<div style={{marginBottom:16}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'0 2px 8px'}}>
-                    <span style={{fontSize:12,fontWeight:700,color:colTit,letterSpacing:.3,textTransform:'uppercase'}}>{titulo}</span>
-                    <div style={{textAlign:'right'}}><div style={{fontSize:15,fontWeight:700,color:colTit}}>{fmt(tot)}</div>{venc>0&&<div style={{fontSize:10,color:C.overdue,fontWeight:600}}>vencido {fmt(venc)}</div>}</div>
-                  </div>
-                  {cs.map(({c,fs})=>clienteCard(c,fs,titulo,money,srt))}
-                </div>)
-              }
-              const srtCobrar=(a,b)=>oldKey(a).localeCompare(oldKey(b))
-              const srtFacturar=(a,b)=>(a.due||a.issued_at||'').localeCompare(b.due||b.issued_at||'')
-              const srtCerr=(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')
-              const vencGlobal=list.reduce((s,{arr})=>s+arr.filter(b=>esCobrar(b)&&estadoReal(b)==='Vencido'&&matchEst(b)).reduce((a,b)=>a+saldoBill(b),0),0)
-              const secCobrar=seccion('Cuentas por cobrar',C.accent,esCobrar,saldoBill,srtCobrar,vencGlobal)
-              const secFacturar=seccion('Por facturar',C.muted,esFacturar,montoDe,srtFacturar,0)
-              const cerr=list.map(({c,arr})=>({c,fs:arr.filter(b=>esCerrada(b)&&matchEst(b))})).filter(x=>x.fs.length)
-              const ccOpen=groupOpen.__cerradas===true
-              const secCerr=cerr.length?(<div style={{marginBottom:8}}>
-                <div onClick={()=>setGroupOpen(p=>({...p,__cerradas:!ccOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'0 2px 8px',cursor:'pointer'}}>
-                  <span style={{fontSize:12,fontWeight:700,color:C.muted,letterSpacing:.3,textTransform:'uppercase'}}>Cobradas y anuladas {ccOpen?'▾':'▸'}</span>
-                  <span style={{fontSize:11,fontWeight:700,color:C.muted}}>{cerr.reduce((s,x)=>s+x.fs.length,0)}</span>
-                </div>
-                {ccOpen&&cerr.map(({c,fs})=>clienteCard(c,fs,'cerr',b=>b.amount||0,srtCerr))}
-              </div>):null
-              if(!secCobrar&&!secFacturar&&!secCerr) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
-              return <>{secCobrar}{secFacturar}{secCerr}</>
+              }).filter(Boolean)
+              if(!cards.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
+              return cards
             })()}</div>)
         })()
         : filter==='anticipos' ? null
