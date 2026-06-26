@@ -5416,6 +5416,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setPagando(false); setPayingId(null)
   }
   const [facturaEmail,setFacturaEmail] = useState(null)   // factura cuya ventana de "Enviar por correo" está abierta
+  const [soloSinEnviar,setSoloSinEnviar] = useState(false)   // filtro: solo facturas emitidas que aún no se envían por correo
+  const esEmitida = b => b.invoice_no && b.status!=='Programada' && b.status!=='Anulada'
+  // Estado de envío por correo de una factura emitida: null si no aplica; si no, {txt,col}.
+  const envioBadge = b => { if(!esEmitida(b)) return null; if(b.email_sent_at){ const d=Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000); return {txt:d>0?`Enviada · ${d}d`:'Enviada',col:C.greenText} } return {txt:'Sin enviar',col:C.coralText} }
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   const recordarCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -5830,6 +5834,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           let rows=bb.filter(b=>!b.deleted_at)
           if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
           if(q.trim()) rows=rows.filter(b=>{ const c=clients.find(x=>x.id===b.client_id); return (c?.name||'').toLowerCase().includes(q.toLowerCase()) })
+          if(soloSinEnviar) rows=rows.filter(b=>esEmitida(b)&&!b.email_sent_at)
           const byC={}; rows.forEach(b=>{ const cid=b.client_id||'__none__'; (byC[cid]=byC[cid]||[]).push(b) })
           const list=Object.entries(byC).map(([cid,arr])=>({c:clients.find(x=>x.id===cid)||{id:cid,name:'Sin cliente'},arr})).sort((a,b)=>(a.c.name||'').localeCompare(b.c.name||'','es'))
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
@@ -5839,7 +5844,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {bigDate(kpiDate(b))}
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?(b.concept||'—'):''}{ui?`${b.invoice_no?' · ':''}${fmtUF(ui.uf)}`:''}</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?(b.concept||'—'):''}{ui?`${b.invoice_no?' · ':''}${fmtUF(ui.uf)}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
@@ -5859,6 +5864,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
               {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
               {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
+              {(()=>{ const n=bb.filter(b=>!b.deleted_at&&esEmitida(b)&&!b.email_sent_at).length; return n>0?<span onClick={()=>setSoloSinEnviar(v=>!v)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${soloSinEnviar?C.coralText:C.border}`,background:soloSinEnviar?C.ambarBg:'#fff',color:soloSinEnviar?C.coralText:C.muted}}>Sin enviar · {n}</span>:null })()}
             </div>
             {list.map(({c,arr})=>{
             const visible=arr.filter(matchEst)
@@ -6045,6 +6051,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           if(fYear) rows=rows.filter(b=>(b.issued_at||b.due||'').slice(0,4)===fYear)
           if(q.trim()) rows=rows.filter(b=>{ const cl=clients.find(x=>x.id===b.client_id); const s=q.toLowerCase(); return (cl?.name||'').toLowerCase().includes(s)||(b.concept||'').toLowerCase().includes(s)||folioN(b.invoice_no).toLowerCase().includes(s) })
           rows=rows.filter(matchEst)
+          if(soloSinEnviar) rows=rows.filter(b=>esEmitida(b)&&!b.email_sent_at)
           const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
           const mesC=d=>(d||'').slice(0,7); const conc=new Set()
           bb.filter(b=>b.status==='Programada'&&!b.deleted_at).forEach(p=>{ const a=p.amount||0; if(!a) return; const pm=mesC(p.due||p.issued_at); const reals=bb.filter(r=>!r.deleted_at&&r.issued_at&&r.status!=='Programada'&&r.status!=='Anulada'&&String(r.client_id)===String(p.client_id)); const hit=reals.some(r=>{ const dM=Math.abs((r.amount||0)-a)/a; if(dM>0.15) return false; const rm=mesC(r.due||r.issued_at); if(!pm||!rm) return false; const d=(parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7))); return Math.abs(d)<=1 }); if(hit) conc.add(p.id) })
@@ -6056,7 +6063,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {bigDate(kpiDate(b))}
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{cl&&rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}{!cl&&b.receptor_name?<span style={{marginLeft:6,fontSize:9,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:9,padding:'1px 7px'}}>sin vincular</span>:''}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}</div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
