@@ -2082,12 +2082,12 @@ function computeAgingCartera(billingRows, clientesMap){
   const pend = (billingRows||[]).filter(b=>b.status==='Pendiente'||b.status==='Vencido')
   const diasVenc = b => { const dl=daysLeft(b.due); return dl===null?null:-dl }
   const bucketDe = b => { const dv=diasVenc(b); if(dv===null) return 'current'; if(dv>60) return 'overdue'; if(dv>30) return 'warning'; return 'current' }
-  const total = pend.reduce((a,b)=>a+(b.amount||0),0)
+  const total = pend.reduce((a,b)=>a+saldoBill(b),0)
   const pct = m => total>0?Math.round(m/total*100):0
-  const sumB = k => pend.filter(b=>bucketDe(b)===k).reduce((a,b)=>a+(b.amount||0),0)
+  const sumB = k => pend.filter(b=>bucketDe(b)===k).reduce((a,b)=>a+saldoBill(b),0)
   const cur=sumB('current'), war=sumB('warning'), over=sumB('overdue')
   // Facturas que componen cada tramo (para el detalle al hacer click), ordenadas por monto desc.
-  const itemsB = k => pend.filter(b=>bucketDe(b)===k).map(b=>{ const cid=b.client_id||'__none__'; const nombre=(clientesMap&&clientesMap[cid])||b.receptor_name||'Sin cliente'; return {id:b.id, nombre, monto:b.amount||0, concept:b.concept||'', due:b.due, dias:diasVenc(b)} }).sort((a,b)=>b.monto-a.monto)
+  const itemsB = k => pend.filter(b=>bucketDe(b)===k).map(b=>{ const cid=b.client_id||'__none__'; const nombre=(clientesMap&&clientesMap[cid])||b.receptor_name||'Sin cliente'; return {id:b.id, nombre, monto:saldoBill(b), concept:b.concept||'', due:b.due, dias:diasVenc(b)} }).sort((a,b)=>b.monto-a.monto)
   const buckets = { current:{monto:cur,pct:pct(cur),items:itemsB('current')}, warning:{monto:war,pct:pct(war),items:itemsB('warning')}, overdue:{monto:over,pct:pct(over),items:itemsB('overdue')} }
 
   // Delta: pendiente actual vs total facturado el mes anterior (por created_at)
