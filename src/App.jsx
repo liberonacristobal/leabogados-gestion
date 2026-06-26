@@ -5686,7 +5686,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             .sort((a,z)=>z.dias-a.dias)
           if(!lista.length) return null
           const tot=lista.reduce((a,x)=>a+saldoBill(x.b),0)
-          return (<div style={{background:'#FCF3F2',border:'0.5px solid #F3D6D4',borderRadius:11,padding:'9px 12px',marginBottom:9}}>
+          return (<div style={{background:C.overdueBg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.overdue}`,borderRadius:'0 10px 10px 0',padding:'9px 12px',marginBottom:9}}>
             <div onClick={()=>setCobranzaOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
               <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.overdue} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M10 5a2 2 0 0 1 4 0c4 1 4 5 4 7l1 3H5l1-3c0-2 0-6 4-7'/><path d='M9 18a3 3 0 0 0 6 0'/></svg>
               <span style={{fontSize:12.5,fontWeight:700,color:C.coralText,flex:1}}>{lista.length} {lista.length===1?'factura enviada sin pago':'facturas enviadas sin pago'} · {fmt(tot)}</span>
@@ -5694,7 +5694,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </div>
             {cobranzaOpen&&<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
               {lista.map(({b,dias,venc})=>{ const cl=clients.find(x=>x.id===b.client_id); return (
-                <div key={b.id} onClick={()=>onOpenClientFicha&&b.client_id&&onOpenClientFicha(b.client_id)} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:'0.5px solid #F3D6D4',cursor:onOpenClientFicha?'pointer':'default'}}>
+                <div key={b.id} onClick={()=>onOpenClientFicha&&b.client_id&&onOpenClientFicha(b.client_id)} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:`0.5px solid ${C.border}`,cursor:onOpenClientFicha?'pointer':'default'}}>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>Enviada hace {dias}d{venc?' · vencida':''} · {fmt(saldoBill(b))}</div></div>
                   <button onClick={(e)=>{e.stopPropagation();recordarCobro(b)}} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'4px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Recordar</button>
                 </div>
@@ -10944,7 +10944,7 @@ function DestinatarioFacturasCard({client, contacts=[]}){
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
       <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,flex:1}}>Destinatario de facturas</div>
       {saved&&<span style={{fontSize:10,color:C.greenText,fontWeight:600}}>guardado ✓</span>}
-      <span style={{fontSize:9,color:C.muted,background:'#F1EFE8',borderRadius:10,padding:'2px 8px'}}>se aprende del envío</span>
+      <span style={{fontSize:9,color:C.muted,background:C.bgWarm,borderRadius:10,padding:'2px 8px'}}>se aprende del envío</span>
     </div>
     <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:4}}>Para</div>
     {conEmail.length>0
@@ -10960,7 +10960,6 @@ function DestinatarioFacturasCard({client, contacts=[]}){
       <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>addCc(ccInput)} placeholder='+ correo' style={{flex:1,minWidth:90,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
     </div>
     {conEmail.filter(c=>(c.email||'').toLowerCase()!==(to||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase())).length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:6}}>{conEmail.filter(c=>(c.email||'').toLowerCase()!==(to||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase())).map(c=><button key={c.id||c.email} type='button' onClick={()=>addCc(c.email)} style={{fontSize:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>+ {c.nombre||c.email}</button>)}</div>}
-    <div style={{fontSize:10,color:C.muted,marginTop:9}}>El envío de factura usa esto solo · si lo cambias al enviar, se actualiza aquí.</div>
   </div>)
 }
 
