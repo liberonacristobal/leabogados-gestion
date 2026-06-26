@@ -105,12 +105,12 @@ function facturaRespaldo(b, respaldoMap={}, cartolaHasta=null){
   if((b.billing_type||'')==='reembolso') return null
   const monto = b.amount||0
   const aplicado = respaldoMap[b.id]||0
-  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Pagada y conciliada', short:'Conciliada', bg:C.azulBg, fg:C.accent}
+  if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Cobrada y conciliada', short:'Conciliada', bg:C.azulBg, fg:C.accent}
   if(aplicado>0) return {key:'parcial', label:`Pagada · parcial · falta ${fmt(monto-aplicado)}`, short:'Parcial', bg:C.ambarBg, fg:C.soonText}
   const fechaPago = String(b.paid_at||b.issued_at||'').slice(0,10)
   if(fechaPago && fechaPago < RESPALDO_CUTOFF) return {key:'manual', label:'Pagada (histórica)', short:'Histórica', bg:C.border, fg:C.grisText}
   if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pagada · pendiente cartola', short:'Pend. cartola', bg:C.greenBg, fg:C.greenText}
-  return {key:'sin', label:'Pagada sin conciliar', short:'Sin conciliar', bg:C.overdueBg, fg:C.overdueText}
+  return {key:'sin', label:'Cobrada sin conciliar', short:'Sin conciliar', bg:C.overdueBg, fg:C.overdueText}
 }
 // Estado unificado para mostrar (cualquier status, no solo Pagada) — fuente única del rótulo en Conciliación/Facturación/ficha.
 function estadoFacturaLabel(b, aplicado=0, cartolaHasta=null){
@@ -6069,7 +6069,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           )}
           const porCobrarTot=rows.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0)
           const vencidoTot=rows.filter(b=>estadoReal(b)==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
-          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
+          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Cobradas'],['Anulada','Anuladas']]
           return (<div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
               {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
@@ -6260,8 +6260,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
           const mesC=d=>(d||'').slice(0,7); const conc=new Set()
           bb.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&!b.deleted_at).forEach(p=>{ const a=p.amount||0; if(!a) return; const pm=mesC(p.due||p.issued_at); const reals=bb.filter(r=>!r.deleted_at&&r.issued_at&&r.invoice_no&&r.status!=='Anulada'&&String(r.client_id)===String(p.client_id)); const hit=reals.some(r=>{ const dM=Math.abs((r.amount||0)-a)/a; if(dM>0.15) return false; const rm=mesC(r.due||r.issued_at); if(!pm||!rm) return false; const d=(parseInt(pm.slice(0,4))*12+parseInt(pm.slice(5,7)))-(parseInt(rm.slice(0,4))*12+parseInt(rm.slice(5,7))); return Math.abs(d)<=1 }); if(hit) conc.add(p.id) })
-          const GR=[['Vencidas',b=>b.invoice_no&&estadoReal(b)==='Vencido',ESTADO_COBRO.vencido.color,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Por cobrar',b=>b.invoice_no&&estadoReal(b)==='Pendiente',ESTADO_COBRO.porCobrar.color,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Por facturar',b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status),ESTADO_COBRO.porFacturar.color,(a,b)=>(a.due||'').localeCompare(b.due||'')],['Pagadas',b=>['Pagado','Anticipada'].includes(b.status),ESTADO_COBRO.cobrado.color,(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')],['Anuladas',b=>b.status==='Anulada',ESTADO_COBRO.anulada.color,()=>0]]
-          const defC=lbl=>lbl==='Pagadas'||lbl==='Anuladas'
+          const GR=[['Vencidas',b=>b.invoice_no&&estadoReal(b)==='Vencido',ESTADO_COBRO.vencido.color,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Por cobrar',b=>b.invoice_no&&estadoReal(b)==='Pendiente',ESTADO_COBRO.porCobrar.color,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Por facturar',b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status),ESTADO_COBRO.porFacturar.color,(a,b)=>(a.due||'').localeCompare(b.due||'')],['Cobradas',b=>['Pagado','Anticipada'].includes(b.status),ESTADO_COBRO.cobrado.color,(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')],['Anuladas',b=>b.status==='Anulada',ESTADO_COBRO.anulada.color,()=>0]]
+          const defC=lbl=>lbl==='Cobradas'||lbl==='Anuladas'
           const filaAll=b=>{ const er=estadoReal(b); const col=estadoCobro(b,{yaFact:conc.has(b.id)}).color; const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:'0 8px 8px 0',marginBottom:5,overflow:'hidden'}}>
               <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',cursor:'pointer'}}>
@@ -6292,7 +6292,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>}
             </div>
           )}
-          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
+          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Cobradas'],['Anulada','Anuladas']]
           return (<div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
               {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
