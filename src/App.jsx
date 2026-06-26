@@ -5391,8 +5391,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     if(!uf) return null
     return { uf, clpHoy: Math.round(uf*ufHoy) }
   }
-  const pending=bb.filter(b=>b.status==='Pendiente'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
-  const overdue=bb.filter(b=>b.status==='Vencido'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
+  const pending=bb.filter(b=>b.status==='Pendiente'&&matchYM(kpiDate(b))).reduce((s,b)=>s+saldoBill(b),0)
+  const overdue=bb.filter(b=>b.status==='Vencido'&&matchYM(kpiDate(b))).reduce((s,b)=>s+saldoBill(b),0)
   const paid=bb.filter(b=>b.status==='Pagado'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   const programado=bb.filter(b=>b.status==='Programada'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   // Contadores por nº de documentos para las tabs
@@ -5997,7 +5997,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?(b.concept||'—'):''}{ui?`${b.invoice_no?' · ':''}${fmtUF(ui.uf)}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}</div>
                 </div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
                 {['Pendiente','Vencido'].includes(er)&&(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const rec=rd!=null&&rd<=2; return <button onClick={()=>recordarCobro(b)} title={rd!=null?(rd===0?'Recordado hoy':`Recordado hace ${rd}d`):''} style={{fontSize:10,color:rec?C.grisText:C.accent,background:rec?C.bgWarm:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{rec?'Recordar otra vez':'Recordar'}</button> })()}
@@ -6034,7 +6034,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const nE=arr.filter(b=>estadoReal(b)==='Pendiente').length
             const nV=arr.filter(b=>estadoReal(b)==='Vencido').length
             const nPag=arr.filter(b=>['Pagado','Anticipada'].includes(b.status)).length
-            const pend=arr.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+(b.amount||0),0)
+            const pend=arr.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0)
             const prox=arr.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))[0]
             // ⚠ Conciliar: programadas con una emitida REAL equivalente. MISMO criterio que el modal de conciliación (NUNCA monto+mes suelto): folio con dígitos + match de cuota (N/M) o período en la glosa + tolerancia (25% si cuota, 6% si solo período). Así el conteo del chip calza con lo que muestra el modal.
             // Helpers locales (los del modal viven en otro componente): cuota N/M y período (AAAA-MM) desde la glosa.
@@ -6048,7 +6048,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const montoDe=b=>{ if(b.status==='Programada'){ const ui=ufInfoDe(b); if(ui) return ui.clpHoy } return b.amount||0 }
             const GRUPOS=[['Vencidas',b=>estadoReal(b)==='Vencido',C.overdue,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Pendientes (dentro de plazo)',b=>estadoReal(b)==='Pendiente',C.soon,(a,b)=>(venceDe(a)||'').localeCompare(venceDe(b)||'')],['Programadas',b=>b.status==='Programada',C.muted,(a,b)=>(a.due||'').localeCompare(b.due||'')],['Pagadas',b=>['Pagado','Anticipada'].includes(b.status),C.normal,(a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||'')],['Anuladas',b=>b.status==='Anulada',C.muted,()=>0]]
             const defColapsado=lbl=> lbl==='Pagadas'||lbl==='Anuladas'
-            const renderGrupos=(facts,sk)=> GRUPOS.map(([lbl,pred,col,srt])=>{ const gr=facts.filter(pred).sort(srt); if(!gr.length) return null; const key=`${sk}|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:!defColapsado(lbl); const sub=gr.reduce((a,b)=>a+montoDe(b),0); const ch=col===C.overdue?{bg:C.overdueBg,fg:C.overdueText}:col===C.soon?{bg:C.soonBg,fg:C.soonText}:col===C.normal?{bg:C.greenBg,fg:C.greenText}:{bg:'#F1EFE8',fg:C.grisText}; return (
+            const renderGrupos=(facts,sk)=> GRUPOS.map(([lbl,pred,col,srt])=>{ const gr=facts.filter(pred).sort(srt); if(!gr.length) return null; const key=`${sk}|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:!defColapsado(lbl); const sub=gr.reduce((a,b)=>a+(['Vencidas','Pendientes (dentro de plazo)'].includes(lbl)?saldoBill(b):montoDe(b)),0); const ch=col===C.overdue?{bg:C.overdueBg,fg:C.overdueText}:col===C.soon?{bg:C.soonBg,fg:C.soonText}:col===C.normal?{bg:C.greenBg,fg:C.greenText}:{bg:'#F1EFE8',fg:C.grisText}; return (
               <div key={key}>
                 <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',margin:'7px 0 4px'}}>
                   <span style={{fontSize:9.5,fontWeight:700,background:ch.bg,color:ch.fg,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
@@ -6076,7 +6076,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   rsList.length>=2 ? (()=>{
                     const byRS={}; visible.forEach(b=>{ const e=efEntity(b); const k=e?String(e.id):'sin'; (byRS[k]=byRS[k]||[]).push(b) })
                     const order=[...rsList.map(e=>String(e.id)),'sin'].filter(k=>byRS[k]&&byRS[k].length)
-                    return order.map(k=>{ const facts=byRS[k]; const ent=rsList.find(e=>String(e.id)===k); const recep=facts.map(b=>b.receptor_name).find(Boolean); const recepRut=facts.map(b=>b.receptor_rut).find(Boolean); const rsName=ent?`${ent.name}${ent.rut?` · ${ent.rut}`:''}`:(recep?`${recep}${recepRut?` · ${recepRut}`:''}`:'Sin razón social'); const rsPend=facts.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+montoDe(b),0); return (
+                    return order.map(k=>{ const facts=byRS[k]; const ent=rsList.find(e=>String(e.id)===k); const recep=facts.map(b=>b.receptor_name).find(Boolean); const recepRut=facts.map(b=>b.receptor_rut).find(Boolean); const rsName=ent?`${ent.name}${ent.rut?` · ${ent.rut}`:''}`:(recep?`${recep}${recepRut?` · ${recepRut}`:''}`:'Sin razón social'); const rsPend=facts.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0); return (
                       <div key={k} style={{marginTop:6}}>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:k==='sin'?'#FFF8E1':C.azulBg,borderRadius:7,padding:'5px 9px'}}><span style={{fontSize:11,fontWeight:700,color:k==='sin'?C.soonText:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsName}</span>{rsPend>0&&<span style={{fontSize:9,color:C.muted,flexShrink:0,marginLeft:6}}>pend. {fmt(rsPend)}</span>}</div>
                         {renderGrupos(facts, c.id+'|'+k)}
@@ -6229,7 +6229,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{cl&&rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}{!cl&&b.receptor_name?<span style={{marginLeft:6,fontSize:9,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:9,padding:'1px 7px'}}>sin vincular</span>:''}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}</div>
                 </div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(ui?ui.clpHoy:b.amount)}</div>{saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status)&&<div style={{fontSize:9,fontWeight:700,color:er==='Vencido'?C.overdueText:C.accent}}>saldo {fmt(saldoBill(b))}</div>}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
                 {['Pendiente','Vencido'].includes(er)&&(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const rec=rd!=null&&rd<=2; return <button onClick={()=>recordarCobro(b)} title={rd!=null?(rd===0?'Recordado hoy':`Recordado hace ${rd}d`):''} style={{fontSize:10,color:rec?C.grisText:C.accent,background:rec?C.bgWarm:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{rec?'Recordar otra vez':'Recordar'}</button> })()}
@@ -6257,7 +6257,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
             </div>
             {rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>}
-            {GR.map(([lbl,pred,col,srt])=>{ const gr=rows.filter(pred).sort(srt); if(!gr.length) return null; const key=`all|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:!defC(lbl); const sub=gr.reduce((a,b)=>a+montoDe(b),0); const ch=col===C.overdue?{bg:C.overdueBg,fg:C.overdueText}:col===C.soon?{bg:C.soonBg,fg:C.soonText}:col===C.normal?{bg:C.greenBg,fg:C.greenText}:{bg:'#F1EFE8',fg:C.grisText}; return (
+            {GR.map(([lbl,pred,col,srt])=>{ const gr=rows.filter(pred).sort(srt); if(!gr.length) return null; const key=`all|${lbl}`; const isOpen=groupOpen[key]!==undefined?groupOpen[key]:!defC(lbl); const sub=gr.reduce((a,b)=>a+(['Vencidas','Pendientes (dentro de plazo)'].includes(lbl)?saldoBill(b):montoDe(b)),0); const ch=col===C.overdue?{bg:C.overdueBg,fg:C.overdueText}:col===C.soon?{bg:C.soonBg,fg:C.soonText}:col===C.normal?{bg:C.greenBg,fg:C.greenText}:{bg:'#F1EFE8',fg:C.grisText}; return (
               <div key={key} style={{marginBottom:4}}>
                 <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',margin:'8px 0 5px'}}>
                   <span style={{fontSize:9.5,fontWeight:700,background:ch.bg,color:ch.fg,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
