@@ -16266,7 +16266,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let xs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
       .map(b=>({b,saldo:saldoFactura(b),delta:deltaDias(b.issued_at)}))
       // El pago cae hasta ~60 días DESPUÉS de emitir la factura (capta pagos tardíos; excluye facturas futuras y las muy lejanas).
-      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-3 && x.delta<=60)))
+      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-3 && x.delta<=90)))
     // Calce EXACTO en pesos (no hay comisiones bancarias → TOL=0): solo facturas con el monto idéntico.
     const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
     return xs.sort((a,b)=>   // 1) RS del pagador, 2) cercanía por DÍA emisión→pago, 3) monto
@@ -17392,6 +17392,14 @@ export default function App() {
   const [clients,setClients]=useState([])
   const [sales,setSales]=useState([])
   const [billing,setBilling]=useState([])
+  // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
+  const vencFlipDone=useRef(false)
+  useEffect(()=>{ if(vencFlipDone.current||!billing.length) return; vencFlipDone.current=true
+    const today=new Date().toISOString().slice(0,10)
+    const ids=billing.filter(b=>b.status==='Pendiente'&&b.due&&String(b.due).slice(0,10)<today&&b.billing_type!=='reembolso'&&!b.deleted_at).map(b=>b.id)
+    if(!ids.length) return
+    supabase.from('billing').update({status:'Vencido'}).in('id',ids).then(({error})=>{ if(!error) setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,status:'Vencido'}:b)) })
+  },[billing])
   const [expenses,setExpenses]=useState([])
   const [tasks,setTasks]=useState([])
   const [tareasOpen,setTareasOpen]=useState(false)   // sheet de tareas (Hoy + equipo) abierto desde el botón del header
