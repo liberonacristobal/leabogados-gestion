@@ -2402,7 +2402,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.border}`,marginTop:11,paddingTop:10}}>
                   <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?C.accent:C.greenText}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Vendido':'Neto'}</div></div>
                   <div style={{minWidth:0}}><div style={{...lblBig,color:C.muted}}>{vMon(m.costoUF,m.costo)}</div><div style={lblSm}>Terceros</div></div>
-                  <div onClick={()=>setTab('billing')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.overdueText}}>{fmtMon(porCobrarSel)}</div><div style={lblSm}>Por cobrar ›</div></div>
+                  <div onClick={()=>setTab('billing')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.accent}}>{fmtMon(porCobrarSel)}</div><div style={lblSm}>Por cobrar ›</div></div>
                   <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.accent}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
                 </div>
               </>)
@@ -6109,7 +6109,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             return (
               <div key={c.id} style={{border:`1px solid ${nV>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
                 <div onClick={()=>toggleClient(c.id)} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>{pend>0&&<span style={{fontSize:13,fontWeight:600,color:nV>0?C.overdue:C.soon,flexShrink:0}}>{fmt(pend)}</span>}</div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name} {open?'▾':'▸'}</span>{pend>0&&<span style={{fontSize:13,fontWeight:600,color:nV>0?C.overdue:C.accent,flexShrink:0}}>{fmt(pend)}</span>}</div>
                   {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.multi||rs.name!==c.name||rs.rut)?<div style={{fontSize:9,color:rs.multi?C.soonText:C.muted,fontWeight:rs.multi?600:400,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
                   <div style={{display:'flex',gap:4,marginTop:5,flexWrap:'wrap',alignItems:'center'}}>
                     {nP>0&&<span style={{fontSize:9,background:'#F1EFE8',color:C.grisText,borderRadius:9,padding:'1px 7px'}}>{nP} prog</span>}
@@ -11460,7 +11460,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           <div onClick={()=>setPorProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',cursor:'pointer'}}>
             <span style={{fontSize:14,color:C.done,lineHeight:1,transform:porProyOpen?'rotate(90deg)':'none',transition:'transform .15s'}}>›</span>
             <span style={{flex:1,fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>Por proyecto</span>
-            <span style={{fontSize:10,color:C.done,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(totFact)}{totPend>0?<span style={{color:C.overdue}}> · por cobrar {fmt(totPend)}</span>:''}</span>
+            <span style={{fontSize:10,color:C.done,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(totFact)}{totPend>0?<span style={{color:C.accent}}> · por cobrar {fmt(totPend)}</span>:''}</span>
           </div>
           {porProyOpen&&<>
           {grupos2.map(([label,items])=>{ const go=!!openGrp[label]; return (<div key={label} style={{marginBottom:2}}>
@@ -11798,7 +11798,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                 <div key={sid} style={{border:`1px solid ${pen>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
                   <div onClick={()=>toggleProj(String(sid))} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s?.title||'Proyecto'} {open?'▾':'▸'}</span><span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>{s&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(s)}} title='Abrir la venta' style={{fontSize:10,color:C.accent,fontWeight:700,cursor:'pointer'}}>ver venta ↗</span>}<span style={{fontSize:10,color:C.muted}}>{cuotasCob}/{rows.length} cobradas</span></span></div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:3}}>Facturado {fmt(fac)} · Cobrado {fmt(cob)} · <b style={{color:pen>0?C.soon:C.muted}}>Pendiente {fmt(pen)}</b></div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:3}}>Facturado {fmt(fac)} · Cobrado {fmt(cob)} · <b style={{color:pen>0?C.accent:C.muted}}>Pendiente {fmt(pen)}</b></div>
                     <div style={{height:4,background:C.border,borderRadius:2,marginTop:6,overflow:'hidden'}}><div style={{height:'100%',width:`${fac>0?Math.min(100,Math.round(cob/fac*100)):0}%`,background:C.normal,borderRadius:2}}/></div>
                   </div>
                   {open&&<div style={{padding:'0 11px 9px'}}>{(()=>{
