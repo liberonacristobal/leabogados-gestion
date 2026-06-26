@@ -16005,6 +16005,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [concView,setConcView] = useState('todos') // abonos: 'todos' | 'porconciliar' | 'conciliados'
   const [autoRun,setAutoRun] = useState(false)   // corriendo conciliación automática
   const [pickFor,setPickFor] = useState(null)    // id del abono con el picker de conciliación abierto
+  const [revSugOpen,setRevSugOpen] = useState(false)   // modal "Revisar sugerencias" (identificar en lote)
+  const [revSugSel,setRevSugSel] = useState(()=>new Set())
+  const [revSugBusy,setRevSugBusy] = useState(false)
   const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
   const [detFor,setDetFor] = useState(null)
   const [facBuscaQ,setFacBuscaQ] = useState('')  // buscador del estado de cuenta del cliente en el panel del pago      // id de la factura con el detalle expandido en el selector "Otra factura"
@@ -16192,7 +16195,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     try{
       const r1 = await supabase.from('cartola_movimientos').update({cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}).eq('id',mov.id)
       if(r1.error) throw r1.error
-      let learnedK=null
+      let learnedK=null, learnedNom=null
       if(rut){
         const r2 = await supabase.from('cliente_alias').upsert({rut_pagador:rut,nombre_pagador:nombre,cliente_id:clientId},{onConflict:'rut_pagador'})
         if(r2.error) throw r2.error
@@ -16200,9 +16203,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         const r3 = await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('rut_contraparte',rut)
         if(r3.error) throw r3.error
         setAliases(p=>[...p.filter(a=>crNormRut(a.rut_pagador)!==learnedK),{rut_pagador:rut,cliente_id:clientId,nombre_pagador:nombre}])
+      } else if(nombre){
+        // Sin RUT: aprende por NOMBRE exacto del banco → asigna el mismo cliente a los demás abonos sin identificar con ese mismo nombre.
+        learnedNom=nombre
+        const r3n = await supabase.from('cartola_movimientos').update({cliente_id:clientId}).is('cliente_id',null).eq('nombre_contraparte',nombre)
+        if(r3n.error) throw r3n.error
       }
       setMovs(p=>p.map(m=> m.id===mov.id ? {...m,cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}
-        : (learnedK&&crNormRut(m.rut_contraparte)===learnedK&&!m.cliente_id ? {...m,cliente_id:clientId} : m)))
+        : (learnedK&&crNormRut(m.rut_contraparte)===learnedK&&!m.cliente_id ? {...m,cliente_id:clientId}
+        : (learnedNom&&m.nombre_contraparte===learnedNom&&!m.cliente_id ? {...m,cliente_id:clientId} : m))))
       setEditMov(null); setEditForm({rut:'',nombre:''})
     }catch(e){ alert('Error: '+e.message) }
   }
@@ -16297,6 +16306,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const cids=[...new Set(ms.map(b=>String(b.client_id)))]
     if(cids.length!==1) return null
     return { cid:cids[0], factura:ms[0] }
+  }
+  // D — Sugerencias de identificación por NOMBRE (único) para abonos sin cliente. El auto ya hace la id por monto; esto es para confirmar en lote las de nombre (con compuerta humana).
+  const sugeridosId = useMemo(()=>{ const out=[]
+    movs.forEach(m=>{ if(m.tipo!=='abono'||m.es_interno||m.cliente_id||RESUELTAS_ABO.includes(m.categoria)||concByMov[m.id]?.length) return
+      const cid=sugerencias[m.id]; if(!cid) return
+      out.push({mov:m, cid}) })
+    return out },[movs,sugerencias,concByMov])
+  const identificarLote = async()=>{
+    const sel=sugeridosId.filter(s=>revSugSel.has(s.mov.id)); if(!sel.length) return
+    setRevSugBusy(true)
+    try{ for(const s of sel){ await identificar(s.mov, s.cid, true) } }
+    finally{ setRevSugBusy(false); setRevSugOpen(false); setRevSugSel(new Set()) }
   }
   // Descalce = abono no interno, no conciliado, sin clasificar como no-honorario, y que NO tiene factura candidata
   // (sin cliente asociado, o con cliente pero sin factura que calce → fondo/anticipo/monto partido).
@@ -17007,6 +17028,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {/* Conciliación (Fase 2) — solo abonos: acción + resumen (el estado se elige en el filtro de arriba) */}
         {sub==='abonos'&&(
           <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8,flexWrap:'wrap'}}>
+            {sugeridosId.length>0&&<button onClick={()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Sugerencias · {sugeridosId.length}</button>}
             <button onClick={conciliarAuto} disabled={autoRun||resumenConc.pend===0} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:'none',background:(autoRun||resumenConc.pend===0)?C.done:C.accent,color:'#fff',cursor:(autoRun||resumenConc.pend===0)?'default':'pointer',whiteSpace:'nowrap'}}>{autoRun?'Conciliando…':'Conciliar auto'}</button>
             {resumenConc.total>0&&(()=>{ const pct=Math.round(resumenConc.done/resumenConc.total*100); return (
               <span style={{fontSize:10.5,color:C.muted}}><b style={{color:C.greenText}}>{pct}%</b> conciliado <span style={{color:C.done}}>· {resumenConc.done}/{resumenConc.total}</span></span>
@@ -17302,6 +17324,36 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         </div>
         <div style={{fontSize:10,color:C.muted,marginTop:10,lineHeight:1.5}}>Toca un movimiento para ver el detalle y conciliar. Calce exacto en pesos · todo reversible y trazable.</div>
       </div>
+      {revSugOpen&&(
+        <div onClick={()=>setRevSugOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:460,background:'#fff',borderRadius:18,maxHeight:'86vh',display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 12px 40px rgba(0,0,0,.18)'}}>
+            <div style={{padding:'16px 18px 12px',borderBottom:`1px solid ${C.border}`}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span style={{fontSize:18,fontWeight:500,color:C.accent}}>Revisar sugerencias</span>
+                <span onClick={()=>setRevSugOpen(false)} style={{fontSize:21,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginTop:3}}>Abonos sin identificar con un cliente sugerido por nombre (único). Confirma los correctos → quedan listos para conciliar y se aprende el patrón.</div>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:'4px 18px 10px'}}>
+              {sugeridosId.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:24}}>Sin sugerencias pendientes.</div>}
+              {sugeridosId.map(s=>{ const on=revSugSel.has(s.mov.id); return (
+                <div key={s.mov.id} onClick={()=>setRevSugSel(p=>{const n=new Set(p);n.has(s.mov.id)?n.delete(s.mov.id):n.add(s.mov.id);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+                  <span style={{width:18,height:18,borderRadius:5,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:C.text,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.mov.nombre_contraparte||'—'}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{s.mov.fecha?fmtFechaDMY(s.mov.fecha):''} · {fmt(s.mov.monto)}</div>
+                  </div>
+                  <span style={{fontSize:11,color:C.greenText,fontWeight:600,flexShrink:0,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>→ {cmap[s.cid]||'Cliente'}</span>
+                </div>
+              )})}
+            </div>
+            <div style={{padding:'12px 18px',borderTop:`1px solid ${C.border}`,display:'flex',gap:8}}>
+              <button onClick={()=>setRevSugOpen(false)} style={{flex:1,height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button disabled={revSugBusy||revSugSel.size===0} onClick={identificarLote} style={{flex:2,height:38,borderRadius:9,border:'none',background:revSugSel.size===0?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:revSugSel.size===0?'default':'pointer'}}>{revSugBusy?'Identificando…':`Identificar ${revSugSel.size}`}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
