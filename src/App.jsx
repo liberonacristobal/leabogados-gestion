@@ -5432,10 +5432,15 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
     const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
     const venc=b.due?fmtFechaDMY(b.due):''
-    if(!confirm(`¿Enviar recordatorio de cobro a ${to} por ${folio} (${monto})?`)) return
-    const texto=`Estimados,\n\nLes recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.\n\nQuedamos atentos a su confirmación. Saludos cordiales,\nLiberona Escala Abogados`
-    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Les recordamos amablemente el pago pendiente de <b>${esc(folio)}</b>${b.concept?` (${esc(b.concept)})`:''} por <b>${monto}</b>${venc?`, con vencimiento <b>${venc}</b>`:''}.<br><br>Quedamos atentos a su confirmación. Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
-    try{ await sendMailServer({to, subject:`Recordatorio de cobro — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
+    const vencida=esVencidaG(b)   // tono: amable si está al día, firme si ya venció
+    if(!confirm(`¿Enviar recordatorio ${vencida?'(firme) ':'(amable) '}de cobro a ${to} por ${folio} (${monto})?`)) return
+    const apertura=vencida
+      ? `Nos dirigimos a ustedes para hacer presente que ${folio}${b.concept?` (${b.concept})`:''}, por ${monto}, se encuentra pendiente y vencida${venc?` (venció el ${venc})`:''}. Les agradeceremos regularizar el pago a la brevedad.`
+      : `Les recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.`
+    const texto=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\nLiberona Escala Abogados`
+    const pagoHtml=DATOS_PAGO_HTML
+    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${pagoHtml}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
+    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
@@ -5689,9 +5694,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </div>
             {cobranzaOpen&&<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
               {lista.map(({b,dias,venc})=>{ const cl=clients.find(x=>x.id===b.client_id); return (
-                <div key={b.id} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:'0.5px solid #F3D6D4'}}>
+                <div key={b.id} onClick={()=>onOpenClientFicha&&b.client_id&&onOpenClientFicha(b.client_id)} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:'0.5px solid #F3D6D4',cursor:onOpenClientFicha?'pointer':'default'}}>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>Enviada hace {dias}d{venc?' · vencida':''} · {fmt(saldoBill(b))}</div></div>
-                  <button onClick={()=>recordarCobro(b)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'4px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Recordar</button>
+                  <button onClick={(e)=>{e.stopPropagation();recordarCobro(b)}} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'4px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Recordar</button>
                 </div>
               )})}
             </div>}
@@ -11826,6 +11831,9 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     </Modal>
   )
 }
+// Datos bancarios del estudio para el pago (transferencia) — fuente única, reusada en el recordatorio de cobro y en el correo de factura.
+const DATOS_PAGO_TXT = `Datos para el pago (transferencia):\n  Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco BICE · Cuenta corriente 138392-2\n  Confirmación a: administracion@leabogados.cl`
+const DATOS_PAGO_HTML = `<div style="margin:14px 0;padding:12px 16px;background:#F7F9FA;border:1px solid #E4E8EB;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#537281;font-weight:600;margin-bottom:3px">Datos para el pago (transferencia)</div><div>Liberona Escala Abogados Limitada</div><div><span style="color:#537281">RUT:</span> <b>77.700.387-9</b></div><div><span style="color:#537281">Banco BICE · Cuenta corriente:</span> <b>138392-2</b></div><div><span style="color:#537281">Confirmación a:</span> administracion@leabogados.cl</div></div>`
 // Envío de una factura por correo. Reusa el motor de la rendición (driveToken + sendGmailWithPdf + firma).
 // Plantilla genérica auto-rellenada + destinatarios de la ficha (contactos) + CC aprendido. PDF a mano por ahora (con la emisión DTE saldrá solo).
 function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
@@ -11843,6 +11851,7 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   const [asunto,setAsunto]=useState(`Factura ${folio} · ${client?.name||''}`)
   const [body,setBody]=useState(`Estimados,\n\nJunto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`)
   const [pdf,setPdf]=useState(null)
+  const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
   const [sending,setSending]=useState(false)
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
@@ -11863,14 +11872,14 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
       if(txt) setBody(txt)
     }catch(e){ alert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
-  const buildHtml=()=>`<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,'es')}</div></div>`
+  const buildHtml=()=>`<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,'es')}</div></div>`
   const enviar=async()=>{
     if(!para.trim()){ alert('Falta el destinatario.'); return }
     setSending(true)
     try{
       const token=await driveToken()
       if(!token){ alert('No se pudo conectar a Gmail. Reingresa con tu correo @leabogados.cl.'); setSending(false); return }
-      await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:body,bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
+      await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${body}\n\n${DATOS_PAGO_TXT}`:body,bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       const at=new Date().toISOString()
@@ -11898,6 +11907,7 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
         </div>
         <textarea value={body} onChange={e=>setBody(e.target.value)} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
       </div>
+      <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>Incluir datos de pago (transferencia)</span></label>
       <div><div style={lbl}>PDF DE LA FACTURA (DTE con timbre)</div>
         {pdf? <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span><button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
           : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>}
