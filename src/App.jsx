@@ -5468,6 +5468,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setPagoBusy(false)
   }
   const [calcesOpen,setCalcesOpen] = useState(true)
+  // "Ya facturadas" (duplicados): facturas SIN folio (por facturar) cuya factura emitida REAL ya existe (mismo cliente, misma cuota N/M o período, monto ±tolerancia). Inflan el "por facturar"; se vinculan a su factura emitida.
+  const _cuotaNMg = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
+  const _mesMapG = {enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
+  const _concPeriodoG = c => { const s=String(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_mesMapG)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_mesMapG[k]).padStart(2,'0')}` } return null }
+  const yaFacturadasIds = useMemo(()=>{ const noFolio=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)); const reales=bb.filter(b=>!b.deleted_at&&b.invoice_no&&/\d/.test(folioN(b.invoice_no||''))&&b.status!=='Anulada'); const rByC={}; reales.forEach(r=>{(rByC[r.client_id]=rByC[r.client_id]||[]).push(r)}); const ids=new Set(); noFolio.forEach(p=>{ const a=p.amount||0; if(!a) return; const rs=rByC[p.client_id]||[]; const pcu=_cuotaNMg(p.concept), pper=_concPeriodoG(p.concept); const hit=rs.some(r=>{ const rcu=_cuotaNMg(r.concept), rper=_concPeriodoG(r.concept); const sameCu=!!(pcu&&rcu&&pcu.n===rcu.n); const samePer=!!(pper&&rper&&pper===rper); if(!sameCu&&!samePer) return false; const dM=Math.abs((r.amount||0)-a)/a; return dM<=(sameCu?0.25:0.06) }); if(hit) ids.add(p.id) }); return ids },[bb])
   // Calces sugeridos: para cada factura pendiente/vencida, los abonos que calzan exacto. 1:1 inequívoco → "limpio" (se concilia de un toque); ambiguo (un abono ↔ 2+ facturas o una factura ↔ 2+ abonos) → "revisar" (eliges).
   const calcesSugeridos = useMemo(()=>{
     const pend = bb.filter(b=>!b.deleted_at && esEmitida(b) && (b.status==='Pendiente'||b.status==='Vencido') && saldoBill(b)>0)
@@ -5931,6 +5936,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const inResYear=(dateStr)=> !fYear || String(dateStr||'').slice(0,4)===fYear
           const cobAll=bb.filter(b=>b.status==='Pagado'&&inResYear(b.paid_at||b.issued_at)).reduce((a,b)=>a+(b.amount||0),0)
           const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
+          // "Por facturar" = todo sin folio (no pagado/anulado). Se separa: real (falta emitir) vs ya facturadas (duplicado, su factura emitida ya existe → vincular).
+          const porFactBucket=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&inResYear(b.due))
+          const yaFactTot=porFactBucket.filter(b=>yaFacturadasIds.has(b.id)).reduce((a,b)=>a+(b.amount||0),0)
+          const porFacturarRealTot=porFactBucket.filter(b=>!yaFacturadasIds.has(b.id)).reduce((a,b)=>a+(b.amount||0),0)
           const resYears=[...new Set(bb.map(b=>String(b.paid_at||b.issued_at||b.due||'').slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
           const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
@@ -5959,9 +5968,13 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {tab('emitidas','Por cobrar',porCobrar,C.accent)}
               {tab('vencido','Vencidas',venAll,C.overdue)}
               {tab('pagado','Cobradas '+(fYear?fYear:'(total)'),cobAll,C.normal)}
-              {tab('programadas','Por facturar '+(fYear?fYear:'(total)'),progAll,C.muted)}
+              {tab('programadas','Por facturar '+(fYear?fYear:'(total)'),porFacturarRealTot,C.muted)}
             </div>
-            <div style={{fontSize:9,color:C.muted,marginBottom:16,lineHeight:1.4}}>Cobradas y Programadas según el año seleccionado. Por cobrar y Vencidas son el total pendiente actual (no dependen del año).</div>
+            {yaFactTot>0&&<div onClick={()=>irAEstado('programadas')} title='Programadas cuya factura emitida ya existe — vincular' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:9,cursor:'pointer'}}>
+              <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.soonText}}>⚠ Ya facturadas — vincular a su factura emitida</div><div style={{fontSize:9,color:C.coralText,marginTop:1}}>su factura real ya existe; inflan el "por facturar"</div></div>
+              <span style={{fontSize:14,fontWeight:700,color:C.soonText,whiteSpace:'nowrap'}}>{fmt(yaFactTot)}</span>
+            </div>}
+            <div style={{fontSize:9,color:C.muted,marginBottom:16,lineHeight:1.4}}>Cobradas y Por facturar según el año seleccionado. Por cobrar y Vencidas son el total pendiente actual (no dependen del año).{yaFactTot>0?' "Por facturar" ya excluye las ya facturadas (arriba).':''}</div>
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               <span onClick={()=>go('anticipos')} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:antDisp>0?C.accent:C.muted,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
                 <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={antDisp>0?C.accent:C.done} strokeWidth='2'><rect x='3' y='6' width='18' height='13' rx='2'/><path d='M16 6V4H8v2M3 11h18'/></svg>
