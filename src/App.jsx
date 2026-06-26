@@ -11607,6 +11607,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const [subRSOpen,setSubRSOpen] = useState({})   // colapso por RS dentro de un proyecto (key: saleId|rsKey); default abierto si tiene deuda
   const [facDir,setFacDir] = useState('desc')   // orden por fecha de las facturas: 'desc' (nueva→antigua) | 'asc'
   const [detFac,setDetFac] = useState(()=>new Set())   // facturas con detalle/movimiento bancario expandido
+  const [ficRs,setFicRs] = useState('all')   // filtro por razón social en la ficha (rsKey | 'all')
+  const [ficEst,setFicEst] = useState({})   // colapso de los acordeones por estado en la ficha
   const [fConc,setFConc] = useState([]); const [fMovs,setFMovs] = useState([])   // conciliación del cliente para ver el movimiento de una factura conciliada
   useEffect(()=>{ if(!client?.id) return; let ok=true; Promise.all([supabase.from('conciliacion').select('factura_id,movimiento_id,tipo_destino,monto_aplicado'), supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,descripcion').eq('cliente_id',client.id)]).then(([a,b])=>{ if(ok){ setFConc(a.data||[]); setFMovs(b.data||[]) } }).catch(()=>{}); return ()=>{ ok=false } },[client?.id])
   const fConcByFac = useMemo(()=>{ const m={}; fConc.forEach(c=>{ if(c.factura_id&&c.tipo_destino==='factura') (m[c.factura_id]=m[c.factura_id]||[]).push(c) }); return m },[fConc])
@@ -11722,7 +11724,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           yf.forEach(b=>{ if(b.sale_id){(bySale[b.sale_id]=bySale[b.sale_id]||[]).push(b)} else if(b.invoice_no && histYear && b.issued_at && b.issued_at<='2025-12-31'){container.push(b)} else {sinP.push(b)} })
           const money = (rows,fn)=>rows.filter(fn).reduce((a,b)=>a+(b.amount||0),0)
           const lblFolio = b => b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:(b.concept||'—')
+          const rutOf=b=>{ if(b.entity_id){ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e&&e.rut) return String(e.rut).trim() } return String(b.receptor_rut||'').trim() }
+          const rsKeyOf=b=>{ const r=rutOf(b); return r?('rut:'+r):(b.receptor_name?('n:'+String(b.receptor_name).trim().toLowerCase()):'sin') }
+          const rsNameOf=b=>{ const r=rutOf(b); const e=entities.find(x=>String(x.id)===String(b.entity_id))||entities.find(x=>x.rut&&String(x.rut).trim()===r); if(e) return e.name+(e.rut?(' · '+e.rut):''); return b.receptor_name?(b.receptor_name+(r?(' · '+r):'')):'Sin razón social' }
+          const rsShort=b=>{ const r=rutOf(b); const e=entities.find(x=>String(x.id)===String(b.entity_id))||entities.find(x=>x.rut&&String(x.rut).trim()===r); if(e?.name) return rsDisplay(e.name); return b.receptor_name?rsDisplay(b.receptor_name):null }
           const renderFactura = (b,assignable)=>{
+            const proj=b.sale_id?saleTitle(b.sale_id):null; const rsNm=rsShort(b)
             // Asignable a CUALQUIER proyecto del cliente (un proyecto puede cruzar años y razones sociales).
             const ventasAsig = clientSales
             const sug = assignable?sugSaleFor(b,ventasAsig):null
@@ -11737,6 +11744,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{b.billing_type==='reembolso'&&<span style={{fontSize:9,color:C.muted,marginLeft:5}}>reembolso</span>}</div>
                     {b.invoice_no&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>}
+                    {(proj||rsNm)&&<div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj||''}{proj&&rsNm?' · ':''}{rsNm&&<b style={{fontWeight:600}}>{rsNm}</b>}</div>}
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
@@ -11786,57 +11794,38 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const nada = !saleIds.length && !container.length && !sinP.length
           return (<>
             {nada&&<div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Sin facturas en {selYear}{q?' con esa búsqueda':''}.</div>}
-            {(()=>{ const renderProyecto = sid => {
-              const s=clientSales.find(x=>String(x.id)===String(sid)); const rows=bySale[sid]; const open=openProj.has(String(sid))
-              const fac=money(rows,esFacturada), cob=money(rows,b=>b.status==='Pagado'), pen=money(rows,b=>['Pendiente','Vencido'].includes(b.status))
-              const cuotasCob=rows.filter(b=>['Pagado','Anticipada'].includes(b.status)).length
-              return (
-                <div key={sid} style={{border:`1px solid ${pen>0?'#EAD9A0':C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
-                  <div onClick={()=>toggleProj(String(sid))} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s?.title||'Proyecto'} {open?'▾':'▸'}</span><span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>{s&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(s)}} title='Abrir la venta' style={{fontSize:10,color:C.accent,fontWeight:700,cursor:'pointer'}}>ver venta ↗</span>}<span style={{fontSize:10,color:C.muted}}>{cuotasCob}/{rows.length} cobradas</span></span></div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:3}}>Facturado {fmt(fac)} · Cobrado {fmt(cob)} · <b style={{color:pen>0?C.accent:C.muted}}>Pendiente {fmt(pen)}</b></div>
-                    <div style={{height:4,background:C.border,borderRadius:2,marginTop:6,overflow:'hidden'}}><div style={{height:'100%',width:`${fac>0?Math.min(100,Math.round(cob/fac*100)):0}%`,background:C.normal,borderRadius:2}}/></div>
-                  </div>
-                  {open&&<div style={{padding:'0 11px 9px'}}>{(()=>{
-                    const rutOf=b=>{ if(b.entity_id){ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e&&e.rut) return String(e.rut).trim() } return String(b.receptor_rut||'').trim() }
-                    const rsKeyOf=b=>{ const r=rutOf(b); return r?('rut:'+r):(b.receptor_name?('n:'+String(b.receptor_name).trim().toLowerCase()):'sin') }
-                    const rsNameOf=b=>{ const r=rutOf(b); const e=entities.find(x=>String(x.id)===String(b.entity_id))||entities.find(x=>x.rut&&String(x.rut).trim()===r); if(e) return e.name+(e.rut?(' · '+e.rut):''); return b.receptor_name?(b.receptor_name+(r?(' · '+r):'')):'Sin razón social' }
-                    const sortFac=arr=> [...arr].sort((a,b)=> facDir==='asc' ? (kpiDate(a)||'').localeCompare(kpiDate(b)||'') : (kpiDate(b)||'').localeCompare(kpiDate(a)||''))
-                    const gmap={}; rows.forEach(b=>{ const k=rsKeyOf(b); (gmap[k]=gmap[k]||{name:rsNameOf(b),facs:[]}).facs.push(b) })
-                    const grps=Object.entries(gmap).map(([k,g])=>{ const pend=g.facs.reduce((s,b)=>s+(['Pendiente','Vencido'].includes(b.status)?Math.max(0,(b.amount||0)-(b.paid_amount||0)):0),0); const cob=g.facs.filter(b=>['Pagado','Anticipada'].includes(b.status)).length; return {k,name:g.name,facs:g.facs,pend,cob,total:g.facs.length} })
-                    if(grps.length<=1) return sortFac(rows).map(b=>renderFactura(b,false))
-                    grps.sort((a,b)=> (b.pend>0?1:0)-(a.pend>0?1:0) || (b.pend-a.pend) || a.name.localeCompare(b.name,'es'))
-                    return grps.map(g=>{ const key=String(sid)+'|'+g.k; const so=(key in subRSOpen)?subRSOpen[key]:(g.pend>0); return (
-                      <div key={g.k} style={{marginBottom:6}}>
-                        <div onClick={()=>setSubRSOpen(p=>({...p,[key]:!so}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,background:g.pend>0?C.overdueBg:'#F5F7F9',borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>
-                          <span style={{fontSize:11,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name} {so?'▾':'▸'}</span>
-                          <span style={{fontSize:10,fontWeight:600,color:g.pend>0?C.overdueText:C.greenText,flexShrink:0}}>{g.pend>0?`Pendiente ${fmt(g.pend)}`:`${g.cob}/${g.total} pagadas`}</span>
-                        </div>
-                        {so&&<div style={{marginTop:5}}>{sortFac(g.facs).map(b=>renderFactura(b,false))}</div>}
-                      </div>
-                    )})
-                  })()}</div>}
-                </div>
-              )
-            }
-            return saleIds.map(renderProyecto)
+            {!nada&&(()=>{
+              // Ficha al mismo patrón que Facturación: filtro por razón social + acordeones por estado (Por cobrar [aging] / Por facturar / Cobradas / Anuladas). Proyecto y RS en cada factura; máximo detalle al tocar.
+              const rsMap={}; yf.forEach(b=>{ const k=rsKeyOf(b); if(!rsMap[k]) rsMap[k]={k,name:rsShort(b)||rsNameOf(b)} })
+              const rsArr=Object.values(rsMap)
+              const facturas = ficRs==='all'?yf:yf.filter(b=>rsKeyOf(b)===ficRs)
+              const byDir=arr=>[...arr].sort((a,b)=> facDir==='asc'?(kpiDate(a)||'').localeCompare(kpiDate(b)||''):(kpiDate(b)||'').localeCompare(kpiDate(a)||''))
+              const agingAsc=arr=>[...arr].sort((a,b)=>(a.due||a.issued_at||'').localeCompare(b.due||b.issued_at||''))
+              const needsProj=b=>!b.sale_id && !(histYear&&b.invoice_no&&b.issued_at&&b.issued_at<='2025-12-31')
+              const ESTADOS=[
+                ['Por cobrar', b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status), ESTADO_COBRO.porCobrar, saldoBill, agingAsc, true],
+                ['Por facturar', b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status), ESTADO_COBRO.porFacturar, b=>b.amount||0, agingAsc, false],
+                ['Cobradas', b=>['Pagado','Anticipada'].includes(b.status), ESTADO_COBRO.cobrado, b=>b.amount||0, byDir, false],
+                ['Anuladas', b=>b.status==='Anulada', ESTADO_COBRO.anulada, b=>b.amount||0, byDir, false],
+              ]
+              return (<>
+                {rsArr.length>=2&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
+                  {[{k:'all',name:'Todas las RS'},...rsArr].map(r=>{ const on=ficRs===r.k; return <span key={r.k} onClick={()=>setFicRs(r.k)} style={{fontSize:9,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,whiteSpace:'nowrap'}}>{r.name}</span> })}
+                </div>}
+                {ESTADOS.map(([lbl,pred,tok,money,ord,defOpen])=>{
+                  const gr=facturas.filter(pred); if(!gr.length) return null
+                  const isOpen=ficEst[lbl]!==undefined?ficEst[lbl]:defOpen
+                  const subT=gr.reduce((a,b)=>a+money(b),0)
+                  return (<div key={lbl} style={{marginBottom:7}}>
+                    <div onClick={()=>setFicEst(p=>({...p,[lbl]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}}>
+                      <span style={{fontSize:10,fontWeight:700,background:tok.bg,color:tok.text,borderRadius:14,padding:'2px 10px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:tok.text}}>{fmt(subT)}</span>
+                    </div>
+                    {isOpen&&ord(gr).map(b=>renderFactura(b,needsProj(b)))}
+                  </div>)
+                })}
+              </>)
             })()}
-            {container.length>0&&(()=>{ const open=openProj.has('__cont'); return (
-              <div style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
-                <div onClick={()=>toggleProj('__cont')} style={{padding:'9px 11px',cursor:'pointer',background:'#fff'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:13,fontWeight:600,color:C.azulInfo}}>Facturación {selYear} {open?'▾':'▸'}</span><span style={{fontSize:10,color:C.muted}}>{container.length} · {fmt(money(container,()=>true))}</span></div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:2}}>Emitidas del año sin proyecto propio</div>
-                </div>
-                {open&&<div style={{padding:'0 11px 9px'}}>{[...container].sort((a,b)=>(b.issued_at||'').localeCompare(a.issued_at||'')).map(b=>renderFactura(b,true))}</div>}
-              </div>
-            )})()}
-            {sinP.length>0&&<div style={{background:'#FFF8E1',border:'1px solid #FAC775',borderRadius:10,padding:'9px 11px',marginTop:2}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}>
-                <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#BA7517' strokeWidth='2.2'><path d='M12 9v4M12 17h.01'/><path d='M10.3 3.3 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0z'/></svg>
-                <span style={{fontSize:11,fontWeight:700,color:C.soonText}}>Facturas sin proyecto asignado · {sinP.length}</span>
-              </div>
-              {sinP.map(b=>renderFactura(b,true))}
-            </div>}
           </>)
         })()}
       </div>
