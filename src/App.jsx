@@ -5425,6 +5425,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [cobranzaOpen,setCobranzaOpen] = useState(false)
   const venceG = b => b.due || (b.issued_at ? (()=>{const x=new Date(b.issued_at+'T00:00:00'); x.setDate(x.getDate()+30); return x.toISOString().slice(0,10)})() : '')
   const esVencidaG = b => b.status==='Vencido' || (b.status==='Pendiente' && venceG(b) && venceG(b) < new Date().toISOString().slice(0,10))
+  // Memoria de recordatorios enviados (sin columna nueva): learnings factura_recordado, key=factura.id → fecha ISO del último recordatorio.
+  const [recordadoMap,setRecordadoMap] = useState({})
+  useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','factura_recordado').then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ m[r.key]=r.value }); setRecordadoMap(m) } },()=>{}); return ()=>{alive=false} },[])
+  const diasDesde = iso => iso ? Math.floor((Date.now()-new Date(iso).getTime())/86400000) : null
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   const recordarCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -5442,7 +5446,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const texto=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\nLiberona Escala Abogados`
     const pagoHtml=DATOS_PAGO_HTML
     const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${pagoHtml}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
-    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
+    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; alert('Recordatorio enviado desde la cuenta de oficina.') }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
@@ -5708,7 +5712,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             {cobranzaOpen&&<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
               {lista.map(({b,dias,venc})=>{ const cl=clients.find(x=>x.id===b.client_id); return (
                 <div key={b.id} onClick={()=>onOpenClientFicha&&b.client_id&&onOpenClientFicha(b.client_id)} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:`0.5px solid ${C.border}`,cursor:onOpenClientFicha?'pointer':'default'}}>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>Enviada hace {dias}d{venc?' · vencida':''} · {fmt(saldoBill(b))}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||'Sin cliente'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>Enviada hace {dias}d{venc?' · vencida':''} · {fmt(saldoBill(b))}{recordadoMap[String(b.id)]&&<span style={{color:C.grisText}}> · {diasDesde(recordadoMap[String(b.id)])===0?'recordado hoy':`recordado hace ${diasDesde(recordadoMap[String(b.id)])}d`}</span>}</div></div>
                   <button onClick={(e)=>{e.stopPropagation();recordarCobro(b)}} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'4px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Recordar</button>
                 </div>
               )})}
@@ -11462,7 +11466,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
       : `Les recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.`
     const texto=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\nLiberona Escala Abogados`
     const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${DATOS_PAGO_HTML}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
-    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
+    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; alert('Recordatorio enviado desde la cuenta de oficina.') }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Registrar pago (total o parcial/abono). Si el monto recibido < saldo → queda "abonado" (paid_amount) y la factura sigue pendiente.
