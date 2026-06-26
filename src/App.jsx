@@ -5443,6 +5443,17 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); alert('Recordatorio enviado desde la cuenta de oficina.') }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
+  // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
+  const acuseCobro = async(b)=>{
+    const cl=clients.find(c=>String(c.id)===String(b.client_id))
+    const to=(cl?.email||'').trim()
+    if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder enviar el acuse.'); return }
+    const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
+    const monto='$'+(b.amount||0).toLocaleString('es-CL')
+    if(!confirm(`¿Enviar acuse de pago a ${to} por ${folio} (${monto})?`)) return
+    try{ await acusePagoEmail(to,{folio,monto,fecha:b.paid_at?fmtFechaDMY(b.paid_at):''}); alert('Acuse de pago enviado desde la cuenta de oficina.') }
+    catch(e){ alert('No se pudo enviar el acuse: '+e.message) }
+  }
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
   const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(confirm(msg)) await emitirConRS(b) }
   const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
@@ -5884,6 +5895,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {b.status==='Programada'&&conciliable&&<button onClick={()=>onConciliar&&onConciliar(cli)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>⚠ Conciliar</button>}
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
                 {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
+                {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
               </div>}
             </div>
           )}
@@ -6103,6 +6115,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {b.status==='Programada'&&conc.has(b.id)&&<button onClick={()=>onConciliar&&onConciliar(cl)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>⚠ Conciliar</button>}
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
                 {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
+                {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
               </div>}
             </div>
           )}
@@ -11837,6 +11850,13 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
 // Datos bancarios del estudio para el pago (transferencia) — fuente única, reusada en el recordatorio de cobro y en el correo de factura.
 const DATOS_PAGO_TXT = `Datos para el pago (transferencia):\n  Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco BICE · Cuenta corriente 138392-2\n  Confirmación a: administracion@leabogados.cl`
 const DATOS_PAGO_HTML = `<div style="margin:14px 0;padding:12px 16px;background:#F7F9FA;border:1px solid #E4E8EB;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#537281;font-weight:600;margin-bottom:3px">Datos para el pago (transferencia)</div><div>Liberona Escala Abogados Limitada</div><div><span style="color:#537281">RUT:</span> <b>77.700.387-9</b></div><div><span style="color:#537281">Banco BICE · Cuenta corriente:</span> <b>138392-2</b></div><div><span style="color:#537281">Confirmación a:</span> administracion@leabogados.cl</div></div>`
+// Acuse de pago: confirma al cliente que recibimos el pago de una factura (al conciliar el abono). Formato oficina, vía la cuenta del estudio.
+async function acusePagoEmail(to, {folio, monto, fecha}){
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const texto=`Estimados,\n\nConfirmamos la recepción del pago de ${folio} por ${monto}${fecha?`, con fecha ${fecha}`:''}. Agradecemos su pago.\n\nSaludos cordiales,\nLiberona Escala Abogados`
+  const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Confirmamos la recepción del pago de <b>${esc(folio)}</b> por <b>${esc(monto)}</b>${fecha?`, con fecha <b>${esc(fecha)}</b>`:''}. Agradecemos su pago.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
+  return sendMailServer({to, subject:`Confirmación de pago — ${folio}`, html, text:texto})
+}
 // Envío de una factura por correo. Reusa el motor de la rendición (driveToken + sendGmailWithPdf + firma).
 // Plantilla genérica auto-rellenada + destinatarios de la ficha (contactos) + CC aprendido. PDF a mano por ahora (con la emisión DTE saldrá solo).
 function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
@@ -16533,6 +16553,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
+      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N°${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(confirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).catch(()=>{}) } }
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar: '+e.message) }
     setBusy(null)
   }
