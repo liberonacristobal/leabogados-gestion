@@ -12958,10 +12958,10 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                 </div>
                 {responsableDe[c.id]&&(()=>{ const pc=personChip(responsableDe[c.id]); return <span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{responsableDe[c.id]}</span> })()}
               </div>
-              <div style={{display:'flex',gap:12,fontSize:11,flexWrap:'wrap',alignItems:'center'}}>
-                {!ended&&<span style={{color:C.accent}}>{activeSales} ventas activas</span>}
-                {cp>0&&<span style={{color:hasOverdue?C.overdue:C.soon,fontWeight:600}}>{fmt(cp)} por cobrar</span>}
-                {balance!==0&&<span style={{color:balance<0?C.overdue:C.normal,fontWeight:600}}>Fondos: {fmt(balance)}</span>}
+              <div style={{display:'flex',gap:13,fontSize:11,flexWrap:'wrap',alignItems:'center'}}>
+                {!ended&&<span style={{color:C.muted,display:'inline-flex',alignItems:'center',gap:4}}><SIcon n='briefcase' s={13} c={C.muted}/>{activeSales} {activeSales===1?'venta activa':'ventas activas'}</span>}
+                {cp>0&&<span style={{color:hasOverdue?C.overdue:C.accent,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}}><SIcon n='file' s={13} c={hasOverdue?C.overdue:C.accent}/>{fmt(cp)} por cobrar</span>}
+                {balance!==0&&<span style={{color:balance<0?C.overdue:C.normal,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}} title='Saldo de fondos'><SIcon n='wallet' s={13} c={balance<0?C.overdue:C.normal}/>{fmt(balance)}</span>}
               </div>
             </div>
           )
