@@ -10914,8 +10914,49 @@ function ContactoTab({client, entities, onSaveFields}) {
           </div>
         )}
       </div>
+      <DestinatarioFacturasCard client={client} contacts={contacts}/>
     </div>
   )
+}
+
+// "Destinatario de facturas" de la ficha: fija el Para (1 contacto) + CC del cliente, auto-guardado en learnings
+// (factura_to / factura_cc) — el mismo dato que el modal de envío aprende y reusa. Así se puede fijar sin mandar una factura.
+function DestinatarioFacturasCard({client, contacts=[]}){
+  const [to,setTo]=useState('')
+  const [cc,setCc]=useState([])
+  const [ccInput,setCcInput]=useState('')
+  const [saved,setSaved]=useState(false)
+  useEffect(()=>{ if(!client?.id) return; let alive=true
+    supabase.from('learnings').select('kind,value').in('kind',['factura_to','factura_cc']).eq('key',String(client.id)).then(({data})=>{ if(!alive) return; (data||[]).forEach(r=>{ if(r.kind==='factura_to') setTo(String(r.value||'').trim()); if(r.kind==='factura_cc') setCc(String(r.value||'').split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean)) }) },()=>{})
+    return ()=>{alive=false} },[client?.id])
+  const flash=()=>{ setSaved(true); setTimeout(()=>setSaved(false),1500) }
+  const saveTo=async v=>{ setTo(v); if(!client?.id) return; try{ if(v.trim()) await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:v.trim()},{onConflict:'kind,key'}); else await supabase.from('learnings').delete().eq('kind','factura_to').eq('key',String(client.id)); flash() }catch(_){} }
+  const saveCc=async arr=>{ setCc(arr); if(!client?.id) return; try{ if(arr.length) await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:arr.join(',')},{onConflict:'kind,key'}); else await supabase.from('learnings').delete().eq('kind','factura_cc').eq('key',String(client.id)); flash() }catch(_){} }
+  const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(to||'').toLowerCase()) saveCc([...cc,e]); setCcInput('') }
+  const conEmail=(contacts||[]).filter(c=>c.email)
+  const inpS={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#fff',boxSizing:'border-box'}
+  return (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginTop:12}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+      <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,flex:1}}>Destinatario de facturas</div>
+      {saved&&<span style={{fontSize:10,color:C.greenText,fontWeight:600}}>guardado ✓</span>}
+      <span style={{fontSize:9,color:C.muted,background:'#F1EFE8',borderRadius:10,padding:'2px 8px'}}>se aprende del envío</span>
+    </div>
+    <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:4}}>Para</div>
+    {conEmail.length>0
+      ? <select value={to} onChange={e=>saveTo(e.target.value)} style={{...inpS,appearance:'none'}}>
+          <option value=''>— Elegir contacto —</option>
+          {conEmail.map(c=><option key={c.id||c.email} value={c.email}>{c.nombre?`${c.nombre} · ${c.email}`:c.email}</option>)}
+          {to&&!conEmail.some(c=>(c.email||'').toLowerCase()===to.toLowerCase())&&<option value={to}>{to}</option>}
+        </select>
+      : <input value={to} onChange={e=>setTo(e.target.value)} onBlur={()=>saveTo(to)} placeholder='correo@cliente.cl' style={inpS}/>}
+    <div style={{fontSize:10,color:C.muted,fontWeight:600,margin:'12px 0 5px'}}>En copia (CC)</div>
+    <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
+      {cc.map(e=><span key={e} style={{fontSize:10,background:C.azulBg,color:C.accent,borderRadius:20,padding:'2px 4px 2px 9px',display:'inline-flex',alignItems:'center'}}>{e}<button type='button' onClick={()=>saveCc(cc.filter(x=>x!==e))} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontWeight:700,padding:'0 4px'}}>×</button></span>)}
+      <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>addCc(ccInput)} placeholder='+ correo' style={{flex:1,minWidth:90,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/>
+    </div>
+    {conEmail.filter(c=>(c.email||'').toLowerCase()!==(to||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase())).length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:6}}>{conEmail.filter(c=>(c.email||'').toLowerCase()!==(to||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase())).map(c=><button key={c.id||c.email} type='button' onClick={()=>addCc(c.email)} style={{fontSize:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>+ {c.nombre||c.email}</button>)}</div>}
+    <div style={{fontSize:10,color:C.muted,marginTop:9}}>El envío de factura usa esto solo · si lo cambias al enviar, se actualiza aquí.</div>
+  </div>)
 }
 
 // Tab "Financiero" de la ficha (solo admin): KPIs de facturación, historial por año,
