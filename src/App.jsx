@@ -7038,7 +7038,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           </div>
         )}
       </div>
-      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} user={user} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
+      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
     </>
   )
 }
@@ -11755,10 +11755,14 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
 }
 // Envío de una factura por correo. Reusa el motor de la rendición (driveToken + sendGmailWithPdf + firma).
 // Plantilla genérica auto-rellenada + destinatarios de la ficha (contactos) + CC aprendido. PDF a mano por ahora (con la emisión DTE saldrá solo).
-function FacturaEmailModal({factura, client, user, onSent, onClose}) {
+function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
-  const glosa=(factura.concept||'').trim()
+  const concept=(factura.concept||'').trim()
+  const proyecto=(sale?.name||'').trim()   // nombre de la venta/proyecto (sales.name) = descripción real del servicio
+  const esRecurrente=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
+  // En recurrentes el concepto es "Cuota 3/12" (no le sirve al cliente) → usar el proyecto; en puntuales el concepto suele ser la glosa real.
+  const glosa=esRecurrente?(proyecto||concept):(concept||proyecto)
   const [para,setPara]=useState(client?.email||'')
   const [cc,setCc]=useState([]); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
@@ -11780,7 +11784,7 @@ function FacturaEmailModal({factura, client, user, onSent, onClose}) {
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
   const redactarIA=async()=>{ setIaBusy(true)
     try{
-      const prompt=`Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(factura.amount)}\n- Glosa/servicio (puede venir abreviada): ${glosa||'servicios legales prestados'}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir de la glosa de forma natural y profesional; NO menciones vencimiento ni plazos de pago; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (saludo + 1 o 2 párrafos), sin asunto ni firma.`
+      const prompt=`Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(factura.amount)}\n- Proyecto/servicio: ${proyecto||'—'}\n- Detalle/concepto: ${concept||'—'}${esRecurrente?'\n- Es un servicio RECURRENTE (cuota/mensualidad): descríbelo como la asesoría/servicio del proyecto correspondiente al período, NUNCA como "cuota N/M".':''}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir del proyecto y el concepto, de forma natural y profesional (no copies literal una glosa abreviada); NO menciones vencimiento ni plazos de pago; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (saludo + 1 o 2 párrafos), sin asunto ni firma.`
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim()
       if(txt) setBody(txt)
