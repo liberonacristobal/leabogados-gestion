@@ -5781,14 +5781,14 @@ function BillingView({billing,clients,sales,clientEntities,anticipos=[],terceros
           const go=f=>{setFilter(f);clearSel&&clearSel()}
           const tab=(f,l,v,col)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:17,fontWeight:600,color:col}}>{fmt(v)}</div></button>)
           return (<div>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16}}>
+            <div onClick={()=>irAEstado('emitidas')} title='Ver las facturas por cobrar' style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16,cursor:'pointer'}}>
               <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:2}}>Por cobrar · facturas emitidas sin pagar</div>
               <div style={{fontSize:26,fontWeight:700,color:C.accent,lineHeight:1.1}}>{fmt(porCobrar)}</div>
               <div style={{height:7,background:C.greenBg,borderRadius:4,margin:'10px 0 7px',overflow:'hidden',display:'flex'}}>
                 <div style={{width:`${porCobrar>0?Math.min(100,Math.round(venAll/porCobrar*100)):0}%`,background:C.overdue}}/>
               </div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:11,flexWrap:'wrap',gap:6}}>
-                <span style={{color:C.overdue,fontWeight:600}}>Vencido {fmt(venAll)} <span style={{color:C.muted,fontWeight:400}}>· ya pasó el plazo</span></span>
+                <span onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{color:C.overdue,fontWeight:600,cursor:'pointer'}}>Vencido {fmt(venAll)} <span style={{color:C.muted,fontWeight:400}}>· ya pasó el plazo</span></span>
                 <span style={{color:C.muted,fontWeight:600}}>Al día {fmt(porCobrar-venAll)}</span>
               </div>
             </div>
