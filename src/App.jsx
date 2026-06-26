@@ -72,8 +72,10 @@ const fmtN = n => '$' + Math.abs(n||0).toLocaleString('es-CL')
 const fmtDate = d => fmtFechaDMY(d)   // formato oficial único: 13-06-2026 (DD-MM-AAAA con guiones) en toda la app
 // Fecha destacada (día grande + "mes año") — formato estándar de listas. col opcional (urgencia).
 const bigDate = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:40,flexShrink:0}}/>; return <div style={{width:40,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:16,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:9,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
-// Saldo de una factura = lo que falta cobrar (monto menos lo ya abonado/conciliado). Fuente ÚNICA; Pagada/Anulada = 0.
-const saldoBill = b => (b && !['Pagado','Anulada'].includes(b.status)) ? Math.max(0,(b.amount||0)-(b.paid_amount||0)) : 0
+// Saldo de una factura = lo que falta cobrar. FUENTE ÚNICA: lo abonado = el mayor entre paid_amount (campo de la factura) y los abonos CONCILIADOS del banco (_respaldoCache, suma de conciliacion.monto_aplicado). Así nunca cuenta doble ni ignora un abono que el banco ya respaldó. Pagada/Anulada = 0.
+let _respaldoCache = {}
+const setRespaldoCache = m => { _respaldoCache = m || {} }
+const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) return 0; const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.max(0,(b.amount||0)-abonado) }
 // La cartola/conciliación bancaria solo tiene movimientos desde esta fecha; pagos anteriores se ingresaron a mano (no hay banco que los respalde).
 const RESPALDO_CUTOFF = '2025-02-06'
 // Estado de respaldo bancario de una factura PAGADA — fuente ÚNICA del badge "verificada/pendiente/sin conciliación".
@@ -17865,7 +17867,7 @@ export default function App() {
 
   const [clientEntities,setClientEntities] = useState([])
   // Suma conciliada por factura (respaldo bancario) — fuente única del badge en Facturación y la ficha.
-  const respaldoMap = useMemo(()=>{ const m={}; for(const c of (conciliacion||[])){ if(c.tipo_destino==='factura'&&c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) } return m },[conciliacion])
+  const respaldoMap = useMemo(()=>{ const m={}; for(const c of (conciliacion||[])){ if(c.tipo_destino==='factura'&&c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) } setRespaldoCache(m); return m },[conciliacion])
 
   useEffect(()=>{
     if(DEMO){
