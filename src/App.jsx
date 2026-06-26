@@ -11913,7 +11913,7 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       const at=new Date().toISOString()
       try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',factura.id) }catch(_){}
-      onSent&&onSent(factura.id,at); onClose()
+      onSent&&onSent(factura.id,at); alert('Factura enviada al cliente.'); onClose()
     }catch(e){ alert('Error al enviar: '+(e.message||e)) }
     setSending(false)
   }
@@ -16559,7 +16559,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
-      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N°${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(confirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).catch(()=>{}) } }
+      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N°${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(confirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).then(()=>alert('Acuse de pago enviado al cliente.')).catch(e=>alert('No se pudo enviar el acuse: '+(e?.message||e))) } }
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar: '+e.message) }
     setBusy(null)
   }
