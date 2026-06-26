@@ -5722,7 +5722,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         {filter!=='resumen'&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:9,flexWrap:'wrap'}}>
           <span onClick={()=>{setFilter('resumen');clearSel()}} title='Volver al resumen' style={{fontSize:16,color:C.accent,cursor:'pointer',flexShrink:0,lineHeight:1}}>←</span>
           <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden',flexShrink:0}}>
-            {[['clientes','Por cliente'],['all','Todas']].map(([v,l])=><span key={v} onClick={()=>{setFilter(v);clearSel()}} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:filter===v?C.accent:'transparent',color:filter===v?'#fff':C.muted}}>{l}</span>)}
+            {[['clientes','Por cliente'],['all','Todas']].map(([v,l])=><span key={v} onClick={()=>{setFilter(v);clearSel();setSoloSinEnviar(false)}} style={{fontSize:11,fontWeight:600,padding:'5px 13px',cursor:'pointer',background:filter===v?C.accent:'transparent',color:filter===v?'#fff':C.muted}}>{l}</span>)}
           </div>
           <select value={fYear} onChange={e=>{setFYear(e.target.value); if(!e.target.value)setFMonth('')}} style={{fontSize:11,fontWeight:600,border:`1px solid ${fYear?C.accent:C.border}`,borderRadius:20,padding:'5px 9px',background:fYear?C.azulBg:'#fff',color:fYear?C.accent:C.muted,cursor:'pointer',flexShrink:0,appearance:'none'}}>
             <option value=''>Todos los años</option>
@@ -5900,7 +5900,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>}
                 {b.status==='Programada'&&conciliable&&<button onClick={()=>onConciliar&&onConciliar(cli)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>⚠ Conciliar</button>}
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
-                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
+                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
                 {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
               </div>}
             </div>
@@ -6120,7 +6120,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>recordarCobro(b)} style={{fontSize:10,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Recordar</button>}
                 {b.status==='Programada'&&conc.has(b.id)&&<button onClick={()=>onConciliar&&onConciliar(cl)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>⚠ Conciliar</button>}
                 {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
-                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.normal,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
+                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
                 {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
               </div>}
             </div>
