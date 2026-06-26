@@ -5954,7 +5954,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <div style={{width:`${porCobrar>0?Math.min(100,Math.round(venAll/porCobrar*100)):0}%`,background:C.overdue}}/>
               </div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:11,flexWrap:'wrap',gap:6}}>
-                <span onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{color:C.overdue,fontWeight:600,cursor:'pointer'}}>Vencido {fmt(venAll)} <span style={{color:C.muted,fontWeight:400}}>· ya pasó el plazo</span></span>
+                <span onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{color:C.overdue,fontWeight:600,cursor:'pointer'}}>Vencido {fmt(venAll)}</span>
                 <span style={{color:C.muted,fontWeight:600}}>Al día {fmt(porCobrar-venAll)}</span>
               </div>
             </div>
