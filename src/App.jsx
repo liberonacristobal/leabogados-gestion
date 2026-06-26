@@ -5391,10 +5391,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     if(!uf) return null
     return { uf, clpHoy: Math.round(uf*ufHoy) }
   }
-  const pending=bb.filter(b=>b.invoice_no&&b.status==='Pendiente'&&matchYM(kpiDate(b))).reduce((s,b)=>s+saldoBill(b),0)
-  const overdue=bb.filter(b=>b.invoice_no&&b.status==='Vencido'&&matchYM(kpiDate(b))).reduce((s,b)=>s+saldoBill(b),0)
+  // "Ya facturadas" (duplicados): facturas SIN folio cuya factura emitida REAL ya existe (mismo cliente, cuota N/M o período, monto ±tolerancia). Inflan el "por facturar"; se vinculan a su factura emitida.
+  const _cuotaNMg = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
+  const _mesMapG = {enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
+  const _concPeriodoG = c => { const s=String(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_mesMapG)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_mesMapG[k]).padStart(2,'0')}` } return null }
+  const yaFacturadasIds = useMemo(()=>{ const noFolio=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)); const reales=bb.filter(b=>!b.deleted_at&&b.invoice_no&&/\d/.test(folioN(b.invoice_no||''))&&b.status!=='Anulada'); const rByC={}; reales.forEach(r=>{(rByC[r.client_id]=rByC[r.client_id]||[]).push(r)}); const ids=new Set(); noFolio.forEach(p=>{ const a=p.amount||0; if(!a) return; const rs=rByC[p.client_id]||[]; const pcu=_cuotaNMg(p.concept), pper=_concPeriodoG(p.concept); const hit=rs.some(r=>{ const rcu=_cuotaNMg(r.concept), rper=_concPeriodoG(r.concept); const sameCu=!!(pcu&&rcu&&pcu.n===rcu.n); const samePer=!!(pper&&rper&&pper===rper); if(!sameCu&&!samePer) return false; const dM=Math.abs((r.amount||0)-a)/a; return dM<=(sameCu?0.25:0.06) }); if(hit) ids.add(p.id) }); return ids },[bb])
+  // KPIs — MISMA fuente que el landing: Por cobrar = total cuentas por cobrar (emitidas con saldo, NO depende del año); Por facturar = sin folio real (excluye las ya facturadas).
+  const pending=bb.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
+  const overdue=bb.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((s,b)=>s+saldoBill(b),0)
   const paid=bb.filter(b=>b.status==='Pagado'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
-  const programado=bb.filter(b=>b.status==='Programada'&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
+  const programado=bb.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&!yaFacturadasIds.has(b.id)&&matchYM(kpiDate(b))).reduce((s,b)=>s+(b.amount||0),0)
   // Contadores por nº de documentos para las tabs
   const nEmitidas=bb.filter(b=>['Pendiente','Vencido','Propuesta'].includes(b.status)).length
   const nProgramadas=bb.filter(b=>b.status==='Programada').length
@@ -5468,11 +5474,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setPagoBusy(false)
   }
   const [calcesOpen,setCalcesOpen] = useState(true)
-  // "Ya facturadas" (duplicados): facturas SIN folio (por facturar) cuya factura emitida REAL ya existe (mismo cliente, misma cuota N/M o período, monto ±tolerancia). Inflan el "por facturar"; se vinculan a su factura emitida.
-  const _cuotaNMg = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
-  const _mesMapG = {enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
-  const _concPeriodoG = c => { const s=String(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_mesMapG)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_mesMapG[k]).padStart(2,'0')}` } return null }
-  const yaFacturadasIds = useMemo(()=>{ const noFolio=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)); const reales=bb.filter(b=>!b.deleted_at&&b.invoice_no&&/\d/.test(folioN(b.invoice_no||''))&&b.status!=='Anulada'); const rByC={}; reales.forEach(r=>{(rByC[r.client_id]=rByC[r.client_id]||[]).push(r)}); const ids=new Set(); noFolio.forEach(p=>{ const a=p.amount||0; if(!a) return; const rs=rByC[p.client_id]||[]; const pcu=_cuotaNMg(p.concept), pper=_concPeriodoG(p.concept); const hit=rs.some(r=>{ const rcu=_cuotaNMg(r.concept), rper=_concPeriodoG(r.concept); const sameCu=!!(pcu&&rcu&&pcu.n===rcu.n); const samePer=!!(pper&&rper&&pper===rper); if(!sameCu&&!samePer) return false; const dM=Math.abs((r.amount||0)-a)/a; return dM<=(sameCu?0.25:0.06) }); if(hit) ids.add(p.id) }); return ids },[bb])
   // Calces sugeridos: para cada factura pendiente/vencida, los abonos que calzan exacto. 1:1 inequívoco → "limpio" (se concilia de un toque); ambiguo (un abono ↔ 2+ facturas o una factura ↔ 2+ abonos) → "revisar" (eliges).
   const calcesSugeridos = useMemo(()=>{
     const pend = bb.filter(b=>!b.deleted_at && esEmitida(b) && (b.status==='Pendiente'||b.status==='Vencido') && saldoBill(b)>0)
@@ -5747,7 +5748,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:9}}>
-          {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Programado',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=estadoActivo(fl); return (
+          {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Por facturar',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=estadoActivo(fl); return (
             <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,cursor:'pointer',minWidth:0}}>
               <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
               <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
@@ -5929,10 +5930,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       <div style={{padding:'10px 20px 100px'}}>
         {filter==='resumen' ? (()=>{
           const hoy=new Date().toISOString().slice(0,10)
-          const pend=bb.filter(b=>['Pendiente','Vencido'].includes(b.status))
+          const pend=bb.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status))
           const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
           const porCobrar=pend.reduce((a,b)=>a+saldoBill(b),0)
-          const venAll=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
+          const venAll=bb.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
           const inResYear=(dateStr)=> !fYear || String(dateStr||'').slice(0,4)===fYear
           const cobAll=bb.filter(b=>b.status==='Pagado'&&inResYear(b.paid_at||b.issued_at)).reduce((a,b)=>a+(b.amount||0),0)
           const progAll=bb.filter(b=>b.status==='Programada'&&inResYear(b.due)).reduce((a,b)=>a+(b.amount||0),0)
@@ -6038,7 +6039,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           )}
           const porCobrarTot=rows.filter(b=>['Pendiente','Vencido'].includes(estadoReal(b))).reduce((a,b)=>a+saldoBill(b),0)
           const vencidoTot=rows.filter(b=>estadoReal(b)==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
-          const estChips=[['Programada','Programadas'],['Pendiente','Emitidas'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
+          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
           return (<div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
               {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
@@ -6269,7 +6270,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>}
             </div>
           )}
-          const estChips=[['Programada','Programadas'],['Pendiente','Emitidas'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
+          const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Pagadas'],['Anulada','Anuladas']]
           return (<div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
               {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
