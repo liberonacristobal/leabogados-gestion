@@ -76,6 +76,26 @@ const bigDate = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul',
 let _respaldoCache = {}
 const setRespaldoCache = m => { _respaldoCache = m || {} }
 const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) return 0; const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.max(0,(b.amount||0)-abonado) }
+// CANON DE COLOR POR ESTADO DE COBRO — fuente única (un color por estado, sin duplicados ni hex sueltos). Cada estado: {label, color (línea/borde/cifra), bg (fondo de badge), text (texto sobre bg)}.
+const ESTADO_COBRO = {
+  vencido:     {label:'Vencido',      color:C.overdue,  bg:C.overdueBg, text:C.overdueText},
+  porCobrar:   {label:'Por cobrar',   color:C.accent,   bg:C.azulBg,    text:C.accent},
+  porFacturar: {label:'Por facturar', color:C.muted,    bg:C.bgWarm,    text:C.muted},
+  yaFacturada: {label:'Ya facturada', color:C.soon,     bg:C.ambarBg,   text:C.soonText},
+  cobrado:     {label:'Cobrado',      color:C.normal,   bg:C.greenBg,   text:C.greenText},
+  anticipada:  {label:'Anticipada',   color:C.azulInfo, bg:C.azulBg,    text:C.azulInfo},
+  anulada:     {label:'Anulada',      color:C.done,     bg:C.bgWarm,    text:C.grisText},
+}
+const esVencidaB = b => !!b && (b.status==='Vencido' || (b.status==='Pendiente' && (b.due||'') && (b.due||'') < new Date().toISOString().slice(0,10)))
+// Deriva el estado de cobro (folio + saldo + vencimiento + status) y devuelve su token de color. opts.yaFact = la sin-folio cuya factura emitida ya existe (duplicada), que la vista detecta y pasa.
+const estadoCobro = (b, opts={}) => {
+  if(!b) return ESTADO_COBRO.porCobrar
+  if(b.status==='Anulada') return ESTADO_COBRO.anulada
+  if(b.status==='Anticipada') return ESTADO_COBRO.anticipada
+  if(b.status==='Pagado' || saldoBill(b)<=0) return ESTADO_COBRO.cobrado
+  if(!b.invoice_no) return opts.yaFact ? ESTADO_COBRO.yaFacturada : ESTADO_COBRO.porFacturar
+  return esVencidaB(b) ? ESTADO_COBRO.vencido : ESTADO_COBRO.porCobrar
+}
 // La cartola/conciliación bancaria solo tiene movimientos desde esta fecha; pagos anteriores se ingresaron a mano (no hay banco que los respalde).
 const RESPALDO_CUTOFF = '2025-02-06'
 // Estado de respaldo bancario de una factura PAGADA — fuente ÚNICA del badge "verificada/pendiente/sin conciliación".
