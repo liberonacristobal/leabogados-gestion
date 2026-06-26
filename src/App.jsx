@@ -5747,8 +5747,15 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
-        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:9}}>
-          {[['Por cobrar',pending,'emitidas',C.accent,'#E6EEF1'],['Por facturar',programado,'programadas','#537281','#EDF1F3'],['Vencido',overdue,'vencido',C.overdue,'#FCEBEB'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=estadoActivo(fl); return (
+        {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
+          {(()=>{ const on=estadoActivo('emitidas'); return (
+            <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</div>
+              <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>{fmtShort(pending)}</div>
+              {overdue>0&&<div onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{fontSize:10,color:C.overdue,fontWeight:600,marginTop:3,whiteSpace:'nowrap'}}>vencido {fmtShort(overdue)}</div>}
+            </button>
+          )})()}
+          {[['Por facturar',programado,'programadas','#537281','#EDF1F3'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=estadoActivo(fl); return (
             <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,cursor:'pointer',minWidth:0}}>
               <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
               <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
@@ -11564,9 +11571,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const real = all.filter(b=>b.billing_type!=='reembolso')
   const facturado = real.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
   const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
-  const porCobrar = real.filter(b=>['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
-  const programado = real.filter(b=>b.status==='Programada').reduce((a,b)=>a+(b.amount||0),0)
-  const overdueTot = real.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+  const porCobrar = real.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
+  const programado = real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
+  const overdueTot = real.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
 
   const clientSales = (sales||[]).filter(s=>String(s.client_id)===String(client.id))
   const saleTitle = id => clientSales.find(s=>String(s.id)===String(id))?.title || null
@@ -11653,10 +11660,15 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
       {/* Tira de 4 KPIs del cliente (heredada del landing), scroll horizontal; Programado/Cobrado por año */}
       {(()=>{
         const cobYear=real.filter(b=>b.status==='Pagado'&&String(b.paid_at||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
-        const progYear=real.filter(b=>b.status==='Programada'&&String(b.due||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
-        const K=[['Por cobrar',porCobrar,porCobrar>0?C.soon:C.text,false],['Vencido',overdueTot,overdueTot>0?C.overdue:C.text,overdueTot>0],['Programado '+(selYear||''),progYear,C.muted,false],['Cobrado '+(selYear||''),cobYear,C.normal,false]]
-        return <div style={{display:'flex',gap:7,overflowX:'auto',marginBottom:12,paddingBottom:2,scrollbarWidth:'none'}}>
-          {K.map(([l,v,col,alert])=>(<div key={l} style={{flex:'0 0 auto',background:alert?C.overdueBg:C.card,border:`1px solid ${alert?'#F7C1C1':C.border}`,borderRadius:10,padding:'7px 11px'}}><div style={{fontSize:8,color:alert?C.overdueText:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{fmt(v)}</div></div>))}
+        const progYear=real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&String(b.due||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
+        return <div style={{display:'flex',gap:7,overflowX:'auto',marginBottom:12,paddingBottom:2,scrollbarWidth:'none',alignItems:'stretch'}}>
+          {/* Por cobrar con Vencido ANIDADO (jerarquía: el vencido es parte del por cobrar, no una tarjeta paralela) */}
+          <div style={{flex:'0 0 auto',background:overdueTot>0?C.overdueBg:C.card,border:`1px solid ${overdueTot>0?'#F7C1C1':C.border}`,borderRadius:10,padding:'7px 11px'}}>
+            <div style={{fontSize:8,color:overdueTot>0?C.overdueText:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div>
+            <div style={{fontSize:14,fontWeight:700,color:porCobrar>0?C.accent:C.text,whiteSpace:'nowrap'}}>{fmt(porCobrar)}</div>
+            {overdueTot>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdue,whiteSpace:'nowrap',marginTop:2}}>vencido {fmt(overdueTot)}</div>}
+          </div>
+          {[['Por facturar '+(selYear||''),progYear,C.muted],['Cobrado '+(selYear||''),cobYear,C.normal]].map(([l,v,col])=>(<div key={l} style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px'}}><div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{fmt(v)}</div></div>))}
         </div>
       })()}
 
@@ -11746,12 +11758,13 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
             )
           }
           const renderGroupRows = rows => {
-            const pend=rows.filter(b=>['Pendiente','Vencido'].includes(b.status)).sort((a,b)=>(a.due||'').localeCompare(b.due||''))
-            const prog=rows.filter(b=>b.status==='Programada').sort((a,b)=>(a.due||'').localeCompare(b.due||''))
+            const pend=rows.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).sort((a,b)=>(a.due||'').localeCompare(b.due||''))
+            const prog=rows.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).sort((a,b)=>(a.due||'').localeCompare(b.due||''))
             const pag=rows.filter(b=>['Pagado','Anticipada'].includes(b.status)).sort((a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''))
-            const otros=rows.filter(b=>!['Pendiente','Vencido','Programada','Pagado','Anticipada'].includes(b.status))
+            const usados=new Set([...pend,...prog,...pag].map(b=>b.id))
+            const otros=rows.filter(b=>!usados.has(b.id))
             const sub=(label,arr)=>arr.length?<><div key={label} style={{fontSize:8,color:C.muted,textTransform:'uppercase',fontWeight:700,letterSpacing:.4,margin:'7px 0 4px'}}>{label}</div>{arr.map(b=>renderFactura(b,false))}</>:null
-            return <>{sub('Pendientes / vencidas',pend)}{sub('Programadas',prog)}{sub('Pagadas',pag)}{otros.map(b=>renderFactura(b,false))}</>
+            return <>{sub('Por cobrar',pend)}{sub('Por facturar',prog)}{sub('Cobradas',pag)}{otros.map(b=>renderFactura(b,false))}</>
           }
           const saleIds = Object.keys(bySale).sort((a,b)=>{ const pa=bySale[a].some(x=>['Pendiente','Vencido'].includes(x.status))?1:0; const pb=bySale[b].some(x=>['Pendiente','Vencido'].includes(x.status))?1:0; return pb-pa || (saleTitle(a)||'').localeCompare(saleTitle(b)||'','es') })
           const nada = !saleIds.length && !container.length && !sinP.length
