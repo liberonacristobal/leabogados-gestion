@@ -7766,6 +7766,9 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const [posOpen,setPosOpen] = useState(true)                 // grupo "posibles duplicados" abierto
   const [posExp,setPosExp] = useState(null)                   // rowId del posible con la comparación expandida
   const [cajaOwner,setCajaOwner] = useState('')               // dueño de la caja chica: estos gastos van a su caja (created_by = su NOMBRE, igual que un gasto normal)
+  // Categorías aprendidas (glosa→categoría, mismo learning que el Asistente IA): pre-rellena la carga cuando la planilla no trae categoría.
+  const catLearnRef = useRef({})
+  useEffect(()=>{ let on=true; supabase.from('learnings').select('key,value').eq('kind','gasto_categoria').then(({data})=>{ if(!on)return; const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); catLearnRef.current=m }); return ()=>{on=false} },[])
   const toggleForzar = id => setForzarNuevo(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   // Memoria del lote: persiste reasignaciones de calce y "forzar nuevo" por huella de fila (cliente+monto+glosa),
   // para que al re-subir el MISMO archivo se retomen tus decisiones (filosofía: la app aprende, no repite).
@@ -8151,7 +8154,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         const cajaRaw = norm(getField('caja_chica'))   // "sí"=pagado con caja chica (paid_by_client=false); "no"=sin caja chica (true)
         const paidByClient = cajaRaw==='' ? undefined : /^(no|false|n|0|nro|na)$/.test(cajaRaw)
         if(!rut&&!nombre&&!concepto&&monto==null&&!fecha&&!notas) return null  // fila vacía
-        const categoria = tipo==='fondo' ? 'Fondo' : (notaria && !String(getField('categoria')||'').trim() ? 'Notaria' : mapCategoria(getField('categoria')))
+        const _rawCat=String(getField('categoria')||'').trim()
+        const _learnCat=(!_rawCat&&concepto)?catLearnRef.current[glosaKey(concepto)]:null   // sin categoría en la planilla → usa la aprendida (tú la revisas en el preview)
+        const categoria = tipo==='fondo' ? 'Fondo' : (notaria && !_rawCat ? 'Notaria' : (_rawCat ? mapCategoria(_rawCat) : (_learnCat&&CAT_OPCIONES.includes(_learnCat) ? _learnCat : 'Otro')))
         // Gasto personal de un miembro de la oficina: "Personal · Martín" / "Personal: Martín" → personal_de (no es cliente).
         const _pm = nombre.match(/^\s*personal\s*[·:.\-]\s*(.+)$/i)
         let personalDe = null
@@ -9091,7 +9096,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
   // Catálogo de categorías de oficina que APRENDE: base + las ya usadas en gastos de la oficina (excluye las legales) + ordenadas.
   const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_BASE); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(e.category) }); return [...s] },[expenses,clients])
-  const setCatOficina = async(e,cat)=>{ setCatMenu(null); try{ await supabase.from('expenses').update({category:cat}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,category:cat}:x)) }catch(err){ alert('No se pudo guardar la categoría: '+err.message) } }
+  const setCatOficina = async(e,cat)=>{ setCatMenu(null); try{ await supabase.from('expenses').update({category:cat}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,category:cat}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ alert('No se pudo guardar la categoría: '+err.message) } }
   const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at){ alert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)) }catch(err){alert('Error: '+err.message)} }
   const notaRow = (e, bloqueado=false, adelanto=false) => { const on=selNota.has(e.id); return (
     <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?'#EEF3F6':'transparent',opacity:bloqueado?.5:1}}>
@@ -18300,6 +18305,8 @@ export default function App() {
       if(error)throw error
       // Aprende glosa→proyecto: la próxima vez un gasto con la misma glosa sugiere este proyecto.
       if(p.type==='gasto' && p.project && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_proyecto', `${p.client_id}::${gk}`, p.project, {}) }
+      // Aprende glosa→categoría: el Asistente IA de caja chica y la carga masiva la reusan (no repetir la clasificación).
+      if(p.type==='gasto' && p.category && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_categoria', gk, p.category) }
       setExpenses(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
       // Si se editó el MONTO de un gasto ya rendido/liquidado, reajusta el total de su rendición (no dejarlo stale).
       const renderId = prev && (prev.client_render_id || prev.render_id)
@@ -18348,6 +18355,8 @@ export default function App() {
       const row = {
         type:tipo, client_id:r.client_id||null, entity_id:r.entity_id||null,
         amount:r.monto||0, concept:_concept, subconcept:_sub||null, ot_number:(r.ot||'').trim()||null, notas:r.notas||null,
+        src_name:(r.nombre||'').trim()||null,   // nombre crudo de la planilla: permite aprender el alias al asignar el huérfano después
+
         category: tipo==='fondo'?'Fondo':(r.categoria||'Otro'),
         date:r.fecha||null, project:r.proyecto||null, sale_id:null,
         personal_de: r.personal_de||null,
@@ -18448,6 +18457,8 @@ export default function App() {
       const {error} = await supabase.from('expenses').update({client_id:clientId, entity_id:null}).in('id',ids)
       if(error) throw error
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:clientId,entity_id:null}:e))
+      // Aprende para futuras cargas: el nombre crudo (src_name) de cada gasto asignado → este cliente, igual que el modal de carga.
+      try{ const nombres=[...new Set(ids.map(id=>(expenses||[]).find(x=>x.id===id)?.src_name).filter(Boolean).map(n=>String(n).toLowerCase().trim()).filter(n=>n.length>1))]; nombres.forEach(n=>handleLearnAlias(n,clientId)) }catch(_){}
       // Trazabilidad: registra cada reasignación (from→to). No rompe si la tabla expense_audit no existe aún.
       try{
         const rows = ids.map(id=>{ const e=(expenses||[]).find(x=>x.id===id); return { expense_id:id, from_client_id:e?.client_id||null, to_client_id:clientId, concept:e?.concept||null, amount:e?.amount??null, moved_by:user?.name||null } }).filter(r=>String(r.from_client_id)!==String(r.to_client_id))
@@ -18459,7 +18470,7 @@ export default function App() {
         setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:null}:e))
       }})
     }catch(e){ alert('Error: '+e.message) }
-  },[expenses])
+  },[expenses,handleLearnAlias])
 
   const handleDeleteExpense=useCallback(async(id)=>{
     const exp=expenses.find(x=>x.id===id)
