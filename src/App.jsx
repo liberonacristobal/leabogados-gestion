@@ -12437,9 +12437,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
   const [rSec,setRSec] = useState({})   // secciones-icono del Resumen (Cobros/Ventas/Gastos/Tareas), colapsadas por defecto
   const rtog = k => setRSec(s=>({...s,[k]:!s[k]}))
-  const RHdr = ({icon,title,summary,sumCol,k,iconCol}) => (<div onClick={()=>rtog(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 0 11px',cursor:'pointer'}}>
+  const RHdr = ({icon,title,summary,sumCol,k,iconCol}) => (<div onClick={()=>rtog(k)} style={{display:'flex',alignItems:'center',gap:11,padding:'13px',cursor:'pointer',background:rSec[k]?'#F7F9FA':'#fff'}}>
     <SIcon n={icon} s={18} c={iconCol||C.muted}/>
-    <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{title}</span>
+    <span style={{fontSize:13,fontWeight:rSec[k]?700:600,color:rSec[k]?C.accent:C.text,flex:1,minWidth:0}}>{title}</span>
     {summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}
     <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:rSec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
   </div>)
@@ -12520,9 +12520,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         </div>
 
         {/* Ventas */}
-        <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`}}>
+        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
           {RHdr({icon:'briefcase',title:'Ventas',k:'ventas',summary:`${clientSales.filter(s=>s.status==='Activo').length} activas`})}
-          {rSec.ventas&&<div style={{paddingBottom:10}}>
+          {rSec.ventas&&<div style={{padding:'2px 13px 12px'}}>
           {clientSales.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin ventas registradas</div>}
           {(()=>{
             const renderSale = s => {
@@ -12599,9 +12599,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
         {/* Cobros pendientes */}
         {porCobrar.length>0&&(
-          <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`}}>
+          <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
             {RHdr({icon:'file',title:'Cobros pendientes',k:'cobros',summary:fmt(totalPorCobrar),sumCol:C.accent,iconCol:C.accent})}
-            {rSec.cobros&&<div style={{paddingBottom:10}}>
+            {rSec.cobros&&<div style={{padding:'2px 13px 12px'}}>
             <button onClick={onAddBilling} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:8}}>+ Nuevo</button>
             {(()=>{
               const sorted = [...porCobrar].sort((a,b)=>{const ra=(a.receptor_name||'').toLowerCase(),rb=(b.receptor_name||'').toLowerCase();if(ra!==rb)return ra.localeCompare(rb,'es');return new Date(a.issued_at||0)-new Date(b.issued_at||0)})
@@ -12651,9 +12651,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         )}
 
         {/* Gastos y fondos */}
-        <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`}}>
+        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
           {RHdr({icon:'wallet',title:'Gastos y fondos',k:'gastos',summary:`saldo ${fmt(saldoFondos)}`,sumCol:saldoFondos<0?C.overdue:C.normal})}
-          {rSec.gastos&&<div style={{paddingBottom:10}}>
+          {rSec.gastos&&<div style={{padding:'2px 13px 12px'}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-start',marginBottom:8}}>
               <button onClick={()=>onAddFondo(client)} style={chipBtn('green')}>+ Fondo</button>
               <button onClick={()=>onAddGasto(client)} style={chipBtn('soft')}>+ Gasto</button>
@@ -12733,9 +12733,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         </div>
 
         {/* Proyectos y Tareas */}
-        <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
           {RHdr({icon:'check',title:'Proyectos y tareas',k:'tareas',summary:clientTasks.length?`${clientTasks.length} ${clientTasks.length===1?'tarea':'tareas'}`:'sin activas',sumCol:clientTasks.some(t=>urgency(t.due,t.status)==='overdue')?C.overdue:C.muted})}
-          {rSec.tareas&&<div style={{paddingBottom:10}}>
+          {rSec.tareas&&<div style={{padding:'2px 13px 12px'}}>
           <button onClick={onAddTask} style={{...chipBtn('soft'),marginBottom:10}}>+ Tarea</button>
           {clientTasks.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin tareas activas</div>}
 
@@ -12801,9 +12801,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           if(!exp.length) return null
           const niv = exp.some(n=>n.prioridad==='alta')?{t:'Riesgo alto',c:C.overdueText}:exp.some(n=>n.prioridad==='media')?{t:'Riesgo medio',c:C.soonText}:{t:'Riesgo bajo',c:C.azulInfo}
           return (
-            <div style={{marginBottom:4,borderBottom:`1px solid ${C.border}`}}>
+            <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
               {RHdr({icon:'alert',iconCol:niv.c,title:'Exposición tributaria',k:'exposicion',summary:niv.t,sumCol:niv.c})}
-              {rSec.exposicion&&<div style={{paddingBottom:10}}>
+              {rSec.exposicion&&<div style={{padding:'2px 13px 12px'}}>
                 {exp.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; return (
                   <div key={n.id||n.titulo} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
                     <div style={{fontSize:12.5,fontWeight:500,color:C.text}}>{n.titulo}</div>
