@@ -590,6 +590,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     const tareasC=(tasks||[]).filter(t=>t.client_id===cl.id&&t.status!=='Terminado').length
     const ended=cl.status==='Terminado'
     const rs=rsLabel(cl.id,clients,clientEntities)
+    const activeProj=ended?[]:(sales||[]).filter(s=>s.client_id===cl.id&&s.status==='Activo')
     return (
       <div onClick={()=>{setFtab('resumen');setSelected(cl)}} style={{background:'#fff',borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid #E4E8EB`,cursor:'pointer',borderLeft:`3px solid ${ended?C.done:tareasC>0?C.soon:C.accent}`,opacity:ended?.7:1}}
         onMouseEnter={e=>e.currentTarget.style.borderColor='#537281'}
@@ -607,6 +608,16 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
         </div>
         <div style={{fontSize:11,color:C.muted,marginTop:3}}>{cl.type||''}{cl.rut?` · ${cl.rut}`:''}</div>
         {(rs.name!==cl.name||rs.multi)&&<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>}
+        {activeProj.length>0&&<div style={{marginTop:7,paddingTop:7,borderTop:`0.5px solid ${C.bgWarm}`}}>
+          <div style={{fontSize:8,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:5}}>Proyectos vigentes · {activeProj.length}</div>
+          {activeProj.slice(0,3).map(s=>{ const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'; return (
+            <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+              <SIcon n={ai} s={15} c={C.muted}/>
+              <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</span>
+            </div>
+          )})}
+          {activeProj.length>3&&<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:2}}>+{activeProj.length-3} más</div>}
+        </div>}
       </div>
     )
   }
