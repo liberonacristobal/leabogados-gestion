@@ -33,6 +33,8 @@ const C = {
   azulInfo:'#185FA5', azulBg:'#E6F1FB', tealBg:'#DFF1F2', tealText:'#155E6B', ambarBg:'#FAEEDA', coralText:'#993C1D', grisText:'#5F5E5A',
   // grises de fondo (antes hex sueltos repetidos): bgSoft = filas/hover/chips suaves; bgPanel = paneles internos; bgWarm = chips neutros cálidos. Migrar los literales a estos al tocar cada vista.
   bgSoft:'#F5F7F9', bgPanel:'#FAFBFC', bgWarm:'#F1EFE8',
+  // sub-paleta SOBRE NAVY (heroes con fondo accent #003C50, p.ej. Saldo del cliente / Vendido): label azul claro, botón navy profundo, divisor, verde/rojo claros legibles sobre navy
+  onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
 }
 // Único puente a Claude. La API key NO vive en el front (sería pública en el bundle):
 // vive como secreto en la edge function claude-proxy, que valida el JWT del equipo.
@@ -321,6 +323,9 @@ function fgCliente(expenses, clientId){
   return {fondos, gastos, saldo:fondos-gastos}
 }
 const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
+// Aporte de UN movimiento al saldo del cliente (fondo suma; gasto resta salvo histórico). FUENTE ÚNICA de la fórmula neta
+// que antes se repetía inline en el Dashboard y la lista de Clientes. Equivale a sumar esto = fgCliente().saldo.
+const saldoDelta = e => e.type==='fondo' ? (e.amount||0) : (e.no_descuenta_saldo ? 0 : -(e.amount||0))
 
 // FUENTE ÚNICA del saldo de un fondo de cliente para RENDICIONES (modal, PDF y correo usan ESTA).
 // saldo disponible = fondos recibidos − gastos YA RENDIDOS (de todas las rendiciones de la RS).
@@ -2263,7 +2268,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const topAreas = Object.entries(byArea).sort((a,b)=>b[1]-a[1]).slice(0,3)
 
   const balances = {}
-  expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):(e.no_descuenta_saldo?0:-(e.amount||0))) })
+  expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+saldoDelta(e) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = useState(false)
   const [funnelKpi,setFunnelKpi] = useState(null)   // paso del funnel (facturado/cobrado/programado) abierto para ver su detalle
@@ -3704,9 +3709,9 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         {/* Hero: Vendido del año (toca para UF/$) + Pipeline (toca para filtrar a propuestas) */}
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <div onClick={()=>setMontoUF(v=>!v)} style={{flex:1.3,minWidth:0,background:C.accent,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
-            <div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:.4}}>Vendido {fYear||'total'}</div>
+            <div style={{fontSize:9,color:C.onNavyLabel,textTransform:'uppercase',letterSpacing:.4}}>Vendido {fYear||'total'}</div>
             <div style={{fontSize:23,fontWeight:700,color:'#fff',lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
-            <div style={{fontSize:9,color:'#85B7EB',marginTop:3}}>{actYr.length} activas · {termYr.length} terminadas · toca para {montoUF?'$':'UF'}</div>
+            <div style={{fontSize:9,color:C.onNavyLabel,marginTop:3}}>{actYr.length} activas · {termYr.length} terminadas · toca para {montoUF?'$':'UF'}</div>
           </div>
           <div onClick={()=>setFStatus(fStatus==='Propuesta'?'':'Propuesta')} style={{flex:1,minWidth:0,background:fStatus==='Propuesta'?C.azulBg:'#fff',border:`1px solid ${fStatus==='Propuesta'?C.accent:C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
             <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='clock' s={12} c={C.muted}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Pipeline</span></div>
@@ -9303,15 +9308,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     return (
     <div style={{background:C.accent,borderRadius:12,padding:'10px 14px',marginBottom:8}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
-        <div style={{minWidth:0}}><div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:'.04em'}}>Saldo del cliente</div><div style={{fontSize:23,fontWeight:700,color:bal.saldo<0?'#F0A3A3':'#fff',lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(bal.saldo)}</div></div>
+        <div style={{minWidth:0}}><div style={{fontSize:9,color:C.onNavyLabel,textTransform:'uppercase',letterSpacing:'.04em'}}>Saldo del cliente</div><div style={{fontSize:23,fontWeight:700,color:bal.saldo<0?C.onNavyRed:'#fff',lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(bal.saldo)}</div></div>
         <div style={{display:'flex',gap:6,flexShrink:0}}>
-          <button onClick={()=>onAddFondo(selectedClient)} style={{background:'#0E5066',color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Fondo</button>
-          <button onClick={()=>onAdd(selectedClient)} style={{background:'#0E5066',color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Gasto</button>
+          <button onClick={()=>onAddFondo(selectedClient)} style={{background:C.onNavyBtn,color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Fondo</button>
+          <button onClick={()=>onAdd(selectedClient)} style={{background:C.onNavyBtn,color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Gasto</button>
         </div>
       </div>
-      <div style={{display:'flex',gap:16,marginTop:6,paddingTop:6,borderTop:'0.5px solid #1C5468'}}>
-        <span style={{fontSize:11,color:'#9BD9BE'}}>Fondos <b style={{color:'#fff'}}>{fmt(bal.fondos)}</b></span>
-        <span style={{fontSize:11,color:'#F0A3A3'}}>Gastos <b style={{color:'#fff'}}>{fmt(bal.gastos)}</b></span>
+      <div style={{display:'flex',gap:16,marginTop:6,paddingTop:6,borderTop:`0.5px solid ${C.onNavyLine}`}}>
+        <span style={{fontSize:11,color:C.onNavyGreen}}>Fondos <b style={{color:'#fff'}}>{fmt(bal.fondos)}</b></span>
+        <span style={{fontSize:11,color:C.onNavyRed}}>Gastos <b style={{color:'#fff'}}>{fmt(bal.gastos)}</b></span>
       </div>
     </div>
   )}
@@ -12904,7 +12909,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
     return [...base].sort((a,b)=>{ const ta=tareasDe[a.id]||0,tb=tareasDe[b.id]||0; if((ta>0)!==(tb>0)) return tb>0?1:-1; return tb-ta })
   },[clients,sFilter,q,respSel,responsableDe,tareasDe])
   const balances = useMemo(()=>{
-    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+(e.type==='fondo'?(e.amount||0):(e.no_descuenta_saldo?0:-(e.amount||0))) }); return m
+    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+saldoDelta(e) }); return m
   },[expenses])
 
   // Proveedores inline (mismo formato que clientes: lista → ficha, pantalla completa)
