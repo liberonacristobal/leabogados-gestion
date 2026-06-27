@@ -3535,7 +3535,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const totalCLP = Math.round(filtered.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
   // Encabezado "Vendido del año" = Activo + Terminado del año seleccionado (mismo universo que el Dashboard), independiente del filtro de la lista. UF por defecto, toca para CLP.
   const [montoUF,setMontoUF] = useState(true)
-  const yearSales = sales.filter(s=> !fYear || String(s.year)===fYear)
+  const yearSales = sales.filter(s=> (!fYear || String(s.year)===fYear) && (!fArea || s.area===fArea))
   const actYr = yearSales.filter(s=>s.status==='Activo')
   const termYr = yearSales.filter(s=>s.status==='Terminado')
   const sumUF = arr=>arr.reduce((a,s)=>a+ventaUF(s,ufRef),0)
@@ -3582,15 +3582,19 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
   const AREA_COL = {'Tributario':'#BA7517','Corporativo':'#534AB7'}
   const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?C.done:personChip(k).color) : (AREA_COL[k]||'#537281')
   const grupos = useMemo(()=>{
+    // El desglose desglosa el MISMO universo que el hero "Vendido del año" (Activo + Terminado), así suma exacto al total.
+    const src = sales.filter(s=> (!fYear||String(s.year)===fYear) && (!fArea||s.area===fArea) && (s.status==='Activo'||s.status==='Terminado'))
     const m={}
-    filtered.forEach(s=>{
+    src.forEach(s=>{
       const k = groupBy==='abogado' ? (s.responsible||'Sin abogado') : (s.area||'Sin área')
       if(!m[k]) m[k]={key:k,count:0,uf:0,rows:[]}
       m[k].count++; m[k].uf+=ventaUF(s,ufRef); m[k].rows.push(s)
     })
     return Object.values(m).sort((a,b)=>b.uf-a.uf)
-  },[filtered,groupBy,ufRef])
+  },[sales,fYear,fArea,groupBy,ufRef])
   const buscando = q.trim().length>0
+  // El desglose (Vendido = Activo+Terminado) se muestra en el estado por defecto; los estados no-vendido (Propuesta/etc.) y la búsqueda van como lista plana.
+  const flatView = buscando || !(fStatus===''||fStatus==='Activo')
   const saleRow = s => {
     const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
     const client=clients.find(c=>c.id===s.client_id)
@@ -3670,53 +3674,52 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
             <div style={{fontSize:9,color:C.done,marginTop:2}}>{propuestasFiltradas.length} propuesta{propuestasFiltradas.length!==1?'s':''}</div>
           </div>
         </div>
-        {(propuestasFiltradas.length>0||totalCerradas>0)&&(
-          <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:4}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}><span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Embudo de propuestas</span>{totalCerradas>0&&<span style={{fontSize:11,fontWeight:700,color:C.normal}}>{conversionPct.toFixed(0)}% conversión</span>}</div>
-            {totalCerradas>0?<><div style={{display:'flex',height:22,borderRadius:5,overflow:'hidden'}}>
-              <div style={{width:`${conversionPct}%`,background:C.normal,display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{conversionPct>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Activadas {activadasFiltradas.length}</span>}</div>
-              <div style={{flex:1,background:'#F09595',display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{(100-conversionPct)>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Rech. {rechazadasFiltradas.length}</span>}</div>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:5}}><span>desc. promedio {conDesc.length>0?descuentoProm.toFixed(0):'0'}%</span><span>valor rechazado {fmtUF(valorRechazadoUF)}</span></div></>
-            :<div style={{fontSize:11,color:C.muted}}>{propuestasFiltradas.length} propuesta{propuestasFiltradas.length!==1?'s':''} en pipeline · {fmtUF(pipelineUF)}</div>}
-          </div>
-        )}
       </div>
       <div style={{padding:'4px 20px 100px'}}>
-        {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>}
-        {filtered.length>0&&(buscando ? (
-          filtered.map(saleRow)
+        {flatView ? (
+          filtered.length===0
+            ? <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>
+            : filtered.map(saleRow)
+        ) : grupos.length===0 ? (
+          <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin ventas en esta categoria</div>
         ) : (<>
           {(()=>{ const tardias=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}); if(!tardias.length) return null; return <div onClick={()=>setFStatus('Propuesta')} style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'9px 12px',marginBottom:9,cursor:'pointer'}}><SIcon n='alert' s={16} c={C.soonText}/><span style={{flex:1,fontSize:11,color:C.soonText,fontWeight:600}}>{tardias.length} propuesta{tardias.length!==1?'s':''} llevan +14 días sin respuesta</span></div> })()}
-          <div style={{display:'flex',gap:6,marginBottom:8}}>
-            {[['abogado','Por abogado'],['area','Por área']].map(([v,l])=>{ const on=groupBy===v; return <span key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px'}}>
+            <span style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Desglose · suma {fmtMonto(vendUF,vendCLP)}</span>
+            <div style={{display:'flex',gap:5}}>
+              {[['abogado','Responsable'],['area','Área']].map(([v,l])=>{ const on=groupBy===v; return <span key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{fontSize:10,fontWeight:on?700:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</span> })}
+            </div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-            {(()=>{ const totUF=grupos.reduce((a,g)=>a+g.uf,0); const on=selGroup==='__todas__'; return (
-              <div onClick={()=>setSelGroup(on?null:'__todas__')} style={{textAlign:'left',background:'#fff',border:`1px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'11px 13px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent}`:undefined}}>
-                <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Todas las ventas</div>
-                <div style={{display:'flex',alignItems:'baseline',gap:5,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(totUF)}</span><span style={{fontSize:10,color:C.done}}>· {filtered.length}</span></div>
-              </div>
-            )})()}
-            {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; return (
-              <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{textAlign:'left',background:sin?'#FBF7EF':'#fff',border:`1px solid ${on?col:(sin?C.ambarBg:C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
-                <div style={{display:'flex',alignItems:'center',gap:5,fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}><SIcon n={groupBy==='abogado'?'users':areaIcon(g.key)} s={12} c={col}/>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
-                <div style={{display:'flex',alignItems:'baseline',gap:5,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:col}}>{fmtUFk(g.uf)}</span><span style={{fontSize:10,color:C.done}}>· {g.count}</span></div>
-              </div>
-            )})}
-          </div>
-          {selGroup&&(()=>{ const isAll=selGroup==='__todas__'; const g=isAll?null:grupos.find(x=>x.key===selGroup); const rows=isAll?filtered:(g?g.rows:[]); if(!rows.length) return null; const col=isAll?C.accent:colorGrupo(selGroup); const uf=isAll?grupos.reduce((a,x)=>a+x.uf,0):g.uf; return (
+          {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?Math.round(g.uf/vendUF*100):0; const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); return (
+            <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{display:'flex',alignItems:'center',gap:10,background:sin?'#FBF7EF':'#fff',border:`1px solid ${on?col:(sin?C.ambarBg:C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:'0 11px 11px 0',padding:'10px 12px',marginBottom:6,cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
+              <SIcon n={groupBy==='abogado'?'users':areaIcon(g.key)} s={17} c={col}/>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'flex',alignItems:'center',gap:6}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>{g.count} venta{g.count!==1?'s':''} · {pct}%</div></div>
+              <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:15,fontWeight:700,color:col,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(g.uf)}</div><div style={{fontSize:9,color:C.done}}>{fmtShort(gclp)}</div></div>
+            </div>
+          )})}
+          {selGroup&&(()=>{ const g=grupos.find(x=>x.key===selGroup); const rows=g?g.rows:[]; if(!rows.length) return null; const col=colorGrupo(selGroup); return (
             <div style={{marginTop:12}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                 <span style={{width:8,height:8,borderRadius:2,background:col}}></span>
-                <span style={{fontSize:12,fontWeight:600,color:C.accent}}>{isAll?'Todas las ventas':selGroup}</span>
-                <span style={{fontSize:11,color:C.muted}}>· {rows.length} venta{rows.length!==1?'s':''} · {fmtUFk(uf)}</span>
+                <span style={{fontSize:12,fontWeight:600,color:C.accent}}>{selGroup}</span>
+                <span style={{fontSize:11,color:C.muted}}>· {rows.length} venta{rows.length!==1?'s':''} · {fmtUFk(g.uf)}</span>
               </div>
               {(verTodasV?rows:rows.slice(0,8)).map(saleRow)}
               {rows.length>8&&<div onClick={()=>setVerTodasV(v=>!v)} style={{textAlign:'center',padding:'7px 0',fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-8} más · ver todas`}</div>}
             </div>
           )})()}
-        </>))}
+          {(propuestasFiltradas.length>0||totalCerradas>0)&&(
+            <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginTop:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}><span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Embudo de propuestas</span>{totalCerradas>0&&<span style={{fontSize:11,fontWeight:700,color:C.normal}}>{conversionPct.toFixed(0)}% conversión</span>}</div>
+              {totalCerradas>0?<><div style={{display:'flex',height:22,borderRadius:5,overflow:'hidden'}}>
+                <div style={{width:`${conversionPct}%`,background:C.normal,display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{conversionPct>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Activadas {activadasFiltradas.length}</span>}</div>
+                <div style={{flex:1,background:'#F09595',display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{(100-conversionPct)>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Rech. {rechazadasFiltradas.length}</span>}</div>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:5}}><span>desc. promedio {conDesc.length>0?descuentoProm.toFixed(0):'0'}%</span><span>valor rechazado {fmtUF(valorRechazadoUF)}</span></div></>
+              :<div style={{fontSize:11,color:C.muted}}>{propuestasFiltradas.length} propuesta{propuestasFiltradas.length!==1?'s':''} en pipeline · {fmtUF(pipelineUF)}</div>}
+            </div>
+          )}
+        </>)}
       </div>
     </div>
   )
