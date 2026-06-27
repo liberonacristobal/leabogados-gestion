@@ -12769,24 +12769,27 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           </div>}
         </div>
 
-        {/* Exposición tributaria · SII (al final) */}
+        {/* Exposición tributaria · SII (icono-sección colapsada, al final) */}
         {(()=>{
           const cliAreas=[...new Set((sales||[]).filter(s=>String(s.client_id)===String(client.id)&&['Activo','Terminado'].includes(s.status)).map(s=>s.area).filter(Boolean))]
           const exp=(fichaSii||[]).filter(n=>(n.areas||[]).some(a=>cliAreas.includes(a)))
           if(!exp.length) return null
+          const niv = exp.some(n=>n.prioridad==='alta')?{t:'Riesgo alto',c:C.overdueText}:exp.some(n=>n.prioridad==='media')?{t:'Riesgo medio',c:C.soonText}:{t:'Riesgo bajo',c:C.azulInfo}
           return (
-            <div style={{marginTop:16}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Exposición tributaria · SII</div>
-              {exp.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; return (
-                <div key={n.id||n.titulo} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
-                  <div style={{fontSize:12.5,fontWeight:500,color:C.text}}>{n.titulo}</div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:3,gap:8}}>
-                    <span style={{fontSize:10,color:C.muted}}>{(n.areas||[]).filter(a=>cliAreas.includes(a)).join(' · ')}</span>
-                    {n.url&&<a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.azulInfo,textDecoration:'none',flexShrink:0}} onClick={e=>e.stopPropagation()}>{n.numero||'fuente'} · sii.cl ↗</a>}
+            <div style={{marginBottom:4,borderBottom:`1px solid ${C.border}`}}>
+              {RHdr({icon:'alert',iconCol:niv.c,title:'Exposición tributaria',k:'exposicion',summary:niv.t,sumCol:niv.c})}
+              {rSec.exposicion&&<div style={{paddingBottom:10}}>
+                {exp.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; return (
+                  <div key={n.id||n.titulo} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
+                    <div style={{fontSize:12.5,fontWeight:500,color:C.text}}>{n.titulo}</div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:3,gap:8}}>
+                      <span style={{fontSize:10,color:C.muted}}>{(n.areas||[]).filter(a=>cliAreas.includes(a)).join(' · ')}</span>
+                      {n.url&&<a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.azulInfo,textDecoration:'none',flexShrink:0}} onClick={e=>e.stopPropagation()}>{n.numero||'fuente'} · sii.cl ↗</a>}
+                    </div>
                   </div>
-                </div>
-              )})}
-              <div style={{fontSize:9.5,color:C.done}}>Focos del SII que tocan el área de este cliente · la IA resume, tú validas</div>
+                )})}
+                <div style={{fontSize:9.5,color:C.done}}>Focos del SII que tocan el área de este cliente</div>
+              </div>}
             </div>
           )
         })()}
