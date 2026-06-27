@@ -9645,7 +9645,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {showDescuadres&&(
               <div style={{marginBottom:12}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
-                  <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Descuadres</span>
+                  <span style={{display:'flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}><SIcon n='alert' s={14} c={C.overdue}/>Descuadres</span>
                   <span onClick={()=>setShowDescuadres(false)} style={{fontSize:17,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
                 </div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.4}}>La oficina adelantó más de lo que hay en fondos. Registra el fondo por reembolsar (o confírmalo).</div>
@@ -9687,7 +9687,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {showRevision&&(
               <div style={{marginBottom:10}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7}}>
-                  <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Gastos por revisar</span>
+                  <span style={{display:'flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}><SIcon n='alert' s={14} c={C.soon}/>Gastos por revisar</span>
                   <span onClick={()=>setShowRevision(false)} style={{fontSize:17,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
                 </div>
                 {(orphans.length===0&&revNoActivo.length===0&&revOcasional.length===0)
@@ -9840,7 +9840,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const byP={}; mine.forEach(e=>{(byP[e.personal_de]=byP[e.personal_de]||[]).push(e)})
               return (
                 <div style={{marginBottom:8,border:'1px solid #F5E2CC',background:'#FEF9F0',borderRadius:12,overflow:'hidden'}}>
-                  <div onClick={()=>setShowPersonales(s=>!s)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer'}}>
+                  <div onClick={()=>setShowPersonales(s=>!s)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',cursor:'pointer'}}>
+                    <SIcon n='wallet' s={18} c={C.soonText}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:9,color:C.soonText,textTransform:'uppercase',letterSpacing:'0.03em',fontWeight:700}}>{isAdmin?'Personales por pagar a la oficina':'Tus gastos personales · debes a la oficina'}</div>
                       <div style={{fontSize:14,fontWeight:700,color:C.soonText,marginTop:3}}>{fmt(total)}</div>
