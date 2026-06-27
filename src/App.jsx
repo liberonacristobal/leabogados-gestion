@@ -9274,11 +9274,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <KpiRect label='Pagado' value={fmt(oficina.pagado)} c={C.greenText} bg={C.greenBg}/>
       </div>
     )
-    const f=cFondos(bal.fondos), s=cSaldo(bal.saldo); return (
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-      <KpiRect label='Fondos' value={fmt(bal.fondos)} c={f.c} bg={f.bg} onPlus={()=>onAddFondo(selectedClient)} plusColor={C.normal}/>
-      <KpiRect label='Gastos' value={fmt(bal.gastos)} c={C.overdue} bg='#FCEBEB' onPlus={()=>onAdd(selectedClient)} plusColor={C.overdue}/>
-      <KpiRect label='Saldo' value={fmt(bal.saldo)} c={s.c} bg={s.bg} onArrow={(bal.saldo>0&&onAddFondo)?()=>onAddFondo(selectedClient,true):null} arrowColor={C.normal}/>
+    return (
+    <div style={{background:C.accent,borderRadius:12,padding:'11px 14px',marginBottom:8}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+        <div style={{minWidth:0}}><div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:'.04em'}}>Saldo del cliente</div><div style={{fontSize:23,fontWeight:700,color:bal.saldo<0?'#F0A3A3':'#fff',lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(bal.saldo)}</div></div>
+        <div style={{display:'flex',gap:6,flexShrink:0}}>
+          <button onClick={()=>onAddFondo(selectedClient)} style={{background:'#0E5066',color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Fondo</button>
+          <button onClick={()=>onAdd(selectedClient)} style={{background:'#0E5066',color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Gasto</button>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:16,marginTop:9,paddingTop:8,borderTop:'0.5px solid #1C5468'}}>
+        <span style={{fontSize:11,color:'#9BD9BE'}}>Fondos <b style={{color:'#fff'}}>{fmt(bal.fondos)}</b></span>
+        <span style={{fontSize:11,color:'#F0A3A3'}}>Gastos <b style={{color:'#fff'}}>{fmt(bal.gastos)}</b></span>
+      </div>
     </div>
   )}
 
@@ -10285,7 +10293,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                       {r.entity.rut&&<div style={{fontSize:10,color:C.muted}}>{r.entity.rut}</div>}
                     </div>
                   </div>
-                  <div style={{fontSize:13,fontWeight:600,color:r.saldo>0?C.normal:C.overdue,flexShrink:0}}>{fmt(r.saldo)}</div>
+                  {(()=>{ const gr=movs.filter(e=>e.type!=='fondo'&&!esRendido(e)); const tot=gr.reduce((a,e)=>a+(e.amount||0),0); return <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue}}>{fmt(tot)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{gr.length} gasto{gr.length!==1?'s':''} a rendir</div></div> })()}
                 </div>
                 {open&&<div style={{padding:'2px 12px 12px'}}>
                   {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.filter(e=>!esRendido(e)).map(renderMov)}
