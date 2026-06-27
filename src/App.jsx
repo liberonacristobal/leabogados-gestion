@@ -3646,57 +3646,29 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
             {['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}
           </select>
         </div>
-        {fStatus==='Propuesta'?(
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:4}}>
-            <div style={{background:C.azulBg,borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Pipeline</div>
-              <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{fmtUF(pipelineUF)}</div>
-            </div>
-            <div style={{background:'#F5F7F9',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Pendientes</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{propuestasFiltradas.length}</div>
-            </div>
-            <div style={{background:'#F5F7F9',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Conversion</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.normal}}>{totalCerradas>0?conversionPct.toFixed(0)+'%':'—'}</div>
-              {totalCerradas>0&&<div style={{fontSize:9,color:C.muted}}>{activadasFiltradas.length} act. / {totalCerradas} cerr.</div>}
-            </div>
-            <div style={{background:'#F5F7F9',borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Desc. prom.</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{conDesc.length>0?descuentoProm.toFixed(1)+'%':'—'}</div>
-            </div>
-            <div style={{background:C.overdueBg,borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Rechazadas</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.overdue}}>{rechazadasFiltradas.length}</div>
-            </div>
-            <div style={{background:C.overdueBg,borderRadius:9,padding:'8px 10px',border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.4}}>Val. rechazado</div>
-              <div style={{fontSize:13,fontWeight:600,color:C.overdue}}>{fmtUF(valorRechazadoUF)}</div>
-            </div>
+        {/* Hero: Vendido del año (toca para UF/$) + Pipeline (toca para filtrar a propuestas) */}
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <div onClick={()=>setMontoUF(v=>!v)} style={{flex:1.3,minWidth:0,background:C.accent,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+            <div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:.4}}>Vendido {fYear||'total'}</div>
+            <div style={{fontSize:23,fontWeight:700,color:'#fff',lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
+            <div style={{fontSize:9,color:'#85B7EB',marginTop:3}}>{actYr.length} activas · {termYr.length} terminadas · toca para {montoUF?'$':'UF'}</div>
           </div>
-        ):(
-          (actYr.length>0||termYr.length>0)&&(
-            <>
-            <div onClick={()=>setMontoUF(v=>!v)} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'14px 16px',cursor:'pointer',display:'flex',gap:12,alignItems:'center',marginBottom:4}}>
-              <div style={{flex:'1.05',minWidth:0}}>
-                <div style={{fontSize:11,fontWeight:500,letterSpacing:'.04em',textTransform:'uppercase',color:C.muted}}>Vendido {fYear||'total'}</div>
-                <div style={{fontSize:30,fontWeight:500,color:C.accent,marginTop:2,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtMonto(vendUF,vendCLP)}</div>
-                <div style={{fontSize:10,color:C.done,marginTop:5}}>{montoUF?'en UF':'en CLP'} · toca para {montoUF?'$':'UF'}</div>
-                <div style={{marginTop:6}} onClick={e=>e.stopPropagation()}><UFStamp {...ufState}/></div>
-              </div>
-              <div style={{flex:'1',minWidth:0,display:'flex',flexDirection:'column',gap:8}}>
-                <div style={{background:C.greenBg,borderRadius:9,padding:'7px 10px'}}>
-                  <div style={{fontSize:10,fontWeight:600,letterSpacing:'.03em',textTransform:'uppercase',color:C.greenText}}>Activas · {actYr.length}</div>
-                  <div style={{fontSize:18,fontWeight:500,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(sumUF(actYr),sumCLP(actYr))}</div>
-                </div>
-                <div style={{background:'#EEF1F3',borderRadius:9,padding:'7px 10px'}}>
-                  <div style={{fontSize:10,fontWeight:600,letterSpacing:'.03em',textTransform:'uppercase',color:C.muted}}>Terminadas · {termYr.length}</div>
-                  <div style={{fontSize:18,fontWeight:500,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(sumUF(termYr),sumCLP(termYr))}</div>
-                </div>
-              </div>
+          <div onClick={()=>setFStatus(fStatus==='Propuesta'?'':'Propuesta')} style={{flex:1,minWidth:0,background:fStatus==='Propuesta'?C.azulBg:'#fff',border:`1px solid ${fStatus==='Propuesta'?C.accent:C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='clock' s={12} c={C.muted}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Pipeline</span></div>
+            <div style={{fontSize:18,fontWeight:700,color:C.muted,lineHeight:1.2,marginTop:2}}>{fmtUF(pipelineUF)}</div>
+            <div style={{fontSize:9,color:C.done,marginTop:2}}>{propuestasFiltradas.length} propuesta{propuestasFiltradas.length!==1?'s':''}</div>
+          </div>
+        </div>
+        {(propuestasFiltradas.length>0||totalCerradas>0)&&(
+          <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:4}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}><span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Embudo de propuestas</span>{totalCerradas>0&&<span style={{fontSize:11,fontWeight:700,color:C.normal}}>{conversionPct.toFixed(0)}% conversión</span>}</div>
+            {totalCerradas>0?<><div style={{display:'flex',height:22,borderRadius:5,overflow:'hidden'}}>
+              <div style={{width:`${conversionPct}%`,background:C.normal,display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{conversionPct>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Activadas {activadasFiltradas.length}</span>}</div>
+              <div style={{flex:1,background:'#F09595',display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{(100-conversionPct)>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Rech. {rechazadasFiltradas.length}</span>}</div>
             </div>
-            </>
-          )
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:5}}><span>desc. promedio {conDesc.length>0?descuentoProm.toFixed(0):'0'}%</span><span>valor rechazado {fmtUF(valorRechazadoUF)}</span></div></>
+            :<div style={{fontSize:11,color:C.muted}}>{propuestasFiltradas.length} propuesta{propuestasFiltradas.length!==1?'s':''} en pipeline · {fmtUF(pipelineUF)}</div>}
+          </div>
         )}
       </div>
       <div style={{padding:'4px 20px 100px'}}>
@@ -3704,6 +3676,10 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         {filtered.length>0&&(buscando ? (
           filtered.map(saleRow)
         ) : (<>
+          {(()=>{ const tardias=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}); if(!tardias.length) return null; return <div onClick={()=>setFStatus('Propuesta')} style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'9px 12px',marginBottom:9,cursor:'pointer'}}><SIcon n='alert' s={16} c={C.soonText}/><span style={{flex:1,fontSize:11,color:C.soonText,fontWeight:600}}>{tardias.length} propuesta{tardias.length!==1?'s':''} llevan +14 días sin respuesta</span></div> })()}
+          <div style={{display:'flex',gap:6,marginBottom:8}}>
+            {[['abogado','Por abogado'],['area','Por área']].map(([v,l])=>{ const on=groupBy===v; return <span key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
+          </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {(()=>{ const totUF=grupos.reduce((a,g)=>a+g.uf,0); const on=selGroup==='__todas__'; return (
               <div onClick={()=>setSelGroup(on?null:'__todas__')} style={{textAlign:'left',background:'#fff',border:`1px solid ${on?C.accent:C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'11px 13px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${C.accent}`:undefined}}>
