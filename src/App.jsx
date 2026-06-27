@@ -11017,7 +11017,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
 // Barra de tabs de la ficha de cliente (reutilizada por admin y limited; bloquea según rol)
 function FichaTabs({tab,setTab,role}){
-  const all=[['resumen','Resumen','grid'],['contacto','Contacto','id'],['financiero','Honorarios','file'],['documentos','Cuenta','receipt']]
+  const all=[['resumen','Resumen','grid'],['contacto','Contacto','id'],['financiero','Ventas','briefcase'],['documentos','Cartola','receipt']]
   // El limited solo ve Resumen y Contacto (Financiero/Documentos no se renderizan)
   const tabs = role==='admin' ? all : all.filter(([id])=>id==='resumen'||id==='contacto')
   return (
