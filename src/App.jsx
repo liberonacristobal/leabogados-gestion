@@ -10188,14 +10188,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     {list.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>{list.map(row)}</div>}
                   </>
               }
-              <div style={{display:'flex',gap:8}}>
-                {orphans.length>0&&(
-                  <div onClick={()=>setShowOrphans(true)} className='lf-row' style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8,background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
-                    <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sin cliente · {orphans.length}</span>
-                    <span style={{fontSize:13,fontWeight:600,color:C.soon}}>{fmt(orphans.reduce((a,e)=>a+(e.amount||0),0))}</span>
-                  </div>
-                )}
-              </div>
             </>)
           })()}
           {showHistorial&&(
