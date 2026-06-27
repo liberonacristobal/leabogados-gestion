@@ -80,13 +80,13 @@ const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) retur
 const porCobrarBills = bills => (bills||[]).filter(b=>b && !b.deleted_at && b.billing_type!=='reembolso' && b.invoice_no && ['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
 // CANON DE COLOR POR ESTADO DE COBRO — fuente única (un color por estado, sin duplicados ni hex sueltos). Cada estado: {label, color (línea/borde/cifra), bg (fondo de badge), text (texto sobre bg)}.
 const ESTADO_COBRO = {
-  vencido:     {label:'Vencido',      color:C.overdue,  bg:C.overdueBg, text:C.overdueText},
-  porCobrar:   {label:'Por cobrar',   color:C.accent,   bg:C.azulBg,    text:C.accent},
-  porFacturar: {label:'Por facturar', color:C.muted,    bg:C.bgWarm,    text:C.muted},
-  yaFacturada: {label:'Ya facturada', color:C.soon,     bg:C.ambarBg,   text:C.soonText},
-  cobrado:     {label:'Cobrado',      color:C.normal,   bg:C.greenBg,   text:C.greenText},
-  anticipada:  {label:'Anticipada',   color:C.azulInfo, bg:C.azulBg,    text:C.azulInfo},
-  anulada:     {label:'Anulada',      color:C.done,     bg:C.bgWarm,    text:C.grisText},
+  vencido:     {label:'Vencido',      color:C.overdue,  bg:C.overdueBg, text:C.overdueText, icon:'alert'},
+  porCobrar:   {label:'Por cobrar',   color:C.accent,   bg:C.azulBg,    text:C.accent,      icon:'file'},
+  porFacturar: {label:'Por facturar', color:C.muted,    bg:C.bgWarm,    text:C.muted,       icon:'clock'},
+  yaFacturada: {label:'Ya facturada', color:C.soon,     bg:C.ambarBg,   text:C.soonText,    icon:'alert'},
+  cobrado:     {label:'Cobrado',      color:C.normal,   bg:C.greenBg,   text:C.greenText,   icon:'check'},
+  anticipada:  {label:'Anticipada',   color:C.azulInfo, bg:C.azulBg,    text:C.azulInfo,    icon:'clock'},
+  anulada:     {label:'Anulada',      color:C.done,     bg:C.bgWarm,    text:C.grisText,    icon:'x'},
 }
 const esVencidaB = b => !!b && (b.status==='Vencido' || (b.status==='Pendiente' && (b.due||'') && (b.due||'') < new Date().toISOString().slice(0,10)))
 // Deriva el estado de cobro (folio + saldo + vencimiento + status) y devuelve su token de color. opts.yaFact = la sin-folio cuya factura emitida ya existe (duplicada), que la vista detecta y pasa.
@@ -111,6 +111,7 @@ const _ICON_PATHS = {
   exchange:'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3',
   clock:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3 2',
   alert:'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',
+  x:'M18 6L6 18M6 6l12 12',
 }
 const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
 // Sección colapsable con icono — patrón único de la ficha (colapsada por defecto, una línea con resumen; se despliega el detalle).
@@ -6149,7 +6150,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       const sub=gr.reduce((a,b)=>a+money(b),0); const _ec=Object.values(ESTADO_COBRO).find(x=>x.color===col)||{bg:C.bgWarm,text:C.grisText}
                       return (<div key={key} style={{marginBottom:6}}>
                         <div onClick={()=>setGroupOpen(p=>({...p,[key]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}}>
-                          <span style={{fontSize:9.5,fontWeight:700,background:_ec.bg,color:_ec.text,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
+                          <span style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><SIcon n={_ec.icon||'file'} s={15} c={_ec.text}/><span style={{fontSize:9.5,fontWeight:700,background:_ec.bg,color:_ec.text,borderRadius:14,padding:'2px 9px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span></span>
                           <span style={{fontSize:11,fontWeight:700,color:_ec.text}}>{fmt(sub)}</span>
                         </div>
                         {isOpen&&gr.map(b=>fila(b,yaFacturadasIds.has(b.id),c))}
@@ -11830,7 +11831,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                   const subT=gr.reduce((a,b)=>a+money(b),0)
                   return (<div key={lbl} style={{marginBottom:7}}>
                     <div onClick={()=>setFicEst(p=>({...p,[lbl]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}}>
-                      <span style={{fontSize:10,fontWeight:700,background:tok.bg,color:tok.text,borderRadius:14,padding:'2px 10px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span>
+                      <span style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><SIcon n={tok.icon||'file'} s={15} c={tok.text}/><span style={{fontSize:10,fontWeight:700,background:tok.bg,color:tok.text,borderRadius:14,padding:'2px 10px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?'▾':'▸'}</span></span>
                       <span style={{fontSize:12,fontWeight:700,color:tok.text}}>{fmt(subT)}</span>
                     </div>
                     {isOpen&&ord(gr).map(b=>renderFactura(b,needsProj(b)))}
@@ -12447,30 +12448,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
       <div style={{padding:'16px 20px 0',display:ftab==='resumen'?'block':'none'}}>
 
-        {/* Razones sociales vinculadas */}
-        {(()=>{
-          const entities = (clientEntities||[]).filter(e=>e.client_id===client.id)
-          if(!entities.length) return null
-          return (
-            <div style={{marginBottom:16,padding:'4px 14px',borderRadius:10,background:'#F5F7F9',border:`1px solid ${C.border}`}}>
-              <div className="lf-row" onClick={()=>setOpenEnt(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0'}}>
-                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600}}>
-                  <span aria-hidden="true" style={{display:'inline-block',transform:openEnt?'rotate(90deg)':'none',transition:'transform .12s',fontSize:14,lineHeight:1}}>›</span>
-                  Razones sociales facturadas
-                </div>
-                <span style={{fontSize:9,color:C.muted,fontWeight:700}}>{entities.length}</span>
-              </div>
-              {openEnt&&entities.map(e=>(
-                <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsDisplay(e.name)||'—'}</div>
-                  {e.rut&&<Copyable text={e.rut} title='Copiar RUT' style={{fontSize:11,color:C.muted,fontFamily:'monospace'}}>{e.rut}</Copyable>}
-                  <Chev/>
-                </div>
-              ))}
-            </div>
-          )
-        })()}
-
         {/* Resumen financiero */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
           {[
@@ -12486,27 +12463,6 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
             </div>
           ))}
         </div>
-
-        {(()=>{
-          const cliAreas=[...new Set((sales||[]).filter(s=>String(s.client_id)===String(client.id)&&['Activo','Terminado'].includes(s.status)).map(s=>s.area).filter(Boolean))]
-          const exp=(fichaSii||[]).filter(n=>(n.areas||[]).some(a=>cliAreas.includes(a)))
-          if(!exp.length) return null
-          return (
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Exposición tributaria · SII</div>
-              {exp.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; return (
-                <div key={n.id||n.titulo} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
-                  <div style={{fontSize:12.5,fontWeight:500,color:C.text}}>{n.titulo}</div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:3,gap:8}}>
-                    <span style={{fontSize:10,color:C.muted}}>{(n.areas||[]).filter(a=>cliAreas.includes(a)).join(' · ')}</span>
-                    {n.url&&<a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.azulInfo,textDecoration:'none',flexShrink:0}} onClick={e=>e.stopPropagation()}>{n.numero||'fuente'} · sii.cl ↗</a>}
-                  </div>
-                </div>
-              )})}
-              <div style={{fontSize:9.5,color:C.done}}>Focos del SII que tocan el área de este cliente · la IA resume, tú validas</div>
-            </div>
-          )
-        })()}
 
         {/* Ventas */}
         <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`}}>
@@ -12782,6 +12738,28 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
           )}
           </div>}
         </div>
+
+        {/* Exposición tributaria · SII (al final) */}
+        {(()=>{
+          const cliAreas=[...new Set((sales||[]).filter(s=>String(s.client_id)===String(client.id)&&['Activo','Terminado'].includes(s.status)).map(s=>s.area).filter(Boolean))]
+          const exp=(fichaSii||[]).filter(n=>(n.areas||[]).some(a=>cliAreas.includes(a)))
+          if(!exp.length) return null
+          return (
+            <div style={{marginTop:16}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Exposición tributaria · SII</div>
+              {exp.map(n=>{ const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; return (
+                <div key={n.id||n.titulo} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${pr}`,borderRadius:10,padding:'9px 11px',marginBottom:7}}>
+                  <div style={{fontSize:12.5,fontWeight:500,color:C.text}}>{n.titulo}</div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:3,gap:8}}>
+                    <span style={{fontSize:10,color:C.muted}}>{(n.areas||[]).filter(a=>cliAreas.includes(a)).join(' · ')}</span>
+                    {n.url&&<a href={n.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.azulInfo,textDecoration:'none',flexShrink:0}} onClick={e=>e.stopPropagation()}>{n.numero||'fuente'} · sii.cl ↗</a>}
+                  </div>
+                </div>
+              )})}
+              <div style={{fontSize:9.5,color:C.done}}>Focos del SII que tocan el área de este cliente · la IA resume, tú validas</div>
+            </div>
+          )
+        })()}
 
       </div>
       {ftab==='contacto'&&<ContactoTab client={client} entities={(clientEntities||[]).filter(e=>e.client_id===client.id)} onSaveFields={onSaveFields}/>}
