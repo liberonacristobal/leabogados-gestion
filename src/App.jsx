@@ -5801,14 +5801,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</div>
+              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</span></div>
               <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>{fmtShort(pending)}</div>
               {overdue>0&&<div onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{fontSize:10,color:C.overdue,fontWeight:600,marginTop:3,whiteSpace:'nowrap'}}>vencido {fmtShort(overdue)}</div>}
             </button>
           )})()}
-          {[['Por facturar',programado,'programadas','#537281','#EDF1F3'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE']].map(([l,v,fl,col,bg])=>{ const on=estadoActivo(fl); return (
+          {[['Por facturar',programado,'programadas','#537281','#EDF1F3','clock'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE','check']].map(([l,v,fl,col,bg,icon])=>{ const on=estadoActivo(fl); return (
             <button key={l} onClick={()=>irAEstado(fl)} style={{textAlign:'left',background:on?bg:'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,cursor:'pointer',minWidth:0}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:2,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n={icon} s={12} c={col}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span></div>
               <div style={{fontSize:13,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmtShort(v)}</div>
             </button>
           )})}
@@ -6003,7 +6003,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
           const go=f=>{setFilter(f);clearSel&&clearSel()}
-          const tab=(f,l,v,col)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{l}</div><div style={{fontSize:17,fontWeight:600,color:col}}>{fmt(v)}</div></button>)
+          const tab=(f,l,v,col,icon)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{display:'flex',alignItems:'center',gap:5,marginBottom:3}}>{icon&&<SIcon n={icon} s={13} c={col}/>}<span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</span></div><div style={{fontSize:17,fontWeight:600,color:col}}>{fmt(v)}</div></button>)
           return (<div>
             <div onClick={()=>irAEstado('emitidas')} title='Ver las facturas por cobrar' style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16,cursor:'pointer'}}>
               <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:2}}>Por cobrar · facturas emitidas sin pagar</div>
@@ -6027,10 +6027,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:7}}>
-              {tab('emitidas','Por cobrar',porCobrar,C.accent)}
-              {tab('vencido','Vencidas',venAll,C.overdue)}
-              {tab('pagado','Cobradas '+(fYear?fYear:'(total)'),cobAll,C.normal)}
-              {tab('programadas','Por facturar '+(fYear?fYear:'(total)'),porFacturarRealTot,C.muted)}
+              {tab('emitidas','Por cobrar',porCobrar,C.accent,'file')}
+              {tab('vencido','Vencidas',venAll,C.overdue,'alert')}
+              {tab('pagado','Cobradas '+(fYear?fYear:'(total)'),cobAll,C.normal,'check')}
+              {tab('programadas','Por facturar '+(fYear?fYear:'(total)'),porFacturarRealTot,C.muted,'clock')}
             </div>
             {yaFactTot>0&&<div onClick={()=>irAEstado('programadas')} title='Programadas cuya factura emitida ya existe — vincular' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:9,cursor:'pointer'}}>
               <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.soonText}}>⚠ Ya facturadas — vincular a su factura emitida</div><div style={{fontSize:9,color:C.coralText,marginTop:1}}>su factura real ya existe; inflan el "por facturar"</div></div>
