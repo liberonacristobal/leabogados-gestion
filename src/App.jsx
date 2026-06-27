@@ -112,6 +112,8 @@ const _ICON_PATHS = {
   clock:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3 2',
   alert:'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',
   x:'M18 6L6 18M6 6l12 12',
+  grid:'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+  receipt:'M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1-2-1zM8 9h8M8 13h6',
 }
 const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
 // Sección colapsable con icono — patrón único de la ficha (colapsada por defecto, una línea con resumen; se despliega el detalle).
@@ -11015,14 +11017,17 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
 // Barra de tabs de la ficha de cliente (reutilizada por admin y limited; bloquea según rol)
 function FichaTabs({tab,setTab,role}){
-  const all=[['resumen','Resumen'],['contacto','Contacto'],['financiero','Financiero'],['documentos','Estado de cuenta']]
+  const all=[['resumen','Resumen','grid'],['contacto','Contacto','id'],['financiero','Financiero','file'],['documentos','Cuenta','receipt']]
   // El limited solo ve Resumen y Contacto (Financiero/Documentos no se renderizan)
   const tabs = role==='admin' ? all : all.filter(([id])=>id==='resumen'||id==='contacto')
   return (
-    <div style={{display:'flex',gap:4,marginTop:10}}>
-      {tabs.map(([id,label])=>(
-        <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'7px 4px',borderRadius:8,border:`1px solid ${tab===id?C.accent:C.border}`,background:tab===id?C.azulBg:'transparent',color:tab===id?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
-      ))}
+    <div style={{display:'flex',gap:6,marginTop:10}}>
+      {tabs.map(([id,label,icon])=>{ const on=tab===id; return (
+        <button key={id} onClick={()=>setTab(id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3,padding:'8px 2px',borderRadius:10,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',cursor:'pointer'}}>
+          <SIcon n={icon} s={17} c={on?'#fff':C.muted}/>
+          <span style={{fontSize:10,fontWeight:on?700:600,color:on?'#fff':C.muted,whiteSpace:'nowrap'}}>{label}</span>
+        </button>
+      )})}
     </div>
   )
 }
