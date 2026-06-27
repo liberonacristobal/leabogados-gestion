@@ -6103,7 +6103,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Cobradas'],['Anulada','Anuladas']]
           return (<div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
-              {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
+              {estChips.map(([v,l])=>{ const on=estSel.has(v); const ic={Programada:'clock',Pendiente:'file',Vencido:'alert',Pagado:'check',Anulada:'x'}[v]; return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{ic&&<SIcon n={ic} s={11} c={on?C.accent:C.muted}/>}{l}</span> })}
               {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
             </div>
             {(()=>{
@@ -6329,7 +6329,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const estChips=[['Programada','Por facturar'],['Pendiente','Por cobrar'],['Vencido','Vencidas'],['Pagado','Cobradas'],['Anulada','Anuladas']]
           return (<div>
             <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:11,alignItems:'center'}}>
-              {estChips.map(([v,l])=>{ const on=estSel.has(v); return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</span> })}
+              {estChips.map(([v,l])=>{ const on=estSel.has(v); const ic={Programada:'clock',Pendiente:'file',Vencido:'alert',Pagado:'check',Anulada:'x'}[v]; return <span key={v} onClick={()=>setEstSel(p=>{const n=new Set(p); n.has(v)?n.delete(v):n.add(v); return n})} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{ic&&<SIcon n={ic} s={11} c={on?C.accent:C.muted}/>}{l}</span> })}
               {estSel.size>0&&<span onClick={()=>setEstSel(new Set())} style={{fontSize:10,color:C.overdue,fontWeight:600,cursor:'pointer'}}>Limpiar</span>}
             </div>
             {rows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>}
@@ -9798,7 +9798,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 return (
                   <div key={k} onClick={()=>{ if(k==='neg'){ setShowDescuadres(true);setDescOpen(null) } else { setSaldoFilter(active?'todos':k);setVerTodos(false) } }} className='lf-kpi' style={{flex:1,minWidth:0,display:'flex',alignItems:'stretch',background:active?tint:'#fff',border:`${active?2:1}px solid ${active?brd:C.border}`,borderRadius:12,overflow:'hidden',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0,padding:'8px 10px'}}>
-                      <div style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:'0.03em',fontWeight:600}}>{lbl}</div>
+                      <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n={k==='neg'?'alert':'wallet'} s={11} c={col}/><span style={{fontSize:9,color:col,textTransform:'uppercase',letterSpacing:'0.03em',fontWeight:600}}>{lbl}</span></div>
                       <div style={{fontSize:14,fontWeight:700,color:col,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{fmt(tot)}</div>
                     </div>
                     <div style={{width:1,background:active?brd:C.border,opacity:active?.35:1,margin:'7px 0'}}></div>
