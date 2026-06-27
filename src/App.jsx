@@ -10156,21 +10156,23 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const saldoDe = c => (balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
             const alpha = (a,b)=>a.name.localeCompare(b.name,'es')
             const row = c => {
-              const sal=saldoDe(c), neg=sal<0
+              const sal=saldoDe(c)
+              const salCol = sal<0?C.overdue:(sal>0?C.normal:C.done)   // rojo=por reembolsar · verde=a favor · gris=$0
               const ents=(clientEntities||[]).filter(x=>x.client_id===c.id)
               const rsLine = ents.length>1 ? `${ents.length} razones sociales` : (ents[0] ? `${rsDisplay(ents[0].name)}${ents[0].rut?` · ${ents[0].rut}`:''}` : 'Sin razón social')
               return (
-                <div key={c.id} onClick={()=>setSelectedClient(c)} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'9px 12px',borderBottom:`1px solid #EEF1F3`,borderLeft:`3px solid ${neg?C.overdue:C.normal}`,cursor:'pointer'}}>
+                <div key={c.id} onClick={()=>setSelectedClient(c)} className='lf-row' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderBottom:`1px solid #EEF1F3`,borderLeft:`3px solid ${salCol}`,cursor:'pointer'}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:6}}>{c.name}{c.is_occasional&&<span style={{fontSize:9,fontWeight:600,color:C.grisText,background:'#F1EFE8',borderRadius:3,padding:'1px 6px',flexShrink:0}}>ocasional</span>}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:6}}>{c.name}{c.is_occasional&&<span style={{fontSize:9,fontWeight:600,color:C.grisText,background:'#F1EFE8',borderRadius:3,padding:'1px 6px',flexShrink:0}}>ocasional</span>}</div>
                     <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsLine}</div>
                   </div>
+                  {c.abogado_responsable&&(()=>{ const pc=personChip(c.abogado_responsable); return <span style={{fontSize:9,fontWeight:600,background:pc.bg,color:pc.color,borderRadius:9,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{c.abogado_responsable}</span> })()}
                   {onToggleClientStatus&&<button onClick={ev=>{ev.stopPropagation();onToggleClientStatus(c)}} title={c.status==='Terminado'?'Reactivar cliente':'Archivar de la lista'} style={{width:26,height:26,borderRadius:6,border:`0.5px solid ${c.status==='Terminado'?C.normal:C.border}`,background:'#fff',color:c.status==='Terminado'?C.greenText:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,flexShrink:0}}>
                     {c.status==='Terminado'
                       ? <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>
                       : <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}
                   </button>}
-                  <div style={{fontSize:15,fontWeight:700,color:neg?C.overdue:C.normal,flexShrink:0,fontVariantNumeric:'tabular-nums',minWidth:92,textAlign:'right'}}>{fmt(sal)}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:salCol,flexShrink:0,fontVariantNumeric:'tabular-nums',minWidth:90,textAlign:'right'}}>{fmt(sal)}</div>
                 </div>
               )
             }
