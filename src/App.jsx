@@ -10186,7 +10186,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const mostrarLista = verTodos || verArchivadosG || !!respFilter || searchingNow || saldoFilter!=='todos'
             return (<>
               {!mostrarLista
-                ? <div style={{color:C.done,textAlign:'center',padding:'16px 16px 8px',fontSize:11}}>Busca un cliente, o toca un saldo / responsable.</div>
+                ? null
                 : <>
                     {list.length===0&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
                     {list.length===0&&orphans.length>0&&<div style={{color:C.muted,textAlign:'center',padding:'18px 0',fontSize:12}}>{verArchivadosG?'Sin clientes archivados en esta vista':'Sin clientes en esta vista'}</div>}
