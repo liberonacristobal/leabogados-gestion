@@ -67,6 +67,22 @@ Disparador: "pulir/pule/pulí <vista>" → correr estas reglas sobre esa vista. 
 
 En una frase: compactar sin perder función — títulos dentro del cuadro, lo opcional colapsado, campos co-locados, sugerencias en vez de tipeo, header unificado, y los datos derivados de la fuente correcta.
 
+## Canon de la foto (landings y resúmenes de KPIs)
+
+Regla universal para CUALQUIER vista-resumen de números — "la foto" — de un landing/dashboard/ficha (Facturación, Ventas, Gastos, Dashboard). Antes de armar o tocar una, correr este checklist:
+
+1. **Jerarquía, no paralelo**: una cifra que es PARTE de otra (Vencido ⊂ Por cobrar) va ANIDADA bajo su total, NUNCA como tarjeta hermana. Cero cifras duplicadas (no repetir el hero como tile).
+2. **Un protagonista**: un solo bloque grande es la foto (ej. Por cobrar, con vencido/al-día dentro); lo accesorio (Cobrado, Por facturar, Anticipos, Proveedores) baja a segundo nivel. No 4 tiles del mismo peso compitiendo.
+3. **Una sola fuente por cifra**: cada número sale de su helper único; los subtotales SUMAN el total; nada calculado dos veces inline (ver "Rigor matemático").
+4. **Canon color + icono por estado**: cada estado con su color e icono del canon (`estadoCobro`/`ESTADO_COBRO`).
+5. **Menos es más, sin disclaimers**: nada de párrafos explicativos al pie; si una cifra depende de un filtro (año), se rotula corto (1 línea). La confianza va por diseño, no por nota.
+6. **Filtro claro**: de un vistazo se entiende qué depende del filtro (año → Cobrado/Por facturar) y qué es saldo vivo (Por cobrar/Vencido).
+7. **Todo clickeable**: cada KPI abre su lista (Por cobrar → sus facturas, Vencido → vencidas).
+8. **Alertas de acción, no KPI de plata**: lo que requiere acción ("Ya facturadas — vincular") es una alerta, no una tarjeta de monto.
+9. **Mobile iPhone**: sin romper layout, targets cómodos, pills estrechas, sin emojis, paleta `C`.
+
+En una frase: **un protagonista con sus partes anidadas, cero cifras repetidas, de fuente única, todo clickeable y sin párrafos.** Aplicado: landing Facturación "Etapas del cobro", Ventas, Gastos, Dashboard.
+
 ## Flujo de trabajo
 
 - Cambios estructurales o grandes: mostrarme el plan antes de tocar código.
