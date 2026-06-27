@@ -8975,9 +8975,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     const showMover = selectedClient && !esOficina(selectedClient.id) && movibles.length>0
     return (<>
       <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
-        <button onClick={()=>setGastoOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'5px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>Fecha {gastoOrd==='desc'?'↓ (nuevas)':'↑ (antiguas)'}</button>
+        <button onClick={()=>setGastoOrd(o=>o==='desc'?'asc':'desc')} title={gastoOrd==='desc'?'Más nuevas primero':'Más antiguas primero'} style={{fontSize:11,fontWeight:600,padding:'5px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {gastoOrd==='desc'?'↓':'↑'}</button>
         {gastoCats.length>1&&<select value={gastoCatF} onChange={e=>setGastoCatF(e.target.value)} style={{fontSize:12,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}><option value=''>Todas las categorías</option>{gastoCats.map(c=><option key={c} value={c}>{c}</option>)}</select>}
-        {showMover&&<button onClick={()=>{setMovMode(o=>!o);setMovSel(new Set())}} style={{...chipBtn('soft'),fontWeight:500,whiteSpace:'nowrap',marginLeft:'auto'}}>Mover varios {movMode?'▴':'▾'}</button>}
+        {showMover&&<button onClick={()=>{setMovMode(o=>!o);setMovSel(new Set())}} title='Mover gastos a otro cliente' style={{...chipBtn('soft'),fontWeight:500,whiteSpace:'nowrap',marginLeft:'auto'}}>Mover {movMode?'▴':'▾'}</button>}
       </div>
       {showMover&&movMode&&(
         <div style={{marginTop:-2,marginBottom:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
@@ -9301,7 +9301,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       </div>
     )
     return (
-    <div style={{background:C.accent,borderRadius:12,padding:'11px 14px',marginBottom:8}}>
+    <div style={{background:C.accent,borderRadius:12,padding:'10px 14px',marginBottom:8}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
         <div style={{minWidth:0}}><div style={{fontSize:9,color:'#85B7EB',textTransform:'uppercase',letterSpacing:'.04em'}}>Saldo del cliente</div><div style={{fontSize:23,fontWeight:700,color:bal.saldo<0?'#F0A3A3':'#fff',lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{fmt(bal.saldo)}</div></div>
         <div style={{display:'flex',gap:6,flexShrink:0}}>
@@ -9309,7 +9309,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           <button onClick={()=>onAdd(selectedClient)} style={{background:'#0E5066',color:'#fff',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>+ Gasto</button>
         </div>
       </div>
-      <div style={{display:'flex',gap:16,marginTop:9,paddingTop:8,borderTop:'0.5px solid #1C5468'}}>
+      <div style={{display:'flex',gap:16,marginTop:6,paddingTop:6,borderTop:'0.5px solid #1C5468'}}>
         <span style={{fontSize:11,color:'#9BD9BE'}}>Fondos <b style={{color:'#fff'}}>{fmt(bal.fondos)}</b></span>
         <span style={{fontSize:11,color:'#F0A3A3'}}>Gastos <b style={{color:'#fff'}}>{fmt(bal.gastos)}</b></span>
       </div>
