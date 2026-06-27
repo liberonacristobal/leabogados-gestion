@@ -292,8 +292,8 @@ const INICIALES_RESP = {'Cristóbal':'CL','Erasmo':'EE','Martín':'MC','Martina'
 const taskAssignees = t => (t && t.assignees && t.assignees.length) ? t.assignees : (t && t.who ? [t.who] : [])
 // Color de pill por persona, para distinguir responsables de un vistazo (Martín/Martina reusan los tonos de Caja Chica).
 const PERSON_CHIP = {
-  'Martín':{bg:'#EAF3DE',color:'#3B6D11'}, 'Martina':{bg:C.overdueBg,color:C.overdueText},
-  'Rodrigo':{bg:'#F7E7E1',color:'#A8472A'}, 'Erasmo':{bg:'#F3EFD8',color:'#8A7012'}, 'Cristóbal':{bg:C.azulBg,color:C.accent},
+  'Martín':{bg:'#F3EFD8',color:'#8A7012'}, 'Martina':{bg:C.overdueBg,color:C.overdueText},
+  'Rodrigo':{bg:'#F7E7E1',color:'#A8472A'}, 'Erasmo':{bg:'#EAF3DE',color:'#3B6D11'}, 'Cristóbal':{bg:C.azulBg,color:C.accent},
 }
 const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:'#F1EFE8',color:C.grisText}
 const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
