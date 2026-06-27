@@ -11743,12 +11743,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           if(!aniosList.length) return <div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Este cliente no tiene facturas todavía.</div>
           const matchQ = b => { if(!q.trim()) return true; const s=q.toLowerCase().trim(); return `${b.concept||''} ${folioN(b.invoice_no)} ${b.amount||''} ${fmtFechaDMY(kpiDate(b))} ${saleTitle(b.sale_id)||''}`.toLowerCase().includes(s) }
           const yf = all.filter(b=>anioDe(b)===selYear && matchQ(b))
-          const bySale={}, container=[], sinP=[]
-          // "Facturación AAAA" (contenedor histórico) solo 2025 hacia atrás Y solo facturas EMITIDAS con fecha de emisión ≤ 31-12-2025.
-          // En 2026+, o sin fecha de emisión, toda factura debe tener venta/propuesta → si no, va a "sin proyecto asignado".
+          // histYear: las emitidas históricas (≤2025) no exigen proyecto asignado (lo usa needsProj más abajo).
           const histYear = (parseInt(selYear)||9999) <= 2025
-          yf.forEach(b=>{ if(b.sale_id){(bySale[b.sale_id]=bySale[b.sale_id]||[]).push(b)} else if(b.invoice_no && histYear && b.issued_at && b.issued_at<='2025-12-31'){container.push(b)} else {sinP.push(b)} })
-          const money = (rows,fn)=>rows.filter(fn).reduce((a,b)=>a+(b.amount||0),0)
           const lblFolio = b => b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:(b.concept||'—')
           const rutOf=b=>{ if(b.entity_id){ const e=entities.find(x=>String(x.id)===String(b.entity_id)); if(e&&e.rut) return String(e.rut).trim() } return String(b.receptor_rut||'').trim() }
           const rsKeyOf=b=>{ const r=rutOf(b); return r?('rut:'+r):(b.receptor_name?('n:'+String(b.receptor_name).trim().toLowerCase()):'sin') }
@@ -11807,17 +11803,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
               </div>
             )
           }
-          const renderGroupRows = rows => {
-            const pend=rows.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).sort((a,b)=>(a.due||'').localeCompare(b.due||''))
-            const prog=rows.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).sort((a,b)=>(a.due||'').localeCompare(b.due||''))
-            const pag=rows.filter(b=>['Pagado','Anticipada'].includes(b.status)).sort((a,b)=>(b.paid_at||b.issued_at||'').localeCompare(a.paid_at||a.issued_at||''))
-            const usados=new Set([...pend,...prog,...pag].map(b=>b.id))
-            const otros=rows.filter(b=>!usados.has(b.id))
-            const sub=(label,arr)=>arr.length?<><div key={label} style={{fontSize:8,color:C.muted,textTransform:'uppercase',fontWeight:700,letterSpacing:.4,margin:'7px 0 4px'}}>{label}</div>{arr.map(b=>renderFactura(b,false))}</>:null
-            return <>{sub('Por cobrar',pend)}{sub('Por facturar',prog)}{sub('Cobradas',pag)}{otros.map(b=>renderFactura(b,false))}</>
-          }
-          const saleIds = Object.keys(bySale).sort((a,b)=>{ const pa=bySale[a].some(x=>['Pendiente','Vencido'].includes(x.status))?1:0; const pb=bySale[b].some(x=>['Pendiente','Vencido'].includes(x.status))?1:0; return pb-pa || (saleTitle(a)||'').localeCompare(saleTitle(b)||'','es') })
-          const nada = !saleIds.length && !container.length && !sinP.length
+          const nada = !yf.length
           return (<>
             {nada&&<div style={{fontSize:12,color:C.muted,padding:'8px 2px'}}>Sin facturas en {selYear}{q?' con esa búsqueda':''}.</div>}
             {!nada&&(()=>{
