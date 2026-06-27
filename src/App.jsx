@@ -10254,50 +10254,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         </div>
       )}
 
-      {/* Vista cliente con 1 razón social (o sin RS): lista de movimientos */}
-      {selectedClient&&!multiRS&&(
+      {/* Vista cliente: Saldo arriba, Fondos recibidos y Gastos en secciones. La RS es etiqueta de cada gasto, no agrupación — el fondo cubre todas las razones sociales. */}
+      {selectedClient&&(
         <div style={{padding:'4px 20px 130px'}}>
           {gastoToolbar}
-          {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>}
-          {filtered.filter(e=>!esRendido(e)).map(renderMov)}
-          {rendidosBlock('__single__',filtered.filter(esRendido))}
-          {fichaHistorial}
-        </div>
-      )}
-      {/* Vista cliente con 2+ razones sociales: acordeón por RS (checkbox + chevron + saldo) */}
-      {selectedClient&&multiRS&&rb&&(
-        <div style={{padding:'4px 20px 130px'}}>
-          {gastoToolbar}
-          {rb.porRS.concat(rb.sin?[{...rb.sin,entity:{id:'__sin__',name:'Sin razón social',rut:''}}]:[]).map(r=>{
-            const eid=r.entity.id, isSin=eid==='__sin__'
-            const checked=selRS.has(eid), open=openRS.has(eid)
-            const movs=filtered.filter(e=> isSin ? (!e.entity_id||!selEnts.find(x=>x.id===e.entity_id)) : e.entity_id===eid)
-            const toggleOpen=()=>setOpenRS(p=>{const n=new Set(p);n.has(eid)?n.delete(eid):n.add(eid);return n})
-            return (
-              <div key={eid} style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:8,overflow:'hidden',background:C.card}}>
-                <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px'}}>
-                  {isSin
-                    ? <div style={{width:22,flexShrink:0}}/>
-                    : <button onClick={()=>setSelRS(p=>{const n=new Set(p);n.has(eid)?n.delete(eid):n.add(eid);return n})} title={checked?'Quitar de la rendición':'Incluir en la rendición'}
-                        style={{width:22,height:22,borderRadius:5,border:`2px solid ${checked?C.normal:C.border}`,background:checked?C.normal:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,padding:0}}>
-                        {checked&&<span style={{display:'inline-block',width:5,height:9,borderRight:'2px solid #fff',borderBottom:'2px solid #fff',transform:'rotate(45deg)',marginTop:-2}}/>}
-                      </button>}
-                  <div onClick={toggleOpen} style={{flex:1,minWidth:0,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:12,color:C.muted,transform:open?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block',flexShrink:0}}>▸</span>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.entity.name}</div>
-                      {r.entity.rut&&<div style={{fontSize:10,color:C.muted}}>{r.entity.rut}</div>}
-                    </div>
-                  </div>
-                  {(()=>{ const gr=movs.filter(e=>e.type!=='fondo'&&!esRendido(e)); const tot=gr.reduce((a,e)=>a+(e.amount||0),0); return <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue}}>{fmt(tot)}</div><div style={{fontSize:8,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{gr.length} gasto{gr.length!==1?'s':''} a rendir</div></div> })()}
-                </div>
-                {open&&<div style={{padding:'2px 12px 12px'}}>
-                  {movs.length===0?<div style={{fontSize:12,color:C.muted,padding:'6px 2px'}}>Sin movimientos</div>:movs.filter(e=>!esRendido(e)).map(renderMov)}
-                  {rendidosBlock(eid,movs.filter(esRendido))}
-                </div>}
-              </div>
-            )
-          })}
+          {(()=>{
+            const movs=filtered.filter(e=>!esRendido(e))
+            const fondos=movs.filter(e=>e.type==='fondo')
+            const gastos=movs.filter(e=>e.type!=='fondo')
+            const rendidos=filtered.filter(esRendido)
+            if(movs.length===0&&rendidos.length===0) return <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>
+            return (<>
+              {fondos.length>0&&<><div style={{fontSize:9,color:C.greenText,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 6px'}}>Fondos recibidos · {fondos.length}</div>{fondos.map(renderMov)}</>}
+              {gastos.length>0&&<><div style={{fontSize:9,color:C.overdueText,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'12px 2px 6px'}}>Gastos · {gastos.length}</div>{gastos.map(renderMov)}</>}
+              {rendidosBlock('__single__',rendidos)}
+            </>)
+          })()}
           {fichaHistorial}
         </div>
       )}
