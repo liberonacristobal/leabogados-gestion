@@ -114,6 +114,7 @@ const _ICON_PATHS = {
   x:'M18 6L6 18M6 6l12 12',
   grid:'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   receipt:'M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1-2-1zM8 9h8M8 13h6',
+  user:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
 }
 const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
 // Sección colapsable con icono — patrón único de la ficha (colapsada por defecto, una línea con resumen; se despliega el detalle).
@@ -12940,44 +12941,46 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
       </div>
       <div style={{padding:'10px 20px 100px'}}>
         {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}
-        {cl.map(c=>{
-          const ended=c.status==='Terminado'
-          const activeProj=sales.filter(s=>s.client_id===c.id&&s.status==='Activo'); const activeSales=activeProj.length
-          const cp=porCobrarBills(billing.filter(b=>b.client_id===c.id))
-          const hasOverdue=billing.some(b=>b.client_id===c.id&&b.status==='Vencido')
-          const balance=balances[c.id]||0
-          const tareasC=tareasDe[c.id]||0
-          return (
-            <div key={c.id} onClick={()=>{setForceFtab(null);setExtOpen(false);setSelected(c)}} style={{background:C.card,borderRadius:respSel.size>0&&tareasC>0?'0 10px 10px 0':10,padding:'13px 16px',marginBottom:8,border:`1px solid ${C.border}`,borderLeft:respSel.size>0&&tareasC>0?'2.5px solid #C77F18':`3px solid ${ended?C.done:hasOverdue?C.overdue:C.accent}`,opacity:ended?.7:1,cursor:'pointer'}}
-              onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 12px rgba(0,0,0,.09)'}
-              onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>{c.name}<span style={{color:C.done,fontSize:13,fontWeight:300}}>|</span><button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} title={ended?'Reactivar cliente':'Archivar (terminar) cliente'} style={{flexShrink:0,width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>{ended?<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}</button>{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:C.border,borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4}}>Interno</span>}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:C.soon,background:'#FFF8E1',borderRadius:20,padding:'1px 8px'}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{c.type}{c.rut?` · ${c.rut}`:''}</div>
-                  {(()=>{ const rs=rsLabel(c.id,clients,clientEntities); return (rs.name!==c.name||rs.multi)?<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${rs.rut}`:''}`}</div>:null })()}
+        {cl.length>0&&(()=>{
+          // Directorio A-Z: agrupado por inicial, avatar empresa/persona del color del responsable, índice lateral. Sin cifras (vista de navegación).
+          const norm=s=>(s||'').trim().toUpperCase()
+          const letterOf=c=>{ const ch=norm(c.name)[0]||'#'; return /[A-ZÑ]/.test(ch)?ch:'#' }
+          const byLetter={}; cl.forEach(c=>{ const L=letterOf(c); (byLetter[L]=byLetter[L]||[]).push(c) })
+          const letters=Object.keys(byLetter).sort((a,b)=>a.localeCompare(b,'es'))
+          const idFor=L=>'cli-letter-'+(L==='#'?'num':L)
+          const card=c=>{
+            const ended=c.status==='Terminado'
+            const resp=responsableDe[c.id]; const pc=resp?personChip(resp):{bg:C.bgWarm,color:C.done}
+            const esEmpresa=/\b(spa|s\.?p\.?a|ltda|limitada|s\.?a|sociedad|inversiones|comercial|constructora|consultores|holding|cia|cía|asociados|partners)\b/i.test(c.name||'')||/empresa|corp|sociedad/i.test(c.type||'')
+            const tareasC=tareasDe[c.id]||0
+            const rs=rsLabel(c.id,clients,clientEntities)
+            const sub=rs.multi?`${rs.multi} razones sociales`:(rs.name&&rs.name!==c.name?rsDisplay(rs.name):(c.type||''))
+            return (
+              <div key={c.id} onClick={()=>{setForceFtab(null);setExtOpen(false);setSelected(c)}} style={{background:C.card,borderRadius:11,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`,opacity:ended?.55:1,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=C.muted}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                <span style={{width:38,height:38,borderRadius:9,background:pc.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={esEmpresa?'building':'user'} s={18} c={pc.color}/></span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}{c.is_internal&&<span style={{fontSize:9,fontWeight:700,color:C.muted,background:C.border,borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:.4,marginLeft:6}}>Interno</span>}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:C.soon,background:'#FFF8E1',borderRadius:20,padding:'1px 8px',marginLeft:6}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
+                  {sub&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{sub}</div>}
                 </div>
-                {responsableDe[c.id]&&(()=>{ const pc=personChip(responsableDe[c.id]); return <span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{responsableDe[c.id]}</span> })()}
+                {resp&&<span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{resp}</span>}
+                <button onClick={ev=>{ev.stopPropagation();onToggleStatus(c)}} title={ended?'Reactivar cliente':'Archivar cliente'} style={{flexShrink:0,width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.done,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>{ended?<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}</button>
               </div>
-              <div style={{display:'flex',gap:13,fontSize:11,flexWrap:'wrap',alignItems:'center'}}>
-                {!ended&&<span style={{color:C.muted,display:'inline-flex',alignItems:'center',gap:4}}><SIcon n='briefcase' s={13} c={C.muted}/>{activeSales} {activeSales===1?'venta activa':'ventas activas'}</span>}
-                {cp>0&&<span style={{color:hasOverdue?C.overdue:C.accent,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}}><SIcon n='file' s={13} c={hasOverdue?C.overdue:C.accent}/>{fmt(cp)} por cobrar</span>}
-                {balance!==0&&<span style={{color:balance<0?C.overdue:C.normal,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}} title='Saldo de fondos'><SIcon n='wallet' s={13} c={balance<0?C.overdue:C.normal}/>{fmt(balance)}</span>}
-              </div>
-              {activeProj.length>0&&!ended&&<div style={{marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.bgWarm}`}}>
-                <div style={{fontSize:8,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:5}}>Proyectos vigentes · {activeProj.length}</div>
-                {activeProj.slice(0,3).map(s=>{ const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'; const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1); return (
-                  <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
-                    <SIcon n={ai} s={15} c={C.muted}/>
-                    <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</span>
-                    {uf>0&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtUF(uf)}</span>}
-                  </div>
-                )})}
-                {activeProj.length>3&&<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:2}}>+{activeProj.length-3} más</div>}
-              </div>}
+            )
+          }
+          return (<div style={{display:'flex',gap:8}}>
+            <div style={{flex:1,minWidth:0}}>
+              {letters.map(L=>(<div key={L} id={idFor(L)}>
+                <div style={{fontSize:12,fontWeight:700,color:C.done,margin:'9px 2px 5px'}}>{L}</div>
+                {byLetter[L].slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(card)}
+              </div>))}
             </div>
-          )
-        })}
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:1,flexShrink:0,position:'sticky',top:70,alignSelf:'flex-start'}}>
+              {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L=>{ const has=!!byLetter[L]; return <span key={L} onClick={has?()=>{const el=document.getElementById(idFor(L));el&&el.scrollIntoView({behavior:'smooth',block:'start'})}:undefined} style={{fontSize:10,fontWeight:has?700:400,color:has?C.accent:'#CBD5DB',cursor:has?'pointer':'default',lineHeight:1.3,padding:'0 1px'}}>{L}</span> })}
+            </div>
+          </div>)
+        })()}
       </div>
     </div>
   )
