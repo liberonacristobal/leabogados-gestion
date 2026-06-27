@@ -11718,6 +11718,33 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         </div>
       })()}
 
+      {/* Proyectos vigentes: ventas activas del cliente con barra de cobro (facturado→cobrado) y lo pendiente */}
+      {(()=>{
+        const activas = clientSales.filter(s=>s.status==='Activo')
+        if(!activas.length) return null
+        return (<div style={{marginBottom:14}}>
+          <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 7px'}}>Proyectos vigentes · {activas.length}</div>
+          {activas.map(s=>{
+            const sb=clientBilling.filter(b=>!b.deleted_at&&b.sale_id===s.id)
+            const fac=sb.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
+            const cob=sb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+            const pen=porCobrarBills(sb)
+            const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1)
+            const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'
+            const pct=fac>0?Math.min(100,Math.round(cob/fac*100)):0
+            return (<div key={s.id} onClick={()=>onOpenSale&&onOpenSale(s)} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'10px 12px',marginBottom:7,cursor:onOpenSale?'pointer':'default'}}>
+              <div style={{display:'flex',alignItems:'center',gap:9}}>
+                <SIcon n={ai} s={19} c={C.muted}/>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}</div></div>
+                {pen>0&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>pend. {fmtShort(pen)}</span>}
+              </div>
+              {fac>0&&<><div style={{height:5,background:C.border,borderRadius:3,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:C.normal,borderRadius:3}}/></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:4}}><span>facturado {fmtShort(fac)}</span><span>cobrado {fmtShort(cob)}</span></div></>}
+            </div>)
+          })}
+        </div>)
+      })()}
+
       {/* Cockpit v2: Año → Proyecto → Factura */}
       <div style={{...card,padding:'12px 13px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
@@ -12910,7 +12937,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
         {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}
         {cl.map(c=>{
           const ended=c.status==='Terminado'
-          const activeSales=sales.filter(s=>s.client_id===c.id&&s.status==='Activo').length
+          const activeProj=sales.filter(s=>s.client_id===c.id&&s.status==='Activo'); const activeSales=activeProj.length
           const cp=porCobrarBills(billing.filter(b=>b.client_id===c.id))
           const hasOverdue=billing.some(b=>b.client_id===c.id&&b.status==='Vencido')
           const balance=balances[c.id]||0
@@ -12932,6 +12959,17 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
                 {cp>0&&<span style={{color:hasOverdue?C.overdue:C.accent,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}}><SIcon n='file' s={13} c={hasOverdue?C.overdue:C.accent}/>{fmt(cp)} por cobrar</span>}
                 {balance!==0&&<span style={{color:balance<0?C.overdue:C.normal,fontWeight:600,display:'inline-flex',alignItems:'center',gap:4}} title='Saldo de fondos'><SIcon n='wallet' s={13} c={balance<0?C.overdue:C.normal}/>{fmt(balance)}</span>}
               </div>
+              {activeProj.length>0&&!ended&&<div style={{marginTop:8,paddingTop:8,borderTop:`0.5px solid ${C.bgWarm}`}}>
+                <div style={{fontSize:8,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:5}}>Proyectos vigentes · {activeProj.length}</div>
+                {activeProj.slice(0,3).map(s=>{ const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'; const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1); return (
+                  <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
+                    <SIcon n={ai} s={15} c={C.muted}/>
+                    <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</span>
+                    {uf>0&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtUF(uf)}</span>}
+                  </div>
+                )})}
+                {activeProj.length>3&&<div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:2}}>+{activeProj.length-3} más</div>}
+              </div>}
             </div>
           )
         })}
