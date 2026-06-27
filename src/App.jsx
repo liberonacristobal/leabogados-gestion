@@ -11017,7 +11017,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
 
 // Barra de tabs de la ficha de cliente (reutilizada por admin y limited; bloquea según rol)
 function FichaTabs({tab,setTab,role}){
-  const all=[['resumen','Resumen','grid'],['contacto','Contacto','id'],['financiero','Financiero','file'],['documentos','Cuenta','receipt']]
+  const all=[['resumen','Resumen','grid'],['contacto','Contacto','id'],['financiero','Honorarios','file'],['documentos','Cuenta','receipt']]
   // El limited solo ve Resumen y Contacto (Financiero/Documentos no se renderizan)
   const tabs = role==='admin' ? all : all.filter(([id])=>id==='resumen'||id==='contacto')
   return (
@@ -11486,7 +11486,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     </div>
     <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
     {loading&&<div style={{fontSize:11,color:C.muted,padding:'10px 13px'}}>Cargando…</div>}
-    {Hdr({icon:'file',title:'Honorarios',k:'honorarios',summary:`${facturas.length} factura${facturas.length!==1?'s':''}`})}
+    {Hdr({icon:'file',title:'Facturas',k:'honorarios',summary:`${facturas.length} factura${facturas.length!==1?'s':''}`})}
     {sec.honorarios&&<div style={{padding:'2px 13px 12px'}}>
       {porProy.length>0&&(()=>{
         const tile=p=>{ const open=openProy===p.key; const falta=(p.fact||0)-(p.pag||0); return (
