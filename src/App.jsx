@@ -8805,6 +8805,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [verArchivadosG,setVerArchivadosG] = useState(false)  // mostrar clientes Terminados en la lista de Gastos
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
   const [rsPickFor,setRsPickFor] = useState(null)        // gasto con el selector de razón social abierto (>3 RS o "cambiar")
+  const [movExp,setMovExp] = useState(null)              // id del gasto/fondo expandido (detalle al tocar): muestra OT/carga + acciones + Editar
   const [rendOpen,setRendOpen] = useState(new Set())     // secciones "Rendidos" desplegadas (key '__single__' o entity_id)
   const [notaBtnOpen,setNotaBtnOpen] = useState(false)   // menú del botón Notaría (visible, al costado de Cargar)
   const [gastoOrd,setGastoOrd] = useState('desc')        // orden por fecha de la lista de gastos del cliente
@@ -9316,21 +9317,21 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     const chipEstado={fontSize:10,padding:'2px 9px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600,cursor:'pointer',border:'none'}
     const showEstado = !isFondo && !e.personal_de && !e.created_by && e.client_id && !esOficina(e.client_id) && isImported && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && isAdmin
     return (
-      <div key={e.id} onClick={()=>onEdit(e)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isDev?C.azulInfo:isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
+      <div key={e.id} onClick={()=>setMovExp(p=>p===e.id?null:e.id)} style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,borderLeft:`3px solid ${isDev?C.azulInfo:isFondo?C.normal:C.overdue}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           {bigDate(e.date)}
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:catBg,color:C.muted,fontWeight:600}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
-              {!isFondo&&e.ot_number&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:C.azulBg,color:C.azulInfo,fontWeight:700}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>}
+              {movExp===e.id&&!isFondo&&e.ot_number&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:C.azulBg,color:C.azulInfo,fontWeight:700}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>}
               {isFondo&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.normal,fontWeight:600}}>{isDev?'Devolución':'Fondo'}</span>}
               {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.greenBg,color:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>Rendido <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>}
               {!isFondo&&e.notaria_liquidado_at&&(isAdmin&&!e.notaria_render_id
                 ? <button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Pagado a la notaría · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FAECE7',color:C.coralText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>✓ Notaría <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
                 : <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FAECE7',color:C.coralText,fontWeight:600}}>✓ Notaría</span>)}
               {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):alert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>✓ Caja chica</button>}
-              {e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
-              {isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Carga masiva</span>}
+              {movExp===e.id&&e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
+              {movExp===e.id&&isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Carga masiva</span>}
               {!isFondo&&e.pagado_cliente_at
                 ? (isAdmin
                   ? <button onClick={ev=>{ev.stopPropagation();marcarEstado(e,null)}} title='Pagado · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:e.no_descuenta_saldo?'#F1EFE8':C.greenBg,color:e.no_descuenta_saldo?C.grisText:C.greenText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>{e.no_descuenta_saldo?icoReloj():icoBaja()} Pagado <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
@@ -9340,7 +9341,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             </div>
             <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
             {!isFondo&&!e.personal_de&&!esOficina(e.client_id)&&<div style={{fontSize:10,marginTop:2}}>{e.client_id?<span style={{color:C.muted,fontWeight:600}}>{rsDisplay(rsLabel(e.client_id,clients,clientEntities,e.entity_id).name)}</span>:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>}</div>}
-            {!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(()=>{ const catOk=e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase()); return (
+            {movExp===e.id&&!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(()=>{ const catOk=e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase()); return (
               <div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}} onClick={stop}>
                 <div style={{position:'relative'}}>
                   <button onClick={()=>setCatMenu(catMenu===e.id?null:e.id)} style={{fontSize:11,fontWeight:600,color:catOk?C.accent:C.soonText,background:catOk?C.azulBg:'#FFF8E1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>{catOk?e.category:'Sin categoría'} ▾</button>
@@ -9356,7 +9357,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 )}
               </div>
             ) })()}
-            {needsClass&&(
+            {movExp===e.id&&needsClass&&(
               <div style={{marginTop:6}} onClick={stop}>
                 {e.created_by ? (
                   <span style={{display:'inline-flex',alignItems:'center',fontSize:10,padding:'2px 8px',borderRadius:12,background:C.greenBg,color:C.greenText,fontWeight:600}}>Caja chica · {e.created_by}{isAdmin&&<button title='Quitar de caja chica' onClick={()=>onAssignCajaChica&&onAssignCajaChica(e,{clear:true})} style={xBtn}>✕</button>}</span>
@@ -9382,7 +9383,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {/* Asignar razón social POR GASTO (solo si el cliente tiene 2+ RS): pills si ≤3, selector si más */}
             {(()=>{
               const rsOpts=(clientEntities||[]).filter(x=>String(x.client_id)===String(selectedClient?.id))
-              if(isFondo||rsOpts.length<2) return null
+              if(isFondo||rsOpts.length<2||movExp!==e.id) return null
               const open=rsPickFor===e.id
               const rsNm=id=>rsOpts.find(x=>String(x.id)===String(id))?.name||'—'
               const pickBtns=rsOpts.map(r=><button key={r.id} onClick={()=>{onAssignGastoRS&&onAssignGastoRS(e,r.id);setRsPickFor(null)}} style={chipPerson}>{(r.name||'').slice(0,24)}</button>)
@@ -9408,16 +9409,18 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
               )
             })()}
+            {movExp===e.id&&<button onClick={ev=>{ev.stopPropagation();onEdit(e)}} style={{marginTop:8,fontSize:11,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Editar →</button>}
           </div>
           <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               {!isFondo&&<AdjuntoIcon e={e}/>}
               <div style={{fontSize:14,fontWeight:700,color:isDev?C.muted:isFondo?C.normal:(e.no_descuenta_saldo?C.done:C.overdue),textDecoration:e.no_descuenta_saldo?'line-through':'none'}}>{isDev?'−'+fmt(Math.abs(e.amount)):(isFondo?'+':'-')+fmt(e.amount)}</div>
+              <span style={{color:C.done,fontSize:14,lineHeight:1,transform:movExp===e.id?'rotate(90deg)':'none',transition:'transform .15s',display:'inline-block'}}>›</span>
             </div>
-            {!isFondo&&e.category==='Notaria'&&!e.ot_number&&!e.notaria_liquidado_at&&!e.notaria_render_id&&!e.rendered_at&&isAdmin&&(
+            {movExp===e.id&&!isFondo&&e.category==='Notaria'&&!e.ot_number&&!e.notaria_liquidado_at&&!e.notaria_render_id&&!e.rendered_at&&isAdmin&&(
               <button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Marcar como pagado a la notaría (sale de "por pagar" y de caja chica)' style={{fontSize:10,padding:'1px 7px',borderRadius:3,border:`0.5px solid ${C.coralText}`,background:'#fff',color:C.coralText,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Marcar pagado</button>
             )}
-            {showEstado && (
+            {movExp===e.id&&showEstado && (
               <div style={{position:'relative'}} onClick={stop}>
                 <button onClick={()=>setEstadoFor(estadoFor===e.id?null:e.id)} style={chipEstado}>Estado ▾</button>
                 {estadoFor===e.id && <>
