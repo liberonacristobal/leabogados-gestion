@@ -11404,7 +11404,8 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
 // Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
 function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste}){
-  const [sec,setSec]=useState('honorarios')
+  const [sec,setSec]=useState({})   // secciones-icono (Honorarios/Fondos/Movimientos/Anticipos), colapsadas por defecto
+  const secT=k=>setSec(s=>({...s,[k]:!s[k]}))
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
   const [det,setDet]=useState(null); const [detG,setDetG]=useState(null)
   const [ord,setOrd]=useState('fecha')
@@ -11444,26 +11445,17 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
     Object.values(g).forEach(a=>a.sort(cmp));return g},[facturas,ord,ventaById])
   const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=(b.amount||0);o.pag+=(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0));o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
   const kpi=(label,val,sub,col,corner)=>(<div style={{background:'#F5F7F9',borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
+  const Hdr=({icon,title,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{title}</span>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
   return (<div style={{padding:'14px 20px 40px'}}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:12}}>
       {kpi('Por cobrar',porCobrar,'facturas emitidas sin pagar',porCobrar>0?C.accent:C.greenText)}
       {kpi('Saldo fondos',fg.saldo,`fondos ${fmt(fg.fondos)} − gastos ${fmt(fg.gastos)}`,fg.saldo<0?C.overdueText:C.greenText,onAjuste&&<button onClick={()=>onAjuste(client)} title='Ajustar saldo' style={{position:'absolute',top:4,right:6,background:'none',border:'none',color:C.done,cursor:'pointer',fontSize:13,lineHeight:1,padding:2}}>⋯</button>)}
       {kpi('A favor',aFavor,'anticipos disponibles',aFavor>0?C.greenText:C.muted)}
     </div>
-    <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:10}}>
-      {(()=>{ const sp={width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
-        const ICN={
-          honorarios:<svg {...sp}><path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/><path d='M14 3v5h5'/><path d='M9 13h6M9 17h4'/></svg>,
-          fondos:<svg {...sp}><path d='M3 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2'/><rect x='3' y='7' width='18' height='13' rx='2'/><circle cx='16' cy='13.5' r='1.3'/></svg>,
-          movs:<svg {...sp}><path d='M4 9h13l-3.5 -3.5'/><path d='M20 15H7l3.5 3.5'/></svg>,
-          adelantos:<svg {...sp}><ellipse cx='12' cy='6' rx='7' ry='3'/><path d='M5 6v6c0 1.6 3.1 3 7 3s7-1.4 7-3V6'/><path d='M5 12v6c0 1.6 3.1 3 7 3s7-1.4 7-3v-6'/></svg>,
-        }
-        return [['honorarios','Honorarios'],['fondos','Fondos'],['movs','Movimientos'],['adelantos','Anticipos']].map(([v,l])=>(
-          <span key={v} onClick={()=>setSec(v)} style={{flex:1,textAlign:'center',padding:'7px 2px',color:sec===v?C.accent:C.muted,borderBottom:sec===v?`2px solid ${C.accent}`:'none',marginBottom:-1,cursor:'pointer'}}>{ICN[v]}<div style={{fontSize:10,marginTop:2,fontWeight:sec===v?600:400}}>{l}</div></span>
-        )) })()}
-    </div>
-    {loading&&<div style={{fontSize:11,color:C.muted}}>Cargando…</div>}
-    {sec==='honorarios'&&<div>
+    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    {loading&&<div style={{fontSize:11,color:C.muted,padding:'10px 13px'}}>Cargando…</div>}
+    {Hdr({icon:'file',title:'Honorarios',k:'honorarios',summary:`${facturas.length} factura${facturas.length!==1?'s':''}`})}
+    {sec.honorarios&&<div style={{padding:'2px 13px 12px'}}>
       {porProy.length>0&&(()=>{
         const tile=p=>{ const open=openProy===p.key; const falta=(p.fact||0)-(p.pag||0); return (
           <div key={p.key}>
@@ -11540,7 +11532,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           </div>) })}
       </div>) })}
     </div>}
-    {sec==='fondos'&&(()=>{ const _sf=(a,b)=>{ const r=(a.date||'')<(b.date||'')?1:-1; return fgOrd==='desc'?r:-r }; const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort(_sf); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort(_sf)
+    {Hdr({icon:'wallet',title:'Fondos y gastos',k:'fondos',summary:`saldo ${fmt(fg.saldo)}`,sumCol:fg.saldo<0?C.overdue:C.normal})}
+    {sec.fondos&&(()=>{ const _sf=(a,b)=>{ const r=(a.date||'')<(b.date||'')?1:-1; return fgOrd==='desc'?r:-r }; const fondos=expenses.filter(e=>e.client_id===client.id&&e.type==='fondo').sort(_sf); const gastos=expenses.filter(e=>e.client_id===client.id&&e.type==='gasto').sort(_sf)
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; const isDev=signo>0&&((e.amount||0)<0||/^\s*devoluci/i.test(e.concept||'')); return (
         <div key={e.id} style={{borderBottom:`1px solid ${C.border}`}}>
           <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer'}}>
@@ -11575,7 +11568,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
       {gastos.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {gastos.map(e=>fila(e,-1,'#A32D2D'))}
     </div>) })()}
-    {sec==='movs'&&(()=>{ const base=movs.filter(m=>!m.es_interno)
+    {Hdr({icon:'exchange',title:'Movimientos bancarios',k:'movs',summary:`${movs.filter(m=>!m.es_interno).length} mov`})}
+    {sec.movs&&(()=>{ const base=movs.filter(m=>!m.es_interno)
       const totAb=base.filter(m=>m.tipo==='abono').reduce((s,m)=>s+(m.monto||0),0); const totCa=base.filter(m=>m.tipo==='cargo').reduce((s,m)=>s+(m.monto||0),0)
       const sinN=base.filter(m=>!conc.find(x=>x.movimiento_id===m.id)).length
       let lista=base; if(movF==='abonos')lista=lista.filter(m=>m.tipo==='abono'); else if(movF==='cargos')lista=lista.filter(m=>m.tipo==='cargo'); else if(movF==='sin')lista=lista.filter(m=>!conc.find(x=>x.movimiento_id===m.id))
@@ -11603,10 +11597,12 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
           </div>}
         </div>) })}
     </div>) })()}
-    {sec==='adelantos'&&<div>
+    {Hdr({icon:'clock',title:'Anticipos',k:'adelantos',summary:anticipos.length?`${anticipos.length}`:'sin anticipos'})}
+    {sec.adelantos&&<div style={{padding:'2px 13px 12px'}}>
       {(anticipos||[]).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin adelantos.</div>}
       {(anticipos||[]).slice().sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(a=>(<div key={a.id} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1'}}><span>{(a.nota||'Anticipo').slice(0,30)} <span style={{color:C.done}}>· {fmtFechaDMY(a.fecha)}</span></span><span style={{textAlign:'right'}}><b style={{color:C.greenText}}>{fmt(a.monto)}</b> <span style={{fontSize:9,color:a.estado==='disponible'?C.greenText:C.done}}>{a.estado}</span></span></div>))}
     </div>}
+    </div>
   </div>)
 }
 
