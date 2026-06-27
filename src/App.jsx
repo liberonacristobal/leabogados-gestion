@@ -5997,40 +5997,47 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
           const go=f=>{setFilter(f);clearSel&&clearSel()}
-          const tab=(f,l,v,col,icon)=>(<button key={f} onClick={()=>irAEstado(f)} style={{textAlign:'left',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer'}}><div style={{display:'flex',alignItems:'center',gap:5,marginBottom:3}}>{icon&&<SIcon n={icon} s={13} c={col}/>}<span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</span></div><div style={{fontSize:17,fontWeight:600,color:col}}>{fmt(v)}</div></button>)
           return (<div>
-            <div onClick={()=>irAEstado('emitidas')} title='Ver las facturas por cobrar' style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16,cursor:'pointer'}}>
-              <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:2}}>Por cobrar · facturas emitidas sin pagar</div>
-              <div style={{fontSize:26,fontWeight:700,color:C.accent,lineHeight:1.1}}>{fmt(porCobrar)}</div>
-              <div style={{display:'flex',marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:11}}>
-                <div onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{flex:1,paddingRight:12,borderRight:`1px solid ${C.border}`,cursor:'pointer'}}>
-                  <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Vencido</div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.overdue}}>{fmt(venAll)}</div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:4,marginBottom:8}}>
+              {[['','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v||'t'} onClick={()=>setFYear(v)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${fYear===v?C.accent:C.border}`,background:fYear===v?C.azulBg:'#fff',color:fYear===v?C.accent:C.muted}}>{l}</span>)}
+            </div>
+            <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'14px 15px',marginBottom:7}}>
+              <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:12}}>Etapas del cobro</div>
+              <div style={{display:'flex',alignItems:'stretch'}}>
+                <div onClick={()=>irAEstado('programadas')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
+                  <SIcon n='clock' s={19} c={C.muted}/>
+                  <div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:3}}>Por facturar</div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.muted}}>{fmtShort(porFacturarRealTot)}</div>
                 </div>
-                <div style={{flex:1,paddingLeft:14}}>
-                  <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Al día</div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.accent}}>{fmt(porCobrar-venAll)}</div>
+                <div style={{display:'flex',alignItems:'center',color:C.done,fontSize:15,paddingTop:14}}>→</div>
+                <div onClick={()=>irAEstado('emitidas')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
+                  <SIcon n='file' s={19} c={C.accent}/>
+                  <div style={{fontSize:8,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginTop:3}}>Por cobrar</div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.accent}}>{fmtShort(porCobrar)}</div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',color:C.done,fontSize:15,paddingTop:14}}>→</div>
+                <div onClick={()=>irAEstado('pagado')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
+                  <SIcon n='check' s={19} c={C.normal}/>
+                  <div style={{fontSize:8,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:3}}>Cobrado</div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.greenText}}>{fmtShort(cobAll)}</div>
+                </div>
+              </div>
+              <div style={{marginTop:12,paddingTop:11,borderTop:`0.5px solid ${C.border}`,display:'flex',gap:9}}>
+                <div onClick={()=>irAEstado('vencido')} style={{flex:1,background:C.overdueBg,borderRadius:9,padding:'8px 11px',cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='alert' s={12} c={C.overdue}/><span style={{fontSize:8,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>De eso, vencido</span></div>
+                  <div style={{fontSize:17,fontWeight:700,color:C.overdueText}}>{fmt(venAll)}</div>
+                </div>
+                <div onClick={()=>irAEstado('emitidas')} style={{flex:1,background:C.azulBg,borderRadius:9,padding:'8px 11px',cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:8,color:C.accent,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Al día</span></div>
+                  <div style={{fontSize:17,fontWeight:700,color:C.accent}}>{fmt(porCobrar-venAll)}</div>
                 </div>
               </div>
             </div>
-            {/* "Ver detalle por cliente" ahora vive en el header (ojo + Por cliente) */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7,gap:8,flexWrap:'wrap'}}>
-              <span style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Estados</span>
-              <div style={{display:'flex',gap:4}}>
-                {[['','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v||'t'} onClick={()=>setFYear(v)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${fYear===v?C.accent:C.border}`,background:fYear===v?C.azulBg:'#fff',color:fYear===v?C.accent:C.muted}}>{l}</span>)}
-              </div>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:7}}>
-              {tab('emitidas','Por cobrar',porCobrar,C.accent,'file')}
-              {tab('vencido','Vencidas',venAll,C.overdue,'alert')}
-              {tab('pagado','Cobradas '+(fYear?fYear:'(total)'),cobAll,C.normal,'check')}
-              {tab('programadas','Por facturar '+(fYear?fYear:'(total)'),porFacturarRealTot,C.muted,'clock')}
-            </div>
-            {yaFactTot>0&&<div onClick={()=>irAEstado('programadas')} title='Programadas cuya factura emitida ya existe — vincular' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:9,cursor:'pointer'}}>
+            <div style={{fontSize:9,color:C.done,marginBottom:10,paddingLeft:2}}>Cobrado y Por facturar del año · Por cobrar y Vencido = saldo vivo</div>
+            {yaFactTot>0&&<div onClick={()=>irAEstado('programadas')} title='Programadas cuya factura emitida ya existe — vincular' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:10,cursor:'pointer'}}>
               <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.soonText}}>⚠ Ya facturadas — vincular a su factura emitida</div><div style={{fontSize:9,color:C.coralText,marginTop:1}}>su factura real ya existe; inflan el "por facturar"</div></div>
               <span style={{fontSize:14,fontWeight:700,color:C.soonText,whiteSpace:'nowrap'}}>{fmt(yaFactTot)}</span>
             </div>}
-            <div style={{fontSize:9,color:C.muted,marginBottom:16,lineHeight:1.4}}>Cobradas y Por facturar según el año seleccionado. Por cobrar y Vencidas son el total pendiente actual (no dependen del año).{yaFactTot>0?' "Por facturar" ya excluye las ya facturadas (arriba).':''}</div>
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               <span onClick={()=>go('anticipos')} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:antDisp>0?C.accent:C.muted,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
                 <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={antDisp>0?C.accent:C.done} strokeWidth='2'><rect x='3' y='6' width='18' height='13' rx='2'/><path d='M16 6V4H8v2M3 11h18'/></svg>
