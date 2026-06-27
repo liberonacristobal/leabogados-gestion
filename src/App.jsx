@@ -12397,6 +12397,14 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const [openSaleGrp,setOpenSaleGrp] = useState(()=>new Set())   // grupos de ventas (Activas/Terminadas), colapsados por defecto
   const toggleSaleGrp = k => setOpenSaleGrp(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const [openEnt,setOpenEnt] = useState(false)   // caja "Razones sociales facturadas", colapsada por defecto
+  const [rSec,setRSec] = useState({})   // secciones-icono del Resumen (Cobros/Ventas/Gastos/Tareas), colapsadas por defecto
+  const rtog = k => setRSec(s=>({...s,[k]:!s[k]}))
+  const RHdr = ({icon,title,summary,sumCol,k,iconCol}) => (<div onClick={()=>rtog(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 0 11px',cursor:'pointer'}}>
+    <SIcon n={icon} s={18} c={iconCol||C.muted}/>
+    <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{title}</span>
+    {summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}
+    <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:rSec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+  </div>)
   const [respPick,setRespPick] = useState(false)   // asignar/cambiar abogado responsable desde el encabezado
   const ufState = useUF()
   const ufRef = ufState.uf || sales.find(s=>s.uf_value>0)?.uf_value || UF_FALLBACK
@@ -12519,10 +12527,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         })()}
 
         {/* Ventas */}
-        <div style={{marginBottom:20}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text}}>Ventas</div>
-          </div>
+        <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`}}>
+          {RHdr({icon:'briefcase',title:'Ventas',k:'ventas',summary:`${clientSales.filter(s=>s.status==='Activo').length} activas`})}
+          {rSec.ventas&&<div style={{paddingBottom:10}}>
           {clientSales.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin ventas registradas</div>}
           {(()=>{
             const renderSale = s => {
@@ -12594,15 +12601,15 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               )
             })
           })()}
+          </div>}
         </div>
 
         {/* Cobros pendientes */}
         {porCobrar.length>0&&(
-          <div style={{marginBottom:20}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.text}}>Cobros pendientes</div>
-              <button onClick={onAddBilling} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Nuevo</button>
-            </div>
+          <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`}}>
+            {RHdr({icon:'file',title:'Cobros pendientes',k:'cobros',summary:fmt(totalPorCobrar),sumCol:C.accent,iconCol:C.accent})}
+            {rSec.cobros&&<div style={{paddingBottom:10}}>
+            <button onClick={onAddBilling} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:8}}>+ Nuevo</button>
             {(()=>{
               const sorted = [...porCobrar].sort((a,b)=>{const ra=(a.receptor_name||'').toLowerCase(),rb=(b.receptor_name||'').toLowerCase();if(ra!==rb)return ra.localeCompare(rb,'es');return new Date(a.issued_at||0)-new Date(b.issued_at||0)})
               const groups = []
@@ -12646,18 +12653,18 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                 </div>
               )})
             })()}
+            </div>}
           </div>
         )}
 
         {/* Gastos y fondos */}
-        <div style={{marginBottom:20}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text}}>Gastos y Fondos</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
+        <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`}}>
+          {RHdr({icon:'wallet',title:'Gastos y fondos',k:'gastos',summary:`saldo ${fmt(saldoFondos)}`,sumCol:saldoFondos<0?C.overdue:C.normal})}
+          {rSec.gastos&&<div style={{paddingBottom:10}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-start',marginBottom:8}}>
               <button onClick={()=>onAddFondo(client)} style={chipBtn('green')}>+ Fondo</button>
               <button onClick={()=>onAddGasto(client)} style={chipBtn('soft')}>+ Gasto</button>
               {clientExpenses.length>0&&<button onClick={()=>onRendicion(client)} style={chipBtn('greenSolid')}>Rendir fondos</button>}
-            </div>
           </div>
           {clientExpenses.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin movimientos</div>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
@@ -12729,14 +12736,14 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               ))}
             </div>)
           })()}
+          </div>}
         </div>
 
         {/* Proyectos y Tareas */}
-        <div style={{marginBottom:20}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text}}>Proyectos y Tareas</div>
-            <button onClick={onAddTask} style={chipBtn('soft')}>+ Tarea</button>
-          </div>
+        <div style={{marginBottom:4,borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}>
+          {RHdr({icon:'check',title:'Proyectos y tareas',k:'tareas',summary:clientTasks.length?`${clientTasks.length} ${clientTasks.length===1?'tarea':'tareas'}`:'sin activas',sumCol:clientTasks.some(t=>urgency(t.due,t.status)==='overdue')?C.overdue:C.muted})}
+          {rSec.tareas&&<div style={{paddingBottom:10}}>
+          <button onClick={onAddTask} style={{...chipBtn('soft'),marginBottom:10}}>+ Tarea</button>
           {clientTasks.length===0&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin tareas activas</div>}
 
           {/* Proyectos nombrados */}
@@ -12791,6 +12798,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
               ))}
             </div>
           )}
+          </div>}
         </div>
 
       </div>
