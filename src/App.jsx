@@ -11668,6 +11668,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const [detFac,setDetFac] = useState(()=>new Set())   // facturas con detalle/movimiento bancario expandido
   const [ficRs,setFicRs] = useState('all')   // filtro por razón social en la ficha (rsKey | 'all')
   const [ficEst,setFicEst] = useState({})   // colapso de los acordeones por estado en la ficha
+  const [vSec,setVSec] = useState({})   // colapso de las secciones-icono de Ventas (Proyectos/Facturas), colapsadas por defecto
+  const vtog = k => setVSec(s=>({...s,[k]:!s[k]}))
+  const [facEje,setFacEje] = useState('estado')   // eje de la sección Facturas: 'estado' | 'anio' | 'proyecto'
   const [fConc,setFConc] = useState([]); const [fMovs,setFMovs] = useState([])   // conciliación del cliente para ver el movimiento de una factura conciliada
   useEffect(()=>{ if(!client?.id) return; let ok=true; Promise.all([supabase.from('conciliacion').select('factura_id,movimiento_id,tipo_destino,monto_aplicado'), supabase.from('cartola_movimientos').select('id,fecha,monto,n_operacion,descripcion').eq('cliente_id',client.id)]).then(([a,b])=>{ if(ok){ setFConc(a.data||[]); setFMovs(b.data||[]) } }).catch(()=>{}); return ()=>{ ok=false } },[client?.id])
   const fConcByFac = useMemo(()=>{ const m={}; fConc.forEach(c=>{ if(c.factura_id&&c.tipo_destino==='factura') (m[c.factura_id]=m[c.factura_id]||[]).push(c) }); return m },[fConc])
@@ -11728,6 +11731,12 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const lbl = {fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.4,marginBottom:4,display:'block'}
   const card = {marginBottom:16,padding:'14px 16px',borderRadius:12,background:C.card,border:`1px solid ${C.border}`}
   const sTitle = (t)=>(<div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:10}}>{t}</div>)
+  const VHdr = ({icon,iconCol,title,summary,sumCol,k}) => (<div onClick={()=>vtog(k)} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',cursor:'pointer',background:vSec[k]?'#F7F9FA':'#fff'}}>
+    <SIcon n={icon} s={18} c={iconCol||C.muted}/>
+    <span style={{fontSize:13,fontWeight:vSec[k]?700:600,color:vSec[k]?C.accent:C.text,flex:1,minWidth:0}}>{title}</span>
+    {summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}
+    <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:vSec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+  </div>)
   const field = (label,k,placeholder)=>(
     <div><label style={lbl}>{label}</label><input value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={placeholder||''} style={inp}/></div>
   )
@@ -11749,37 +11758,45 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         </div>
       })()}
 
-      {/* Proyectos vigentes: ventas activas del cliente con barra de cobro (facturado→cobrado) y lo pendiente */}
+      {/* Proyectos (icono-sección colapsada): Vigentes + Terminados, con barra de cobro (facturado→cobrado) */}
       {(()=>{
         const activas = clientSales.filter(s=>s.status==='Activo')
-        if(!activas.length) return null
-        return (<div style={{marginBottom:14}}>
-          <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 7px'}}>Proyectos vigentes · {activas.length}</div>
-          {activas.map(s=>{
-            const sb=clientBilling.filter(b=>!b.deleted_at&&b.sale_id===s.id)
-            const fac=sb.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
-            const cob=sb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
-            const pen=porCobrarBills(sb)
-            const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1)
-            const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'
-            const pct=fac>0?Math.min(100,Math.round(cob/fac*100)):0
-            return (<div key={s.id} onClick={()=>onOpenSale&&onOpenSale(s)} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'10px 12px',marginBottom:7,cursor:onOpenSale?'pointer':'default'}}>
-              <div style={{display:'flex',alignItems:'center',gap:9}}>
-                <SIcon n={ai} s={19} c={C.muted}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}</div></div>
-                {pen>0&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>pend. {fmtShort(pen)}</span>}
-              </div>
-              {fac>0&&<><div style={{height:5,background:C.border,borderRadius:3,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:C.normal,borderRadius:3}}/></div>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:4}}><span>facturado {fmtShort(fac)}</span><span>cobrado {fmtShort(cob)}</span></div></>}
-            </div>)
-          })}
+        const terminadas = clientSales.filter(s=>s.status==='Terminado')
+        if(!activas.length && !terminadas.length) return null
+        const projCard = s => {
+          const sb=clientBilling.filter(b=>!b.deleted_at&&b.sale_id===s.id)
+          const fac=sb.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
+          const cob=sb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+          const pen=porCobrarBills(sb)
+          const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1)
+          const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'
+          const pct=fac>0?Math.min(100,Math.round(cob/fac*100)):0
+          return (<div key={s.id} onClick={()=>onOpenSale&&onOpenSale(s)} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,padding:'10px 12px',marginBottom:7,cursor:onOpenSale?'pointer':'default'}}>
+            <div style={{display:'flex',alignItems:'center',gap:9}}>
+              <SIcon n={ai} s={19} c={C.muted}/>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}</div></div>
+              {pen>0&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>pend. {fmtShort(pen)}</span>}
+            </div>
+            {fac>0&&<><div style={{height:5,background:C.border,borderRadius:3,marginTop:8,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:C.normal,borderRadius:3}}/></div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:4}}><span>facturado {fmtShort(fac)}</span><span>cobrado {fmtShort(cob)}</span></div></>}
+          </div>)
+        }
+        return (<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+          {VHdr({icon:'briefcase',title:'Proyectos',k:'proyectos',summary:`${activas.length} vigente${activas.length!==1?'s':''} · ${terminadas.length} terminado${terminadas.length!==1?'s':''}`})}
+          {vSec.proyectos&&<div style={{padding:'6px 13px 12px'}}>
+            {activas.length>0&&<><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 7px'}}>Vigentes · {activas.length}</div>
+            {activas.map(projCard)}</>}
+            {terminadas.length>0&&<><div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'10px 2px 7px'}}>Terminados · {terminadas.length}</div>
+            {terminadas.map(projCard)}</>}
+          </div>}
         </div>)
       })()}
 
-      {/* Cockpit v2: Año → Proyecto → Factura */}
-      <div style={{...card,padding:'12px 13px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
-          <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600}}>Facturas</div>
+      {/* Facturas (icono-sección colapsada): el cockpit Año → Proyecto → Factura va dentro */}
+      <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
+        {VHdr({icon:'file',title:'Facturas',k:'facturas',summary:porCobrar>0?`${fmt(porCobrar)} por cobrar`:(real.filter(esFacturada).length?`${real.filter(esFacturada).length} emitidas`:'sin facturas'),sumCol:porCobrar>0?C.accent:undefined})}
+        {vSec.facturas&&<div style={{padding:'10px 13px 13px'}}>
+        <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',marginBottom:9}}>
           <div style={{display:'flex',gap:10,alignItems:'center'}}>
             {onConciliar&&<span onClick={()=>onConciliar()} style={{fontSize:11,color:C.greenText,fontWeight:600,cursor:'pointer'}}>Conciliar</span>}
             <span onClick={()=>onAddBilling&&onAddBilling()} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>+ Nueva factura</span>
@@ -11901,6 +11918,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
             })()}
           </>)
         })()}
+        </div>}
       </div>
 
       {/* Anticipos (PP-15 commit 2) */}
