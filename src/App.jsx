@@ -9683,7 +9683,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const respList = (()=>{ const m=new Map(); baseAll.forEach(c=>{ const k=c.abogado_responsable||'__sin__'; const o=m.get(k)||{negAmt:0,negN:0,posAmt:0,posN:0}; const s=saldoDe(c); if(s<0){o.negAmt+=s;o.negN++}else{o.posAmt+=s;o.posN++} m.set(k,o) }); return [...m.entries()] })()
           const verPos = saldoFilter==='pos'
           const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
-          const cards=[['neg','Saldo negativo',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','Saldo a favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
+          const cards=[['neg','Por reembolsar',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','A favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
             {showDescuadres&&(
               <div style={{marginBottom:12}}>
@@ -9878,7 +9878,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {respCobranza.length>1&&(
               <div style={{marginBottom:8}}>
                 <div style={{display:'flex',alignItems:'center',marginBottom:6}}>
-                  <span style={{fontSize:10,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{verPos?'A favor por responsable':'Por cobrar por responsable'}</span>
+                  <span style={{fontSize:10,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{verPos?'A favor · por responsable':'Por reembolsar · por responsable'}</span>
                   {respFilter&&<button onClick={()=>setRespFilter(null)} style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:`repeat(${respCobranza.length},minmax(0,1fr))`,gap:5}}>
@@ -10177,7 +10177,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             const mostrarLista = verTodos || verArchivadosG || !!respFilter || searchingNow || saldoFilter!=='todos'
             return (<>
               {!mostrarLista
-                ? <div style={{color:C.muted,textAlign:'center',padding:'24px 16px',fontSize:12,lineHeight:1.55,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,marginBottom:10}}>Toca un <b style={{color:C.text}}>saldo</b> o un <b style={{color:C.text}}>responsable</b> para ver los clientes — o busca por nombre / toca <b style={{color:C.text}}>Todos</b>.</div>
+                ? <div style={{color:C.done,textAlign:'center',padding:'16px 16px 8px',fontSize:11}}>Busca un cliente, o toca un saldo / responsable.</div>
                 : <>
                     {list.length===0&&orphans.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{verArchivadosG?'Sin clientes archivados':'Sin registros'}</div>}
                     {list.length===0&&orphans.length>0&&<div style={{color:C.muted,textAlign:'center',padding:'18px 0',fontSize:12}}>{verArchivadosG?'Sin clientes archivados en esta vista':'Sin clientes en esta vista'}</div>}
