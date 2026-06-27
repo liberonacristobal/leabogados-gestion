@@ -3562,10 +3562,12 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
 
   const statusPillBg = st => st==='Activo'?C.accent:st==='Propuesta'?C.muted:st==='Borrador'?'#E8CC6A':st==='Rechazada'?C.overdue:st==='Terminado'?C.done:C.soon
   const statusPillColor = st => st==='Borrador'?'#4A3800':undefined
+  const areaIcon = a => ({Corporativo:'building',Tributario:'file',Laboral:'users'}[a]||'briefcase')
 
   // Agrupación de la lista: tiles por Abogado o Área (alternable). Buscar muestra resultados planos (sin agrupar).
   const [groupBy,setGroupBy] = useState('abogado')
   const [selGroup,setSelGroup] = useState(null)
+  const [verTodasV,setVerTodasV] = useState(false)   // "ver todas" en el drill del grupo (evita scroll eterno)
   const AREA_COL = {'Tributario':'#BA7517','Corporativo':'#534AB7'}
   const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?C.done:personChip(k).color) : (AREA_COL[k]||'#537281')
   const grupos = useMemo(()=>{
@@ -3590,7 +3592,8 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
         style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?C.soon:C.border}`,borderLeft:tardio?`4px solid #C77F18`:undefined,cursor:'pointer'}}
         onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?C.soon:C.accent}
         onMouseLeave={e=>e.currentTarget.style.borderColor=tardio?C.soon:C.border}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:5}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:9,marginBottom:5}}>
+          <SIcon n={areaIcon(s.area)} s={18} c={C.muted}/>
           <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
             <div onClick={client&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} title={client&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:client&&onOpenClientFicha?'pointer':'inherit'}}>{client?.name||'—'}</div>
@@ -3710,7 +3713,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
             )})()}
             {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; return (
               <div key={g.key} onClick={()=>setSelGroup(on?null:g.key)} style={{textAlign:'left',background:sin?'#FBF7EF':'#fff',border:`1px solid ${on?col:(sin?C.ambarBg:C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:10,padding:'11px 13px',cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
-                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
+                <div style={{display:'flex',alignItems:'center',gap:5,fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}><SIcon n={groupBy==='abogado'?'users':areaIcon(g.key)} s={12} c={col}/>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div>
                 <div style={{display:'flex',alignItems:'baseline',gap:5,fontVariantNumeric:'tabular-nums'}}><span style={{fontSize:17,fontWeight:600,color:col}}>{fmtUFk(g.uf)}</span><span style={{fontSize:10,color:C.done}}>· {g.count}</span></div>
               </div>
             )})}
@@ -3722,7 +3725,8 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
                 <span style={{fontSize:12,fontWeight:600,color:C.accent}}>{isAll?'Todas las ventas':selGroup}</span>
                 <span style={{fontSize:11,color:C.muted}}>· {rows.length} venta{rows.length!==1?'s':''} · {fmtUFk(uf)}</span>
               </div>
-              {rows.map(saleRow)}
+              {(verTodasV?rows:rows.slice(0,8)).map(saleRow)}
+              {rows.length>8&&<div onClick={()=>setVerTodasV(v=>!v)} style={{textAlign:'center',padding:'7px 0',fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-8} más · ver todas`}</div>}
             </div>
           )})()}
         </>))}
