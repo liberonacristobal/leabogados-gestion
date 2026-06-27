@@ -9790,6 +9790,28 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 )
               })}
             </div>
+            {(()=>{
+              const nRev = orphans.length+revN(revNoActivo)+revN(revOcasional)
+              const notaTot = notariaPend.reduce((a,e)=>a+(e.amount||0),0)
+              const acciones=[
+                nRev>0&&{ic:'alert',icC:C.soonText,bg:C.ambarBg,t:'Revisar gastos sin asignar',sub:`${nRev} gasto${nRev!==1?'s':''} · sin cliente, archivado u ocasional`,go:()=>setShowRevision(true)},
+                notariaPend.length>0&&{ic:'file',icC:C.tealText,bg:C.tealBg,t:'Liquidar a notaría',sub:`${fmtShort(notaTot)} pendiente · ${notariaPend.length} gasto${notariaPend.length!==1?'s':''}`,go:()=>setShowNotaria(true)},
+                orphans.length>0&&{ic:'alert',icC:C.muted,bg:C.bgWarm,t:'Sin cliente · por asignar',sub:`${orphans.length} gasto${orphans.length!==1?'s':''}`,go:()=>setShowOrphans(true)},
+              ].filter(Boolean)
+              if(!acciones.length) return null
+              return (<div style={{marginBottom:10}}>
+                <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 6px'}}>Qué hacer</div>
+                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                  {acciones.map((a,i)=>(
+                    <div key={i} onClick={a.go} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 12px',borderBottom:i<acciones.length-1?`0.5px solid ${C.bgWarm}`:'none',cursor:'pointer'}}>
+                      <span style={{width:32,height:32,borderRadius:9,background:a.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={a.ic} s={17} c={a.icC}/></span>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{a.t}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.sub}</div></div>
+                      <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M9 6l6 6-6 6'/></svg>
+                    </div>
+                  ))}
+                </div>
+              </div>)
+            })()}
             {respCobranza.length>1&&(
               <div style={{marginBottom:8}}>
                 <div style={{display:'flex',alignItems:'center',marginBottom:6}}>
