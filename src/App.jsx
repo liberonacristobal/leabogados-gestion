@@ -11480,11 +11480,15 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const kpi=(label,val,sub,col,corner)=>(<div style={{background:'#F5F7F9',borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
   const Hdr=({icon,title,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{title}</span>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
   return (<div style={{padding:'14px 20px 40px'}}>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:12}}>
-      {kpi('Por cobrar',porCobrar,'facturas emitidas sin pagar',porCobrar>0?C.accent:C.greenText)}
-      {kpi('Saldo fondos',fg.saldo,`fondos ${fmt(fg.fondos)} − gastos ${fmt(fg.gastos)}`,fg.saldo<0?C.overdueText:C.greenText,onAjuste&&<button onClick={()=>onAjuste(client)} title='Ajustar saldo' style={{position:'absolute',top:4,right:6,background:'none',border:'none',color:C.done,cursor:'pointer',fontSize:13,lineHeight:1,padding:2}}>⋯</button>)}
-      {kpi('A favor',aFavor,'anticipos disponibles',aFavor>0?C.greenText:C.muted)}
-    </div>
+    {/* Banda accionable: lo único que de verdad importa en una cuenta donde casi solo entra plata — lo que falta conciliar */}
+    {(()=>{ const movBase=movs.filter(m=>!m.es_interno); const sinC=movBase.filter(m=>!conc.find(x=>x.movimiento_id===m.id)); if(!sinC.length) return null; const tot=sinC.reduce((s,m)=>s+(m.monto||0),0); return (
+      <div onClick={()=>{ if(!sec.movs)secT('movs'); setMovF('sin') }} style={{display:'flex',alignItems:'center',gap:10,background:C.ambarBg,border:'0.5px solid #EFD9A8',borderLeft:`3px solid ${C.soon}`,borderRadius:'0 11px 11px 0',padding:'10px 13px',marginBottom:12,cursor:'pointer'}}>
+        <SIcon n='alert' s={17} c={C.soonText}/>
+        <span style={{flex:1,fontSize:12,fontWeight:700,color:C.soonText}}>{sinC.length} movimiento{sinC.length!==1?'s':''} sin conciliar</span>
+        <span style={{fontSize:13,fontWeight:700,color:C.soonText}}>{fmt(tot)}</span>
+        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.soon} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 6l6 6-6 6'/></svg>
+      </div>
+    )})()}
     <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
     {loading&&<div style={{fontSize:11,color:C.muted,padding:'10px 13px'}}>Cargando…</div>}
     <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',padding:'11px 13px 6px'}}>General · la cartola</div>
