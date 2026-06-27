@@ -11884,35 +11884,6 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         })()}
       </div>
 
-      {/* Relación con el estudio */}
-      <div style={card}>
-        {sTitle('Relación con el estudio')}
-        <div style={{display:'grid',gap:10}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            <div>
-              <label style={lbl}>Cliente desde</label>
-              <input value={fmtFechaTS(client.created_at)} disabled style={{...inp,background:'#F5F7F9',color:C.muted}}/>
-            </div>
-            <div>
-              <label style={lbl}>Tipo de servicio</label>
-              <input value={client.type||'—'} disabled style={{...inp,background:'#F5F7F9',color:C.muted}}/>
-            </div>
-          </div>
-          <div><label style={lbl}>Responsable</label><select value={form.abogado_responsable} onChange={e=>set('abogado_responsable',e.target.value)} style={inp}><option value=''>— Sin asignar —</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(a=><option key={a} value={a}>{a}</option>)}</select></div>
-          <div>
-            <label style={lbl}>Notas internas</label>
-            <textarea value={form.notas_internas} onChange={e=>set('notas_internas',e.target.value)} rows={3} placeholder="Solo visibles para administración" style={{...inp,resize:'vertical',fontFamily:'inherit'}}/>
-          </div>
-        </div>
-      </div>
-
-      {dirty&&(
-        <div style={{display:'flex',gap:8,marginBottom:20}}>
-          <button onClick={()=>setForm(fromClient())} disabled={savingF} style={{flex:1,padding:'10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Descartar</button>
-          <button onClick={guardar} disabled={savingF} style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:savingF?.6:1}}>{savingF?'Guardando...':'Guardar cambios'}</button>
-        </div>
-      )}
-
       {/* Anticipos (PP-15 commit 2) */}
       {(()=>{
         const antDisp = anticipos.filter(a=>a.estado==='disponible')
