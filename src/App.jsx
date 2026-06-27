@@ -806,7 +806,44 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
       </div>
       <div style={{padding:'4px 20px 100px'}}>
         {filtered.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Sin clientes</div>}
-        {filtered.map(cl=><ClientRow key={cl.id} cl={cl}/>)}
+        {filtered.length>0&&(()=>{
+          // Directorio A-Z (mismo patrón que la vista admin): inicial + avatar empresa/persona del color del responsable + índice lateral, sin cifras.
+          const norm=s=>(s||'').trim().toUpperCase()
+          const letterOf=cl=>{ const ch=norm(cl.name)[0]||'#'; return /[A-ZÑ]/.test(ch)?ch:'#' }
+          const byLetter={}; filtered.forEach(cl=>{ const L=letterOf(cl); (byLetter[L]=byLetter[L]||[]).push(cl) })
+          const letters=Object.keys(byLetter).sort((a,b)=>a.localeCompare(b,'es'))
+          const idFor=L=>'climl-letter-'+(L==='#'?'num':L)
+          const card=cl=>{
+            const ended=cl.status==='Terminado'
+            const resp=cl.abogado_responsable; const pc=resp?personChip(resp):{bg:C.bgWarm,color:C.done}
+            const esEmpresa=/\b(spa|s\.?p\.?a|ltda|limitada|s\.?a|sociedad|inversiones|comercial|constructora|consultores|holding|cia|cía|asociados|partners)\b/i.test(cl.name||'')||/empresa|corp|sociedad/i.test(cl.type||'')
+            const tareasC=(tasks||[]).filter(t=>t.client_id===cl.id&&t.status!=='Terminado').length
+            const rs=rsLabel(cl.id,clients,clientEntities)
+            const sub=rs.multi?`${rs.multi} razones sociales`:(rs.name&&rs.name!==cl.name?rsDisplay(rs.name):(cl.type||''))
+            return (
+              <div key={cl.id} onClick={()=>{setFtab('resumen');setSelected(cl)}} style={{background:'#fff',borderRadius:11,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`,opacity:ended?.55:1,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}>
+                <span style={{width:38,height:38,borderRadius:9,background:pc.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={esEmpresa?'building':'user'} s={18} c={pc.color}/></span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl.name}{tareasC>0&&<span style={{fontSize:10,fontWeight:600,color:C.soon,background:'#FFF8E1',borderRadius:20,padding:'1px 8px',marginLeft:6}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
+                  {sub&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{sub}</div>}
+                </div>
+                {resp&&<span style={{flexShrink:0,fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 9px',fontWeight:600,whiteSpace:'nowrap'}}>{resp}</span>}
+                <button onClick={ev=>{ev.stopPropagation();onSaveFields&&onSaveFields(cl.id,{status:ended?'Activo':'Terminado'})}} title={ended?'Reactivar cliente':'Archivar cliente'} style={{flexShrink:0,width:24,height:24,borderRadius:6,border:`0.5px solid ${ended?C.normal:C.border}`,background:'transparent',color:ended?C.greenText:C.done,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0}}>{ended?<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 7v6h6'/><path d='M3.5 13a9 9 0 1 0 2.5-6.5L3 9'/></svg>:<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><path d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8'/><line x1='10' y1='12' x2='14' y2='12'/></svg>}</button>
+              </div>
+            )
+          }
+          return (<div style={{display:'flex',gap:8}}>
+            <div style={{flex:1,minWidth:0}}>
+              {letters.map(L=>(<div key={L} id={idFor(L)}>
+                <div style={{fontSize:12,fontWeight:700,color:C.done,margin:'9px 2px 5px'}}>{L}</div>
+                {byLetter[L].slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).map(card)}
+              </div>))}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:1,flexShrink:0,position:'sticky',top:70,alignSelf:'flex-start'}}>
+              {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L=>{ const has=!!byLetter[L]; return <span key={L} onClick={has?()=>{const el=document.getElementById(idFor(L));el&&el.scrollIntoView({behavior:'smooth',block:'start'})}:undefined} style={{fontSize:10,fontWeight:has?700:400,color:has?C.accent:'#CBD5DB',cursor:has?'pointer':'default',lineHeight:1.3,padding:'0 1px'}}>{L}</span> })}
+            </div>
+          </div>)
+        })()}
       </div>
     </div>
   )
