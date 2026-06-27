@@ -9889,17 +9889,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <span style={{fontSize:10,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>{verPos?'A favor · por responsable':'Por reembolsar · por responsable'}</span>
                   {respFilter&&<button onClick={()=>setRespFilter(null)} style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button>}
                 </div>
-                <div style={{display:'grid',gridTemplateColumns:`repeat(${respCobranza.length},minmax(0,1fr))`,gap:5}}>
-                  {respCobranza.map(([k,o])=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:C.grisText}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=amt<0?C.overdueText:C.greenText; const a=Math.abs(amt),sg=amt<0?'-':''; const amtK = a>=1e6?`$${sg}${(a/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}M`:(a>=1e3?`$${sg}${Math.round(a/1e3)}K`:fmt(amt)); return (
-                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} className='lf-kpi' style={{border:`${on?2:1}px solid ${on?pc.color:C.border}`,borderRadius:9,cursor:'pointer',background:on?pc.bg:'#fff',minWidth:0,display:'flex',alignItems:'stretch',overflow:'hidden'}}>
-                      <div style={{flex:1,minWidth:0,padding:'6px 8px'}}>
-                        <div style={{fontSize:13,fontWeight:700,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{amtK}</div>
-                        <div style={{fontSize:9,fontWeight:700,color:pc.color,textTransform:'uppercase',letterSpacing:'0.02em',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sin?'Oficina':k}</div>
-                      </div>
-                      <div style={{width:1,background:C.border,margin:'6px 0',flexShrink:0}}></div>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:'0 9px',flexShrink:0}}>
-                        <span style={{fontSize:11,fontWeight:600,color:C.done}}>{n}</span>
-                      </div>
+                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                  {respCobranza.map(([k,o],i)=>{ const sin=k==='__sin__'; const pc=sin?{bg:'#F1EFE8',color:C.grisText}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=amt<0?C.overdueText:C.greenText; const a=Math.abs(amt),sg=amt<0?'-':''; const amtK = a>=1e6?`$${sg}${(a/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}M`:(a>=1e3?`$${sg}${Math.round(a/1e3)}K`:fmt(amt)); return (
+                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 13px',cursor:'pointer',background:on?pc.bg:'#fff',borderTop:i?`0.5px solid ${C.bgWarm}`:'none'}}>
+                      {sin?<span style={{fontSize:13,fontWeight:600,color:C.text}}>Oficina</span>:<span style={{fontSize:11,fontWeight:600,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{k}</span>}
+                      <span style={{fontSize:10,color:C.done}}>· {n}</span>
+                      <span style={{flex:1}}></span>
+                      <span style={{fontSize:14,fontWeight:700,color:col}}>{amtK}</span>
                     </div>
                   )})}
                 </div>
