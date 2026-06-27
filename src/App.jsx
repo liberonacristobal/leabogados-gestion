@@ -8970,12 +8970,37 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     return l.sort((a,b)=> gastoOrd==='asc' ? (new Date(a.date||0)-new Date(b.date||0)) : (new Date(b.date||0)-new Date(a.date||0)))
   },[expenses,selectedClient,gastoOrd,gastoCatF])
   const gastoCats = useMemo(()=> selectedClient ? [...new Set(expenses.filter(e=>e.client_id===selectedClient.id).map(e=> e.type==='fondo'?'Fondo':(e.category||'Otro')))].sort() : [],[expenses,selectedClient])
-  const gastoToolbar = (
-    <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
-      <button onClick={()=>setGastoOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'5px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>Fecha {gastoOrd==='desc'?'↓ (nuevas)':'↑ (antiguas)'}</button>
-      {gastoCats.length>1&&<select value={gastoCatF} onChange={e=>setGastoCatF(e.target.value)} style={{fontSize:12,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}><option value=''>Todas las categorías</option>{gastoCats.map(c=><option key={c} value={c}>{c}</option>)}</select>}
-    </div>
-  )
+  const gastoToolbar = () => {
+    const movibles = selectedClient ? (expenses||[]).filter(e=> String(e.client_id)===String(selectedClient.id) && e.type==='gasto' && !e.deleted_at && !e.client_render_id && !e.render_id && !e.notaria_render_id) : []
+    const showMover = selectedClient && !esOficina(selectedClient.id) && movibles.length>0
+    return (<>
+      <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
+        <button onClick={()=>setGastoOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'5px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>Fecha {gastoOrd==='desc'?'↓ (nuevas)':'↑ (antiguas)'}</button>
+        {gastoCats.length>1&&<select value={gastoCatF} onChange={e=>setGastoCatF(e.target.value)} style={{fontSize:12,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted}}><option value=''>Todas las categorías</option>{gastoCats.map(c=><option key={c} value={c}>{c}</option>)}</select>}
+        {showMover&&<button onClick={()=>{setMovMode(o=>!o);setMovSel(new Set())}} style={{...chipBtn('soft'),fontWeight:500,whiteSpace:'nowrap',marginLeft:'auto'}}>Mover varios {movMode?'▴':'▾'}</button>}
+      </div>
+      {showMover&&movMode&&(
+        <div style={{marginTop:-2,marginBottom:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:7}}>Marca los gastos que NO son de {selectedClient.name} y muévelos a otro cliente.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:7,maxHeight:280,overflowY:'auto'}}>
+            {movibles.map(e=>{ const on=movSel.has(e.id); return (
+              <div key={e.id} onClick={()=>setMovSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
+                <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+                {e.ot_number&&<span style={{color:C.azulInfo,fontWeight:600,flexShrink:0}}>{fmtOt(e.ot_number)}</span>}
+                <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
+              </div>) })}
+          </div>
+          {movSel.size>0 && (
+            <div style={{marginTop:9,paddingTop:9,borderTop:`0.5px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:5}}>Mover {movSel.size} gasto{movSel.size!==1?'s':''} a:</div>
+              <ClientePicker clients={clients.filter(c=>String(c.id)!==String(selectedClient.id))} onPick={async cid=>{ for(const id of [...movSel]){ await onAssignClientToExpense(id,cid) } setMovSel(new Set()); setMovMode(false) }}/>
+            </div>
+          )}
+        </div>
+      )}
+    </>)
+  }
   // Gastos huérfanos (sin cliente) — provienen de "Importar todo" en carga masiva.
   const orphans = useMemo(()=>(expenses||[]).filter(e=>!e.client_id&&!e.personal_de).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),[expenses])
   // Revisión de carga: gastos pegados a un cliente NO activo (Terminado/Prospecto) o a un ocasional → para revisar/corregir.
@@ -9522,15 +9547,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
   // Sección de historial dentro de la ficha del cliente (solo rendiciones del cliente actual)
   const selStyle = {padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#F5F7F9',fontSize:12,boxSizing:'border-box',outline:'none',width:'100%'}
-  const fichaHistorial = selectedClient ? (
-    <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
-      <div style={{fontSize:11,fontWeight:500,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Historial de rendiciones</div>
-      {(()=>{
-        const rends=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&r.client_id===selectedClient.id).sort((a,b)=>b.created_at>a.created_at?1:-1)
-        return renderHistorialTable(rends,false)
-      })()}
-    </div>
-  ) : null
+  const fichaHistorial = (()=>{
+    if(!selectedClient) return null
+    const rends=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&r.client_id===selectedClient.id).sort((a,b)=>b.created_at>a.created_at?1:-1)
+    if(!rends.length) return null   // sin rendiciones → no mostrar la sección vacía (ahorra espacio)
+    return (
+      <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}>
+        <div style={{fontSize:11,fontWeight:500,color:C.done,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>Historial de rendiciones</div>
+        {renderHistorialTable(rends,false)}
+      </div>
+    )
+  })()
   // Separa gastos rendidos al cliente (client_rendered_at) y los muestra en una sección "Rendidos" colapsada (fuera de activos).
   const esRendido = e => e.type!=='fondo' && !!e.client_rendered_at
   // Selector «añadir gastos a notaría» (agrupado por cliente con fondos). Único: se reutiliza en Liquidar Notaría y en Historial.
@@ -9650,38 +9677,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             return <><KpiRow oficina={{total,porPagar,pagado}}/><OficinaCostPanel expenses={expenses} clientId={selectedClient.id}/></>
           }
           return <KpiRow bal={rb.total}/>
-        })()}
-
-        {selectedClient && !esOficina(selectedClient.id) && (()=>{
-          const movibles = (expenses||[]).filter(e=> String(e.client_id)===String(selectedClient.id) && e.type==='gasto' && !e.deleted_at && !e.client_render_id && !e.render_id && !e.notaria_render_id)
-          if(movibles.length===0) return null
-          return (
-            <div style={{marginBottom:8}}>
-              <div style={{display:'flex',justifyContent:'flex-end'}}>
-                <button onClick={()=>{setMovMode(o=>!o);setMovSel(new Set())}} style={{...chipBtn('soft'),fontWeight:500,whiteSpace:'nowrap'}}>Mover varios {movMode?'▴':'▾'}</button>
-              </div>
-              {movMode && (
-                <div style={{marginTop:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
-                  <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:7}}>Marca los gastos que NO son de {selectedClient.name} y muévelos a otro cliente.</div>
-                  <div style={{display:'flex',flexDirection:'column',gap:7,maxHeight:280,overflowY:'auto'}}>
-                    {movibles.map(e=>{ const on=movSel.has(e.id); return (
-                      <div key={e.id} onClick={()=>setMovSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
-                        <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
-                        {e.ot_number&&<span style={{color:C.azulInfo,fontWeight:600,flexShrink:0}}>{fmtOt(e.ot_number)}</span>}
-                        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
-                        <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
-                      </div>) })}
-                  </div>
-                  {movSel.size>0 && (
-                    <div style={{marginTop:9,paddingTop:9,borderTop:`0.5px solid ${C.border}`}}>
-                      <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:5}}>Mover {movSel.size} gasto{movSel.size!==1?'s':''} a:</div>
-                      <ClientePicker clients={clients.filter(c=>String(c.id)!==String(selectedClient.id))} onPick={async cid=>{ for(const id of [...movSel]){ await onAssignClientToExpense(id,cid) } setMovSel(new Set()); setMovMode(false) }}/>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
         })()}
 
         {/* Vista general: tarjetas-filtro + búsqueda */}
@@ -10276,7 +10271,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       {/* Vista cliente: Saldo arriba, Fondos recibidos y Gastos en secciones. La RS es etiqueta de cada gasto, no agrupación — el fondo cubre todas las razones sociales. */}
       {selectedClient&&(
         <div style={{padding:'4px 20px 130px'}}>
-          {gastoToolbar}
+          {gastoToolbar()}
           {(()=>{
             const movs=filtered.filter(e=>!esRendido(e))
             const fondos=movs.filter(e=>e.type==='fondo')
