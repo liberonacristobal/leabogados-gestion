@@ -303,7 +303,7 @@ const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
 const ADMIN_NAMES = ['Cristóbal','Erasmo']
 // Costos ESTRUCTURALES de la oficina (fijos: sueldos/arriendo/servicios/compras — normalmente vienen de la conciliación bancaria). El resto de categorías = GESTIÓN (operativo: notaría/CBR/movilización/archivo judicial/otros, gralmente de clientes; movilización siempre nuestra).
-const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Compras']
+const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Retiros','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Compras']
 // Un gasto de oficina es de GESTIÓN si su categoría NO es estructural (criterio por CATEGORÍA, determinista — no por quién lo cargó).
 const esGestionGasto = g => !CATS_OFICINA_ESTRUCTURAL.includes(String(g?.category||'').trim())
 
@@ -18038,9 +18038,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const _ym=String(m.fecha||'').slice(0,7),_y=_ym.slice(0,4)
             const _p=lista[i-1],_pym=_p?String(_p.fecha||'').slice(0,7):null
             const _newY=i===0||_y!==(_pym?_pym.slice(0,4):null), _newM=i===0||_ym!==_pym
-            const _yOpen=!concYCol.has(_y)
+            // Con un filtro activo (Descalces/Sin identificar/búsqueda/año/mes) la lista va TODA expandida (si no, al resolver uno los de otros meses quedan colapsados y "desaparecen").
+            const _filtroActivo = concView!=='todos' || !!q.trim() || anioF!=='todos' || mesF!=='todos' || respF!=='todos'
+            const _yOpen=_filtroActivo||!concYCol.has(_y)
             const _firstYM=lista[0]?String(lista[0].fecha||'').slice(0,7):null
-            const _mOpen=concMOpen===null?_ym===_firstYM:concMOpen.has(_ym)
+            const _mOpen=_filtroActivo||(concMOpen===null?_ym===_firstYM:concMOpen.has(_ym))
             const _MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
             const _mInfo=()=>{ let c=0,t=0; lista.forEach(x=>{ if(String(x.fecha||'').slice(0,7)===_ym){c++;t+=(x.monto||0)*(x.tipo==='abono'?1:-1)} }); return {c,t} }
             const _yCount=()=>lista.filter(x=>String(x.fecha||'').slice(0,4)===_y).length
