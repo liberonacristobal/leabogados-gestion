@@ -6137,7 +6137,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <div onClick={abrirBandeja} title='Facturas emitidas que aún no se mandan al cliente' style={{display:'flex',alignItems:'center',gap:11,background:C.azulBg,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='m22 7-10 5L2 7'/></svg></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent}}>Por enviar al cliente</div><div style={{fontSize:9,color:C.azulInfo}}>{porEnviar.length} factura{porEnviar.length!==1?'s':''} emitida{porEnviar.length!==1?'s':''} sin mandar por correo</div></div>
-                <span style={{color:'#85B7EB',fontSize:18,fontWeight:700}}>›</span>
+                <span style={{color:C.onNavyLabel,fontSize:18,fontWeight:700}}>›</span>
               </div>
             ) })()}
             {yaFactTot>0&&<div onClick={()=>irAEstado('programadas')} title='Programadas cuya factura emitida ya existe — vincular' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:10,cursor:'pointer'}}>
@@ -12335,6 +12335,8 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
+  // Si la factura se emitió por el SII (tiene dte_xml), adjunta el PDF oficial con timbre automáticamente.
+  useEffect(()=>{ if(!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc) return; const r=await facturaDtePdfBase64(doc); if(alive) setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}) }catch(_){} })(); return ()=>{alive=false} },[])
   const [iaBusy,setIaBusy]=useState(false)
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
   const redactarIA=async()=>{ setIaBusy(true)
@@ -12384,7 +12386,7 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
       <div><div style={lbl}>PDF DE LA FACTURA (DTE con timbre)</div>
         {pdf? <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span><button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
           : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>}
-        <div style={{fontSize:9,color:C.muted,marginTop:3}}>Por ahora se adjunta a mano; con la emisión DTE saldrá solo.</div>
+        {pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
       </div>
       <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?'Enviando…':'Enviar factura'}</button>
     </div>
