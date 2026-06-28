@@ -5414,6 +5414,36 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [bandejaEnvio,setBandejaEnvio] = useState(false)
   const [factToMap,setFactToMap] = useState({})   // client_id → correo aprendido (learnings factura_to), para mostrar a quién va
   const abrirBandeja = async()=>{ setBandejaEnvio(true); try{ const {data}=await supabase.from('learnings').select('key,value').eq('kind','factura_to'); const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setFactToMap(m) }catch(_){} }
+  const [envioMasivoBusy,setEnvioMasivoBusy] = useState(false)
+  // Envío masivo (etapa 2): manda, desde la cuenta de oficina, las facturas por enviar que YA tienen destinatario recordado (factura_to).
+  // PDF automático desde el DTE emitido; plantilla por defecto (sin pulir con IA, una a una). Las sin correo se omiten (van a mano).
+  const enviarTodas = async()=>{
+    const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b))
+    const conDest=porEnviar.filter(b=>factToMap[String(b.client_id)])
+    const sinDest=porEnviar.length-conDest.length
+    if(!conDest.length){ alert('Ninguna factura por enviar tiene un destinatario recordado todavía.\nEnvíalas una a una: ahí eliges el correo y la app lo aprende para la próxima.'); return }
+    if(!confirm(`Enviar ${conDest.length} factura(s) a su destinatario recordado, desde la cuenta de oficina.${sinDest?`\n${sinDest} se omiten (sin correo recordado).`:''}\n\n¿Continuar?`)) return
+    setEnvioMasivoBusy(true)
+    const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
+    let ok=0, err=0
+    for(const b of conDest){
+      try{
+        const dest=factToMap[String(b.client_id)]
+        const sale=(sales||[]).find(s=>String(s.id)===String(b.sale_id))
+        const body=facturaCorreoBody(b, sale)
+        const html=facturaCorreoHtml(body, firma, false)
+        const folio=folioN(b.invoice_no||'')||b.invoice_no||''
+        let pdf=null; if(b.dte_xml){ try{ const doc=splitSetDTE(b.dte_xml)[0]; if(doc) pdf=await facturaDtePdfBase64(doc) }catch(_){} }
+        await sendMailServer({to:dest, subject:`Factura ${folio}`, html, text:body, ...(pdf?{pdfBase64:pdf.base64, pdfName:`Factura ${folio}.pdf`}:{})})
+        const at=new Date().toISOString()
+        try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',b.id) }catch(_){}
+        setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at}:x))
+        ok++
+      }catch(_){ err++ }
+    }
+    setEnvioMasivoBusy(false)
+    alert(`Envío masivo listo.\nEnviadas: ${ok}${err?` · con error: ${err}`:''}${sinDest?` · omitidas sin correo: ${sinDest}`:''}`)
+  }
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
   useEffect(()=>{ try{ localStorage.setItem('fac_year', fYear||'') }catch(e){} },[fYear])
@@ -6493,8 +6523,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>
             )}
             <div style={{display:'flex',alignItems:'center',gap:8,marginTop:12}}>
-              <span style={{fontSize:11,color:C.muted,flex:1}}>{porEnviar.length} por enviar</span>
-              <button onClick={()=>alert('Envío masivo: llega en la etapa 2, cuando la app ya recuerde a quién enviar cada factura.')} style={{fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 13px',cursor:'pointer'}}>Enviar todas</button>
+              <span style={{fontSize:11,color:C.muted,flex:1}}>{porEnviar.length} por enviar{(()=>{ const c=porEnviar.filter(b=>factToMap[String(b.client_id)]).length; return c?` · ${c} con correo recordado`:'' })()}</span>
+              <button disabled={envioMasivoBusy} onClick={enviarTodas} style={{fontSize:12,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.accent}`,borderRadius:8,padding:'8px 13px',cursor:'pointer',opacity:envioMasivoBusy?.6:1}}>{envioMasivoBusy?'Enviando…':'Enviar todas'}</button>
             </div>
           </div>
         </div>
@@ -12265,6 +12295,20 @@ async function acusePagoEmail(to, {folio, monto, fecha}){
 }
 // Envío de una factura por correo. Reusa el motor de la rendición (driveToken + sendGmailWithPdf + firma).
 // Plantilla genérica auto-rellenada + destinatarios de la ficha (contactos) + CC aprendido. PDF a mano por ahora (con la emisión DTE saldrá solo).
+// Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
+function facturaGlosa(factura, sale){
+  const concept=(factura.concept||'').trim(), proyecto=(sale?.name||'').trim()
+  const esRec=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
+  return esRec?(proyecto||concept):(concept||proyecto)   // recurrente → proyecto (no "Cuota N/M"); puntual → concepto
+}
+function facturaCorreoBody(factura, sale){
+  const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
+  const glosa=facturaGlosa(factura,sale)
+  return `Estimados,\n\nJunto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`
+}
+function facturaCorreoHtml(body, firma, incPago){
+  return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,'es')}</div></div>`
+}
 function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
@@ -12278,7 +12322,7 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [asunto,setAsunto]=useState(`Factura ${folio} · ${client?.name||''}`)
-  const [body,setBody]=useState(`Estimados,\n\nJunto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`)
+  const [body,setBody]=useState(facturaCorreoBody(factura, sale))
   const [pdf,setPdf]=useState(null)
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
   const [sending,setSending]=useState(false)
@@ -12301,7 +12345,7 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
       if(txt) setBody(txt)
     }catch(e){ alert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
-  const buildHtml=()=>`<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,'es')}</div></div>`
+  const buildHtml=()=>facturaCorreoHtml(body, firma, incPago)
   const enviar=async()=>{
     if(!para.trim()){ alert('Falta el destinatario.'); return }
     setSending(true)
