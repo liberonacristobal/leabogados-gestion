@@ -17521,7 +17521,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
   const conciliarAuto = async()=>{
     if(autoRun||busy) return
-    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0, nInt=0; const used=new Set()
+    setAutoRun(true); let ok=0, monto=0, marc=0, enl=0, cmb=0, nInt=0; const used=new Set(), doneMovs=new Set()
+    let sinId=0, sinIdM=0, sinCalce=0, sinCalceM=0   // Mejora 2: desglose de lo que QUEDA tras el auto, por razón
     try{
       // 1) Traspasos internos: cargo↔abono del mismo monto exacto en cuentas distintas, ±2 días, par único → ambos internos. (Sin comisiones en CL, el monto calza exacto.)
       const libres = movs.filter(m=> !m.es_interno && !(concByMov[m.id]?.length) && !m.cliente_id && !m.categoria)
@@ -17552,12 +17553,23 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       // corresponde y deja el otro para revisar (antes dejaba los dos sin tocar).
       for(const mov of pend){
         const f=mejorCandidato(mov, used)
-        if(f){ used.add(f.id); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
+        if(f){ used.add(f.id); doneMovs.add(mov.id); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
         const cb=comboExacto(mov, used) || comboExacto3(mov, used)
-        if(cb){ cb.forEach(f=>used.add(f.id)); await reconciliarCombo(mov, cb); cmb++; ok++; monto+=mov.monto } }
+        if(cb){ cb.forEach(f=>used.add(f.id)); doneMovs.add(mov.id); await reconciliarCombo(mov, cb); cmb++; ok++; monto+=mov.monto } }
+      // Mejora 2 — desglose de lo que NO se pudo conciliar, por razón:
+      //   sin calce  = abono YA identificado (cliente_id) que no encontró factura de monto exacto en ventana → el monto no cuadra.
+      //   sin id     = abono sin cliente_id (ni auto-identificado) → falta cruzar el pagador (el auto no puede tocarlo).
+      const sinCalceList = pend.filter(m=>!doneMovs.has(m.id))
+      sinCalce = sinCalceList.length; sinCalceM = sinCalceList.reduce((s,m)=>s+(m.monto||0),0)
+      const sinIdList = movsV.filter(m=> m.tipo==='abono' && !m.es_interno && !m.cliente_id && !RESUELTAS_ABO.includes(m.categoria) && !(concByMov[m.id]?.length))
+      sinId = sinIdList.length; sinIdM = sinIdList.reduce((s,m)=>s+(m.monto||0),0)
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
-    alert((ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nInt?`\n${nInt} traspasos internos marcados`:''}` : 'No hubo calces exactos únicos ni traspasos internos. Revisa "Por conciliar".')
+    const hecho = (ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nInt?`\n${nInt} traspasos internos marcados`:''}` : 'No hubo calces nuevos.'
+    const queda = (sinId||sinCalce)
+      ? `\n\nQuedan sin conciliar:${sinId?`\n· ${sinId} sin identificar (${fmtM(sinIdM)}) — falta cruzar el pagador`:''}${sinCalce?`\n· ${sinCalce} identificadas sin calce exacto (${fmtM(sinCalceM)}) — el monto no cuadra con una factura`:''}`
+      : '\n\nNo queda nada por conciliar.'
+    alert(hecho+queda)
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
