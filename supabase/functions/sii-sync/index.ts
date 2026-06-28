@@ -92,9 +92,11 @@ serve(async (req) => {
   let body: any = {}
   try { body = await req.json() } catch { /* body vacio */ }
 
-  // Acceso: admin (email en el JWT) O el cron con su secreto (para jobs programados como verificar-estados).
+  // Acceso: admin (email en el JWT) O el cron con su secreto, pero el secreto SOLO autoriza los jobs de reporte
+  // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
+  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal']
   const email = emailDelJwt(req)
-  const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET')
+  const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !ADMINS.includes(email))) {
     console.log(`[sii-sync] acceso denegado (email: ${email || 'sin email'})`)
     return json({ error: 'Solo administradores pueden usar el SII' }, 403)

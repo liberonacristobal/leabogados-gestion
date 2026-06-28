@@ -70,15 +70,16 @@ CREATE POLICY team_all ON dte_log FOR ALL TO authenticated
 NOTIFY pgrst, 'reload schema';
 ```
 
-## 2d. Reportes automáticos (cron) — opcional, cuando ya emitas
-**Secreto del cron**: setear el secreto `CRON_SECRET` (un string aleatorio) en los secretos de la edge function. El cron lo pasa para autenticarse sin un usuario.
+## 2d. Reportes automáticos (cron)
+**Secreto del cron**: setear el secreto `CRON_SECRET` (un string aleatorio) en los secretos de la edge function. El cron lo pasa para autenticarse sin un usuario. (Ya seteado + función desplegada.) El secreto SOLO autoriza las acciones de reporte (`verificar-estados`/`resumen-semanal`), nunca emitir/anular.
+**OJO `verify_jwt=true`**: el gateway exige JWT, por eso el cron manda la **anon key pública** en `Authorization` (además del `cronSecret` en el body, que es la auth real).
 
 **Auto-verificación del estado del DTE** (diaria): re-consulta los DTE "enviado", marca aceptada/rechazada y avisa por correo a los admins si hay rechazadas. Requiere extensiones `pg_cron` + `pg_net` (Database → Extensions). También se puede agendar desde el panel Cron Jobs de Supabase.
 ```sql
 select cron.schedule('verificar-estados-dte', '0 12 * * *', $$
   select net.http_post(
     url := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',
-    headers := '{"Content-Type":"application/json"}'::jsonb,
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer ANON_KEY_PUBLICA"}'::jsonb,
     body := '{"action":"verificar-estados","cronSecret":"EL_MISMO_CRON_SECRET"}'::jsonb
   );
 $$);
@@ -90,7 +91,7 @@ $$);
 select cron.schedule('resumen-semanal-facturacion', '0 12 * * 1', $$
   select net.http_post(
     url := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',
-    headers := '{"Content-Type":"application/json"}'::jsonb,
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer ANON_KEY_PUBLICA"}'::jsonb,
     body := '{"action":"resumen-semanal","cronSecret":"EL_MISMO_CRON_SECRET"}'::jsonb
   );
 $$);
