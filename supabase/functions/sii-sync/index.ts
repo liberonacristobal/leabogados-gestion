@@ -13,10 +13,15 @@
 // con action 'emitir'. No refactorizar lo existente.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { obtenerToken } from './auth.ts'
 import { getVentas } from './rcv.ts'
 import { conciliar } from './match.ts'
-import { getConfig } from './config.ts'
+import { getConfig, getEmisor, getResol } from './config.ts'
+import { parseCaf } from './caf.ts'
+import { armarDocumento, type FacturaInput } from './dte.ts'
+import { firmarDocumento } from './firma.ts'
+import { armarEnvioDTE, enviarAlSII, consultarEstado } from './emision.ts'
 
 const ADMINS = ['cl@leabogados.cl', 'ee@leabogados.cl']
 
@@ -37,6 +42,16 @@ function emailDelJwt(req: Request): string | null {
   } catch {
     return null
   }
+}
+
+// Timestamp local de Chile (YYYY-MM-DDTHH:mm:ss), con DST correcto vía timezone. El SII lo exige local.
+function nowChileIso(): string {
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(new Date())
+  const g = (t: string) => parts.find(x => x.type === t)?.value || '00'
+  return `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}`
 }
 
 serve(async (req) => {
@@ -65,6 +80,64 @@ serve(async (req) => {
         tokenPreview: token.slice(0, 6) + '...' + token.slice(-4),
         mensaje: 'Danza de autenticacion OK: semilla obtenida, firma aceptada, token emitido',
       })
+    }
+
+    // Emisión de un DTE directo al SII. Reusa el CAF de dte_folios; arma+firma+envía.
+    // body: { action:'emitir', tipoDte, fecha?, receptor:{rut,rs,giro?,dir?,comuna?}, items:[{nombre,desc?,qty?,precio?,monto}], fmaPago?, billingId?, dryRun? }
+    // dryRun=true arma y firma pero NO envía (para inspeccionar el XML / generar el set de pruebas).
+    if (body.action === 'emitir') {
+      const f = body || {}
+      const tipoDte = parseInt(String(f.tipoDte || 0), 10)
+      if (![33, 34, 61, 56].includes(tipoDte)) return json({ error: 'tipoDte inválido (33/34/61/56)' }, 400)
+      if (!f.receptor?.rut || !Array.isArray(f.items) || f.items.length === 0) return json({ error: 'Falta receptor.rut o items' }, 400)
+      const amb = ambiente === 'produccion' ? 'prod' : 'cert'
+
+      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      const { data: cafs, error: cafErr } = await sb.from('dte_folios').select('*').eq('tipo_dte', tipoDte).eq('ambiente', amb).order('folio_desde')
+      if (cafErr) throw new Error('No se pudo leer dte_folios: ' + cafErr.message)
+      // deno-lint-ignore no-explicit-any
+      const cafRow = (cafs || []).find((c: any) => c.folio_actual <= c.folio_hasta)
+      if (!cafRow) return json({ error: `Sin folios CAF disponibles para DTE ${tipoDte} (${amb}). Carga un CAF en dte_folios.` }, 400)
+
+      // Asigna folio. OJO: lectura+update NO es atómico; en producción conviene un RPC. En certificación (1 usuario) es seguro.
+      const folio = cafRow.folio_actual
+      const { error: updErr } = await sb.from('dte_folios').update({ folio_actual: folio + 1 }).eq('id', cafRow.id).eq('folio_actual', folio)
+      if (updErr) throw new Error('No se pudo reservar el folio: ' + updErr.message)
+
+      const caf = parseCaf(cafRow.caf_xml)
+      const nowIso = nowChileIso()
+      const emisor = getEmisor()
+      const factura: FacturaInput = {
+        tipoDte, folio, fecha: String(f.fecha || nowIso.slice(0, 10)),
+        emisor, receptor: f.receptor, items: f.items, fmaPago: f.fmaPago,
+      }
+      const { documento, docId, tot } = armarDocumento(factura, caf, nowIso)
+      const firma = firmarDocumento(documento, docId)
+      const dteFirmado = `<DTE version="1.0">${documento}${firma}</DTE>`
+      const resol = getResol()
+      const envio = armarEnvioDTE(
+        [dteFirmado],
+        { rutEmisor: emisor.rut, rutEnvia: getConfig().rutEnvia, fchResol: resol.fchResol, nroResol: resol.nroResol, subtotales: [{ tipoDte, nro: 1 }] },
+        nowIso,
+      )
+
+      if (f.dryRun) {
+        console.log(`[sii-sync] emitir DRY-RUN ${docId} (${amb}) por ${email}`)
+        return json({ ok: true, dryRun: true, ambiente: amb, folio, docId, total: tot.total, envioXml: envio })
+      }
+
+      console.log(`[sii-sync] emitir ${docId} (${amb}) por ${email}`)
+      const trackId = await enviarAlSII(envio)
+      let estado = { estado: 'enviado', glosa: '' }
+      try { estado = await consultarEstado(trackId) } catch (_) { /* el estado puede tardar; queda 'enviado' */ }
+
+      if (f.billingId) {
+        await sb.from('billing').update({
+          folio, dte_estado: estado.estado || 'enviado', dte_track_id: trackId,
+          dte_xml: dteFirmado, dte_ambiente: amb, dte_emitido_at: new Date().toISOString(),
+        }).eq('id', f.billingId)
+      }
+      return json({ ok: true, ambiente: amb, folio, docId, trackId, estado: estado.estado, glosa: estado.glosa, total: tot.total })
     }
 
     const periodo = String(body.periodo || '')
