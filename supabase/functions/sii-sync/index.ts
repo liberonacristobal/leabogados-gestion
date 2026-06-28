@@ -88,15 +88,17 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'Metodo no permitido' }, 405)
 
-  const email = emailDelJwt(req)
-  if (!email || !ADMINS.includes(email)) {
-    console.log(`[sii-sync] acceso denegado (email: ${email || 'sin email'})`)
-    return json({ error: 'Solo administradores pueden sincronizar con el SII' }, 403)
-  }
-
   // deno-lint-ignore no-explicit-any
   let body: any = {}
   try { body = await req.json() } catch { /* body vacio */ }
+
+  // Acceso: admin (email en el JWT) O el cron con su secreto (para jobs programados como verificar-estados).
+  const email = emailDelJwt(req)
+  const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET')
+  if (!cronOk && (!email || !ADMINS.includes(email))) {
+    console.log(`[sii-sync] acceso denegado (email: ${email || 'sin email'})`)
+    return json({ error: 'Solo administradores pueden usar el SII' }, 403)
+  }
   const { ambiente } = getConfig()
 
   try {
@@ -210,6 +212,44 @@ serve(async (req) => {
       // deno-lint-ignore no-explicit-any
       const folios = (data || []).map((r: any) => ({ tipoDte: r.tipo_dte, disponibles: Math.max(0, r.folio_hasta - r.folio_actual + 1) }))
       return json({ ok: true, ambiente: amb, folios })
+    }
+
+    // REPORTE AUTOMÁTICO #1: re-consulta el estado de los DTE aún sin resolver (enviado), marca aceptada/rechazada,
+    // y AVISA POR CORREO a los admins si alguno fue rechazado. Pensado para el cron diario (action + cronSecret).
+    // body: { action:'verificar-estados', cronSecret? }
+    if (body.action === 'verificar-estados') {
+      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      const { data: all } = await sb.from('billing').select('id, folio, dte_track_id, dte_estado, receptor_name').not('dte_track_id', 'is', null).limit(300)
+      // deno-lint-ignore no-explicit-any
+      const pend = (all || []).filter((b: any) => !['aceptada', 'rechazada'].includes(b.dte_estado || ''))
+      // deno-lint-ignore no-explicit-any
+      const rechazadas: any[] = []
+      let revisados = 0, cambiados = 0
+      for (const b of pend) {
+        try {
+          const r = await consultarEstado(String(b.dte_track_id))
+          const e = (r.estado || '').toUpperCase()
+          const norm = /ACEPT|^EPR|DOK/.test(e) ? 'aceptada' : /RECH|RCH|RFR|RSC|ANC/.test(e) ? 'rechazada' : 'enviado'
+          revisados++
+          if (norm !== (b.dte_estado || 'enviado')) {
+            await sb.from('billing').update({ dte_estado: norm }).eq('id', b.id)
+            cambiados++
+            if (norm === 'rechazada') rechazadas.push({ folio: b.folio, glosa: r.glosa, receptor: b.receptor_name })
+          }
+        } catch (_) { /* sigue con la siguiente factura */ }
+      }
+      if (rechazadas.length) {
+        const filas = rechazadas.map(x => `<li>Folio ${x.folio || '—'}${x.receptor ? ` · ${x.receptor}` : ''}${x.glosa ? ` · ${x.glosa}` : ''}</li>`).join('')
+        const html = `<div style="font-family:Arial,sans-serif;color:#1a1a1a"><h3 style="color:#A32D2D;margin:0 0 8px">DTE rechazadas por el SII</h3><p>El SII rechazó ${rechazadas.length} factura(s) electrónica(s). Revísalas en Facturación y vuelve a emitir:</p><ul>${filas}</ul></div>`
+        try {
+          await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-task`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Deno.env.get('SUPABASE_ANON_KEY') },
+            body: JSON.stringify({ mail: { to: ['cl@leabogados.cl', 'ee@leabogados.cl'], subject: `${rechazadas.length} DTE rechazada(s) por el SII`, html } }),
+          })
+        } catch (_) { /* el aviso no debe romper el job */ }
+      }
+      console.log(`[sii-sync] verificar-estados: ${revisados} revisados, ${cambiados} cambiados, ${rechazadas.length} rechazadas`)
+      return json({ ok: true, revisados, cambiados, rechazadas: rechazadas.length })
     }
 
     const periodo = String(body.periodo || '')
