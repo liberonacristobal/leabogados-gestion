@@ -19325,14 +19325,33 @@ export default function App() {
     setEmitirBusy(true)
     try{
       const r=await _siiFetch(ep.base)
-      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString() }
+      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null }
       await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha}).eq('id',ep.billId)
       setBilling(p=>p.map(x=>x.id===ep.billId?{...x,...patch}:x))
       setEmitirPreview(null)
-      alert(`Emitida al SII.\nFolio ${r.folio} · TrackID ${r.trackId||'—'} · estado ${r.estado||'enviado'}`)
+      // Automatización emitir→enviar: si el cliente tiene destinatario recordado, ofrece mandar la factura de inmediato (con PDF del DTE). Compuerta humana.
+      const fact=(billing||[]).find(x=>String(x.id)===String(ep.billId))
+      let dest=null
+      try{ const {data:lt}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(fact?.client_id)).maybeSingle(); dest=lt?.value||null }catch(_){}
+      if(dest && r.dteXml && confirm(`Factura emitida (folio ${r.folio}).\n¿Enviarla ahora al cliente (${dest})?`)){
+        try{
+          const sale=(sales||[]).find(s=>String(s.id)===String(fact?.sale_id))
+          const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
+          const bodyTxt=facturaCorreoBody({...fact,invoice_no:String(r.folio)}, sale)
+          const html=facturaCorreoHtml(bodyTxt, firma, false)
+          const doc=splitSetDTE(r.dteXml)[0]; const pdf=doc?await facturaDtePdfBase64(doc):null
+          await sendMailServer({to:dest, subject:`Factura ${r.folio}`, html, text:bodyTxt, ...(pdf?{pdfBase64:pdf.base64,pdfName:`Factura ${r.folio}.pdf`}:{})})
+          const at=new Date().toISOString()
+          await supabase.from('billing').update({email_sent_at:at}).eq('id',ep.billId)
+          setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at}:x))
+          alert(`Factura ${r.folio} emitida y enviada a ${dest}.`)
+        }catch(e){ alert(`Emitida (folio ${r.folio}), pero no se pudo enviar el correo: ${e.message}\nQueda en "Por enviar".`) }
+      } else {
+        alert(`Emitida al SII.\nFolio ${r.folio} · estado ${r.estado||'enviado'}${dest?'':`\nQueda en "Por enviar".`}`)
+      }
     }catch(e){ alert('No se pudo emitir al SII: '+e.message) }
     setEmitirBusy(false)
-  },[emitirPreview])
+  },[emitirPreview,billing,sales,user])
   // Re-consultar el estado de un DTE en el SII (tarda en procesar; puede RECHAZAR). Actualiza dte_estado.
   const handleActualizarEstadoDTE=useCallback(async(bill)=>{
     if(!bill?.dte_track_id) return

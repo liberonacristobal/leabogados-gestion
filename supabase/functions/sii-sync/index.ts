@@ -158,7 +158,7 @@ serve(async (req) => {
           dte_xml: d.dteFirmado, dte_ambiente: amb, dte_emitido_at: new Date().toISOString(),
         }).eq('id', body.billingId)
       }
-      return json({ ok: true, ambiente: amb, folio: firmados[0]?.folio, trackId, estado: estado.estado, glosa: estado.glosa, docs })
+      return json({ ok: true, ambiente: amb, folio: firmados[0]?.folio, trackId, estado: estado.estado, glosa: estado.glosa, docs, dteXml: body.action === 'emitir' ? firmados[0]?.dteFirmado : undefined })
     }
 
     // Libro de Ventas electrónico (IECV) para la certificación. Devuelve el XML firmado.
