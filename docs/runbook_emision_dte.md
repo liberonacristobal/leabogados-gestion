@@ -1,0 +1,71 @@
+# Runbook — Puesta en marcha de la emisión DTE (certificación → producción)
+
+Secuencia **mecánica** para cuando el SII apruebe la postulación. El motor ya está construido; esto es solo cargar credenciales, probar y certificar. Ver también `checklist_certificacion_sii_dte.md` (la parte administrativa) y `plan_facturacion_sii_2026-06.md`.
+
+---
+
+## 0. Pre-requisitos (de la Parte A del checklist)
+- [ ] Postulación como facturador propio enviada en sii.cl.
+- [ ] **CAF de certificación** descargados (XML `<AUTORIZACION>`) por cada tipo de DTE a certificar (34 exenta, y 61 nota de crédito; 33 si emiten afectas).
+- [ ] Datos del **Emisor**: RUT, Razón social, Giro, Acteco, Dirección y Comuna de origen.
+
+## 1. Cargar credenciales (secretos de Supabase)
+La firma usa el `.pfx` que **ya está** (`SII_CERT_B64`, `SII_CERT_PASSWORD`). Faltan estos (Project → Settings → Edge Functions → Secrets, o `supabase secrets set`):
+
+```
+SII_AMBIENTE=certificacion
+SII_RUT_EMPRESA=76xxxxxxx-x        # RUT del estudio (emisor)
+SII_RUT_ENVIA=11111111-1           # RUT de la persona que envía (el dueño del certificado)
+SII_EMISOR_RS=LIBERONA ESCALA ABOGADOS ...
+SII_EMISOR_GIRO=Servicios jurídicos / asesorías profesionales
+SII_EMISOR_ACTECO=691000           # código de actividad económica
+SII_EMISOR_DIR=Cam. Las Hualtatas 4901, C. 11
+SII_EMISOR_COMUNA=Lo Barnechea
+SII_RESOL_FCH=2014-08-22           # en certificación
+SII_RESOL_NRO=0                    # en certificación
+```
+
+## 2. Cargar el/los CAF en `dte_folios`
+Por cada CAF (XML completo entre comillas simples; escapar comillas internas si las hubiera):
+
+```sql
+INSERT INTO dte_folios (tipo_dte, ambiente, folio_desde, folio_hasta, folio_actual, caf_xml)
+VALUES (34, 'cert', 1, 50, 1, '<AUTORIZACION>…CAF completo…</AUTORIZACION>');
+```
+(`folio_desde`/`hasta` = el rango `<RNG>` del CAF; `folio_actual` = `folio_desde`.)
+
+## 3. Desplegar
+```
+supabase functions deploy sii-sync
+```
+
+## 4. Validar la autenticación
+`POST` a `…/functions/v1/sii-sync` con `{ "action": "test-auth" }` → debe responder `ok:true` con un token. (Ya validado para lectura; confirma que el ambiente quedó en certificación.)
+
+## 5. Probar la emisión — vista previa (no envía nada)
+Desde la app: abrir una factura → **Emitir al SII** hace `dryRun` y muestra folio/total; o `POST {action:'emitir', tipoDte:34, receptor:{…}, items:[…], dryRun:true}` para inspeccionar el `envioXml`.
+
+## 6. Set de pruebas (lo que el SII asigna tras postular)
+- Cargar los casos del set (cada uno = un DTE con sus datos exactos).
+- Emitir el set en UN sobre: `POST {action:'emitir-set', facturas:[ {tipoDte,receptor,items,…}, … ]}` → un `EnvioDTE` con todos los DTE → TrackID.
+- Generar la **muestra impresa** (PDF con timbre) de cada caso (botón PDF / `facturaDtePdfBase64`).
+- Generar y enviar el **Libro de Ventas**: `POST {action:'libro-ventas', periodo:'YYYY-MM', detalle:[…]}`.
+- Consultar estado de cada envío.
+
+## 7. Enviar al SII y esperar autorización
+Subir el set + muestras impresas + libros por el portal de certificación del SII. El SII revisa y **autoriza** como emisor electrónico.
+
+## 8. Flip a producción
+Al autorizar:
+- [ ] Solicitar **CAF de producción** y cargarlos en `dte_folios` con `ambiente='prod'`.
+- [ ] Cambiar secretos: `SII_AMBIENTE=produccion`, `SII_RESOL_FCH`/`SII_RESOL_NRO` reales (de la resolución de autorización).
+- [ ] `supabase functions deploy sii-sync`.
+- [ ] Emitir la primera factura real desde la app (con su `dryRun` de seguridad).
+
+---
+
+## Puntos que se afinan recién acá (no testeables antes)
+- **Firma XMLDSig**: si el SII la rechaza, `auth.ts` deja la "PLAN B" (microservicio xml-crypto). El digest/canonicalización del `<Documento>` se confirma con texto acentuado real.
+- **Encoding**: el DTE se emite UTF-8; si el SII exige ISO-8859-1, ajustar en `dte.ts`/`emision.ts` (afecta solo el texto con tildes/ñ).
+- **Montos**: hoy se asume **34 exenta** (monto = exento). Para **33 afecta**, confirmar si el monto de `billing` es neto o con IVA antes de emitir afectas.
+- **Folios**: la asignación lee+actualiza `dte_folios` (no atómica). En producción multiusuario, migrar a un RPC `next_folio`.
