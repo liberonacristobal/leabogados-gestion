@@ -5390,6 +5390,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setProcResp(false)
   }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
+  const [saludCobranza,setSaludCobranza] = useState(false)   // panel de salud de cobranza (DSO, tasa, morosidad, top deudores)
   const [siiPanel,setSiiPanel] = useState(null)    // panel del módulo Emisión electrónica SII: null | 'set' | 'libro'
   const [siiBusy,setSiiBusy] = useState(false)
   // Llamada a la edge function sii-sync (emisión/certificación). Reusa el token de sesión.
@@ -6166,6 +6167,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={provPorPagar>0?C.accent:C.done} strokeWidth='2'><path d='M3 7h13v9H3zM16 10h3l2 3v3h-5'/><circle cx='7.5' cy='18.5' r='1.5'/><circle cx='17.5' cy='18.5' r='1.5'/></svg>
                 Proveedores{provPorPagar>0&&<><span style={{width:5,height:5,borderRadius:'50%',background:'#EF9F27',display:'inline-block'}}/><b style={{color:C.soonText}}>{fmtShort(provPorPagar)}</b></>}
               </span>
+              <span onClick={()=>setSaludCobranza(true)} title='DSO, tasa de cobro, morosidad y top deudores' style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:C.accent,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
+                <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v18h18'/><path d='m19 9-5 5-4-4-3 3'/></svg>
+                Cobranza
+              </span>
               {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{fontSize:11,fontWeight:600,color:C.soonText,border:'1px solid #FAC775',background:'#FFF8E1',borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>Sin año · {sinAnio.length}</span>}
             </div>
             {(()=>{
@@ -6520,6 +6525,53 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         )}
       </div>
       {/* FAB "Nueva factura" retirado a pedido del usuario (alta manual de cobros queda en la ficha del cliente → Financiero) */}
+      {saludCobranza&&(()=>{
+        const haceUnAnio=new Date(Date.now()-365*86400000).toISOString().slice(0,10)
+        const vivos=(billing||[]).filter(b=>!b.deleted_at)
+        const pagadas=vivos.filter(b=>b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.issued_at>=haceUnAnio)
+        const dias=pagadas.map(b=>Math.max(0,Math.round((new Date(b.paid_at)-new Date(b.issued_at))/86400000)))
+        const dso=dias.length?Math.round(dias.reduce((a,d)=>a+d,0)/dias.length):null
+        const porCobrar=porCobrarBills(vivos)
+        const vencido=vivos.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b)).reduce((s,b)=>s+saldoBill(b),0)
+        const morosidad=porCobrar>0?Math.round(vencido/porCobrar*100):0
+        const cobrado12=pagadas.reduce((s,b)=>s+(b.amount||0),0)
+        const tasa=(cobrado12+porCobrar)>0?Math.round(cobrado12/(cobrado12+porCobrar)*100):0
+        const porCli={}; vivos.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).forEach(b=>{ const k=String(b.client_id); porCli[k]=(porCli[k]||0)+saldoBill(b) })
+        const top=Object.entries(porCli).map(([cid,v])=>({cid,v,cli:clients.find(c=>String(c.id)===cid)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,5)
+        const Mini=(lbl,val,col)=><div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:9,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>{lbl}</div><div style={{fontSize:18,fontWeight:700,color:col||C.text,marginTop:2}}>{val}</div></div>
+        return (
+          <div onClick={()=>setSaludCobranza(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
+                <div style={{fontSize:15,fontWeight:600,color:C.text}}>Salud de cobranza</div>
+                <button onClick={()=>setSaludCobranza(false)} style={{background:'none',border:'none',color:C.muted,fontSize:20,lineHeight:1,cursor:'pointer'}}>×</button>
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:13}}>Facturas emitidas · últimos 12 meses</div>
+              <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10}}>
+                <div style={{fontSize:9,color:C.onNavyLabel,textTransform:'uppercase',letterSpacing:.4}}>Días promedio de cobro (DSO)</div>
+                <div style={{fontSize:26,fontWeight:700,color:'#fff',lineHeight:1.1}}>{dso==null?'—':`${dso} días`}</div>
+                <div style={{fontSize:10,color:C.onNavyLabel,marginTop:2}}>de la emisión al pago · {pagadas.length} factura{pagadas.length!==1?'s':''} cobrada{pagadas.length!==1?'s':''}</div>
+              </div>
+              <div style={{display:'flex',gap:8,marginBottom:13}}>
+                {Mini('Tasa de cobro',`${tasa}%`,C.greenText)}
+                {Mini('Morosidad',`${morosidad}%`,morosidad>30?C.overdueText:C.soonText)}
+                {Mini('Vencido',fmtShort(vencido),C.overdueText)}
+              </div>
+              <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'0 2px 6px'}}>Top deudores</div>
+              {top.length===0?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'14px 0'}}>Sin facturas por cobrar.</div>:(
+                <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+                  {top.map((t,i)=>(
+                    <div key={t.cid} onClick={()=>{ setSaludCobranza(false); onOpenClientFicha&&onOpenClientFicha(t.cid) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none',cursor:'pointer'}}>
+                      <span style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.cli?.name||'—'}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:C.overdueText,flexShrink:0}}>{fmt(t.v)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
       {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
         <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
