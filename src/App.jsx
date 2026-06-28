@@ -17600,11 +17600,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }
     return { alta, combina, revisar }
   }, [movs, concByMov, billing, facturasConSaldo])
+  // Señal B — la herramienta aprende: al APROBAR (compuerta humana), si el pagador (RUT) aún no está vinculado a este
+  // cliente, se guarda el alias → el próximo mes ese mismo pagador auto-identifica (no se vuelve a preguntar).
+  const aprenderPagador = async(m)=>{ try{ const k=crNormRut(m.rut_contraparte); if(k && m.cliente_id && !aliases.some(a=>crNormRut(a.rut_pagador)===k)){ await supabase.from('cliente_alias').upsert({rut_pagador:m.rut_contraparte,nombre_pagador:m.nombre_contraparte||null,cliente_id:m.cliente_id},{onConflict:'rut_pagador'}); setAliases(p=>[...p.filter(a=>crNormRut(a.rut_pagador)!==k),{rut_pagador:m.rut_contraparte,cliente_id:m.cliente_id,nombre_pagador:m.nombre_contraparte}]) } }catch(_){} }
   const aprobarProp = async(p)=>{
-    if(p.fg){ await reconciliarFacturaGastos(p.mov, p.fg); return }
-    let facturas=p.facturas
-    if(p.facturas.length===1 && propPick[p.mov.id]){ const f=facturasConSaldo.find(b=>String(b.id)===String(propPick[p.mov.id])); if(f) facturas=[f] }
-    if(facturas.length===1) await reconciliar(p.mov, facturas[0], 'propuesta'); else await reconciliarCombo(p.mov, facturas)
+    if(p.fg){ await reconciliarFacturaGastos(p.mov, p.fg) }
+    else { let facturas=p.facturas
+      if(p.facturas.length===1 && propPick[p.mov.id]){ const f=facturasConSaldo.find(b=>String(b.id)===String(propPick[p.mov.id])); if(f) facturas=[f] }
+      if(facturas.length===1) await reconciliar(p.mov, facturas[0], 'propuesta'); else await reconciliarCombo(p.mov, facturas) }
+    aprenderPagador(p.mov)
   }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
