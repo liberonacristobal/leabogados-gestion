@@ -18200,7 +18200,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const fShown = single ? (picked||(hasAuto?p.facturas[0]:null)) : (hasAuto?p.facturas[0]:null)
           const facturas = p.fg ? p.facturas : (single ? [fShown] : (hasAuto?p.facturas:[]))
           const tieneTarget = !!p.fg || facturas.length>0
-          const resumen = !tieneTarget ? 'sin calce · ¿adelanto o buscar factura?'
+          const resumen = !tieneTarget ? 'sin calce · ¿adelanto, fondo o factura?'
             : p.fg ? `F°${folioN(p.facturas[0].invoice_no)} + reembolso de fondos`
             : facturas.length>1 ? `${facturas.length} facturas suman el pago`
             : `F°${folioN(fShown.invoice_no)}${overridden?' · elegida por ti':(p.reasons?` · ${p.reasons[0]}`:'')}`
@@ -18265,7 +18265,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <div style={{display:'flex',gap:5,flexWrap:'wrap',minWidth:0}}>{(overridden?['elegida por ti']:(p.reasons||[])).map((r,i)=><span key={i} style={{fontSize:9,fontWeight:600,color:overridden?C.soonText:C.greenText,background:overridden?C.soonBg:C.greenBg,padding:'2px 7px',borderRadius:20}}>{r}</span>)}</div>
                 {tieneTarget
                   ? <button onClick={()=>aprobarProp(p)} disabled={busy===m.id} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:busy===m.id?C.done:C.normal,border:'none',borderRadius:7,padding:'6px 12px',cursor:busy===m.id?'default':'pointer'}}>{busy===m.id?'…':'Aprobar ✓'}</button>
-                  : <span style={{fontSize:10,color:C.done}}>elige una factura o déjalo para revisar</span>}
+                  : m.cliente_id?<div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>
+                      <button onClick={()=>{ if(confirm(`Registrar ${fmtM(m.monto)} como ADELANTO (anticipo) de este cliente?`)) saldoAFavor(m) }} disabled={busy===m.id} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>Adelanto</button>
+                      <button onClick={()=>crearFondoProvision(m)} disabled={busy===m.id} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>Fondo por rendir</button>
+                    </div>:<span style={{fontSize:10,color:C.done}}>identifica el cliente primero</span>}
               </div>
             </div>}
           </div>) }
