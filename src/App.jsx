@@ -2227,7 +2227,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -2970,6 +2970,47 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
+      {/* Equipo (admin) — trazabilidad del equipo limited: caja chica + actividad reciente (Eje 4, 2026-06-28) */}
+      {(()=>{
+        const ADMIN_NAMES=['Cristóbal','Erasmo']
+        const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
+        if(!cajaUsers.length) return null
+        const dDesde=iso=>{ if(!iso) return null; return Math.floor((Date.now()-new Date(iso).getTime())/86400000) }
+        const dTxt=iso=>{ const d=dDesde(iso); return d==null?'':d<=0?'hoy':d===1?'ayer':`hace ${d} días` }
+        return (
+          <div style={{padding:'16px 20px 0'}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Equipo · trazabilidad</div>
+            {cajaUsers.map(u=>{
+              const saldo=saldoCajaChica(pettyCash,expenses,u)
+              const misGastos=(expenses||[]).filter(e=>e.created_by===u)
+              const sinLiq=misGastos.filter(e=>e.type==='gasto'&&!e.rendered_at&&!e.paid_by_client)
+              const misRend=(rendiciones||[]).filter(r=>r.user_name===u && r.tipo!=='cliente').sort((a,b)=>(b.created_at||'')<(a.created_at||'')?-1:1)
+              const ultRend=misRend[0]; const dlRend=ultRend?dDesde(ultRend.created_at||ultRend.date):null
+              const pc=personChip(u)
+              const porDia={}; misGastos.forEach(e=>{ const k=(e.created_at||e.date||'').slice(0,10); if(!k) return; (porDia[k]=porDia[k]||[]).push(e) })
+              const evGastos=Object.entries(porDia).map(([k,arr])=>({fecha:k+'T12:00', txt:`Cargó ${arr.length} gasto${arr.length!==1?'s':''}${arr[0].category&&arr[0].category!=='Fondo'?` · ${arr[0].category}`:''}`}))
+              const evRend=misRend.map(r=>({fecha:r.created_at||r.date, txt:`Liquidó caja chica · ${fmtN(r.total||0)}`}))
+              const eventos=[...evRend,...evGastos].filter(e=>e.fecha).sort((a,b)=>(b.fecha||'')<(a.fecha||'')?-1:1).slice(0,3)
+              const alerta=saldo<0||(sinLiq.length>0&&(dlRend==null||dlRend>14))
+              return (
+                <div key={u} onClick={()=>setTab&&setTab('gastos')} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${alerta?C.soon:C.normal}`,borderRadius:12,padding:12,marginBottom:9,cursor:setTab?'pointer':'default'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:eventos.length?9:0}}>
+                    <span style={{width:30,height:30,borderRadius:'50%',background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[u]||u[0]}</span>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{u}</div><div style={{fontSize:10,color:C.done}}>caja chica</div></div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:saldo<0?C.overdue:saldo>0?C.normal:C.muted}}>{fmtN(saldo)}</div>
+                      <div style={{fontSize:9,color:sinLiq.length>0?C.soonText:C.greenText}}>{saldo<0?'le debes · ':''}{sinLiq.length>0?`${sinLiq.length} sin liquidar`:'al día'}{ultRend?` · rindió ${dTxt(ultRend.created_at||ultRend.date)}`:''}</div>
+                    </div>
+                  </div>
+                  {eventos.length>0&&<div style={{borderTop:`0.5px solid #F2F4F6`,paddingTop:8,display:'flex',flexDirection:'column',gap:5}}>
+                    {eventos.map((e,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11}}><span style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.txt}</span><span style={{color:C.done,flexShrink:0}}>{dTxt(e.fecha)}</span></div>)}
+                  </div>}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
       {/* Gestión Caja Chica retirada del Dashboard de admin (2026-06-25): la cubre el resumen "Caja chica sin liquidar" del sheet de Tareas. Bloque desactivado (queda el detalle por persona en Gastos › Caja chica). */}
       {false && (()=>{
         // Caja chica activa = quienes tienen fondos en petty_cash (incluye a Rodrigo u otros); no lista fija.
@@ -19825,7 +19866,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
