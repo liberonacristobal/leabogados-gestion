@@ -302,6 +302,8 @@ const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 // "En mi lista": soy responsable o me delegaron la tarea (los delegados también la ven).
 const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
 const ADMIN_NAMES = ['Cristóbal','Erasmo']
+// Costo de oficina de GESTIÓN (operativo: lo que carga el equipo limited — Martina/Martín/Rodrigo, caja chica/trámites) vs ESTRUCTURAL (sueldos/arriendo, lo cargan los admin). Criterio: quién lo cargó.
+const esGestionGasto = g => { const cb=String(g?.created_by||'').trim(); return !!cb && !ADMIN_NAMES.includes(cb) }
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -9093,8 +9095,9 @@ const CATS_OFICINA_BASE = ['Arriendo','Gastos comunes','Contadora','Tarjeta de c
 const CATS_LEGALES = ['notaria','cbr','diario oficial','registro civil','fondo','otro']
 const _mesLabelOf = m => { const [y,mm]=m.split('-'); const nm=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(mm)]||mm; return `${nm} ${y}` }
 // Pieza 2: panel mensual de Costos de Oficina, por categoría, con NETO = costos (gasto) − recuperos (fondo).
-function OficinaCostPanel({expenses, clientId}){
-  const office = useMemo(()=>(expenses||[]).filter(e=>String(e.client_id)===String(clientId)&&!e.personal_de), [expenses,clientId])
+function OficinaCostPanel({expenses, clientId, filtro=null}){
+  // filtro: 'estructural' (admin: sueldos/arriendo) | 'gestion' (equipo: movilización/trámites) | null (todo)
+  const office = useMemo(()=>(expenses||[]).filter(e=>String(e.client_id)===String(clientId)&&!e.personal_de&&(!filtro||(filtro==='gestion')===esGestionGasto(e))), [expenses,clientId,filtro])
   const meses = useMemo(()=>{ const cur=`${currentYear}-${String(currentMonth).padStart(2,'0')}`; const s=[...new Set([cur,...office.map(e=>(e.date||'').slice(0,7)).filter(Boolean)])].sort().reverse(); return s }, [office])
   const [mes,setMes] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
   const idx = meses.indexOf(mes)
@@ -9109,35 +9112,37 @@ function OficinaCostPanel({expenses, clientId}){
     return Object.entries(byCat).map(([cat,v])=>({cat,...v,neto:v.costo-v.recupero})).sort((a,b)=>b.neto-a.neto)
   }, [office,mes])
   const totNeto = cats.reduce((a,c)=>a+c.neto,0)
+  const yearNeto = useMemo(()=>{ const yr=mes.slice(0,4); let costo=0,recupero=0; office.filter(e=>(e.date||'').slice(0,4)===yr).forEach(e=>{ if(e.type==='fondo')recupero+=(e.amount||0); else if(!e.no_descuenta_saldo)costo+=(e.amount||0) }); return costo-recupero }, [office,mes])
   return (
-    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginTop:10}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-        <span style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina · por categoría</span>
-        <div style={{display:'flex',alignItems:'center',gap:2}}>
+    <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginTop:10}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+        <div>
+          <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.4px'}}>Costos de oficina</div>
+          <div style={{fontSize:24,fontWeight:700,color:C.accent,lineHeight:1.05,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmt(totNeto)}</div>
+          <div style={{fontSize:9,color:'#A8B2B8',textTransform:'uppercase',letterSpacing:'.3px',marginTop:2}}>neto del mes · año {fmt(yearNeto)}</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
           <button onClick={()=>idx<meses.length-1&&setMes(meses[idx+1])} disabled={idx>=meses.length-1} style={{background:'none',border:'none',color:idx>=meses.length-1?C.border:C.muted,cursor:idx>=meses.length-1?'default':'pointer',fontSize:18,padding:'0 4px',lineHeight:1}}>‹</button>
           <span style={{fontSize:12,fontWeight:600,color:C.accent,minWidth:62,textAlign:'center'}}>{_mesLabelOf(mes)}</span>
           <button onClick={()=>idx>0&&setMes(meses[idx-1])} disabled={idx<=0} style={{background:'none',border:'none',color:idx<=0?C.border:C.muted,cursor:idx<=0?'default':'pointer',fontSize:18,padding:'0 4px',lineHeight:1}}>›</button>
         </div>
       </div>
+      <div style={{borderTop:`0.5px solid ${C.border}`,marginTop:10,paddingTop:4}}>
       {cats.length===0 ? (
-        <div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin costos registrados en {_mesLabelOf(mes)}.</div>
-      ) : (<>
-        {cats.map(c=>(
+        <div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin costos en {_mesLabelOf(mes)}.</div>
+      ) : cats.map(c=>(
           <div key={c.cat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`0.5px solid ${C.border}`}}>
-            <span style={{fontSize:12.5,color:C.text,fontWeight:500}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
+            <span style={{fontSize:12.5,color:c.cat==='Sin categoría'?C.soonText:C.text,fontWeight:500}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
             <span style={{fontSize:13,fontWeight:700,color:c.neto<0?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(c.neto)}</span>
           </div>
         ))}
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:8,marginTop:2}}>
-          <span style={{fontSize:12.5,fontWeight:700,color:C.muted}}>Total neto del mes</span>
-          <span style={{fontSize:15,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(totNeto)}</span>
-        </div>
-      </>)}
+      </div>
     </div>
   )
 }
 function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[]}) {
   const [catMenu,setCatMenu] = useState(null)   // id del gasto de oficina con el menú de categoría abierto
+  const [ofiLente,setOfiLente] = useState('estructural')   // vista oficina: 'estructural' (sueldos/arriendo, admin) | 'gestion' (movilización/trámites, equipo)
   const [selectedClient,setSelectedClient] = useState(null)
   const [notaMenuOpen,setNotaMenuOpen] = useState(false)   // pill "Gastos notariales" desplegada
   const [verArchivadosG,setVerArchivadosG] = useState(false)  // mostrar clientes Terminados en la lista de Gastos
@@ -9304,11 +9309,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
   const filtered = useMemo(()=>{
     if(!selectedClient) return []
-    if(!isAdmin && (selectedClient.is_internal || /liberona\s+escala/i.test(selectedClient.name||''))) return []   // limited: oficina jamás
+    const ofi = selectedClient.is_internal || /liberona\s+escala/i.test(selectedClient.name||'')
+    if(!isAdmin && ofi) return []   // limited: oficina jamás
     let l = expenses.filter(e=>e.client_id===selectedClient.id)
+    if(ofi) l = l.filter(e=> (ofiLente==='gestion')===esGestionGasto(e))   // oficina: lente Estructural ⇄ Gestión (mismo criterio que la foto)
     if(gastoCatF) l = l.filter(e=> gastoCatF==='Fondo' ? e.type==='fondo' : (e.type!=='fondo' && (e.category||'Otro')===gastoCatF))
     return l.sort((a,b)=> gastoOrd==='asc' ? (new Date(a.date||0)-new Date(b.date||0)) : (new Date(b.date||0)-new Date(a.date||0)))
-  },[expenses,selectedClient,gastoOrd,gastoCatF,isAdmin])
+  },[expenses,selectedClient,gastoOrd,gastoCatF,isAdmin,ofiLente])
   const gastoCats = useMemo(()=> selectedClient ? [...new Set(expenses.filter(e=>e.client_id===selectedClient.id).map(e=> e.type==='fondo'?'Fondo':(e.category||'Otro')))].sort() : [],[expenses,selectedClient])
   const gastoToolbar = () => {
     const movibles = selectedClient ? (expenses||[]).filter(e=> String(e.client_id)===String(selectedClient.id) && e.type==='gasto' && !e.deleted_at && !e.client_render_id && !e.render_id && !e.notaria_render_id) : []
@@ -9985,7 +9992,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial' aria-label='Historial' style={{background:'none',border:'none',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:4}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),fontWeight:500,background:notaBtnOpen?C.tealText:C.tealBg,color:notaBtnOpen?'#fff':C.tealText,border:`1px solid ${C.tealText}`}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaMenuOpen(o=>!o);setNotaBtnOpen(false)}} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
-            {selectedClient&&(()=>{ const por=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
+            {selectedClient&&!esOficina(selectedClient.id)&&(()=>{ const por=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
           </div>
         </div>
 
@@ -10007,15 +10014,18 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           </div>
         )}
 
-        {/* Vista cliente seleccionado: KPIs (totales de todas las RS). Oficina = la firma: no hay saldo, sí Gastos / Por pagar / Pagado */}
+        {/* Vista cliente seleccionado: KPIs (totales de todas las RS). Oficina = la firma: NO es cliente (sin saldo, sin Rendir/Por pagar) — estado de costos con lente Estructural ⇄ Gestión */}
         {selectedClient&&rb&&(()=>{
           if(esOficina(selectedClient.id)){
             if(!isAdmin) return null   // los limited NUNCA ven los costos de oficina (sueldos/arriendo)
-            const gs=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
-            const total=gs.reduce((a,e)=>a+(e.amount||0),0)
-            const pagado=gs.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
-            const porPagar=gs.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
-            return <><KpiRow oficina={{total,porPagar,pagado}}/><OficinaCostPanel expenses={expenses} clientId={selectedClient.id}/></>
+            return (<>
+              <div style={{display:'flex',gap:4,justifyContent:'flex-end',marginBottom:2}}>
+                {[['estructural','Estructural'],['gestion','Gestión']].map(([k,l])=>{ const on=ofiLente===k; return (
+                  <button key={k} onClick={()=>setOfiLente(k)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>{l}</button>
+                )})}
+              </div>
+              <OficinaCostPanel expenses={expenses} clientId={selectedClient.id} filtro={ofiLente}/>
+            </>)
           }
           return <KpiRow bal={rb.total}/>
         })()}
@@ -10032,17 +10042,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
           const cards=[['neg','Por reembolsar',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','A favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
-            {isAdmin&&!q.trim()&&!respFilter&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
-              const gOfi=(expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
-              if(!gOfi.length) return null
-              const ym=new Date().toISOString().slice(0,7); const mesGastos=gOfi.filter(e=>(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
-              return (<div onClick={()=>setSelectedClient(ofi)} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',marginBottom:12,cursor:'pointer'}}>
-                <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div><div style={{fontSize:10,color:C.muted}}>sueldos, arriendo, servicios… (fuera de los clientes)</div></div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesGastos)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
-                <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
-              </div>)
-            })()}
             {showDescuadres&&(
               <div style={{marginBottom:12}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
@@ -10312,6 +10311,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                     <div style={{fontSize:9,color:C.done,marginTop:1}}>{nota.length} liquidació{nota.length===1?'n':'nes'}</div>
                   </div>
                 </div>
+              </div>)
+            })()}
+            {isAdmin&&!q.trim()&&!respFilter&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
+              const gOfi=(expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
+              if(!gOfi.length) return null
+              const ym=new Date().toISOString().slice(0,7); const mesEstr=gOfi.filter(e=>(e.date||'').slice(0,7)===ym&&!esGestionGasto(e)).reduce((a,e)=>a+(e.amount||0),0)
+              return (<div onClick={()=>{setOfiLente('estructural');setSelectedClient(ofi)}} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',marginTop:6,cursor:'pointer'}}>
+                <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div><div style={{fontSize:10,color:C.muted}}>la firma · sueldos, arriendo, gestión (aparte de los clientes)</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesEstr)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
+                <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
               </div>)
             })()}
           </>)
