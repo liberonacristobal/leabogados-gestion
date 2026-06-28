@@ -17096,6 +17096,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   }
   // ¿Esta aplicación TRANSICIONA la factura a Pagada? (para guardar marco_pago en la fila y revertir bien al deshacer)
   const marcaPago = (factura, aplicadoTotal) => factura.status!=='Pagado' && aplicadoTotal >= (factura.amount||0)-TOL
+  // Registro auditable de quién concilió: update RESILIENTE (si la columna created_by aún no existe, falla en
+  // silencio y NO rompe la conciliación). Lo llaman los reconciliar* tras crear cada fila. El 'cómo' va en origen, el 'cuándo' en created_at.
+  const marcaQuien = (crId)=>{ if(!crId||!user?.email) return; try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',crId).then(()=>{},()=>{}) }catch(_){} }
   // Aplica un abono (o su resto) a una factura: crea fila conciliacion, marca la factura y avanza el estado del movimiento.
   const reconciliar = async(mov, factura, origen='manual')=>{
     if(busy) return
@@ -17110,7 +17113,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const aplTot = (aplicadoByFactura[factura.id]||0)+aplicado+manualExtra
       const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen, marco_pago:marcaPago(factura,aplTot) }).select().single()
       if(ins.error) throw ins.error
-      cr=ins.data
+      cr=ins.data; marcaQuien(cr.id)
       await persistPagoFactura(factura, aplTot, mov.fecha, mov.n_operacion)
       const movAplicado = (mov.monto_conciliado||0)+aplicado
       const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
@@ -17175,7 +17178,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         const aplTot = (aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)+aplicado
         const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'manual', marco_pago:marcaPago(factura,aplTot) }).select().single()
         if(ins.error) throw ins.error
-        nuevas.push(ins.data)
+        nuevas.push(ins.data); marcaQuien(ins.data.id)
         await persistPagoFactura(factura, aplTot, mov.fecha, mov.n_operacion)
         aplicLocal[factura.id]=(aplicLocal[factura.id]||0)+aplicado; movAplicado += aplicado
       }
@@ -17236,7 +17239,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const aplTot = (aplicadoByFactura[factura.id]||0)+(aplicLocal[factura.id]||0)+aplicado
           const ins = await supabase.from('conciliacion').insert({ movimiento_id:tr.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen:'auto', marco_pago:marcaPago(factura,aplTot) }).select().single()
           if(ins.error) throw ins.error
-          nuevas.push(ins.data)
+          nuevas.push(ins.data); marcaQuien(ins.data.id)
           aplicLocal[factura.id]=(aplicLocal[factura.id]||0)+aplicado; restoMov[tr.id]=(restoMov[tr.id]||0)-aplicado; saldo-=aplicado
           await persistPagoFactura(factura, aplTot, tr.fecha, tr.n_operacion)
         }
@@ -17257,7 +17260,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const aplicF = Math.max(0, Math.min((mov.monto||0)-(mov.monto_conciliado||0), fg.saldo))
       const aplTotF = (aplicadoByFactura[fg.factura.id]||0)+aplicF
       const insF = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:fg.factura.id, monto_aplicado:aplicF, origen:'manual', marco_pago:marcaPago(fg.factura,aplTotF) }).select().single()
-      if(insF.error) throw insF.error; crF=insF.data
+      if(insF.error) throw insF.error; crF=insF.data; marcaQuien(crF.id)
       await persistPagoFactura(fg.factura, aplTotF, mov.fecha, mov.n_operacion)
       let movAplicado=(mov.monto_conciliado||0)+aplicF
       const excess=(mov.monto||0)-movAplicado
@@ -17266,7 +17269,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         const insFon = await supabase.from('expenses').insert({ client_id:mov.cliente_id, type:'fondo', amount:excess, date:mov.fecha, concept:`Reembolso de gastos · Factura N°${folioN(fg.factura.invoice_no)||'—'} (conciliación)`, category:'Fondo', created_by:user?.email||null }).select().single()
         if(insFon.error) throw insFon.error; fondo=insFon.data
         const insG = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:excess, origen:'manual' }).select().single()
-        if(insG.error) throw insG.error; crG=insG.data; movAplicado+=excess
+        if(insG.error) throw insG.error; crG=insG.data; marcaQuien(crG.id); movAplicado+=excess
       }
       const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
@@ -17302,7 +17305,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const ins = await supabase.from('expenses').insert({ client_id:mov.cliente_id, type:'fondo', amount:resto, date:mov.fecha, concept:'Devolución de gastos (conciliación bancaria)', category:'Fondo', created_by:user?.email||null }).select().single()
       if(ins.error) throw ins.error; fondo=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:resto, origen:'manual' }).select().single()
-      if(ic.error) throw ic.error; cr=ic.data
+      if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
       const nuevoConc=(mov.monto_conciliado||0)+resto
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
       if(me) throw me
@@ -17422,7 +17425,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const ins = await supabase.from('expenses').insert({ client_id:clientId, entity_id:entityId||null, type:'gasto', amount:monto, date:mov.fecha, concept:(concept||'Gasto por cuenta del cliente').slice(0,200), category:category||'Notaría', created_by:user?.email||null, paid_by_client:false }).select().single()
       if(ins.error) throw ins.error; gasto=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', gasto_id:gasto.id, monto_aplicado:monto, origen:'manual' }).select().single()
-      if(ic.error) throw ic.error; cr=ic.data
+      if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
       const movAplic=(mov.monto_conciliado||0)+monto
       const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, cliente_id:clientId }).eq('id',mov.id)
@@ -17448,7 +17451,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const ins = await supabase.from('expenses').insert({ client_id:ofiCli.id, type:'gasto', amount:monto, date:mov.fecha, concept:(mov.descripcion||'Costo de oficina').slice(0,200), category, created_by:user?.email||null, paid_by_client:false }).select().single()
       if(ins.error) throw ins.error; gasto=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', gasto_id:gasto.id, monto_aplicado:monto, origen:'manual' }).select().single()
-      if(ic.error) throw ic.error; cr=ic.data
+      if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
       const movAplic=(mov.monto_conciliado||0)+monto
       const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Gastos Oficina' }).eq('id',mov.id)
@@ -17572,17 +17575,23 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [propBuscar,setPropBuscar] = useState(null)  // movId con la búsqueda de factura abierta
   const [propBuscaQ,setPropBuscaQ] = useState('')
   const rutEq = (a,b) => { const x=crNormRut(a), y=crNormRut(b); return !!x && x===y }
+  // Señal premium: el banco escribe el folio en la glosa ("PAGO FACTURA 412", "F°412"). Si ese folio calza exacto, se prefiere.
+  const folioGlosa = m => { const mt=String(m?.descripcion||'').match(/\b(?:factura|fact|fac|fra|f[°ºn])\s*[°ºn.\-:]*\s*(\d{2,7})\b/i); return mt?mt[1]:null }
   const propuesta = useMemo(()=>{
     const used=new Set(); const alta=[], combina=[], revisar=[]
     const otrasDe=(cid,exclId)=>{ const o=facturasConSaldo.filter(b=> String(b.client_id)===String(cid) && b.id!==exclId); return { n:o.length, total:o.reduce((s,b)=>s+saldoFactura(b),0) } }
     const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
     for(const mov of pend){
-      const f = mejorCandidato(mov, used)
-      if(f){ used.add(f.id)
+      let f = mejorCandidato(mov, used)
+      if(f){
+        const fg = folioGlosa(mov); let porFolio=false
+        if(fg){ const byFolio=candidatos(mov, used).find(c=>String(folioN(c.invoice_no))===String(fg)); if(byFolio){ f=byFolio; porFolio=true } }
+        used.add(f.id)
         const rm = rutEq(mov.rut_contraparte, f.receptor_rut)
-        const reasons = rm ? ['mismo RUT','calce exacto'] : ['calce exacto · mismo monto']
+        const reasons=[]; if(porFolio) reasons.push(`banco nombra F°${fg}`); if(rm) reasons.push('mismo RUT'); reasons.push('calce exacto')
+        const conf = (porFolio||rm) ? 'alta' : 'media'
         const alt = facturasConSaldo.filter(b=> String(b.client_id)===String(mov.cliente_id) && b.id!==f.id && saldoFactura(b)===(mov.monto||0))
-        ;(rm?alta:combina).push({ mov, facturas:[f], reasons, conf:rm?'alta':'media', alt, otras:otrasDe(mov.cliente_id,f.id) }); continue }
+        ;(conf==='alta'?alta:combina).push({ mov, facturas:[f], reasons, conf, alt, otras:otrasDe(mov.cliente_id,f.id) }); continue }
       const fmg = facturaMasGastos(mov)
       if(fmg){ used.add(fmg.factura.id); combina.push({ mov, facturas:[fmg.factura], fg:fmg, reembolso:fmg.excess, reasons:['factura + reembolso de gastos'], conf:'combina', otras:otrasDe(mov.cliente_id,fmg.factura.id) }); continue }
       const cb = comboExacto(mov, used) || comboExacto3(mov, used)
