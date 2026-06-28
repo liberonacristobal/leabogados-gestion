@@ -302,8 +302,10 @@ const isAssignee = (t,name) => !!name && taskAssignees(t).includes(name)
 // "En mi lista": soy responsable o me delegaron la tarea (los delegados también la ven).
 const enMiLista = (t,name) => isAssignee(t,name) || (!!name && ((t&&t.delegated_to)||[]).includes(name))
 const ADMIN_NAMES = ['Cristóbal','Erasmo']
-// Costo de oficina de GESTIÓN (operativo: lo que carga el equipo limited — Martina/Martín/Rodrigo, caja chica/trámites) vs ESTRUCTURAL (sueldos/arriendo, lo cargan los admin). Criterio: quién lo cargó.
-const esGestionGasto = g => { const cb=String(g?.created_by||'').trim(); return !!cb && !ADMIN_NAMES.includes(cb) }
+// Costos ESTRUCTURALES de la oficina (fijos: sueldos/arriendo/servicios/compras — normalmente vienen de la conciliación bancaria). El resto de categorías = GESTIÓN (operativo: notaría/CBR/movilización/archivo judicial/otros, gralmente de clientes; movilización siempre nuestra).
+const CATS_OFICINA_ESTRUCTURAL = ['Sueldos','Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Compras']
+// Un gasto de oficina es de GESTIÓN si su categoría NO es estructural (criterio por CATEGORÍA, determinista — no por quién lo cargó).
+const esGestionGasto = g => !CATS_OFICINA_ESTRUCTURAL.includes(String(g?.category||'').trim())
 
 // Saldo disponible de caja chica del usuario = fondos entregados − TODOS sus gastos (liquidados o no).
 // Liquidar es neutro para el saldo: el gasto ya descontó la plata; solo un fondo nuevo lo sube.
@@ -642,7 +644,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     const {fondos,gastos,saldo} = fgCliente(expenses, cl.id)   // fuente única (no duplicar la fórmula de saldo inline)
     const clientTasks = tasks.filter(t=>t.client_id===cl.id&&t.status!=='Terminado')
     const entities = (clientEntities||[]).filter(e=>e.client_id===cl.id)
-    const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':C.greenBg,'Otro':'#F5F7F9'}
+    const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':'#F5F7F9'}
     const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
 
     return (
@@ -983,11 +985,11 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   const totalSel = seleccionados.reduce((a,e)=>a+(e.amount||0),0)
 
   const fmtCLP = fmtN
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':C.greenBg,'Otro':'#F5F7F9'}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':'#F5F7F9'}
   // Pills de categoría en PENDIENTES: [valor en DB, etiqueta mostrada]
-  const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
-  const CAT_LIST = ['Notaria','CBR','Diario Oficial','Registro Civil','Fondo','Otro']
-  const catLabel = c => c==='Diario Oficial'?'DO':c==='Registro Civil'?'R. Civil':(c||'Otro')
+  const CAT_PILLS = [['','Todos'],['Notaria','Notaria'],['CBR','CBR'],['Movilización','Movil.'],['Archivo Judicial','Archivo'],['Diario Oficial','DO'],['Registro Civil','R. Civil'],['Otro','Otro']]
+  const CAT_LIST = ['Notaria','CBR','Movilización','Archivo Judicial','Diario Oficial','Registro Civil','Fondo','Otro']
+  const catLabel = c => c==='Diario Oficial'?'DO':c==='Registro Civil'?'R. Civil':c==='Movilización'?'Movil.':c==='Archivo Judicial'?'Archivo':(c||'Otro')
   const catBadge = c => c==='CBR'?{bg:C.border,color:C.accent}:(c==='Notaria'||c==='Diario Oficial')?{bg:'#FFF8E1',color:C.soon}:{bg:'#F5F7F9',color:C.muted}
   // KPI cards (compartidas PENDIENTES/CAJA): mismo formato que Facturación — fondo con tinte de
   // color según el dato, label mayúscula muted, cifra bold del color. El bg se pasa por tarjeta.
@@ -7778,7 +7780,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
     else setSelected(new Set(disponibles.map(e=>e.id)))
   }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':C.greenBg,'Otro':'#F5F7F9'}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':'#F5F7F9'}
 
   const gastosSel = disponibles.filter(e=>selected.has(e.id))
 
@@ -9091,7 +9093,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 }
 
 // Categorías base de COSTOS DE OFICINA (la firma). Editable/aprende: el catálogo = estas + las que ya se usaron en gastos de la oficina + "Nueva categoría".
-const CATS_OFICINA_BASE = ['Arriendo','Gastos comunes','Contadora','Tarjeta de crédito','Servicios','Software','Sueldos','Otros']
+const CATS_OFICINA_BASE = [...CATS_OFICINA_ESTRUCTURAL, 'Otros']   // catálogo de la oficina = estructurales + Otros (Gestión usa las operativas: notaría/CBR/movilización…)
 const CATS_LEGALES = ['notaria','cbr','diario oficial','registro civil','fondo','otro']
 const _mesLabelOf = m => { const [y,mm]=m.split('-'); const nm=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(mm)]||mm; return `${nm} ${y}` }
 // Pieza 2: panel mensual de Costos de Oficina, por categoría, con NETO = costos (gasto) − recuperos (fondo).
@@ -9107,7 +9109,7 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
   const cats = useMemo(()=>{
     const byCat={}
     office.filter(e=>(e.date||'').slice(0,7)===mes).forEach(e=>{
-      const cat=(e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase()))?e.category:'Sin categoría'
+      const cat=e.category||'Sin categoría'   // muestra la categoría real (Notaría/CBR/Movilización en Gestión; Sueldos/Arriendo en Estructural)
       if(!byCat[cat]) byCat[cat]={costo:0,recupero:0}
       if(e.type==='fondo') byCat[cat].recupero+=(e.amount||0)
       else if(!e.no_descuenta_saldo) byCat[cat].costo+=(e.amount||0)
@@ -9663,7 +9665,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     }catch(e){alert('Error al añadir: '+e.message)}
   }
 
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':C.greenBg,'Otro':'#F5F7F9'}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':'#F5F7F9'}
 
   // Al entrar a un cliente: pre-seleccionar todas sus RS y colapsar el acordeón
   useEffect(()=>{
@@ -10877,7 +10879,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 }
 
 // ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
-const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Otro']
+const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
 function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient}) {
   const [q,setQ] = useState('')
   const [selectedClient,setSelectedClient] = useState(preClient||null)
@@ -12924,7 +12926,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   const taskGroups = {}
   clientTasks.forEach(t=>{ const k=t.project||'__none__'; if(!taskGroups[k])taskGroups[k]=[]; taskGroups[k].push(t) })
 
-  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':C.greenBg,'Otro':'#F5F7F9'}
+  const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':'#F5F7F9'}
 
   // Chevron de affordance (fila clickeable) — paleta corporativa, hover lo oscurece vía .lf-row:hover
   const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}>›</span>
@@ -15610,7 +15612,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           }).slice(0,3)
           const fmtCLP = fmtN
           const fmtFecha = iso => { if(!iso) return '—'; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return iso} }
-          const CAT_BG = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Fondo':C.greenBg,'Otro':'#F5F7F9'}
+          const CAT_BG = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':'#F5F7F9'}
           const GREEN={num:C.normal,bg:C.greenBg,bd:'#D4EDE0',label:C.muted}
           const ORANGE={num:C.soon,bg:'#FEF6EE',bd:'#F5E2CC',label:C.soon}
           const RED={num:C.overdue,bg:C.overdueBg,bd:'#F2D5D5',label:C.muted}
