@@ -34,3 +34,23 @@ export function getConfig() {
     timeoutMs: 30000,
   }
 }
+
+// Datos del Emisor para el encabezado del DTE (desde secretos; se cargan tras la postulación).
+export function getEmisor() {
+  return {
+    rut: Deno.env.get('SII_RUT_EMPRESA') || '',
+    rs: Deno.env.get('SII_EMISOR_RS') || '',
+    giro: Deno.env.get('SII_EMISOR_GIRO') || '',
+    acteco: Deno.env.get('SII_EMISOR_ACTECO') || '',
+    dir: Deno.env.get('SII_EMISOR_DIR') || '',
+    comuna: Deno.env.get('SII_EMISOR_COMUNA') || '',
+  }
+}
+
+// Datos de la Resolución SII para la Carátula del EnvioDTE (en certificación: NroResol=0).
+export function getResol() {
+  return {
+    fchResol: Deno.env.get('SII_RESOL_FCH') || '2014-08-22',
+    nroResol: parseInt(Deno.env.get('SII_RESOL_NRO') || '0', 10),
+  }
+}
