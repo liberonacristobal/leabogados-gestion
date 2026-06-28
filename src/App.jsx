@@ -5570,8 +5570,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [facturaEmail,setFacturaEmail] = useState(null)   // factura cuya ventana de "Enviar por correo" está abierta
   const [soloSinEnviar,setSoloSinEnviar] = useState(false)   // filtro: solo facturas emitidas que aún no se envían por correo
   const esEmitida = b => b.invoice_no && b.status!=='Programada' && b.status!=='Anulada'
-  // "Sin enviar" SOLO importa en facturas pendientes de cobro (Pendiente/Vencido): una pagada que nunca se mandó por la app no es pendiente de envío (evita inflar el conteo con el histórico sin email_sent_at).
-  const sinEnviar = b => esEmitida(b) && !b.email_sent_at && (b.status==='Pendiente'||b.status==='Vencido')
+  // "Por enviar" = SOLO facturas EMITIDAS POR LA APP (tienen dte_track_id) que aún no se mandaron por correo.
+  // Las facturas históricas (emitidas/enviadas fuera de la app, sin dte_track_id) YA fueron enviadas a sus clientes —
+  // nunca cuentan como pendientes de envío (regla del usuario: nada del histórico pendiente).
+  const sinEnviar = b => !!b.dte_track_id && !b.email_sent_at && (b.status==='Pendiente'||b.status==='Vencido')
   // Estado de envío por correo de una factura emitida: null si no aplica; si no, {txt,col}.
   // Solo marcamos si ya se envió por la app (email_sent_at). Nunca "Sin enviar" (las facturas ya se enviaron fuera de la app; sería engañoso).
   const envioBadge = b => { if(!esEmitida(b)||!b.email_sent_at) return null; const d=Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000); return {txt:d>0?`Enviada · ${d}d`:'Enviada',col:C.greenText} }
