@@ -252,6 +252,37 @@ serve(async (req) => {
       return json({ ok: true, revisados, cambiados, rechazadas: rechazadas.length })
     }
 
+    // REPORTE AUTOMÁTICO #2: resumen semanal de facturación → correo a los admins (los lunes, por cron).
+    // body: { action:'resumen-semanal', cronSecret? }
+    if (body.action === 'resumen-semanal') {
+      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      const hoy = nowChileIso().slice(0, 10)
+      const hace7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+      const { data: bills } = await sb.from('billing').select('amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at').limit(5000)
+      // deno-lint-ignore no-explicit-any
+      const vivos = (bills || []).filter((b: any) => !b.deleted_at)
+      // deno-lint-ignore no-explicit-any
+      const saldo = (b: any) => ['Pagado', 'Anulada', 'Anulado'].includes(b.status) ? 0 : Math.max(0, (b.amount || 0) - (b.paid_amount || 0))
+      // deno-lint-ignore no-explicit-any
+      const porCobrarB = vivos.filter((b: any) => b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status))
+      const emitidasSemana = vivos.filter((b: any) => (b.dte_emitido_at || '').slice(0, 10) >= hace7).length
+      const porCobrar = porCobrarB.reduce((s: number, b: any) => s + saldo(b), 0)
+      const vencido = porCobrarB.filter((b: any) => (b.due || '') && (b.due || '') < hoy).reduce((s: number, b: any) => s + saldo(b), 0)
+      const rechazadas = vivos.filter((b: any) => (b.dte_estado || '') === 'rechazada').length
+      const porEnviar = vivos.filter((b: any) => b.dte_track_id && !b.email_sent_at && ['Pendiente', 'Vencido'].includes(b.status)).length
+      const fm = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CL')
+      const fila = (lbl: string, val: string, col?: string) => `<tr><td style="padding:7px 8px;border-bottom:1px solid #eee;color:#537281">${lbl}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;color:${col || '#003C50'}">${val}</td></tr>`
+      const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:16px 22px;color:#fff"><b>Resumen semanal de facturación</b></div><div style="padding:18px 22px;color:#1a1a1a;font-size:14px"><table style="width:100%;border-collapse:collapse">${fila('Emitidas esta semana', String(emitidasSemana))}${fila('Por cobrar', fm(porCobrar))}${fila('De eso, vencido', fm(vencido), vencido > 0 ? '#A32D2D' : '#003C50')}${fila('Facturas por enviar', String(porEnviar), porEnviar > 0 ? '#854F0B' : '#003C50')}${fila('DTE rechazadas por el SII', String(rechazadas), rechazadas > 0 ? '#A32D2D' : '#0F6E56')}</table></div></div>`
+      try {
+        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-task`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Deno.env.get('SUPABASE_ANON_KEY') },
+          body: JSON.stringify({ mail: { to: ['cl@leabogados.cl', 'ee@leabogados.cl'], subject: 'Resumen semanal de facturación', html } }),
+        })
+      } catch (_) { /* no romper el job */ }
+      console.log(`[sii-sync] resumen-semanal enviado`)
+      return json({ ok: true, emitidasSemana, porCobrar, vencido, rechazadas, porEnviar })
+    }
+
     const periodo = String(body.periodo || '')
     if (!/^\d{4}-\d{2}$/.test(periodo)) return json({ error: 'periodo debe tener formato YYYY-MM' }, 400)
     if (ambiente !== 'produccion') {
