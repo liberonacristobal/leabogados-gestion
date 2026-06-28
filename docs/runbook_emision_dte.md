@@ -53,6 +53,23 @@ $$;
 GRANT EXECUTE ON FUNCTION siguiente_folio(int, text) TO service_role;
 ```
 
+## 2c. Log de auditoría de emisión (correr una vez en SQL)
+Registra cada emisión (folio, estado, errores, folios perdidos). Lo lee el módulo (Historial de emisión).
+```sql
+CREATE TABLE dte_log (
+  id uuid primary key default gen_random_uuid(),
+  billing_id uuid, tipo_dte int, folio int, track_id text,
+  estado text, error text, ambiente text, created_by text,
+  created_at timestamptz default now()
+);
+GRANT ALL ON TABLE dte_log TO authenticated, service_role;
+ALTER TABLE dte_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY team_all ON dte_log FOR ALL TO authenticated
+  USING ((auth.jwt() ->> 'email') LIKE '%@leabogados.cl')
+  WITH CHECK ((auth.jwt() ->> 'email') LIKE '%@leabogados.cl');
+NOTIFY pgrst, 'reload schema';
+```
+
 ## 3. Desplegar
 ```
 supabase functions deploy sii-sync
