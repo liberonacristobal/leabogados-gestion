@@ -18277,15 +18277,20 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             </div>}
           </div>) }
         const dDesde=iso=>{ if(!iso) return 99999; const t=new Date(String(iso).slice(0,10)+'T12:00').getTime(); return Math.floor((Date.now()-t)/86400000) }
-        const buckets=[{k:'hoy',label:'Hoy',test:d=>d<=0},{k:'semana',label:'Esta semana',test:d=>d>=1&&d<=7},{k:'mes',label:'Este mes',test:d=>d>=8&&d<=31},{k:'antiguos',label:'Más antiguos',test:d=>d>31}]
+        const _now=new Date(), _cy=_now.getFullYear(), _cm=_now.getMonth()
+        const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+        // Hoy / Esta semana / Este mes (mes calendario actual) y, los anteriores, UNA sección por mes-año (Mayo 2026, …).
+        const bucketKey=p=>{ const d=dDesde(p.mov.fecha); if(d<=0) return 'hoy'; if(d<=7) return 'semana'; const dt=new Date(String(p.mov.fecha).slice(0,10)+'T12:00'); if(dt.getFullYear()===_cy&&dt.getMonth()===_cm) return 'mes'; return `m:${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}` }
+        const labelOf=k=> k==='hoy'?'Hoy':k==='semana'?'Esta semana':k==='mes'?'Este mes':(()=>{ const [y,mo]=k.slice(2).split('-'); return `${MES[+mo-1]} ${y}` })()
         const todos=[...conCalce,...propuesta.revisar]
         const total=todos.reduce((s,p)=>s+(p.mov.monto||0),0)
         const matchF=p=> propFiltro==='todos' || (propFiltro==='calce'?conCalce.includes(p):propuesta.revisar.includes(p))
-        const grupos=buckets.map(b=>{ const items=todos.filter(p=>matchF(p)&&b.test(dDesde(p.mov.fecha))).sort((a,z)=>(z.mov.fecha||'')<(a.mov.fecha||'')?-1:1); return {...b,items,monto:items.reduce((s,p)=>s+(p.mov.monto||0),0)} }).filter(g=>g.items.length)
-        const secIco=(g,col)=> g==='hoy'
+        const visibles=todos.filter(matchF)
+        const monthKeys=[...new Set(visibles.map(bucketKey).filter(k=>k.startsWith('m:')))].sort().reverse()
+        const allKeys=['hoy','semana','mes',...monthKeys]
+        const grupos=allKeys.map(k=>{ const items=visibles.filter(p=>bucketKey(p)===k).sort((a,z)=>(z.mov.fecha||'')<(a.mov.fecha||'')?-1:1); return {k,label:labelOf(k),items,monto:items.reduce((s,p)=>s+(p.mov.monto||0),0)} }).filter(g=>g.items.length)
+        const secIco=(k,col)=> k==='hoy'
           ? <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg>
-          : g==='antiguos'
-          ? <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 8v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8'/><rect x='2' y='3' width='20' height='5' rx='1'/><line x1='10' y1='12' x2='14' y2='12'/></svg>
           : <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>
         const fchip=(k,txt,col,bg)=><span onClick={()=>setPropFiltro(propFiltro===k?'todos':k)} style={{fontSize:10,fontWeight:600,color:propFiltro===k?'#fff':col,background:propFiltro===k?col:bg,padding:'2px 9px',borderRadius:20,cursor:'pointer'}}>{txt}</span>
         return (<div onClick={()=>setPropOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'18px 0',overflowY:'auto'}}>
