@@ -9185,6 +9185,7 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
 function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[]}) {
   const [catMenu,setCatMenu] = useState(null)   // id del gasto de oficina con el menú de categoría abierto
   const [ofiLente,setOfiLente] = useState('estructural')   // vista oficina: 'estructural' (sueldos/arriendo, admin) | 'gestion' (movilización/trámites, equipo)
+  const [ofiMesOpen,setOfiMesOpen] = useState(null)   // oficina: meses desplegados en la lista (null = sin tocar → abre solo el más reciente)
   const [selectedClient,setSelectedClient] = useState(null)
   const [notaMenuOpen,setNotaMenuOpen] = useState(false)   // pill "Gastos notariales" desplegada
   const [verArchivadosG,setVerArchivadosG] = useState(false)  // mostrar clientes Terminados en la lista de Gastos
@@ -10691,7 +10692,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             if(movs.length===0&&rendidos.length===0) return <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin movimientos</div>
             return (<>
               {fondos.length>0&&<><div style={{fontSize:9,color:C.greenText,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 6px'}}>Fondos recibidos · {fondos.length}</div>{fondos.map(renderMov)}</>}
-              {gastos.length>0&&<><div style={{fontSize:9,color:C.overdueText,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'12px 2px 6px'}}>Gastos · {gastos.length}</div>{gastos.map(renderMov)}</>}
+              {gastos.length>0&&(esOficina(selectedClient.id) ? (()=>{
+                // Oficina: la lista se agrupa por MES, colapsable (no un muro plano que mezcla meses).
+                const groups=[]; const seen={}
+                gastos.forEach(e=>{ const k=(e.date||'').slice(0,7)||'sin'; if(!seen[k]){seen[k]={k,items:[],total:0};groups.push(seen[k])} seen[k].items.push(e); seen[k].total+=(e.amount||0) })
+                const isOpen=(k,gi)=> ofiMesOpen===null ? gi===0 : ofiMesOpen.has(k)
+                const toggle=k=> setOfiMesOpen(prev=>{ const base= prev===null ? new Set([groups[0].k]) : new Set(prev); base.has(k)?base.delete(k):base.add(k); return base })
+                return groups.map((g,gi)=>{ const op=isOpen(g.k,gi); return (
+                  <div key={g.k} style={{marginTop:gi===0?10:6}}>
+                    <div onClick={()=>toggle(g.k)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'8px 4px',borderBottom:`0.5px solid ${C.border}`}}>
+                      <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'capitalize'}}>{g.k==='sin'?'Sin fecha':_mesLabelOf(g.k)}<span style={{color:C.done,fontWeight:500}}> · {g.items.length}</span></span>
+                      <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</span><span style={{fontSize:11,color:C.done,transform:op?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span></span>
+                    </div>
+                    {op&&g.items.map(renderMov)}
+                  </div>
+                )})
+              })() : <><div style={{fontSize:9,color:C.overdueText,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'12px 2px 6px'}}>Gastos · {gastos.length}</div>{gastos.map(renderMov)}</>)}
               {rendidosBlock('__single__',rendidos)}
             </>)
           })()}
