@@ -9261,10 +9261,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
     return m
   },[expenses])
 
-  // Clientes con movimientos, ordenados: negativos primero, luego por nombre
+  // Clientes con movimientos, ordenados: negativos primero, luego por nombre. EXCLUYE la oficina (Liberona Escala /
+  // is_internal): sus costos reales (sueldos/arriendo/servicios) viven en la card "Costos de oficina", no en la lista operativa.
   const clientsWithMovs = useMemo(()=>{
     return clients
-      .filter(c=>balances[c.id])
+      .filter(c=>balances[c.id] && !(c.is_internal || /liberona\s+escala/i.test(c.name||'')))
       .sort((a,b)=>{
         const sa=(balances[a.id]?.fondos||0)-(balances[a.id]?.gastos||0)
         const sb=(balances[b.id]?.fondos||0)-(balances[b.id]?.gastos||0)
@@ -10017,6 +10018,17 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
           const cards=[['neg','Por reembolsar',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','A favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
+            {!q.trim()&&!respFilter&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
+              const gOfi=(expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
+              if(!gOfi.length) return null
+              const ym=new Date().toISOString().slice(0,7); const mesGastos=gOfi.filter(e=>(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
+              return (<div onClick={()=>setSelectedClient(ofi)} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',marginBottom:12,cursor:'pointer'}}>
+                <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div><div style={{fontSize:10,color:C.muted}}>sueldos, arriendo, servicios… (fuera de los clientes)</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesGastos)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
+                <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
+              </div>)
+            })()}
             {showDescuadres&&(
               <div style={{marginBottom:12}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
