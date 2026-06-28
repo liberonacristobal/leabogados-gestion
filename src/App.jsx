@@ -6787,7 +6787,9 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
           <div style={{background:'#fff',borderRadius:16,width:'100%',maxWidth:460,padding:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
             <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>Dar de baja factura</div>
             <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{f.concept||'—'} · {fmt(parseInt(f.amount)||0)}</div>
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FFF8E1',color:C.soon,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color='#C77F18'/>Podrás reactivarla después si fue un error</div>
+            {bill?.dte_track_id
+              ? <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:C.azulBg,color:C.accent,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color={C.accent}/>Emitida al SII: se anula con una Nota de Crédito electrónica</div>
+              : <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,background:'#FFF8E1',color:C.soon,fontSize:12,fontWeight:600,marginBottom:12}}><BanIcon size={15} color='#C77F18'/>Podrás reactivarla después si fue un error</div>}
             <label style={flabel}>Motivo</label>
             <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
               {MOTIVOS_BAJA.map(m=>(
@@ -6798,7 +6800,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
             <input value={obsBaja} onChange={e=>setObsBaja(e.target.value)} placeholder='Detalle adicional...' style={{...inp,marginBottom:14}}/>
             <div style={{display:'flex',gap:8}}>
               <button onClick={()=>setAnularOpen(false)} style={{flex:1,height:40,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-              <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:40,borderRadius:10,border:'none',background:motivoBaja?C.overdue:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>Confirmar baja</button>
+              <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:40,borderRadius:10,border:'none',background:motivoBaja?C.overdue:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>{bill?.dte_track_id?'Anular y emitir NC':'Confirmar baja'}</button>
             </div>
           </div>
         </div>
@@ -19329,7 +19331,22 @@ export default function App() {
   // Dar de baja (anular) una factura: registra motivo, quién y cuándo.
   const handleAnularFactura=useCallback(async(bill,motivo,obs)=>{
     try{
-      const patch={status:'Anulada', motivo_baja:obs?.trim()?`${motivo} — ${obs.trim()}`:motivo, anulada_por:user?.name||user?.email||null, anulada_at:new Date().toISOString(), updated_at:new Date().toISOString()}
+      const razon = obs?.trim()?`${motivo} — ${obs.trim()}`:motivo
+      let ncRef=''
+      // Si la factura fue emitida electrónicamente (dte_track_id), NO se borra: se anula con una Nota de Crédito al SII (61, exenta) que la referencia (codRef 1).
+      if(bill.dte_track_id){
+        const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(bill.client_id))
+        const ent = bill.entity_id?ents.find(e=>String(e.id)===String(bill.entity_id)):(ents.length===1?ents[0]:null)
+        const recRut = ent?.rut || bill.receptor_rut, recRs = ent?.name || bill.receptor_name
+        if(!recRut||!recRs) throw new Error('Falta el receptor de la factura para emitir la Nota de Crédito.')
+        if(!confirm(`Esta factura fue emitida al SII (folio ${bill.folio||'—'}).\nPara anularla se emitirá una NOTA DE CRÉDITO electrónica que la deja sin efecto.\n\n¿Continuar?`)) return
+        const r=await _siiFetch({ action:'emitir', tipoDte:61, exenta:true, fecha:new Date().toISOString().slice(0,10),
+          receptor:{ rut:recRut, rs:recRs },
+          items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }],
+          referencias:[{ tpoDocRef:34, folioRef:bill.folio, fchRef:(bill.issued_at||'').slice(0,10)||new Date().toISOString().slice(0,10), codRef:1, razonRef:(razon||'Anula factura').slice(0,90) }] })
+        ncRef=` · Nota de crédito F° ${r.folio} (SII ${r.estado||'enviado'})`
+      }
+      const patch={status:'Anulada', motivo_baja:razon+ncRef, anulada_por:user?.name||user?.email||null, anulada_at:new Date().toISOString(), updated_at:new Date().toISOString()}
       const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
       if(error) throw error
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
@@ -19337,7 +19354,7 @@ export default function App() {
       const antLig=(anticipos||[]).filter(a=>String(a.billing_id)===String(bill.id))
       if(antLig.length){ const ids=antLig.map(a=>a.id); const {error:ae}=await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',ids); if(!ae) setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
     }catch(e){alert('No se pudo dar de baja: '+e.message)}
-  },[user,anticipos])
+  },[user,anticipos,clientEntities])
 
   // Reactivar una factura anulada por error: vuelve a Pendiente y borra el registro de baja.
   const handleReactivarFactura=useCallback(async(bill)=>{
