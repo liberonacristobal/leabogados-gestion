@@ -18286,9 +18286,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         const total=todos.reduce((s,p)=>s+(p.mov.monto||0),0)
         const matchF=p=> propFiltro==='todos' || (propFiltro==='calce'?conCalce.includes(p):propuesta.revisar.includes(p))
         const visibles=todos.filter(matchF)
-        const monthKeys=[...new Set(visibles.map(bucketKey).filter(k=>k.startsWith('m:')))].sort().reverse()
-        const allKeys=['hoy','semana','mes',...monthKeys]
-        const grupos=allKeys.map(k=>{ const items=visibles.filter(p=>bucketKey(p)===k).sort((a,z)=>(z.mov.fecha||'')<(a.mov.fecha||'')?-1:1); return {k,label:labelOf(k),items,monto:items.reduce((s,p)=>s+(p.mov.monto||0),0)} }).filter(g=>g.items.length)
+        const sortF=(a,z)=>(z.mov.fecha||'')<(a.mov.fecha||'')?-1:1
+        const grp=k=>{ const items=visibles.filter(p=>bucketKey(p)===k).sort(sortF); return {items,monto:items.reduce((s,p)=>s+(p.mov.monto||0),0)} }
+        const recent=['hoy','semana','mes'].map(k=>({k,label:labelOf(k),...grp(k)})).filter(g=>g.items.length)
+        const monthG=[...new Set(visibles.map(bucketKey).filter(k=>k.startsWith('m:')))].map(k=>{ const [y,mo]=k.slice(2).split('-'); return {k,y:+y,label:MES[+mo-1],...grp(k)} }).filter(g=>g.items.length)
+        // Antiguos = por AÑO, y dentro de cada año por MES (lo más reciente primero).
+        const años=[...new Set(monthG.map(g=>g.y))].sort((a,b)=>b-a).map(y=>{ const meses=monthG.filter(g=>g.y===y).sort((a,b)=>b.k<a.k?-1:1); return {k:`y:${y}`,y,meses,n:meses.reduce((s,m)=>s+m.items.length,0),monto:meses.reduce((s,m)=>s+m.monto,0)} })
+        const hayAlgo = recent.length>0 || años.length>0
         const secIco=(k,col)=> k==='hoy'
           ? <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg>
           : <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>
@@ -18302,7 +18306,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>{conCalce.length>0&&fchip('calce',`${conCalce.length} con calce`,C.greenText,C.greenBg)}{propuesta.revisar.length>0&&fchip('revisar',`${propuesta.revisar.length} a revisar`,C.soonText,C.soonBg)}{propFiltro!=='todos'&&<span onClick={()=>setPropFiltro('todos')} style={{fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer',alignSelf:'center'}}>ver todos</span>}</div>
             </div>
             <div style={{fontSize:10,color:C.done,textAlign:'center',marginBottom:11}}>nada se aplica hasta que apruebes</div>
-            {grupos.map(g=>{ const open=propTime.has(g.k); return (
+            {recent.map(g=>{ const open=propTime.has(g.k); return (
               <div key={g.k} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
                 <div onClick={()=>setPropTime(s=>{const n=new Set(s);n.has(g.k)?n.delete(g.k):n.add(g.k);return n})} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 14px',cursor:'pointer',background:open?'#F7F9FA':'#fff'}}>
                   {secIco(g.k,open?C.accent:C.muted)}
@@ -18313,7 +18317,27 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {open&&<div style={{padding:'0 12px 8px'}}>{g.items.map(card)}</div>}
               </div>
             )})}
-            {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:20}}>No hay pagos sin conciliar{propFiltro!=='todos'?' con ese filtro':''}.</div>}
+            {años.map(yr=>{ const yopen=propTime.has(yr.k); return (
+              <div key={yr.k} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+                <div onClick={()=>setPropTime(s=>{const n=new Set(s);n.has(yr.k)?n.delete(yr.k):n.add(yr.k);return n})} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 14px',cursor:'pointer',background:yopen?'#F7F9FA':'#fff'}}>
+                  {secIco('y',yopen?C.accent:C.muted)}
+                  <span style={{flex:1,fontSize:13,fontWeight:yopen?700:600,color:yopen?C.accent:C.text}}>{yr.y}</span>
+                  <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{yr.n} · {fmtM(yr.monto)}</span>
+                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:yopen?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+                </div>
+                {yopen&&<div style={{padding:'0 8px 5px'}}>{yr.meses.map(mo=>{ const mopen=propTime.has(mo.k); return (
+                  <div key={mo.k}>
+                    <div onClick={()=>setPropTime(s=>{const n=new Set(s);n.has(mo.k)?n.delete(mo.k):n.add(mo.k);return n})} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 6px',cursor:'pointer',borderTop:`0.5px solid #F2F4F6`}}>
+                      <span style={{flex:1,fontSize:12,fontWeight:mopen?700:500,color:mopen?C.accent:C.text}}>{mo.label}</span>
+                      <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>{mo.items.length} · {fmtM(mo.monto)}</span>
+                      <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:mopen?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+                    </div>
+                    {mopen&&<div style={{padding:'0 2px'}}>{mo.items.map(card)}</div>}
+                  </div>
+                )})}</div>}
+              </div>
+            )})}
+            {!hayAlgo&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:20}}>No hay pagos sin conciliar{propFiltro!=='todos'?' con ese filtro':''}.</div>}
           </div>
         </div>)
       })()}
