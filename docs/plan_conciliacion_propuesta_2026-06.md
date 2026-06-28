@@ -48,6 +48,17 @@ cuándo concilió" (traza permanente).
   - C. Preservar correcciones manuales de RUT/nombre al recargar la cartola.
   - D. Validar que la cartola cuadre al cargar (avisar parseo malo antes de proponer).
 
+## Eje 1 · Fase 4 — Bandeja de conciliación diaria (punto de entrada) [NUEVO, pedido 2026-06-28]
+El usuario quiere que el flujo diario lo avise: cuando llegan transferencias nuevas sin conciliar, dejar un
+indicador y poder conciliar de un toque (como sugerencia, nunca solo).
+- **Icono de banco en el landing del dashboard, al lado del de tareas, con una burbuja** = cantidad de abonos
+  sin conciliar (cuenta `resumenConc.pend` o equivalente; aparece tras importar la cartola del día/mes).
+- Al tocarlo, **resumen de "Nuevos depósitos"** agrupado por **fecha + cuenta** (Honorarios/Gastos), cada pago
+  con los datos de siempre (pagador + RUT, N° operación, glosa, monto). Total arriba.
+- CTA **"Revisar propuesta de conciliación"** → abre el panel de propuesta de la Fase 1/2 (sugiere, el humano
+  aprueba). Cierra el círculo: el banco avisa → ves el resumen → apruebas las sugerencias.
+- Solo admin (la conciliación es admin). La burbuja desaparece cuando todo queda conciliado.
+
 ## Eje 2 — Barrido de canon de la foto (vistas admin)
 Dashboard "Proveedores" (por-pagar + pendiente → total con desglose anidado) y revisar las demás "fotos"
 admin que marcó la auditoría, con antes/después de cada una antes de tocar.
