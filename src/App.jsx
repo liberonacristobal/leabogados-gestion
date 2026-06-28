@@ -17622,6 +17622,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [propBuscaQ,setPropBuscaQ] = useState('')
   const [propExp,setPropExp] = useState(()=>new Set())   // movIds con la tarjeta desplegada (triage colapsado por defecto)
   const [propTime,setPropTime] = useState(()=>new Set(['hoy','semana']))   // secciones de tiempo desplegadas (Hoy/Semana abiertas por defecto)
+  const [propFiltro,setPropFiltro] = useState('todos')   // filtro de la foto: todos | calce | revisar (chips clickeables)
   useEffect(()=>{ if(openProp){ setPropOpen(true); onPropOpened&&onPropOpened() } },[openProp])   // abrir la bandeja desde el icono de banco del landing
   const rutEq = (a,b) => { const x=crNormRut(a), y=crNormRut(b); return !!x && x===y }
   // Señal premium: el banco escribe el folio en la glosa ("PAGO FACTURA 412", "F°412"). Si ese folio calza exacto, se prefiere.
@@ -18211,7 +18212,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const buscando = propBuscar===m.id
           const q=propBuscaQ.trim().toLowerCase()
           const lista = buscando ? facturasConSaldo.filter(b=> String(b.client_id)===String(m.cliente_id) && (!q || String(folioN(b.invoice_no)).includes(q) || (b.concept||'').toLowerCase().includes(q) || String(b.amount||'').includes(q))).slice(0,30) : []
-          return (<div key={m.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:8}}>
+          return (<div key={m.id} style={{padding:'9px 0',borderTop:`0.5px solid #F2F4F6`}}>
             <div onClick={()=>setPropExp(s=>{const n=new Set(s); n.has(m.id)?n.delete(m.id):n.add(m.id); return n})} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,cursor:'pointer'}}>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}</div>
@@ -18275,13 +18276,39 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               </div>
             </div>}
           </div>) }
+        const dDesde=iso=>{ if(!iso) return 99999; const t=new Date(String(iso).slice(0,10)+'T12:00').getTime(); return Math.floor((Date.now()-t)/86400000) }
+        const buckets=[{k:'hoy',label:'Hoy',test:d=>d<=0},{k:'semana',label:'Esta semana',test:d=>d>=1&&d<=7},{k:'mes',label:'Este mes',test:d=>d>=8&&d<=31},{k:'antiguos',label:'Más antiguos',test:d=>d>31}]
+        const todos=[...conCalce,...propuesta.revisar]
+        const total=todos.reduce((s,p)=>s+(p.mov.monto||0),0)
+        const matchF=p=> propFiltro==='todos' || (propFiltro==='calce'?conCalce.includes(p):propuesta.revisar.includes(p))
+        const grupos=buckets.map(b=>{ const items=todos.filter(p=>matchF(p)&&b.test(dDesde(p.mov.fecha))).sort((a,z)=>(z.mov.fecha||'')<(a.mov.fecha||'')?-1:1); return {...b,items,monto:items.reduce((s,p)=>s+(p.mov.monto||0),0)} }).filter(g=>g.items.length)
+        const secIco=(g,col)=> g==='hoy'
+          ? <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg>
+          : g==='antiguos'
+          ? <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 8v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8'/><rect x='2' y='3' width='20' height='5' rx='1'/><line x1='10' y1='12' x2='14' y2='12'/></svg>
+          : <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={col} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>
+        const fchip=(k,txt,col,bg)=><span onClick={()=>setPropFiltro(propFiltro===k?'todos':k)} style={{fontSize:10,fontWeight:600,color:propFiltro===k?'#fff':col,background:propFiltro===k?col:bg,padding:'2px 9px',borderRadius:20,cursor:'pointer'}}>{txt}</span>
         return (<div onClick={()=>setPropOpen(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'18px 0',overflowY:'auto'}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.bgSoft,borderRadius:14,padding:14,width:'92%',maxWidth:440}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:15,fontWeight:700,color:C.accent}}>Propuesta de conciliación</span><span onClick={()=>setPropOpen(false)} style={{fontSize:20,color:C.done,cursor:'pointer',lineHeight:1}}>×</span></div>
-            <div style={{fontSize:11,color:C.muted,marginBottom:13}}>{conCalce.length} con calce sugerido · {propuesta.revisar.length} a revisar · <b style={{color:C.accent}}>nada se aplica hasta que apruebes</b></div>
-            {conCalce.length>0&&<><div style={{fontSize:10,fontWeight:700,color:C.greenText,letterSpacing:.4,textTransform:'uppercase',marginBottom:7}}>Con calce sugerido · {conCalce.length}</div>{conCalce.map(card)}</>}
-            {propuesta.revisar.length>0&&<><div style={{fontSize:10,fontWeight:700,color:C.soonText,letterSpacing:.4,textTransform:'uppercase',margin:'13px 0 7px'}}>A revisar · {propuesta.revisar.length}</div>{propuesta.revisar.map(card)}</>}
-            {conCalce.length===0&&propuesta.revisar.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:20}}>No hay pagos sin conciliar.</div>}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:11}}><span style={{fontSize:15,fontWeight:700,color:C.accent}}>Propuesta de conciliación</span><span onClick={()=>setPropOpen(false)} style={{fontSize:20,color:C.done,cursor:'pointer',lineHeight:1}}>×</span></div>
+            <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',marginBottom:11}}>
+              <div style={{fontSize:9,fontWeight:700,color:C.done,letterSpacing:.4,textTransform:'uppercase'}}>Por conciliar</div>
+              <div style={{fontSize:24,fontWeight:600,color:C.accent,lineHeight:1.1,marginTop:2}}>{fmtM(total)}</div>
+              <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>{conCalce.length>0&&fchip('calce',`${conCalce.length} con calce`,C.greenText,C.greenBg)}{propuesta.revisar.length>0&&fchip('revisar',`${propuesta.revisar.length} a revisar`,C.soonText,C.soonBg)}{propFiltro!=='todos'&&<span onClick={()=>setPropFiltro('todos')} style={{fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer',alignSelf:'center'}}>ver todos</span>}</div>
+            </div>
+            <div style={{fontSize:10,color:C.done,textAlign:'center',marginBottom:11}}>nada se aplica hasta que apruebes</div>
+            {grupos.map(g=>{ const open=propTime.has(g.k); return (
+              <div key={g.k} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
+                <div onClick={()=>setPropTime(s=>{const n=new Set(s);n.has(g.k)?n.delete(g.k):n.add(g.k);return n})} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 14px',cursor:'pointer',background:open?'#F7F9FA':'#fff'}}>
+                  {secIco(g.k,open?C.accent:C.muted)}
+                  <span style={{flex:1,fontSize:13,fontWeight:open?700:600,color:open?C.accent:C.text}}>{g.label}</span>
+                  <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{g.items.length} · {fmtM(g.monto)}</span>
+                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+                </div>
+                {open&&<div style={{padding:'0 12px 8px'}}>{g.items.map(card)}</div>}
+              </div>
+            )})}
+            {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:20}}>No hay pagos sin conciliar{propFiltro!=='todos'?' con ese filtro':''}.</div>}
           </div>
         </div>)
       })()}
