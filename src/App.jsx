@@ -5390,6 +5390,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setProcResp(false)
   }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
+  const [siiPanel,setSiiPanel] = useState(null)    // panel del módulo Emisión electrónica SII: null | 'set' | 'libro'
+  const [siiBusy,setSiiBusy] = useState(false)
+  // Llamada a la edge function sii-sync (emisión/certificación). Reusa el token de sesión.
+  const siiCall = async(body)=>{
+    const {data:{session}}=await supabase.auth.getSession()
+    if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
+    const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)})
+    const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
+  }
+  const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); alert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ alert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
   useEffect(()=>{ try{ localStorage.setItem('fac_year', fYear||'') }catch(e){} },[fYear])
@@ -6094,6 +6104,47 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </span>
               {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{fontSize:11,fontWeight:600,color:C.soonText,border:'1px solid #FAC775',background:'#FFF8E1',borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>Sin año · {sinAnio.length}</span>}
             </div>
+            {(()=>{
+              const emitidas=(billing||[]).filter(b=>b.dte_track_id&&!b.deleted_at).sort((a,b)=>(b.dte_emitido_at||'')>(a.dte_emitido_at||'')?1:-1)
+              const enProd=emitidas.some(b=>b.dte_ambiente==='prod')
+              const Btn=(label,on,primary)=><button onClick={on} disabled={siiBusy} style={{fontSize:12,fontWeight:600,color:primary?'#fff':C.accent,background:primary?C.accent:'#fff',border:primary?'none':`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer',opacity:siiBusy?.6:1}}>{label}</button>
+              return (
+                <div style={{marginTop:14}}>
+                  <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 7px'}}>Facturación electrónica</div>
+                  <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'13px 15px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:11}}>
+                      <span style={{width:34,height:34,borderRadius:9,background:enProd?C.greenBg:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                        <svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={enProd?C.greenText:C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6M9 13h6M9 17h4'/></svg>
+                      </span>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>Emisión electrónica · SII</div><div style={{fontSize:11,color:C.muted}}>{enProd?`${emitidas.length} emitida${emitidas.length!==1?'s':''} · directo al SII`:'Emite tus facturas directo al SII'}</div></div>
+                      <span style={{fontSize:10,fontWeight:600,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 9px',whiteSpace:'nowrap'}}>{enProd?'Producción':'En certificación'}</span>
+                    </div>
+                    {enProd?(<>
+                      <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
+                        <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Últimas emitidas</div>
+                        {emitidas.slice(0,3).map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const ok=/acept/i.test(b.dte_estado||''); return (
+                          <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
+                            <div style={{minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}><span style={{fontSize:12,fontWeight:600}}>F° {b.folio||'—'}</span> <span style={{fontSize:11,color:C.muted}}>· {cli?.name||'—'}</span></div>
+                            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:12,fontWeight:600}}>{fmt(b.amount)}</span><span style={{fontSize:10,color:ok?C.greenText:C.soonText,background:ok?C.greenBg:C.ambarBg,borderRadius:4,padding:'1px 6px'}}>{ok?'Aceptada':'Enviada'}</span></div>
+                          </div>) })}
+                      </div>
+                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Ver facturas',()=>go('clientes'),true)}{Btn('Probar conexión',siiProbar)}</div>
+                    </>):(<>
+                      <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
+                        {[['Certificado digital cargado','ok'],['Postulación + set de pruebas · en curso','now'],['Autorización del SII','next'],['Emitir en producción','next']].map(([t,st],i)=>(
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:9,marginBottom:i<3?7:0}}>
+                            {st==='ok'?<span style={{width:16,height:16,borderRadius:'50%',background:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg></span>
+                             :st==='now'?<span style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${C.soon}`,background:C.ambarBg,flexShrink:0}}/>
+                             :<span style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${C.border}`,flexShrink:0}}/>}
+                            <span style={{fontSize:12,color:st==='now'?C.text:st==='ok'?C.muted:C.done,fontWeight:st==='now'?600:400}}>{t}</span>
+                          </div>))}
+                      </div>
+                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>setSiiPanel('set'))}{Btn('Libro de ventas',()=>setSiiPanel('libro'))}</div>
+                    </>)}
+                  </div>
+                </div>
+              )
+            })()}
           </div>)
         })()
         : filter==='clientes' ? (()=>{
