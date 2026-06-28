@@ -5400,6 +5400,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
   }
   const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); alert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ alert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
+  const [siiSetJson,setSiiSetJson] = useState('')   // casos del set de pruebas (JSON array de facturas que asigna el SII)
+  const [siiPeriodo,setSiiPeriodo] = useState('')   // período del Libro de Ventas (YYYY-MM)
+  const [siiResult,setSiiResult] = useState(null)
+  const SII_SET_SAMPLE = JSON.stringify([
+    {tipoDte:34,receptor:{rut:'66666666-6',rs:'CLIENTE DE PRUEBA SII',giro:'Servicios',dir:'Calle 123',comuna:'Santiago'},items:[{nombre:'Servicio profesional',monto:100000}]},
+    {tipoDte:61,exenta:true,receptor:{rut:'66666666-6',rs:'CLIENTE DE PRUEBA SII'},items:[{nombre:'Anula factura',monto:100000}],referencias:[{tpoDocRef:34,folioRef:1,fchRef:new Date().toISOString().slice(0,10),codRef:1,razonRef:'Anula factura de prueba'}]},
+  ],null,2)
+  const siiEmitirSet = async(dryRun)=>{ setSiiBusy(true); setSiiResult(null); try{ const facturas=JSON.parse(siiSetJson||'[]'); if(!Array.isArray(facturas)||!facturas.length) throw new Error('Pega el set de casos (un array JSON de facturas).'); const d=await siiCall({action:'emitir-set',facturas,dryRun}); setSiiResult(d) }catch(e){ setSiiResult({error:e.message}) } setSiiBusy(false) }
+  const siiLibro = async()=>{ setSiiBusy(true); setSiiResult(null); try{ if(!/^\d{4}-\d{2}$/.test(siiPeriodo)) throw new Error('Período en formato AAAA-MM (ej. 2026-07).'); const det=(billing||[]).filter(b=>b.dte_track_id&&(b.dte_emitido_at||'').slice(0,7)===siiPeriodo&&!b.deleted_at).map(b=>{ const ent=(clientEntities||[]).find(e=>String(e.id)===String(b.entity_id)); return {tpoDoc:34,nroDoc:Number(b.folio)||0,fchDoc:(b.issued_at||'').slice(0,10),rutDoc:ent?.rut||b.receptor_rut||'',rznSoc:ent?.name||b.receptor_name||'',mntExe:Math.round(b.amount||0),mntTotal:Math.round(b.amount||0)} }); const d=await siiCall({action:'libro-ventas',periodo:siiPeriodo,detalle:det}); setSiiResult({...d,nDet:det.length}) }catch(e){ setSiiResult({error:e.message}) } setSiiBusy(false) }
+  const siiDescargarXml = (xml,name)=>{ try{ const url=URL.createObjectURL(new Blob([xml],{type:'application/xml'})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),30000) }catch(_){} }
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
   useEffect(()=>{ try{ localStorage.setItem('fac_year', fYear||'') }catch(e){} },[fYear])
@@ -6139,7 +6149,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                             <span style={{fontSize:12,color:st==='now'?C.text:st==='ok'?C.muted:C.done,fontWeight:st==='now'?600:400}}>{t}</span>
                           </div>))}
                       </div>
-                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>setSiiPanel('set'))}{Btn('Libro de ventas',()=>setSiiPanel('libro'))}</div>
+                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}</div>
                     </>)}
                   </div>
                 </div>
@@ -6451,6 +6461,38 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       </div>
       {/* FAB "Nueva factura" retirado a pedido del usuario (alta manual de cobros queda en la ficha del cliente → Financiero) */}
       {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
+      {siiPanel&&(
+        <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:540,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
+              <div style={{fontSize:15,fontWeight:600,color:C.text}}>{siiPanel==='set'?'Set de pruebas · SII':'Libro de ventas'}</div>
+              <button onClick={()=>setSiiPanel(null)} style={{background:'none',border:'none',color:C.muted,fontSize:20,lineHeight:1,cursor:'pointer'}}>×</button>
+            </div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:13}}>Ambiente certificación · prueba con vista previa antes de enviar</div>
+            {siiPanel==='set'?(<>
+              <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Casos del set (JSON). Pega los que asigne el SII; viene un ejemplo (factura 34 + nota de crédito 61 que la anula).</div>
+              <textarea value={siiSetJson} onChange={e=>setSiiSetJson(e.target.value)} spellCheck={false} style={{width:'100%',minHeight:170,boxSizing:'border-box',fontFamily:'monospace',fontSize:11,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.text,resize:'vertical'}}/>
+              <div style={{display:'flex',gap:8,marginTop:10}}>
+                <button disabled={siiBusy} onClick={()=>siiEmitirSet(true)} style={{flex:1,fontSize:13,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'9px',cursor:'pointer',opacity:siiBusy?.6:1}}>Vista previa (XML)</button>
+                <button disabled={siiBusy} onClick={()=>{ if(confirm('¿Emitir el set al SII (ambiente certificación)?')) siiEmitirSet(false) }} style={{flex:1,fontSize:13,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'9px',cursor:'pointer',opacity:siiBusy?.6:1}}>Emitir set al SII</button>
+              </div>
+            </>):(<>
+              <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Genera el Libro de Ventas del período con las facturas ya emitidas en él.</div>
+              <input value={siiPeriodo} onChange={e=>setSiiPeriodo(e.target.value)} placeholder='AAAA-MM (ej. 2026-07)' style={{width:'100%',boxSizing:'border-box',height:38,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 12px',fontSize:13,color:C.text}}/>
+              <button disabled={siiBusy} onClick={siiLibro} style={{width:'100%',marginTop:10,fontSize:13,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'9px',cursor:'pointer',opacity:siiBusy?.6:1}}>Generar libro</button>
+            </>)}
+            {siiResult&&(
+              <div style={{marginTop:13,background:siiResult.error?C.overdueBg:C.bgSoft,borderRadius:8,padding:'10px 12px'}}>
+                {siiResult.error?<div style={{fontSize:12,color:C.overdueText}}>{siiResult.error}</div>:(<>
+                  <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:siiResult.docs?5:0}}>{siiResult.dryRun?'Vista previa lista (no se envió)':siiResult.trackId?`Enviado al SII · TrackID ${siiResult.trackId}`:`Libro generado${siiResult.nDet!=null?` · ${siiResult.nDet} documento(s)`:''}`}</div>
+                  {siiResult.docs&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>{siiResult.docs.map(d=>`${d.docId} · $${(d.total||0).toLocaleString('es-CL')}`).join('  ·  ')}</div>}
+                  {(siiResult.envioXml||siiResult.libroXml)&&<button onClick={()=>siiDescargarXml(siiResult.envioXml||siiResult.libroXml, siiResult.libroXml?'libro_ventas.xml':'set_dte.xml')} style={{fontSize:12,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Descargar XML</button>}
+                </>)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
