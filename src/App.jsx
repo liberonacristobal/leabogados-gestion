@@ -17053,7 +17053,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Índice memoizado del pool de calce: facturas con saldo por aplicar (Pendiente|Pagado, no anuladas/borradas, amount−Σconciliado>TOL),
   // agrupadas por cliente. Antes cada movimiento re-escaneaba TODO billing (O(movs×facturas) en cada render → congelaba el iPhone
   // con cartolas grandes). Ahora el lookup por cliente es O(1) y la conversión a candidatos solo recorre las facturas de ese cliente.
-  const facturasConSaldo = useMemo(()=> (billing||[]).filter(b=> !b.deleted_at && (b.amount||0)>0 && String(b.invoice_no||'').trim()!=='' && (b.status==='Pendiente'||b.status==='Pagado') && saldoFactura(b) > TOL), [billing,aplicadoByFactura])  // solo facturas EMITIDAS (con folio): un pago no se concilia contra una cuota sin emitir
+  // Pool de conciliación = TODAS las facturas EMITIDAS (con folio) con saldo por conciliar, SALVO las ya conciliadas (saldo 0)
+  // y las Anuladas/Anticipadas. Incluye VENCIDO (antes se excluía y dejaba fuera casi todo lo impago → 0 calces).
+  const facturasConSaldo = useMemo(()=> (billing||[]).filter(b=> !b.deleted_at && (b.amount||0)>0 && String(b.invoice_no||'').trim()!=='' && ['Pendiente','Vencido','Pagado'].includes(b.status) && saldoFactura(b) > TOL), [billing,aplicadoByFactura])
   const facturasPorCliente = useMemo(()=>{ const m={}; facturasConSaldo.forEach(b=>{ (m[b.client_id]=m[b.client_id]||[]).push(b) }); return m },[facturasConSaldo])
   // Abono conciliable contra facturas: identificado a cliente, no interno, y de honorarios (Comisión/Subarriendo/Otro NO calzan).
   const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')
@@ -17619,6 +17621,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [propBuscar,setPropBuscar] = useState(null)  // movId con la búsqueda de factura abierta
   const [propBuscaQ,setPropBuscaQ] = useState('')
   const [propExp,setPropExp] = useState(()=>new Set())   // movIds con la tarjeta desplegada (triage colapsado por defecto)
+  const [propTime,setPropTime] = useState(()=>new Set(['hoy','semana']))   // secciones de tiempo desplegadas (Hoy/Semana abiertas por defecto)
   useEffect(()=>{ if(openProp){ setPropOpen(true); onPropOpened&&onPropOpened() } },[openProp])   // abrir la bandeja desde el icono de banco del landing
   const rutEq = (a,b) => { const x=crNormRut(a), y=crNormRut(b); return !!x && x===y }
   // Señal premium: el banco escribe el folio en la glosa ("PAGO FACTURA 412", "F°412"). Si ese folio calza exacto, se prefiere.
