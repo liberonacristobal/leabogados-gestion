@@ -9099,6 +9099,7 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
   // filtro: 'estructural' (admin: sueldos/arriendo) | 'gestion' (equipo: movilización/trámites) | null (todo)
   const [repAjustar,setRepAjustar] = useState(false)
   const [repMontos,setRepMontos] = useState({})
+  const [yearOpen,setYearOpen] = useState(false)   // "año $X" desplegado → registro mes a mes
   const office = useMemo(()=>(expenses||[]).filter(e=>String(e.client_id)===String(clientId)&&!e.personal_de&&(!filtro||(filtro==='gestion')===esGestionGasto(e))), [expenses,clientId,filtro])
   const meses = useMemo(()=>{ const cur=`${currentYear}-${String(currentMonth).padStart(2,'0')}`; const s=[...new Set([cur,...office.map(e=>(e.date||'').slice(0,7)).filter(Boolean)])].sort().reverse(); return s }, [office])
   const [mes,setMes] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
@@ -9121,13 +9122,15 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
   const puedeRepetir = filtro==='estructural' && cats.length===0 && prevItems.length>0 && !!onRepetir
   const repTot = prevItems.reduce((a,it)=>a+(repMontos[it.id]??it.amount??0),0)
   const repLabel = it => (it.category&&!CATS_LEGALES.includes(String(it.category).trim().toLowerCase()))?it.category:(it.concept||'Costo')
+  // Registro mes a mes del año (los costos fijos se acumulan, no se rinden) — para desplegar bajo "año $X".
+  const yearMeses = useMemo(()=>{ const yr=mes.slice(0,4); const m={}; office.forEach(e=>{ const k=(e.date||'').slice(0,7); if(k.slice(0,4)!==yr) return; if(e.type==='fondo') m[k]=(m[k]||0)-(e.amount||0); else if(!e.no_descuenta_saldo) m[k]=(m[k]||0)+(e.amount||0) }); return Object.entries(m).filter(([,v])=>v!==0).sort((a,b)=>b[0].localeCompare(a[0])) }, [office,mes])
   return (
     <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginTop:10}}>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
         <div>
           <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:'.4px'}}>Costos de oficina</div>
           <div style={{fontSize:24,fontWeight:700,color:C.accent,lineHeight:1.05,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmt(totNeto)}</div>
-          <div style={{fontSize:9,color:'#A8B2B8',textTransform:'uppercase',letterSpacing:'.3px',marginTop:2}}>neto del mes · año {fmt(yearNeto)}</div>
+          <div style={{fontSize:9,color:'#A8B2B8',textTransform:'uppercase',letterSpacing:'.3px',marginTop:2}}>neto del mes · {yearMeses.length>0?<button onClick={()=>setYearOpen(o=>!o)} style={{background:'none',border:'none',padding:0,font:'inherit',color:yearOpen?C.accent:'#A8B2B8',fontWeight:700,cursor:'pointer',letterSpacing:'.3px'}}>año {fmt(yearNeto)} {yearOpen?'⌃':'⌄'}</button>:<>año {fmt(yearNeto)}</>}</div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
           <button onClick={()=>idx<meses.length-1&&setMes(meses[idx+1])} disabled={idx>=meses.length-1} style={{background:'none',border:'none',color:idx>=meses.length-1?C.border:C.muted,cursor:idx>=meses.length-1?'default':'pointer',fontSize:18,padding:'0 4px',lineHeight:1}}>‹</button>
@@ -9136,7 +9139,17 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
         </div>
       </div>
       <div style={{borderTop:`0.5px solid ${C.border}`,marginTop:10,paddingTop:4}}>
-      {puedeRepetir ? (
+      {yearOpen ? (
+        <div>
+          <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.4px',margin:'4px 0'}}>{mes.slice(0,4)} · mes a mes</div>
+          {yearMeses.map(([m,v])=>(
+            <div key={m} onClick={()=>{setMes(m);setYearOpen(false)}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 0',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+              <span style={{fontSize:12.5,color:m===mes?C.accent:C.text,fontWeight:m===mes?700:500,textTransform:'capitalize'}}>{_mesLabelOf(m)}</span>
+              <span style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</span><span style={{fontSize:12,color:C.done}}>›</span></span>
+            </div>
+          ))}
+        </div>
+      ) : puedeRepetir ? (
         <div style={{background:C.azulBg,borderLeft:`3px solid ${C.accent}`,border:`1px solid ${C.border}`,borderRadius:9,padding:'10px 12px',margin:'6px 0 2px'}}>
           <div style={{fontSize:11.5,fontWeight:700,color:C.accent,marginBottom:2}}>Aún no cargas los costos fijos de {_mesLabelOf(mes)}</div>
           <div style={{fontSize:10,color:C.muted,marginBottom:9}}>En {_mesLabelOf(prevMes)} fueron {prevItems.length} ítem{prevItems.length!==1?'s':''} · {fmt(repTot)}. ¿Los repito?</div>
