@@ -16886,6 +16886,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [anioF,setAnioF] = useState('todos')       // filtro por año
   const [mesF,setMesF] = useState('todos')         // filtro por mes (01-12)
+  const [concYCol,setConcYCol] = useState(()=>new Set())   // cartola: años colapsados (default: todos abiertos)
+  const [concMOpen,setConcMOpen] = useState(null)          // cartola: meses abiertos en la lista (null = solo el más reciente)
   const [respF,setRespF] = useState('todos')       // filtro por abogado responsable del cliente
   const [facChip,setFacChip] = useState(null)      // movimiento cuyo chip de factura está desplegado (Opción A)
   const [facMyc,setFacMyc] = useState(null)        // factura del detalle "Conciliar" (multi) desplegada
@@ -18030,8 +18032,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {/* Lista */}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
           {lista.length===0&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:12}}>{movs.length>0?<>No hay movimientos con estos filtros. <span onClick={()=>{setCuentaF('ambas');setMesF('todos');setAnioF('todos');setRespF('todos');setConcView('todos');setQ('')}} style={{color:C.accent,fontWeight:600,cursor:'pointer',textDecoration:'underline'}}>Ver todos</span></>:'Sin movimientos. Sube una cartola para empezar.'}</div>}
-          {lista.map(m=>{
+          {lista.map((m,i)=>{
             const rc=rolChip(m.rol_cuenta); const ec=estadoChip(m); const abierto=modalMov===m.id
+            // Agrupación año › mes colapsable (mismo patrón que la propuesta): cabeceras inyectadas cuando cambia el año/mes; la fila solo se muestra si su año Y su mes están abiertos.
+            const _ym=String(m.fecha||'').slice(0,7),_y=_ym.slice(0,4)
+            const _p=lista[i-1],_pym=_p?String(_p.fecha||'').slice(0,7):null
+            const _newY=i===0||_y!==(_pym?_pym.slice(0,4):null), _newM=i===0||_ym!==_pym
+            const _yOpen=!concYCol.has(_y)
+            const _firstYM=lista[0]?String(lista[0].fecha||'').slice(0,7):null
+            const _mOpen=concMOpen===null?_ym===_firstYM:concMOpen.has(_ym)
+            const _MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+            const _mInfo=()=>{ let c=0,t=0; lista.forEach(x=>{ if(String(x.fecha||'').slice(0,7)===_ym){c++;t+=(x.monto||0)*(x.tipo==='abono'?1:-1)} }); return {c,t} }
+            const _yCount=()=>lista.filter(x=>String(x.fecha||'').slice(0,4)===_y).length
             // Factura única conciliada → el chip "→ Factura N°X" se vuelve clickeable y despliega su detalle.
             const facObj=(()=>{ const fc=(concByMov[m.id]||[]).filter(c=>c.tipo_destino==='factura'); return fc.length===1?billing.find(b=>String(b.id)===String(fc[0].factura_id)):null })()
             const cliName=m.cliente_id?cmap[m.cliente_id]:null
@@ -18040,7 +18052,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             const mostrarCli=cliName&&String(cliName).trim().toLowerCase()!==String(nomBanco||'').trim().toLowerCase()   // solo si aporta (≠ nombre del banco)
             const cat=tipoContraparte(m); const ts=cat?(TAG_STY[cat]||{bg:'#F1EFE8',color:C.grisText}):null
             return (
-              <div key={m.id} id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${ec.c}`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
+              <Fragment key={m.id}>
+              {_newY&&(()=>{ const yc=_yCount(); return (
+                <div onClick={()=>setConcYCol(p=>{const n=new Set(p);n.has(_y)?n.delete(_y):n.add(_y);return n})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'10px 12px',background:C.bgSoft,borderTop:i>0?`1px solid ${C.border}`:'none'}}>
+                  <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{_y}</span>
+                  <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>{yc} mov.</span><span style={{fontSize:12,color:C.done,transform:_yOpen?'rotate(180deg)':'none'}}>{'▾'}</span></span>
+                </div>
+              )})()}
+              {_yOpen&&_newM&&(()=>{ const mi=_mInfo(); return (
+                <div onClick={()=>setConcMOpen(prev=>{ const base=prev===null?new Set([_firstYM]):new Set(prev); base.has(_ym)?base.delete(_ym):base.add(_ym); return base })} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'8px 12px 8px 18px',borderTop:`1px solid ${C.border}`}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{_MES[+_ym.slice(5,7)-1]||_ym}<span style={{color:C.done,fontWeight:500}}> · {mi.c}</span></span>
+                  <span style={{display:'flex',alignItems:'center',gap:9}}><span style={{fontSize:12,fontWeight:700,color:mi.t>=0?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums'}}>{mi.t>=0?'+':'−'}{fmtM(Math.abs(mi.t))}</span><span style={{fontSize:11,color:C.done,transform:_mOpen?'rotate(180deg)':'none'}}>{'▾'}</span></span>
+                </div>
+              )})()}
+              {_yOpen&&_mOpen&&(
+              <div id={'mov-'+m.id} style={{padding:'9px 12px',borderTop:`1px solid #D7DEE3`,borderLeft:`3px solid ${ec.c}`,...(modalMov===m.id?{outline:`2px solid ${C.accent}`,outlineOffset:-2}:{})}}>
                 <div onClick={()=>{setModalMov(abierto?null:m.id);setVerGlosa(false)}} style={{cursor:'pointer',display:'flex',gap:10,alignItems:'center'}}>
                   <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}>{(()=>{const dp=String(m.fecha||'').slice(0,10).split('-');const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return <><div style={{fontSize:18,fontWeight:700,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${M[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></>})()}</div>
                   <div style={{flex:1,minWidth:0}}>
@@ -18291,6 +18317,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9,color:C.done,marginTop:6,borderTop:`1px solid #F1F1F1`,paddingTop:4,lineHeight:1.4}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo por Rendir':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
                 </div>)}
               </div>
+              )}
+              </Fragment>
             )
           })}
         </div>
