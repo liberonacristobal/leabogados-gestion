@@ -34,6 +34,25 @@ VALUES (34, 'cert', 1, 50, 1, '<AUTORIZACION>…CAF completo…</AUTORIZACION>')
 ```
 (`folio_desde`/`hasta` = el rango `<RNG>` del CAF; `folio_actual` = `folio_desde`.)
 
+## 2b. Función de folio atómico (correr una vez en SQL)
+La emisión reserva el folio con esta función (evita folios duplicados ante emisiones simultáneas):
+```sql
+CREATE OR REPLACE FUNCTION siguiente_folio(p_tipo int, p_ambiente text)
+RETURNS TABLE(folio int, caf_xml text)
+LANGUAGE sql AS $$
+  UPDATE dte_folios
+  SET folio_actual = folio_actual + 1
+  WHERE id = (
+    SELECT id FROM dte_folios
+    WHERE tipo_dte = p_tipo AND ambiente = p_ambiente AND folio_actual <= folio_hasta
+    ORDER BY folio_desde LIMIT 1
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING folio_actual - 1, caf_xml;
+$$;
+GRANT EXECUTE ON FUNCTION siguiente_folio(int, text) TO service_role;
+```
+
 ## 3. Desplegar
 ```
 supabase functions deploy sii-sync
