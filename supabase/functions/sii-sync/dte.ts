@@ -16,6 +16,14 @@ import { CafParsed, firmarTED } from './caf.ts'
 export interface Emisor { rut: string; rs: string; giro: string; acteco: string; dir: string; comuna: string; ciudad?: string }
 export interface Receptor { rut: string; rs: string; giro?: string; dir?: string; comuna?: string; ciudad?: string }
 export interface ItemDTE { nombre: string; desc?: string; qty?: number; precio?: number; monto: number }
+// Referencia a otro documento — OBLIGATORIA en Notas de Crédito/Débito (61/56): a qué factura modifican.
+export interface ReferenciaDTE {
+  tpoDocRef: number             // tipo del documento referenciado (ej. 34)
+  folioRef: number | string     // folio del documento referenciado
+  fchRef: string                // YYYY-MM-DD del documento referenciado
+  codRef?: 1 | 2 | 3            // 1=anula · 2=corrige texto · 3=corrige monto
+  razonRef?: string
+}
 export interface FacturaInput {
   tipoDte: number
   folio: number
@@ -24,6 +32,8 @@ export interface FacturaInput {
   receptor: Receptor
   items: ItemDTE[]
   fmaPago?: '1' | '2' | '3'     // 1 contado · 2 crédito · 3 sin costo
+  exenta?: boolean              // fuerza tratamiento exento (NC/ND que modifican una factura exenta)
+  referencias?: ReferenciaDTE[] // NC/ND: documento(s) que modifica
 }
 
 const IVA = 0.19
@@ -35,9 +45,9 @@ const n = (v: unknown) => Math.round(Number(v) || 0)
 
 export interface Totales { exento: number; neto: number; iva: number; total: number }
 
-export function calcularTotales(tipoDte: number, items: ItemDTE[]): Totales {
+export function calcularTotales(tipoDte: number, items: ItemDTE[], exenta = false): Totales {
   const suma = items.reduce((a, i) => a + n(i.monto), 0)
-  if (tipoDte === 34) return { exento: suma, neto: 0, iva: 0, total: suma }
+  if (tipoDte === 34 || exenta) return { exento: suma, neto: 0, iva: 0, total: suma }
   const neto = suma
   const iva = n(neto * IVA)
   return { exento: 0, neto, iva, total: neto + iva }
@@ -75,7 +85,8 @@ export function armarDocumento(f: FacturaInput, caf: CafParsed, nowIso: string):
   if (f.tipoDte !== caf.tipoDte) throw new Error(`El CAF es para DTE ${caf.tipoDte}, no para ${f.tipoDte}`)
   if (f.folio < caf.desde || f.folio > caf.hasta) throw new Error(`Folio ${f.folio} fuera del rango del CAF (${caf.desde}–${caf.hasta})`)
 
-  const tot = calcularTotales(f.tipoDte, f.items)
+  const exenta = f.tipoDte === 34 || !!f.exenta   // 34 siempre; NC/ND de una exenta llevan exenta:true
+  const tot = calcularTotales(f.tipoDte, f.items, exenta)
   const docId = `F${f.folio}T${f.tipoDte}`
 
   const idDoc =
@@ -120,9 +131,21 @@ export function armarDocumento(f: FacturaInput, caf: CafParsed, nowIso: string):
     (i.desc ? `<DscItem>${t(i.desc).slice(0, 1000)}</DscItem>` : '') +
     (i.qty != null ? `<QtyItem>${n(i.qty)}</QtyItem>` : '') +
     (i.precio != null ? `<PrcItem>${n(i.precio)}</PrcItem>` : '') +
-    (f.tipoDte === 34 ? `<IndExe>1</IndExe>` : '') +
+    (exenta ? `<IndExe>1</IndExe>` : '') +
     `<MontoItem>${n(i.monto)}</MontoItem>` +
     `</Detalle>`
+  ).join('')
+
+  // Referencias (NC/ND): a qué documento(s) modifica. Van DESPUÉS del Detalle y ANTES del TED (orden del esquema SII).
+  const referencias = (f.referencias || []).map((r, idx) =>
+    `<Referencia>` +
+    `<NroLinRef>${idx + 1}</NroLinRef>` +
+    `<TpoDocRef>${r.tpoDocRef}</TpoDocRef>` +
+    `<FolioRef>${r.folioRef}</FolioRef>` +
+    `<FchRef>${r.fchRef}</FchRef>` +
+    (r.codRef ? `<CodRef>${r.codRef}</CodRef>` : '') +
+    (r.razonRef ? `<RazonRef>${t(r.razonRef).slice(0, 90)}</RazonRef>` : '') +
+    `</Referencia>`
   ).join('')
 
   const ted = construirTED(f, tot, caf, nowIso)
@@ -131,6 +154,7 @@ export function armarDocumento(f: FacturaInput, caf: CafParsed, nowIso: string):
     `<Documento ID="${docId}">` +
     `<Encabezado>${idDoc}${emisor}${receptor}${totales}</Encabezado>` +
     detalle +
+    referencias +
     ted +
     `<TmstFirma>${tstamp(nowIso)}</TmstFirma>` +
     `</Documento>`

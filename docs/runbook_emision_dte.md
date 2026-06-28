@@ -48,6 +48,8 @@ Desde la app: abrir una factura → **Emitir al SII** hace `dryRun` y muestra fo
 ## 6. Set de pruebas (lo que el SII asigna tras postular)
 - Cargar los casos del set (cada uno = un DTE con sus datos exactos).
 - Emitir el set en UN sobre: `POST {action:'emitir-set', facturas:[ {tipoDte,receptor,items,…}, … ]}` → un `EnvioDTE` con todos los DTE → TrackID.
+  - **Factura exenta (34):** `{tipoDte:34, receptor:{rut,rs,giro?,dir?,comuna?}, items:[{nombre,monto}]}`.
+  - **Nota de Crédito (61) que anula una factura:** `{tipoDte:61, exenta:true, receptor:{…mismo de la factura…}, items:[{nombre,monto}], referencias:[{tpoDocRef:34, folioRef:<folio de la factura>, fchRef:'YYYY-MM-DD', codRef:1, razonRef:'Anula factura'}]}`. (`codRef`: 1=anula · 2=corrige texto · 3=corrige monto. `exenta:true` cuando la NC es de una exenta.) Requiere un CAF de tipo 61 cargado en `dte_folios`.
 - Generar la **muestra impresa** (PDF con timbre) de cada caso (botón PDF / `facturaDtePdfBase64`).
 - Generar y enviar el **Libro de Ventas**: `POST {action:'libro-ventas', periodo:'YYYY-MM', detalle:[…]}`.
 - Consultar estado de cada envío.
