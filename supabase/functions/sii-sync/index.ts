@@ -62,15 +62,14 @@ async function construirFirmado(sb: any, amb: string, f: any, nowIso: string) {
   const tipoDte = parseInt(String(f.tipoDte || 0), 10)
   if (![33, 34, 61, 56].includes(tipoDte)) throw new Error(`tipoDte inválido (${tipoDte}); usar 33/34/61/56`)
   if (!f.receptor?.rut || !Array.isArray(f.items) || f.items.length === 0) throw new Error('Falta receptor.rut o items')
-  const { data: cafs, error: cafErr } = await sb.from('dte_folios').select('*').eq('tipo_dte', tipoDte).eq('ambiente', amb).order('folio_desde')
-  if (cafErr) throw new Error('No se pudo leer dte_folios: ' + cafErr.message)
-  // deno-lint-ignore no-explicit-any
-  const cafRow = (cafs || []).find((c: any) => c.folio_actual <= c.folio_hasta)
-  if (!cafRow) throw new Error(`Sin folios CAF disponibles para DTE ${tipoDte} (${amb}). Carga un CAF en dte_folios.`)
-  const folio = cafRow.folio_actual
-  const { error: updErr } = await sb.from('dte_folios').update({ folio_actual: folio + 1 }).eq('id', cafRow.id).eq('folio_actual', folio)
-  if (updErr) throw new Error('No se pudo reservar el folio: ' + updErr.message)
-  const caf = parseCaf(cafRow.caf_xml)
+  // Folio ATÓMICO: la función siguiente_folio() reserva e incrementa en una sola transacción (FOR UPDATE SKIP LOCKED),
+  // así dos emisiones simultáneas NUNCA toman el mismo folio (folios duplicados = problema serio con el SII).
+  const { data: fol, error: folErr } = await sb.rpc('siguiente_folio', { p_tipo: tipoDte, p_ambiente: amb })
+  if (folErr) throw new Error('No se pudo reservar folio: ' + folErr.message)
+  const row = Array.isArray(fol) ? fol[0] : fol
+  if (!row || row.folio == null) throw new Error(`Sin folios CAF disponibles para DTE ${tipoDte} (${amb}). Carga un CAF en dte_folios.`)
+  const folio = row.folio as number
+  const caf = parseCaf(row.caf_xml as string)
   const factura: FacturaInput = {
     tipoDte, folio, fecha: String(f.fecha || nowIso.slice(0, 10)),
     emisor: getEmisor(), receptor: f.receptor, items: f.items, fmaPago: f.fmaPago,
@@ -120,6 +119,12 @@ serve(async (req) => {
       const lista = body.action === 'emitir-set' ? (Array.isArray(body.facturas) ? body.facturas : []) : [body]
       if (!lista.length) return json({ error: 'Sin facturas para emitir' }, 400)
 
+      // Idempotencia: si esa factura YA fue emitida (dte_track_id), no re-emitir (evita doble folio / doble DTE ante reintentos o doble click).
+      if (body.action === 'emitir' && body.billingId && !body.dryRun) {
+        const { data: ya } = await sb.from('billing').select('dte_track_id, folio, dte_estado').eq('id', body.billingId).maybeSingle()
+        if (ya?.dte_track_id) return json({ ok: true, yaEmitida: true, folio: ya.folio, trackId: ya.dte_track_id, estado: ya.dte_estado })
+      }
+
       const firmados = []
       for (const f of lista) firmados.push(await construirFirmado(sb, amb, f, nowIso))
 
@@ -168,6 +173,31 @@ serve(async (req) => {
       )
       console.log(`[sii-sync] libro-ventas ${body.periodo} (${amb}) por ${email}`)
       return json({ ok: true, ambiente: amb, libroXml: xml })
+    }
+
+    // Re-consultar el estado de un DTE por TrackID (el SII tarda en procesar; puede RECHAZAR). Actualiza billing si se pasa billingId.
+    // body: { action:'estado', trackId, billingId? }
+    if (body.action === 'estado') {
+      const r = await consultarEstado(String(body.trackId || ''))
+      const e = (r.estado || '').toUpperCase()
+      // Mapa coarse del estado del envío del SII (se afina en certificación con los códigos reales).
+      const norm = /ACEPT|^EPR|DOK/.test(e) ? 'aceptada' : /RECH|RCH|RFR|RSC|ANC/.test(e) ? 'rechazada' : (e ? e.toLowerCase() : 'enviado')
+      if (body.billingId) {
+        const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+        await sb.from('billing').update({ dte_estado: norm }).eq('id', body.billingId)
+      }
+      return json({ ok: true, estado: norm, glosa: r.glosa, crudo: r.estado })
+    }
+
+    // Folios CAF disponibles por tipo (para el módulo: alerta de folios bajos). Devuelve solo el CONTEO, nunca el CAF.
+    // body: { action:'folios-estado' }
+    if (body.action === 'folios-estado') {
+      const amb = ambiente === 'produccion' ? 'prod' : 'cert'
+      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      const { data } = await sb.from('dte_folios').select('tipo_dte, folio_actual, folio_hasta').eq('ambiente', amb)
+      // deno-lint-ignore no-explicit-any
+      const folios = (data || []).map((r: any) => ({ tipoDte: r.tipo_dte, disponibles: Math.max(0, r.folio_hasta - r.folio_actual + 1) }))
+      return json({ ok: true, ambiente: amb, folios })
     }
 
     const periodo = String(body.periodo || '')
