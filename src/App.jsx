@@ -5402,6 +5402,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   }
   const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); alert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ alert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
   const siiVerificarEstados = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'verificar-estados'}); alert(`Estados verificados en el SII:\n${d.revisados} revisado(s) · ${d.cambiados} actualizado(s)${d.rechazadas?`\n⚠ ${d.rechazadas} rechazada(s) — revisa tu correo`:''}.`); if(d.cambiados&&onRefresh) await onRefresh() }catch(e){ alert('No se pudo verificar estados: '+e.message) } setSiiBusy(false) }
+  const siiResumenSemanal = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'resumen-semanal'}); alert(`Resumen semanal enviado a los admins.\nEmitidas (7d): ${d.emitidasSemana} · Por cobrar: $${(d.porCobrar||0).toLocaleString('es-CL')} · Vencido: $${(d.vencido||0).toLocaleString('es-CL')}.`) }catch(e){ alert('No se pudo enviar el resumen: '+e.message) } setSiiBusy(false) }
   const [foliosEstado,setFoliosEstado] = useState(null)   // [{tipoDte,disponibles}] folios CAF disponibles (para la alerta de folios bajos)
   useEffect(()=>{ let on=true; siiCall({action:'folios-estado'}).then(d=>{ if(on&&Array.isArray(d?.folios)) setFoliosEstado(d.folios) }).catch(()=>{}); return ()=>{on=false} },[])
   const [siiLog,setSiiLog] = useState(null)   // historial de emisión (tabla dte_log)
@@ -6209,7 +6210,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                             <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:12,fontWeight:600}}>{fmt(b.amount)}</span><span style={{fontSize:10,color:ok?C.greenText:C.soonText,background:ok?C.greenBg:C.ambarBg,borderRadius:4,padding:'1px 6px'}}>{ok?'Aceptada':'Enviada'}</span></div>
                           </div>) })}
                       </div>
-                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Ver facturas',()=>go('clientes'),true)}{Btn('Verificar estados',siiVerificarEstados)}{Btn('Probar conexión',siiProbar)}{Btn('Historial',cargarSiiLog)}</div>
+                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Ver facturas',()=>go('clientes'),true)}{Btn('Verificar estados',siiVerificarEstados)}{Btn('Enviar resumen',siiResumenSemanal)}{Btn('Probar conexión',siiProbar)}{Btn('Historial',cargarSiiLog)}</div>
                     </>):(<>
                       <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
                         {[['Certificado digital cargado','ok'],['Postulación + set de pruebas · en curso','now'],['Autorización del SII','next'],['Emitir en producción','next']].map(([t,st],i)=>(
