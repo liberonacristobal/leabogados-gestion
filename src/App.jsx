@@ -1738,7 +1738,7 @@ function TasksByPerson({tasks,clients}) {
 const META_UF = 9800
 const META_CLP = 400000000
 
-function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[]}) {
+function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[], embedded=false}) {
   const [horizon,setHorizon] = useState(6)
   const [cfVista,setCfVista] = useState('flujo')   // 'flujo' (3M/6M/12M) | 'dic' (proyección al 31-dic, inline)
   const [activePoint,setActivePoint] = useState(null)
@@ -1833,8 +1833,8 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
   const tcell = {borderRadius:10,padding:'10px 12px',background:'#F5F7F9',minWidth:0}
   const tlabel = {fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}
   return (
-    <div style={{padding:'16px 20px 0'}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Proyección flujo de caja</div>
+    <div style={{padding:embedded?0:'16px 20px 0'}}>
+      {!embedded&&<div style={{fontSize:11,fontWeight:700,color:C.muted,letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:8}}>Proyección flujo de caja</div>}
       <div style={{background:C.card,borderRadius:12,padding:'14px 16px',border:`1px solid ${C.border}`}}>
 
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
@@ -2373,6 +2373,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
   const [top5Open,setTop5Open] = useState(false)
   const [agingBucket,setAgingBucket] = useState(null)   // tramo del aging abierto para ver su detalle
+  const [cobLens,setCobLens] = useState('antiguedad')   // foto Cobranza: 'antiguedad' (aging) | 'proyeccion' (flujo) — dos lentes del MISMO por cobrar
   const agingData = useMemo(()=>computeAgingCartera(billing.filter(b=>b.billing_type!=='reembolso'), clientesMap),[billing,clientesMap])
 
   // --- Clientes sin fondos: detalle por cliente ---
@@ -2645,7 +2646,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       })()}
 
       <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients}/>
-      <CashflowProjection billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales}/>
 
       {/* Cobrado del año por AÑO DE VENTA — controla ingresos de este año que vienen de ventas anteriores */}
       {ingresosPorAnioVenta.total>0&&(()=>{
@@ -2676,9 +2676,19 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       })()}
 
 
-      {/* Aging de cartera */}
+      {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
       <div style={{padding:'16px 20px 0'}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Antigüedad de cartera</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Cobranza</span>
+          <div style={{display:'flex',gap:4}}>
+            {[['antiguedad','Antigüedad'],['proyeccion','Proyección']].map(([k,l])=>{ const on=cobLens===k; return (
+              <button key={k} onClick={()=>setCobLens(k)} style={{padding:'3px 9px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>{l}</button>
+            )})}
+          </div>
+        </div>
+        {cobLens==='proyeccion' ? (
+        <CashflowProjection embedded billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales}/>
+        ) : (
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:11}}>
             <div>
@@ -2736,6 +2746,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               ))}
           </div>}
         </div>
+        )}
       </div>
 
       {/* Cuentas por pagar a proveedores (costos de terceros) */}
