@@ -74,6 +74,7 @@ async function construirFirmado(sb: any, amb: string, f: any, nowIso: string) {
   const factura: FacturaInput = {
     tipoDte, folio, fecha: String(f.fecha || nowIso.slice(0, 10)),
     emisor: getEmisor(), receptor: f.receptor, items: f.items, fmaPago: f.fmaPago,
+    exenta: f.exenta, referencias: f.referencias,
   }
   const { documento, docId, tot } = armarDocumento(factura, caf, nowIso)
   const firma = firmarDocumento(documento, docId)
