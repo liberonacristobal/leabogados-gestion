@@ -17642,7 +17642,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(fmg){ used.add(fmg.factura.id); combina.push({ mov, facturas:[fmg.factura], fg:fmg, reembolso:fmg.excess, reasons:['factura + reembolso de gastos'], conf:'combina', otras:otrasDe(mov.cliente_id,fmg.factura.id) }); continue }
       const cb = comboExacto(mov, used) || comboExacto3(mov, used)
       if(cb){ cb.forEach(x=>used.add(x.id)); combina.push({ mov, facturas:cb, reasons:[`${cb.length} facturas suman el pago`], conf:'combina' }); continue }
-      revisar.push({ mov })
+      revisar.push({ mov, otras:otrasDe(mov.cliente_id) })
     }
     return { alta, combina, revisar }
   }, [movs, concByMov, billing, facturasConSaldo])
@@ -18247,7 +18247,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               {m.cliente_id&&<div style={{marginBottom:8}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                   <span onClick={()=>{ setPropBuscar(buscando?null:m.id); setPropBuscaQ('') }} style={{fontSize:10,fontWeight:600,color:C.accent,cursor:'pointer'}}>{buscando?'Cerrar búsqueda':(tieneTarget?'Buscar otra factura':'Buscar factura para imputar')}</span>
-                  {p.otras&&p.otras.n>0&&<span style={{fontSize:10,color:C.muted}}>Otras pendientes: {p.otras.n} · {fmtM(p.otras.total)}</span>}
+                  {p.otras&&(p.otras.n>0?<span style={{fontSize:10,color:C.muted}}>Otras pendientes: {p.otras.n} · {fmtM(p.otras.total)}</span>:(!tieneTarget?<span style={{fontSize:10,color:C.soonText}}>Sin facturas con saldo · es fondo o adelanto</span>:null))}
                 </div>
                 {buscando&&<div style={{marginTop:7}}>
                   <input value={propBuscaQ} onChange={e=>setPropBuscaQ(e.target.value)} placeholder='Folio, concepto o monto…' style={{width:'100%',height:32,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:12,padding:'0 10px',boxSizing:'border-box',outline:'none',color:C.text,marginBottom:6}}/>
