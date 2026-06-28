@@ -19198,6 +19198,10 @@ export default function App() {
   // EMISIÓN ELECTRÓNICA (DTE directo al SII) vía edge function sii-sync (action:'emitir').
   // Distinto de handleEmitirProgramada (que solo MARCA como emitida). Siempre hace una vista previa
   // (dryRun: arma+firma, no envía) y pide confirmación antes de emitir de verdad. Default DTE 34 (exenta).
+  const [emitirPreview,setEmitirPreview] = useState(null)   // vista previa de emisión DTE (folio/receptor/total + Ver PDF) antes de enviar
+  const [emitirBusy,setEmitirBusy] = useState(false)
+  const _siiFetch = async(body)=>{ const {data:{session}}=await supabase.auth.getSession(); if(!session) throw new Error('Sesión expirada. Vuelve a entrar.'); const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)}); const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d }
+  // Paso 1: arma la vista previa (dryRun, no envía) y abre el modal con folio/receptor/total + Ver PDF.
   const handleEmitirDTE=useCallback(async(bill, entity)=>{
     try{
       const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(bill.client_id))
@@ -19206,26 +19210,25 @@ export default function App() {
       const recRs  = ent?.name || bill.receptor_name
       if(!recRut || !recRs){ alert('Falta RUT o razón social del receptor.\nAsigna la razón social a la factura antes de emitir al SII.'); return }
       const fecha = (bill.issued_at||'').slice(0,10) || new Date().toISOString().slice(0,10)
-      const base = {
-        action:'emitir', tipoDte:34, billingId:bill.id, fecha,
-        receptor:{ rut:recRut, rs:recRs },
-        items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }],
-      }
-      const {data:{session}}=await supabase.auth.getSession()
-      if(!session){ alert('Sesión expirada. Vuelve a entrar.'); return }
-      const call = async(body)=>{
-        const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)})
-        const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
-      }
-      const prev=await call({...base, dryRun:true})   // 1) vista previa: arma y firma, NO envía
-      if(!confirm(`Vista previa OK — Factura exenta (DTE 34)\nFolio ${prev.folio} · total ${fmt(prev.total)} · ambiente ${prev.ambiente}\nReceptor ${recRs} (${recRut})\n\n¿Emitir de verdad al SII?`)) return
-      const r=await call(base)                        // 2) emisión real (el motor persiste folio + dte_* en billing)
-      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString() }
-      await supabase.from('billing').update({status:'Pendiente', issued_at:fecha}).eq('id',bill.id)
-      setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
-      alert(`Emitida al SII.\nFolio ${r.folio} · TrackID ${r.trackId||'—'} · estado ${r.estado||'enviado'}${r.glosa?`\n${r.glosa}`:''}`)
-    }catch(e){ alert('No se pudo emitir al SII: '+e.message) }
+      const base = { action:'emitir', tipoDte:34, billingId:bill.id, fecha, receptor:{ rut:recRut, rs:recRs }, items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }] }
+      const prev=await _siiFetch({...base, dryRun:true})
+      setEmitirPreview({ prev, base, recRut, recRs, billId:bill.id, fecha })
+    }catch(e){ alert('No se pudo preparar la emisión: '+e.message) }
   },[clientEntities])
+  // Paso 2: emite de verdad al SII (desde el modal de vista previa). El motor persiste folio + dte_* en billing.
+  const confirmEmitirDTE=useCallback(async()=>{
+    const ep=emitirPreview; if(!ep) return
+    setEmitirBusy(true)
+    try{
+      const r=await _siiFetch(ep.base)
+      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString() }
+      await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha}).eq('id',ep.billId)
+      setBilling(p=>p.map(x=>x.id===ep.billId?{...x,...patch}:x))
+      setEmitirPreview(null)
+      alert(`Emitida al SII.\nFolio ${r.folio} · TrackID ${r.trackId||'—'} · estado ${r.estado||'enviado'}`)
+    }catch(e){ alert('No se pudo emitir al SII: '+e.message) }
+    setEmitirBusy(false)
+  },[emitirPreview])
 
   // Editar cuotas PROGRAMADAS (fecha/monto) sin rehacer la forma de cobro. Solo programadas; no toca emitidas/pagadas.
   const handleUpdateCuotas=useCallback(async(updates)=>{
@@ -19440,6 +19443,28 @@ export default function App() {
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {emitirPreview&&(()=>{ const ep=emitirPreview
+          const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ alert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ alert('No se pudo generar el PDF: '+(e.message||e)) } }
+          return (
+            <div onClick={()=>!emitirBusy&&setEmitirPreview(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+              <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:440,width:'100%',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
+                <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:2}}>Vista previa — Factura exenta</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:13}}>DTE 34 · no se envía nada todavía ({ep.prev.ambiente})</div>
+                <div style={{background:C.bgSoft,borderRadius:10,padding:'11px 13px',marginBottom:13}}>
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12}}><span style={{color:C.muted}}>Folio asignado</span><span style={{fontWeight:600}}>{ep.prev.folio}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12,gap:10}}><span style={{color:C.muted,flexShrink:0}}>Receptor</span><span style={{fontWeight:600,textAlign:'right',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ep.recRs}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12}}><span style={{color:C.muted}}>RUT</span><span style={{fontWeight:600}}>{ep.recRut}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'7px 0 0',marginTop:3,borderTop:`0.5px solid ${C.border}`,fontSize:13}}><span style={{color:C.accent,fontWeight:600}}>Total exento</span><span style={{color:C.accent,fontWeight:600}}>{fmt(ep.prev.total)}</span></div>
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <button onClick={verPdf} style={{fontSize:12,fontWeight:600,color:C.tealText,background:'#fff',border:`0.5px solid ${C.tealText}`,borderRadius:8,padding:'8px 11px',cursor:'pointer'}}>Ver PDF</button>
+                  <button disabled={emitirBusy} onClick={()=>setEmitirPreview(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
+                  <button disabled={emitirBusy} onClick={confirmEmitirDTE} style={{fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',opacity:emitirBusy?.6:1}}>{emitirBusy?'Emitiendo…':'Emitir'}</button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
