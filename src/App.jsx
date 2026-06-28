@@ -5402,6 +5402,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); alert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ alert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
   const [foliosEstado,setFoliosEstado] = useState(null)   // [{tipoDte,disponibles}] folios CAF disponibles (para la alerta de folios bajos)
   useEffect(()=>{ let on=true; siiCall({action:'folios-estado'}).then(d=>{ if(on&&Array.isArray(d?.folios)) setFoliosEstado(d.folios) }).catch(()=>{}); return ()=>{on=false} },[])
+  const [siiLog,setSiiLog] = useState(null)   // historial de emisión (tabla dte_log)
+  const cargarSiiLog = async()=>{ setSiiLog(null); setSiiPanel('log'); try{ const {data}=await supabase.from('dte_log').select('*').order('created_at',{ascending:false}).limit(60); setSiiLog(data||[]) }catch(_){ setSiiLog([]) } }
   const [siiSetJson,setSiiSetJson] = useState('')   // casos del set de pruebas (JSON array de facturas que asigna el SII)
   const [siiPeriodo,setSiiPeriodo] = useState('')   // período del Libro de Ventas (YYYY-MM)
   const [siiResult,setSiiResult] = useState(null)
@@ -6196,7 +6198,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                             <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:12,fontWeight:600}}>{fmt(b.amount)}</span><span style={{fontSize:10,color:ok?C.greenText:C.soonText,background:ok?C.greenBg:C.ambarBg,borderRadius:4,padding:'1px 6px'}}>{ok?'Aceptada':'Enviada'}</span></div>
                           </div>) })}
                       </div>
-                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Ver facturas',()=>go('clientes'),true)}{Btn('Probar conexión',siiProbar)}</div>
+                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Ver facturas',()=>go('clientes'),true)}{Btn('Probar conexión',siiProbar)}{Btn('Historial',cargarSiiLog)}</div>
                     </>):(<>
                       <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
                         {[['Certificado digital cargado','ok'],['Postulación + set de pruebas · en curso','now'],['Autorización del SII','next'],['Emitir en producción','next']].map(([t,st],i)=>(
@@ -6207,7 +6209,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                             <span style={{fontSize:12,color:st==='now'?C.text:st==='ok'?C.muted:C.done,fontWeight:st==='now'?600:400}}>{t}</span>
                           </div>))}
                       </div>
-                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}</div>
+                      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}{Btn('Historial',cargarSiiLog)}</div>
                     </>)}
                   </div>
                 </div>
@@ -6550,11 +6552,24 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:540,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
-              <div style={{fontSize:15,fontWeight:600,color:C.text}}>{siiPanel==='set'?'Set de pruebas · SII':'Libro de ventas'}</div>
+              <div style={{fontSize:15,fontWeight:600,color:C.text}}>{siiPanel==='set'?'Set de pruebas · SII':siiPanel==='libro'?'Libro de ventas':'Historial de emisión'}</div>
               <button onClick={()=>setSiiPanel(null)} style={{background:'none',border:'none',color:C.muted,fontSize:20,lineHeight:1,cursor:'pointer'}}>×</button>
             </div>
-            <div style={{fontSize:11,color:C.muted,marginBottom:13}}>Ambiente certificación · prueba con vista previa antes de enviar</div>
-            {siiPanel==='set'?(<>
+            <div style={{fontSize:11,color:C.muted,marginBottom:13}}>{siiPanel==='log'?'Cada emisión registrada — folio, estado y errores (incluye folios perdidos)':'Ambiente certificación · prueba con vista previa antes de enviar'}</div>
+            {siiPanel==='log'?(
+              siiLog===null?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'22px 0'}}>Cargando…</div>
+              :siiLog.length===0?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'22px 0'}}>Sin emisiones registradas todavía.</div>
+              :<div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+                {siiLog.map((l,i)=>{ const err=l.estado==='error'||l.error; const acep=/acep/i.test(l.estado||''); return (
+                  <div key={l.id||i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text}}>DTE {l.tipo_dte} · F° {l.folio||'—'}</div>
+                      <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{String(l.created_at||'').slice(0,16).replace('T',' ')}{l.created_by?` · ${l.created_by}`:''}{l.error?` · ${l.error}`:''}</div>
+                    </div>
+                    <span style={{fontSize:10,fontWeight:600,flexShrink:0,color:err?C.overdueText:acep?C.greenText:C.soonText,background:err?C.overdueBg:acep?C.greenBg:C.ambarBg,borderRadius:4,padding:'2px 7px'}}>{err?'error':acep?'aceptada':(l.estado||'enviado')}</span>
+                  </div>) })}
+              </div>
+            ):siiPanel==='set'?(<>
               <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Casos del set (JSON). Pega los que asigne el SII; viene un ejemplo (factura 34 + nota de crédito 61 que la anula).</div>
               <textarea value={siiSetJson} onChange={e=>setSiiSetJson(e.target.value)} spellCheck={false} style={{width:'100%',minHeight:170,boxSizing:'border-box',fontFamily:'monospace',fontSize:11,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.text,resize:'vertical'}}/>
               <div style={{display:'flex',gap:8,marginTop:10}}>
@@ -19313,6 +19328,9 @@ export default function App() {
       const recRut = ent?.rut || bill.receptor_rut
       const recRs  = ent?.name || bill.receptor_name
       if(!recRut || !recRs){ alert('Falta RUT o razón social del receptor.\nAsigna la razón social a la factura antes de emitir al SII.'); return }
+      // Validación pre-emisión: RUT con dígito verificador correcto (módulo 11) evita el rechazo más común del SII.
+      if(!rutValido(recRut)){ alert(`El RUT del receptor (${recRut}) no es válido — revisa el dígito verificador en la razón social antes de emitir.`); return }
+      if(!(Math.round(bill.amount||0)>0)){ alert('La factura no tiene monto. No se puede emitir.'); return }
       const fecha = (bill.issued_at||'').slice(0,10) || new Date().toISOString().slice(0,10)
       const base = { action:'emitir', tipoDte:34, billingId:bill.id, fecha, receptor:{ rut:recRut, rs:recRs }, items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }] }
       const prev=await _siiFetch({...base, dryRun:true})

@@ -55,6 +55,10 @@ function nowChileIso(): string {
   return `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}`
 }
 
+// Log de auditoría de emisión (best-effort, nunca bloquea). Registra cada intento: éxito o folio perdido.
+// deno-lint-ignore no-explicit-any
+async function logDte(sb: any, rows: any[]) { try { if (rows?.length) await sb.from('dte_log').insert(rows) } catch (_) { /* el log no debe romper la emisión */ } }
+
 // Arma + firma UN DTE: lee su CAF, reserva folio, construye el <Documento> y lo firma.
 // Reutilizado por 'emitir' (uno) y 'emitir-set' (varios en un mismo EnvioDTE, p.ej. el set de certificación).
 // deno-lint-ignore no-explicit-any
@@ -146,9 +150,17 @@ serve(async (req) => {
       }
 
       console.log(`[sii-sync] emitir ${docs.map(d => d.docId).join(',')} (${amb}) por ${email}`)
-      const trackId = await enviarAlSII(envio)
+      let trackId: string
+      try {
+        trackId = await enviarAlSII(envio)
+      } catch (e) {
+        // Folios perdidos: la emisión reservó folios pero el SII falló. Quedan registrados en el log (el SII admite gaps justificados).
+        await logDte(sb, firmados.map(d => ({ billing_id: body.billingId || null, tipo_dte: d.tipoDte, folio: d.folio, estado: 'error', error: String(e instanceof Error ? e.message : e), ambiente: amb, created_by: email })))
+        throw e
+      }
       let estado = { estado: 'enviado', glosa: '' }
       try { estado = await consultarEstado(trackId) } catch (_) { /* el estado puede tardar; queda 'enviado' */ }
+      await logDte(sb, firmados.map(d => ({ billing_id: body.billingId || null, tipo_dte: d.tipoDte, folio: d.folio, track_id: trackId, estado: estado.estado || 'enviado', ambiente: amb, created_by: email })))
 
       // En el flujo simple (1 factura con billingId) persiste el DTE en su fila.
       if (body.action === 'emitir' && body.billingId) {
