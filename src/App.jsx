@@ -684,23 +684,24 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Gastos y Fondos</div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
-              <div style={{position:'relative',background:C.greenBg,borderRadius:8,padding:'8px 10px'}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>FONDOS</div>
-                <div style={{fontSize:12,fontWeight:700,color:C.normal}}>${fondos.toLocaleString('es-CL')}</div>
-                <button onClick={()=>onAddFondo(cl)} aria-label='Agregar fondo' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.normal,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span></button>
+            {(()=>{ const sNeg=saldo<0, sZero=saldo===0
+              const bg=sNeg?C.overdueBg:sZero?C.bgWarm:C.greenBg, col=sNeg?C.overdue:sZero?C.grisText:C.greenText, line=sNeg?C.overdue:sZero?C.border:C.normal
+              const plus=(onClick,bgc,al)=>(<button onClick={onClick} aria-label={al} style={{width:18,height:18,borderRadius:'50%',background:bgc,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:0,flexShrink:0}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></button>)
+              return (
+              <div style={{background:bg,borderRadius:10,padding:'12px 14px',marginBottom:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Saldo{sNeg?' · por reembolsar':saldo>0?' · a favor':''}</div>
+                    <div style={{fontSize:21,fontWeight:700,color:col,marginTop:1}}>${saldo.toLocaleString('es-CL')}</div>
+                  </div>
+                  {saldo>0&&onAddFondo&&<button onClick={()=>onAddFondo(cl,true)} aria-label='Devolver saldo a favor' title='Devolver saldo a favor' style={{flexShrink:0,height:28,padding:'0 11px',borderRadius:8,border:`0.5px solid ${C.normal}`,background:'#fff',color:C.greenText,fontSize:11,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}>Devolver<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='13 6 19 12 13 18'/></svg></button>}
+                </div>
+                <div style={{display:'flex',gap:18,marginTop:9,paddingTop:9,borderTop:`0.5px solid ${line}`,flexWrap:'wrap'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted}}>Fondos</span><span style={{fontSize:12,fontWeight:600,color:C.normal}}>+${fondos.toLocaleString('es-CL')}</span>{plus(()=>onAddFondo(cl),C.normal,'Agregar fondo')}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted}}>Gastos</span><span style={{fontSize:12,fontWeight:600,color:C.overdue}}>−${gastos.toLocaleString('es-CL')}</span>{plus(()=>onAddGasto(cl),C.overdue,'Agregar gasto')}</div>
+                </div>
               </div>
-              <div style={{position:'relative',background:C.overdueBg,borderRadius:8,padding:'8px 10px'}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>GASTOS</div>
-                <div style={{fontSize:12,fontWeight:700,color:C.overdue}}>${gastos.toLocaleString('es-CL')}</div>
-                <button onClick={()=>onAddGasto(cl)} aria-label='Agregar gasto' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.overdue,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg></span></button>
-              </div>
-              <div style={{position:'relative',background:saldo<0?C.overdueBg:saldo===0?'#F1EFE8':C.greenBg,borderRadius:8,padding:'8px 10px'}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:2}}>SALDO</div>
-                <div style={{fontSize:12,fontWeight:700,color:saldo<0?C.overdue:saldo===0?C.grisText:C.greenText}}>${saldo.toLocaleString('es-CL')}</div>
-                {saldo>0&&onAddFondo&&<button onClick={()=>onAddFondo(cl,true)} aria-label='Devolver saldo a favor' title='Devolver saldo a favor' style={{position:'absolute',top:0,right:0,width:30,height:30,padding:0,border:'none',background:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center'}}><span style={{width:18,height:18,borderRadius:'50%',background:C.normal,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><line x1='5' y1='12' x2='19' y2='12'/><polyline points='13 6 19 12 13 18'/></svg></span></button>}
-              </div>
-            </div>
+            )})()}
             {clientExpenses.slice(0,8).map(e=>{
               const isFondo=e.type==='fondo'
               const isDev=isFondo&&((e.amount||0)<0||/^\s*devoluci/i.test(e.concept||''))
@@ -1348,15 +1349,14 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
 
       {tab==='liquidar'&&(
         <div style={{padding:'0 0 130px'}}>
-          {/* Resumen: saldo de caja + total sin liquidar */}
-          <div style={{display:'flex',gap:8,padding:'2px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?C.overdueBg:C.greenBg,borderLeft:`3px solid ${saldoCaja<0?C.overdue:C.normal}`}}>
-              <div style={kpiLbl}>Saldo caja</div>
-              <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
-            </div>
-            <div style={{...kpiCard,background:'#fff',borderLeft:`3px solid ${C.accent}`}}>
-              <div style={kpiLbl}>Sin liquidar</div>
-              <div style={{...kpiVal,color:C.accent}}>{fmtCLP(sinLiquidar)}</div>
+          {/* Resumen (canon): Saldo caja protagonista; Sin liquidar = chip de acción (el saldo ya descuenta todos los gastos) */}
+          <div style={{padding:'2px 14px 10px'}}>
+            <div style={{background:saldoCaja<0?C.overdueBg:C.greenBg,borderRadius:10,padding:'12px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Saldo caja</div>
+                <div style={{fontSize:21,fontWeight:700,color:saldoCaja<0?C.overdue:C.normal,marginTop:1}}>{fmtCLP(saldoCaja)}</div>
+              </div>
+              {sinLiquidar>0&&<span style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,padding:'4px 10px',borderRadius:20}}>Sin liquidar {fmtCLP(sinLiquidar)}</span>}
             </div>
           </div>
           {/* MIS GASTOS + asistente IA + conteo */}
@@ -1424,17 +1424,15 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         const fmtD = iso => { try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear() }catch(e){return iso||'—'} }
         return (
         <div style={{padding:'4px 0 100px'}}>
-          {/* KPIs */}
-          <div style={{display:'flex',gap:8,padding:'4px 14px 10px'}}>
-            <div style={{...kpiCard,background:saldoCaja<0?C.overdueBg:C.greenBg,borderLeft:`3px solid ${saldoCaja<0?C.overdue:C.normal}`}}>
-              <div style={kpiLbl}>Saldo</div>
-              <div style={{...kpiVal,color:saldoCaja<0?C.overdue:C.normal}}>{fmtCLP(saldoCaja)}</div>
-              <div style={{...kpiSub,color:saldoCaja<0?C.overdue:C.muted}}>{saldoCaja<0?'Te debemos':'Disponible'}</div>
+          {/* KPIs (canon): Saldo protagonista (rótulo corto inline); Liquidado histórico = línea secundaria, no tile paralelo */}
+          <div style={{padding:'4px 14px 10px'}}>
+            <div style={{background:saldoCaja<0?C.overdueBg:C.greenBg,borderRadius:10,padding:'12px 14px'}}>
+              <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Saldo{saldoCaja<0?' · te debemos':saldoCaja>0?' · disponible':''}</div>
+              <div style={{fontSize:21,fontWeight:700,color:saldoCaja<0?C.overdue:C.normal,marginTop:1}}>{fmtCLP(saldoCaja)}</div>
             </div>
-            <div style={{...kpiCard,background:C.border}}>
-              <div style={kpiLbl}>Liquidado</div>
-              <div style={{...kpiVal,color:C.muted}}>{fmtCLP(totalLiquidado)}</div>
-              <div style={{...kpiSub,color:C.muted}}>Histórico</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,padding:'0 2px'}}>
+              <span style={{fontSize:11,color:C.muted}}>Liquidado a la fecha</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.muted}}>{fmtCLP(totalLiquidado)}</span>
             </div>
           </div>
           {/* CAJAS ENTREGADAS */}
@@ -15488,18 +15486,14 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
           const saldoSch = saldo<0 ? RED : saldo<=50000 ? ORANGE : GREEN
           const sinLiqNoNotaria = porLiquidar.filter(e=>e.category!=='Notaria').length
           const liqSch = sinLiqNoNotaria>10 ? RED : ORANGE
-          const KPI = ({sch,label,valor,sub}) => (
-            <div style={{background:sch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${sch.bd}`,borderLeft:`4px solid ${sch.num}`}}>
-              <div style={{fontSize:10,fontWeight:600,color:sch.label,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>{label}</div>
-              <div style={{fontSize:22,fontWeight:700,color:sch.num,lineHeight:1.1}}>{valor}</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:3}}>{sub}</div>
-            </div>
-          )
           return (
             <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-                <KPI sch={saldoSch} label='Saldo disponible' valor={`${saldo<0?'-':''}${fmtCLP(saldo)}`} sub='en tu caja'/>
-                <KPI sch={liqSch} label='Por liquidar' valor={fmtCLP(totalPorLiquidar)} sub={`${porLiquidar.length} gasto${porLiquidar.length!==1?'s':''}`}/>
+              <div style={{background:saldoSch.bg,borderRadius:10,padding:'12px 14px',border:`1px solid ${saldoSch.bd}`,borderLeft:`4px solid ${saldoSch.num}`,marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:10,fontWeight:600,color:saldoSch.label,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Saldo en tu caja{saldo<0?' · te debemos':''}</div>
+                  <div style={{fontSize:22,fontWeight:700,color:saldoSch.num,lineHeight:1.1}}>{`${saldo<0?'-':''}${fmtCLP(saldo)}`}</div>
+                </div>
+                {totalPorLiquidar>0&&<span style={{flexShrink:0,fontSize:11,fontWeight:600,color:liqSch.num,background:'#fff',border:`0.5px solid ${liqSch.bd}`,padding:'5px 11px',borderRadius:20,whiteSpace:'nowrap'}}>{porLiquidar.length} por liquidar · {fmtCLP(totalPorLiquidar)}</span>}
               </div>
               {ultimos.length>0&&(
                 <>
