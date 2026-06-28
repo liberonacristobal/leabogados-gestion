@@ -9318,8 +9318,9 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   },[expenses,selectedClient,gastoOrd,gastoCatF,isAdmin,ofiLente])
   const gastoCats = useMemo(()=> selectedClient ? [...new Set(expenses.filter(e=>e.client_id===selectedClient.id).map(e=> e.type==='fondo'?'Fondo':(e.category||'Otro')))].sort() : [],[expenses,selectedClient])
   const gastoToolbar = () => {
-    const movibles = selectedClient ? (expenses||[]).filter(e=> String(e.client_id)===String(selectedClient.id) && e.type==='gasto' && !e.deleted_at && !e.client_render_id && !e.render_id && !e.notaria_render_id) : []
-    const showMover = selectedClient && !esOficina(selectedClient.id) && movibles.length>0
+    const ofiSel = selectedClient && esOficina(selectedClient.id)
+    const movibles = selectedClient ? (expenses||[]).filter(e=> String(e.client_id)===String(selectedClient.id) && e.type==='gasto' && !e.deleted_at && !e.client_render_id && !e.render_id && !e.notaria_render_id && (!ofiSel || (ofiLente==='gestion')===esGestionGasto(e))) : []
+    const showMover = selectedClient && movibles.length>0   // también la oficina: mover a su cliente los gastos que en realidad son de un cliente (trámites)
     return (<>
       <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
         <button onClick={()=>setGastoOrd(o=>o==='desc'?'asc':'desc')} title={gastoOrd==='desc'?'Más nuevas primero':'Más antiguas primero'} style={{fontSize:11,fontWeight:600,padding:'5px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {gastoOrd==='desc'?'↓':'↑'}</button>
