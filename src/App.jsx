@@ -5400,6 +5400,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
   }
   const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); alert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ alert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
+  const [foliosEstado,setFoliosEstado] = useState(null)   // [{tipoDte,disponibles}] folios CAF disponibles (para la alerta de folios bajos)
+  useEffect(()=>{ let on=true; siiCall({action:'folios-estado'}).then(d=>{ if(on&&Array.isArray(d?.folios)) setFoliosEstado(d.folios) }).catch(()=>{}); return ()=>{on=false} },[])
   const [siiSetJson,setSiiSetJson] = useState('')   // casos del set de pruebas (JSON array de facturas que asigna el SII)
   const [siiPeriodo,setSiiPeriodo] = useState('')   // período del Libro de Ventas (YYYY-MM)
   const [siiResult,setSiiResult] = useState(null)
@@ -6135,6 +6137,13 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>
             </div>
             <div style={{fontSize:9,color:C.done,marginBottom:10,paddingLeft:2}}>Cobrado y Por facturar del año · Por cobrar y Vencido = saldo vivo</div>
+            {(()=>{ const rech=(billing||[]).filter(b=>!b.deleted_at&&/rech/i.test(b.dte_estado||'')); if(!rech.length) return null; return (
+              <div onClick={()=>go('clientes')} title='El SII rechazó estas facturas electrónicas — revísalas y vuelve a emitir' style={{display:'flex',alignItems:'center',gap:11,background:C.overdueBg,borderLeft:`3px solid ${C.overdue}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
+                <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdue} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.overdueText}}>DTE rechazadas por el SII</div><div style={{fontSize:9,color:C.overdueText}}>{rech.length} factura{rech.length!==1?'s':''} — revisar y volver a emitir</div></div>
+                <span style={{color:C.overdue,fontSize:18,fontWeight:700}}>›</span>
+              </div>
+            ) })()}
             {(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); if(!porEnviar.length) return null; return (
               <div onClick={abrirBandeja} title='Facturas emitidas que aún no se mandan al cliente' style={{display:'flex',alignItems:'center',gap:11,background:C.azulBg,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='m22 7-10 5L2 7'/></svg></span>
@@ -6172,6 +6181,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>Emisión electrónica · SII</div><div style={{fontSize:11,color:C.muted}}>{enProd?`${emitidas.length} emitida${emitidas.length!==1?'s':''} · directo al SII`:'Emite tus facturas directo al SII'}</div></div>
                       <span style={{fontSize:10,fontWeight:600,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 9px',whiteSpace:'nowrap'}}>{enProd?'Producción':'En certificación'}</span>
                     </div>
+                    {(()=>{ const f34=(foliosEstado||[]).find(x=>x.tipoDte===34); if(!f34) return null; const bajo=f34.disponibles<=5; return (
+                      <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:bajo?C.overdueText:C.muted,marginBottom:10}}>
+                        <span style={{width:6,height:6,borderRadius:'50%',background:bajo?C.overdue:C.normal,flexShrink:0}}/>
+                        {f34.disponibles} folio{f34.disponibles!==1?'s':''} disponible{f34.disponibles!==1?'s':''} (factura 34){bajo&&<b style={{color:C.overdueText}}> · solicita un nuevo CAF</b>}
+                      </div>
+                    ) })()}
                     {enProd?(<>
                       <div style={{borderTop:`0.5px solid ${C.bgWarm}`,paddingTop:10,marginBottom:11}}>
                         <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Últimas emitidas</div>
@@ -6578,7 +6593,7 @@ function printComprobante(bill, clientName){
   const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Comprobante ${bill.invoice_no||''}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:12px;background:#fff}.page{max-width:816px;margin:0 auto}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:16px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Comprobante de cobro</div>${bill.invoice_no?`<div style='font-size:11px;opacity:.85;margin-top:2px'>N° ${bill.invoice_no}</div>`:''}</div></div><div style='padding:24px 26px'><table style='width:100%;border-collapse:collapse;font-size:12px'>${row('Cliente', clientName||'—')}${bill.receptor_name?row('Razón social', bill.receptor_name+(bill.receptor_rut?` · ${bill.receptor_rut}`:'')):''}${row('Concepto', bill.concept||'—')}${row('Monto', n(bill.amount))}${row('Estado', bill.status||'—')}${row('Emisión', dmy(bill.issued_at))}${bill.status==='Pagado'?row('Fecha de pago', dmy(bill.paid_at)):row('Vencimiento', dmy(bill.due))}${bill.notes?row('Notas', bill.notes):''}</table><div style='margin-top:26px;padding-top:12px;border-top:1px solid ${GRAY};font-size:10px;color:${MUT};display:flex;justify-content:space-between'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago</span><span>Documento interno — no es el DTE del SII</span></div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
   const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
 }
-function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSeries,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,onEmitirDTE,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSeries,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,onEmitirDTE,onActualizarEstado,saving,user,onAttachChange}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
@@ -6779,6 +6794,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
         {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
         {bill?.id&&onEmitirDTE&&f.status!=='Anulado'&&f.status!=='Anulada'&&!bill.dte_track_id&&<button onClick={()=>onEmitirDTE(bill)} title='Generar y enviar la factura electrónica al SII (con vista previa antes de emitir)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Emitir al SII</button>}
         {bill?.id&&bill.dte_xml&&<button onClick={async()=>{ try{ const doc=splitSetDTE(bill.dte_xml)[0]||bill.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ alert('No se pudo generar el PDF: '+(e.message||e)) } }} title='Ver el PDF oficial (con timbre) de la factura emitida' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.tealText}`,background:'#fff',color:C.tealText,fontSize:13,fontWeight:600,cursor:'pointer'}}>PDF</button>}
+        {bill?.id&&bill.dte_track_id&&onActualizarEstado&&(()=>{ const est=String(bill.dte_estado||'enviado'); const rech=/rech/i.test(est); const acep=/acep/i.test(est); return <button onClick={()=>onActualizarEstado(bill)} title='Re-consultar el estado del DTE en el SII (puede tardar en aceptarse o rechazarse)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${rech?C.overdue:acep?C.normal:C.soon}`,background:'#fff',color:rech?C.overdue:acep?C.greenText:C.soonText,fontSize:12,fontWeight:600,cursor:'pointer'}}>SII: {rech?'rechazada':acep?'aceptada':'enviado'} · actualizar</button> })()}
         <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
         <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave({...f,_terceroProv:terceroProv,_terceroPagado:terceroPagado})} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
@@ -19317,6 +19333,15 @@ export default function App() {
     }catch(e){ alert('No se pudo emitir al SII: '+e.message) }
     setEmitirBusy(false)
   },[emitirPreview])
+  // Re-consultar el estado de un DTE en el SII (tarda en procesar; puede RECHAZAR). Actualiza dte_estado.
+  const handleActualizarEstadoDTE=useCallback(async(bill)=>{
+    if(!bill?.dte_track_id) return
+    try{
+      const r=await _siiFetch({action:'estado', trackId:bill.dte_track_id, billingId:bill.id})
+      setBilling(p=>p.map(x=>x.id===bill.id?{...x,dte_estado:r.estado}:x))
+      alert(`Estado en el SII: ${r.estado}${r.glosa?`\n${r.glosa}`:''}`)
+    }catch(e){ alert('No se pudo consultar el estado: '+e.message) }
+  },[])
 
   // Editar cuotas PROGRAMADAS (fecha/monto) sin rehacer la forma de cobro. Solo programadas; no toca emitidas/pagadas.
   const handleUpdateCuotas=useCallback(async(updates)=>{
@@ -19545,7 +19570,7 @@ export default function App() {
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {emitirPreview&&(()=>{ const ep=emitirPreview
           const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ alert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ alert('No se pudo generar el PDF: '+(e.message||e)) } }
           return (
