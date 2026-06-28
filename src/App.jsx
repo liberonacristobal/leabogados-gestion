@@ -5638,6 +5638,21 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     clean.sort((a,z)=> (z.rut?1:0)-(a.rut?1:0) || (esVencidaG(z.factura)?1:0)-(esVencidaG(a.factura)?1:0) || String(z.abono.fecha||'').localeCompare(String(a.abono.fecha||'')) )
     return {clean, revisar:Object.values(revMap)}
   },[bb, abonos, clientEntities])
+  // Estado de cuenta: correo al cliente con TODAS sus facturas pendientes + total adeudado (práctica estándar de cobranza). Compuerta de confirmación.
+  const estadoCuentaEnviar = async(cli)=>{
+    if(!cli) return
+    const pend=(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(cli.id)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1)
+    if(!pend.length){ alert(`${cli.name} no tiene facturas pendientes.`); return }
+    let to=(cli.email||'').trim()
+    try{ const {data:lt}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(cli.id)).maybeSingle(); if(lt?.value) to=String(lt.value).trim() }catch(_){}
+    if(!to){ alert('El cliente no tiene correo (ni en la ficha ni recordado). Agrégalo para enviar el estado de cuenta.'); return }
+    const total=pend.reduce((s,b)=>s+saldoBill(b),0)
+    if(!confirm(`¿Enviar el estado de cuenta de ${cli.name} a ${to}?\n${pend.length} factura(s) pendiente(s) · total ${fmt(total)}`)) return
+    const filas=pend.map(b=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">N° ${folioN(b.invoice_no)||b.invoice_no}</td><td style="padding:6px 8px;border-bottom:1px solid #eee">${b.due?fmtFechaDMY(b.due):'—'}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">$${saldoBill(b).toLocaleString('es-CL')}</td></tr>`).join('')
+    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Junto con saludar, les compartimos el estado de cuenta con las facturas pendientes a la fecha:<br><br><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Factura</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Vence</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #003C50">Saldo</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="2" style="padding:8px 8px;font-weight:bold">Total adeudado</td><td style="padding:8px 8px;text-align:right;font-weight:bold;color:#003C50">$${total.toLocaleString('es-CL')}</td></tr></tfoot></table><br>${DATOS_PAGO_HTML}Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div></div>`
+    const text=`Estado de cuenta — ${cli.name}\n\n${pend.map(b=>`N° ${folioN(b.invoice_no)||b.invoice_no} · vence ${b.due?fmtFechaDMY(b.due):'—'} · $${saldoBill(b).toLocaleString('es-CL')}`).join('\n')}\n\nTotal adeudado: ${fmt(total)}\n\n${DATOS_PAGO_TXT}\n\nSaludos cordiales,\nLiberona Escala Abogados`
+    try{ await sendMailServer({to, subject:'Estado de cuenta — Liberona Escala Abogados', html, text}); alert(`Estado de cuenta enviado a ${to}.`) }catch(e){ alert('No se pudo enviar: '+(e.message||e)) }
+  }
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   const recordarCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -6561,9 +6576,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {top.length===0?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'14px 0'}}>Sin facturas por cobrar.</div>:(
                 <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
                   {top.map((t,i)=>(
-                    <div key={t.cid} onClick={()=>{ setSaludCobranza(false); onOpenClientFicha&&onOpenClientFicha(t.cid) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none',cursor:'pointer'}}>
-                      <span style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.cli?.name||'—'}</span>
+                    <div key={t.cid} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
+                      <span onClick={()=>{ setSaludCobranza(false); onOpenClientFicha&&onOpenClientFicha(t.cid) }} style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',flex:1,minWidth:0}}>{t.cli?.name||'—'}</span>
                       <span style={{fontSize:12,fontWeight:600,color:C.overdueText,flexShrink:0}}>{fmt(t.v)}</span>
+                      <button onClick={()=>estadoCuentaEnviar(t.cli)} title='Enviar estado de cuenta al cliente' style={{flexShrink:0,width:28,height:28,borderRadius:7,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='m22 7-10 5L2 7'/></svg></button>
                     </div>
                   ))}
                 </div>
