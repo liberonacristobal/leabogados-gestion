@@ -6415,7 +6415,7 @@ function printComprobante(bill, clientName){
   const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Comprobante ${bill.invoice_no||''}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:${TXT};font-size:12px;background:#fff}.page{max-width:816px;margin:0 auto}@page{size:letter portrait;margin:16mm 18mm}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:22px 26px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:16px;font-weight:700'>Liberona Escala Abogados</div><div style='font-size:10px;opacity:.7;margin-top:2px'>leabogados.cl</div></div><div style='text-align:right'><div style='font-size:13px;font-weight:600'>Comprobante de cobro</div>${bill.invoice_no?`<div style='font-size:11px;opacity:.85;margin-top:2px'>N° ${bill.invoice_no}</div>`:''}</div></div><div style='padding:24px 26px'><table style='width:100%;border-collapse:collapse;font-size:12px'>${row('Cliente', clientName||'—')}${bill.receptor_name?row('Razón social', bill.receptor_name+(bill.receptor_rut?` · ${bill.receptor_rut}`:'')):''}${row('Concepto', bill.concept||'—')}${row('Monto', n(bill.amount))}${row('Estado', bill.status||'—')}${row('Emisión', dmy(bill.issued_at))}${bill.status==='Pagado'?row('Fecha de pago', dmy(bill.paid_at)):row('Vencimiento', dmy(bill.due))}${bill.notes?row('Notas', bill.notes):''}</table><div style='margin-top:26px;padding-top:12px;border-top:1px solid ${GRAY};font-size:10px;color:${MUT};display:flex;justify-content:space-between'><span>Av. Kennedy 7900, Of. 905, Vitacura · Santiago</span><span>Documento interno — no es el DTE del SII</span></div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
   const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
 }
-function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSeries,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,saving,user,onAttachChange}) {
+function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSeries,proveedores=[],terceros=[],anticipos=[],onConsume,onSave,onClose,onDelete,onAnular,onEmitirDTE,saving,user,onAttachChange}) {
   const [f,setF] = useState(bill||{client_id:'',concept:'',amount:'',monto_terceros:'',status:'Pendiente',invoice_no:'',issued_at:'',due:'',paid_at:'',notes:'',billing_type:'honorarios',receptor_name:'',receptor_rut:''})
   const [clientQuery,setClientQuery] = useState('')
   const [nuevaRS,setNuevaRS] = useState(false)
@@ -6614,6 +6614,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
         {bill?.id&&<button onClick={()=>onDelete(bill.id)} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:500,cursor:'pointer'}}>Eliminar</button>}
         {bill?.id&&<button onClick={()=>printComprobante(f,clients.find(c=>String(c.id)===String(f.client_id))?.name)} title='Imprimir / Guardar PDF' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:500,cursor:'pointer'}}>Comprobante</button>}
         {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
+        {bill?.id&&onEmitirDTE&&f.status!=='Anulado'&&f.status!=='Anulada'&&!bill.dte_track_id&&<button onClick={()=>onEmitirDTE(bill)} title='Generar y enviar la factura electrónica al SII (con vista previa antes de emitir)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Emitir al SII</button>}
         <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
         <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave({...f,_terceroProv:terceroProv,_terceroPagado:terceroPagado})} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
@@ -19100,6 +19101,38 @@ export default function App() {
     }catch(e){alert('Error: '+e.message)}
   },[])
 
+  // EMISIÓN ELECTRÓNICA (DTE directo al SII) vía edge function sii-sync (action:'emitir').
+  // Distinto de handleEmitirProgramada (que solo MARCA como emitida). Siempre hace una vista previa
+  // (dryRun: arma+firma, no envía) y pide confirmación antes de emitir de verdad. Default DTE 34 (exenta).
+  const handleEmitirDTE=useCallback(async(bill, entity)=>{
+    try{
+      const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(bill.client_id))
+      const ent = entity || (bill.entity_id?ents.find(e=>String(e.id)===String(bill.entity_id)):(ents.length===1?ents[0]:null))
+      const recRut = ent?.rut || bill.receptor_rut
+      const recRs  = ent?.name || bill.receptor_name
+      if(!recRut || !recRs){ alert('Falta RUT o razón social del receptor.\nAsigna la razón social a la factura antes de emitir al SII.'); return }
+      const fecha = (bill.issued_at||'').slice(0,10) || new Date().toISOString().slice(0,10)
+      const base = {
+        action:'emitir', tipoDte:34, billingId:bill.id, fecha,
+        receptor:{ rut:recRut, rs:recRs },
+        items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }],
+      }
+      const {data:{session}}=await supabase.auth.getSession()
+      if(!session){ alert('Sesión expirada. Vuelve a entrar.'); return }
+      const call = async(body)=>{
+        const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)})
+        const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
+      }
+      const prev=await call({...base, dryRun:true})   // 1) vista previa: arma y firma, NO envía
+      if(!confirm(`Vista previa OK — Factura exenta (DTE 34)\nFolio ${prev.folio} · total ${fmt(prev.total)} · ambiente ${prev.ambiente}\nReceptor ${recRs} (${recRut})\n\n¿Emitir de verdad al SII?`)) return
+      const r=await call(base)                        // 2) emisión real (el motor persiste folio + dte_* en billing)
+      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString() }
+      await supabase.from('billing').update({status:'Pendiente', issued_at:fecha}).eq('id',bill.id)
+      setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
+      alert(`Emitida al SII.\nFolio ${r.folio} · TrackID ${r.trackId||'—'} · estado ${r.estado||'enviado'}${r.glosa?`\n${r.glosa}`:''}`)
+    }catch(e){ alert('No se pudo emitir al SII: '+e.message) }
+  },[clientEntities])
+
   // Editar cuotas PROGRAMADAS (fecha/monto) sin rehacer la forma de cobro. Solo programadas; no toca emitidas/pagadas.
   const handleUpdateCuotas=useCallback(async(updates)=>{
     try{
@@ -19312,7 +19345,7 @@ export default function App() {
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<CubrirCuotasModal anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
-        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
+        {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {modal?.type==='anticipo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><AnticipoForm clients={clients} sales={sales} clientEntities={clientEntities} onSave={handleSaveAnticipo} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null}/></Modal>}
         {modal?.type==='proveedores'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ProveedoresModal proveedores={proveedores} terceros={terceros} billing={billing} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='gastos'&&(
