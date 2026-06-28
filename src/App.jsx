@@ -9095,8 +9095,10 @@ const CATS_OFICINA_BASE = ['Arriendo','Gastos comunes','Contadora','Tarjeta de c
 const CATS_LEGALES = ['notaria','cbr','diario oficial','registro civil','fondo','otro']
 const _mesLabelOf = m => { const [y,mm]=m.split('-'); const nm=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(mm)]||mm; return `${nm} ${y}` }
 // Pieza 2: panel mensual de Costos de Oficina, por categoría, con NETO = costos (gasto) − recuperos (fondo).
-function OficinaCostPanel({expenses, clientId, filtro=null}){
+function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
   // filtro: 'estructural' (admin: sueldos/arriendo) | 'gestion' (equipo: movilización/trámites) | null (todo)
+  const [repAjustar,setRepAjustar] = useState(false)
+  const [repMontos,setRepMontos] = useState({})
   const office = useMemo(()=>(expenses||[]).filter(e=>String(e.client_id)===String(clientId)&&!e.personal_de&&(!filtro||(filtro==='gestion')===esGestionGasto(e))), [expenses,clientId,filtro])
   const meses = useMemo(()=>{ const cur=`${currentYear}-${String(currentMonth).padStart(2,'0')}`; const s=[...new Set([cur,...office.map(e=>(e.date||'').slice(0,7)).filter(Boolean)])].sort().reverse(); return s }, [office])
   const [mes,setMes] = useState(`${currentYear}-${String(currentMonth).padStart(2,'0')}`)
@@ -9113,6 +9115,12 @@ function OficinaCostPanel({expenses, clientId, filtro=null}){
   }, [office,mes])
   const totNeto = cats.reduce((a,c)=>a+c.neto,0)
   const yearNeto = useMemo(()=>{ const yr=mes.slice(0,4); let costo=0,recupero=0; office.filter(e=>(e.date||'').slice(0,4)===yr).forEach(e=>{ if(e.type==='fondo')recupero+=(e.amount||0); else if(!e.no_descuenta_saldo)costo+=(e.amount||0) }); return costo-recupero }, [office,mes])
+  // Costos fijos: el molde = los ítems estructurales del mes anterior; se ofrece repetirlos si el mes actual está vacío.
+  const prevMes = useMemo(()=>{ const [y,mo]=mes.split('-').map(Number); const d=new Date(y,mo-2,1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }, [mes])
+  const prevItems = useMemo(()=> office.filter(e=>(e.date||'').slice(0,7)===prevMes && e.type!=='fondo' && !e.no_descuenta_saldo), [office,prevMes])
+  const puedeRepetir = filtro==='estructural' && cats.length===0 && prevItems.length>0 && !!onRepetir
+  const repTot = prevItems.reduce((a,it)=>a+(repMontos[it.id]??it.amount??0),0)
+  const repLabel = it => (it.category&&!CATS_LEGALES.includes(String(it.category).trim().toLowerCase()))?it.category:(it.concept||'Costo')
   return (
     <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginTop:10}}>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
@@ -9128,7 +9136,26 @@ function OficinaCostPanel({expenses, clientId, filtro=null}){
         </div>
       </div>
       <div style={{borderTop:`0.5px solid ${C.border}`,marginTop:10,paddingTop:4}}>
-      {cats.length===0 ? (
+      {puedeRepetir ? (
+        <div style={{background:C.azulBg,borderLeft:`3px solid ${C.accent}`,border:`1px solid ${C.border}`,borderRadius:9,padding:'10px 12px',margin:'6px 0 2px'}}>
+          <div style={{fontSize:11.5,fontWeight:700,color:C.accent,marginBottom:2}}>Aún no cargas los costos fijos de {_mesLabelOf(mes)}</div>
+          <div style={{fontSize:10,color:C.muted,marginBottom:9}}>En {_mesLabelOf(prevMes)} fueron {prevItems.length} ítem{prevItems.length!==1?'s':''} · {fmt(repTot)}. ¿Los repito?</div>
+          <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:10}}>
+            {prevItems.map(it=>(
+              <div key={it.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,fontSize:11.5}}>
+                <span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{repLabel(it)}</span>
+                {repAjustar
+                  ? <input type='number' value={repMontos[it.id]??it.amount??0} onChange={ev=>setRepMontos(m=>({...m,[it.id]:Number(ev.target.value)||0}))} style={{width:110,fontSize:12,fontWeight:700,textAlign:'right',border:`1px solid ${C.accent}`,borderRadius:6,padding:'3px 7px',color:C.text,flexShrink:0}}/>
+                  : <span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(repMontos[it.id]??it.amount)}</span>}
+              </div>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>onRepetir(prevItems.map(it=>({concept:it.concept,category:it.category,amount:repMontos[it.id]??it.amount})), mes)} style={{flex:1,fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'8px',cursor:'pointer'}}>Cargar {_mesLabelOf(mes)} · {fmt(repTot)}</button>
+            <button onClick={()=>setRepAjustar(a=>!a)} style={{fontSize:11.5,fontWeight:600,color:repAjustar?C.accent:C.muted,background:'#fff',border:`1px solid ${repAjustar?C.accent:C.border}`,borderRadius:7,padding:'8px 12px',cursor:'pointer'}}>{repAjustar?'Listo':'Ajustar'}</button>
+          </div>
+        </div>
+      ) : cats.length===0 ? (
         <div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin costos en {_mesLabelOf(mes)}.</div>
       ) : cats.map(c=>(
           <div key={c.cat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`0.5px solid ${C.border}`}}>
@@ -9432,6 +9459,16 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const marcarPersonal = async(e,persona)=>{ const patch={personal_de:persona||null, paid_by_client: persona?false:(e.category==='Notaria')}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); setNotaPersonaPick(null) }catch(err){alert('Error: '+err.message)} }
   // Triage de gasto de oficina (Liberona Escala) → personal de un miembro: lo saca del folder de la oficina y queda como personal.
   const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
+  // Repetir los costos fijos del mes anterior en el mes nuevo (sin re-tipear). created_by = admin → quedan estructurales.
+  const repetirCostosFijos = async (items, mesISO) => {
+    if(!items?.length || !selectedClient) return
+    const rows = items.map(it=>({ client_id:selectedClient.id, type:'gasto', amount:Math.round(it.amount||0), concept:it.concept||'Costo de oficina', category:it.category||null, date:`${mesISO}-01`, created_by:currentUserName||null }))
+    try {
+      const { data, error } = await supabase.from('expenses').insert(rows).select()
+      if(error){ console.error('repetirCostosFijos',error); return }
+      if(data) setExpenses(p=>[...data, ...p])
+    } catch(err){ console.error('repetirCostosFijos',err) }
+  }
   // Catálogo de categorías de oficina que APRENDE: base + las ya usadas en gastos de la oficina (excluye las legales) + ordenadas.
   const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_BASE); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(e.category) }); return [...s] },[expenses,clients])
   const setCatOficina = async(e,cat)=>{ setCatMenu(null); try{ await supabase.from('expenses').update({category:cat}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,category:cat}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ alert('No se pudo guardar la categoría: '+err.message) } }
@@ -10025,7 +10062,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <button key={k} onClick={()=>setOfiLente(k)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>{l}</button>
                 )})}
               </div>
-              <OficinaCostPanel expenses={expenses} clientId={selectedClient.id} filtro={ofiLente}/>
+              <OficinaCostPanel expenses={expenses} clientId={selectedClient.id} filtro={ofiLente} onRepetir={repetirCostosFijos}/>
             </>)
           }
           return <KpiRow bal={rb.total}/>
