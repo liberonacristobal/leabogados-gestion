@@ -587,6 +587,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
   const endedN=clients.filter(c=>!c.is_internal&&c.status==='Terminado').length
   const prospectoN=clients.filter(c=>!c.is_internal&&c.status==='Prospecto').length
   const filtered = clients.filter(c=>{
+    if(c.is_internal) return false   // la oficina (Liberona Escala) no es un cliente: los limited no la ven ni sus costos (sueldos/arriendo)
     if(sFilter==='Activo' && (c.status||'Activo')!=='Activo') return false
     if(sFilter==='Terminado' && c.status!=='Terminado') return false
     if(sFilter==='Prospecto' && c.status!=='Prospecto') return false
@@ -9292,10 +9293,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
 
   const filtered = useMemo(()=>{
     if(!selectedClient) return []
+    if(!isAdmin && (selectedClient.is_internal || /liberona\s+escala/i.test(selectedClient.name||''))) return []   // limited: oficina jamás
     let l = expenses.filter(e=>e.client_id===selectedClient.id)
     if(gastoCatF) l = l.filter(e=> gastoCatF==='Fondo' ? e.type==='fondo' : (e.type!=='fondo' && (e.category||'Otro')===gastoCatF))
     return l.sort((a,b)=> gastoOrd==='asc' ? (new Date(a.date||0)-new Date(b.date||0)) : (new Date(b.date||0)-new Date(a.date||0)))
-  },[expenses,selectedClient,gastoOrd,gastoCatF])
+  },[expenses,selectedClient,gastoOrd,gastoCatF,isAdmin])
   const gastoCats = useMemo(()=> selectedClient ? [...new Set(expenses.filter(e=>e.client_id===selectedClient.id).map(e=> e.type==='fondo'?'Fondo':(e.category||'Otro')))].sort() : [],[expenses,selectedClient])
   const gastoToolbar = () => {
     const movibles = selectedClient ? (expenses||[]).filter(e=> String(e.client_id)===String(selectedClient.id) && e.type==='gasto' && !e.deleted_at && !e.client_render_id && !e.render_id && !e.notaria_render_id) : []
@@ -9997,6 +9999,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         {/* Vista cliente seleccionado: KPIs (totales de todas las RS). Oficina = la firma: no hay saldo, sí Gastos / Por pagar / Pagado */}
         {selectedClient&&rb&&(()=>{
           if(esOficina(selectedClient.id)){
+            if(!isAdmin) return null   // los limited NUNCA ven los costos de oficina (sueldos/arriendo)
             const gs=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
             const total=gs.reduce((a,e)=>a+(e.amount||0),0)
             const pagado=gs.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
@@ -10018,7 +10021,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           const respCobranza = respList.filter(([,o])=> verPos? o.posN>0 : o.negN>0).sort((a,b)=> verPos ? b[1].posAmt-a[1].posAmt : a[1].negAmt-b[1].negAmt)
           const cards=[['neg','Por reembolsar',negL.reduce((a,c)=>a+saldoDe(c),0),negL.length,'#A32D2D','#FCEBEB','#E24B4A'],['pos','A favor',posL.reduce((a,c)=>a+saldoDe(c),0),posL.length,C.greenText,'#E1F5EE','#1D9E75']]
           return (<>
-            {!q.trim()&&!respFilter&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
+            {isAdmin&&!q.trim()&&!respFilter&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
               const gOfi=(expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
               if(!gOfi.length) return null
               const ym=new Date().toISOString().slice(0,7); const mesGastos=gOfi.filter(e=>(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
