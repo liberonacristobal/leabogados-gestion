@@ -17568,23 +17568,35 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // PROPUESTA de conciliación (Eje 1): el motor SUGIERE, no aplica. Reusa el MISMO calce exacto (mejorCandidato/combo)
   // que el auto, pero en vez de conciliar arma una lista con trazabilidad; el humano aprueba tarjeta por tarjeta.
   const [propOpen,setPropOpen] = useState(false)
+  const [propPick,setPropPick] = useState({})        // movId → factura elegida a mano (Cambiar / Buscar otra)
+  const [propBuscar,setPropBuscar] = useState(null)  // movId con la búsqueda de factura abierta
+  const [propBuscaQ,setPropBuscaQ] = useState('')
   const rutEq = (a,b) => { const x=crNormRut(a), y=crNormRut(b); return !!x && x===y }
   const propuesta = useMemo(()=>{
     const used=new Set(); const alta=[], combina=[], revisar=[]
+    const otrasDe=(cid,exclId)=>{ const o=facturasConSaldo.filter(b=> String(b.client_id)===String(cid) && b.id!==exclId); return { n:o.length, total:o.reduce((s,b)=>s+saldoFactura(b),0) } }
     const pend = movs.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
     for(const mov of pend){
       const f = mejorCandidato(mov, used)
       if(f){ used.add(f.id)
         const rm = rutEq(mov.rut_contraparte, f.receptor_rut)
         const reasons = rm ? ['mismo RUT','calce exacto'] : ['calce exacto · mismo monto']
-        ;(rm?alta:combina).push({ mov, facturas:[f], reasons, conf: rm?'alta':'media' }); continue }
+        const alt = facturasConSaldo.filter(b=> String(b.client_id)===String(mov.cliente_id) && b.id!==f.id && saldoFactura(b)===(mov.monto||0))
+        ;(rm?alta:combina).push({ mov, facturas:[f], reasons, conf:rm?'alta':'media', alt, otras:otrasDe(mov.cliente_id,f.id) }); continue }
+      const fmg = facturaMasGastos(mov)
+      if(fmg){ used.add(fmg.factura.id); combina.push({ mov, facturas:[fmg.factura], fg:fmg, reembolso:fmg.excess, reasons:['factura + reembolso de gastos'], conf:'combina', otras:otrasDe(mov.cliente_id,fmg.factura.id) }); continue }
       const cb = comboExacto(mov, used) || comboExacto3(mov, used)
       if(cb){ cb.forEach(x=>used.add(x.id)); combina.push({ mov, facturas:cb, reasons:[`${cb.length} facturas suman el pago`], conf:'combina' }); continue }
       revisar.push({ mov })
     }
     return { alta, combina, revisar }
-  }, [movs, concByMov, billing])
-  const aprobarProp = async(p)=>{ if(p.facturas.length===1) await reconciliar(p.mov, p.facturas[0], 'propuesta'); else await reconciliarCombo(p.mov, p.facturas) }
+  }, [movs, concByMov, billing, facturasConSaldo])
+  const aprobarProp = async(p)=>{
+    if(p.fg){ await reconciliarFacturaGastos(p.mov, p.fg); return }
+    let facturas=p.facturas
+    if(p.facturas.length===1 && propPick[p.mov.id]){ const f=facturasConSaldo.find(b=>String(b.id)===String(propPick[p.mov.id])); if(f) facturas=[f] }
+    if(facturas.length===1) await reconciliar(p.mov, facturas[0], 'propuesta'); else await reconciliarCombo(p.mov, facturas)
+  }
   const resumenConc = useMemo(()=>{ const abo=movs.filter(esConciliable); const done=abo.filter(m=>concByMov[m.id]?.length)
     const desc=movs.filter(esDescalce); const fondos=movs.filter(m=>m.tipo==='abono'&&!m.es_interno&&m.rol_cuenta==='gastos'&&!(concByMov[m.id]?.length)&&(!m.categoria||m.categoria==='Cliente')&&!tieneCand(m))
     return { total:abo.length, done:done.length, pend:abo.length-done.length, montoPend:abo.filter(m=>!(concByMov[m.id]?.length)).reduce((s,m)=>s+(m.monto||0),0),
@@ -18118,10 +18130,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         const fdate=iso=>iso?fmtFechaDMY(iso):'—'
         const cuenta=m=>m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'
         const card=(p)=>{ const m=p.mov; const cli=clients.find(c=>String(c.id)===String(m.cliente_id)); const rs=cli?.name||m.nombre_contraparte||'—'; const vinc=aliases.some(a=>rutEq(a.rut_pagador,m.rut_contraparte))
+          const single=p.facturas.length===1 && !p.fg
+          const fShown=(single&&propPick[m.id]) ? (facturasConSaldo.find(b=>String(b.id)===String(propPick[m.id]))||p.facturas[0]) : p.facturas[0]
+          const overridden = single && propPick[m.id] && String(propPick[m.id])!==String(p.facturas[0].id)
+          const facturas = single ? [fShown] : p.facturas
+          const buscando = propBuscar===m.id
+          const q=propBuscaQ.trim().toLowerCase()
+          const lista = buscando ? facturasConSaldo.filter(b=> String(b.client_id)===String(m.cliente_id) && (!q || String(folioN(b.invoice_no)).includes(q) || (b.concept||'').toLowerCase().includes(q) || String(b.amount||'').includes(q))).slice(0,30) : []
           return (<div key={m.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:12,marginBottom:9}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:9}}>
               <span onClick={()=>onOpenClientFicha&&m.cliente_id&&onOpenClientFicha(m.cliente_id)} style={{fontSize:13,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{rs}</span>
-              <span style={{flexShrink:0,fontSize:9,fontWeight:600,color:C.greenText,background:C.greenBg,padding:'2px 8px',borderRadius:20}}>{p.conf==='alta'?'cuadra exacto':p.conf==='combina'?'combina':'monto idéntico'}</span>
+              <span style={{flexShrink:0,fontSize:9,fontWeight:600,color:C.greenText,background:C.greenBg,padding:'2px 8px',borderRadius:20}}>{p.fg?'factura + fondos':p.conf==='alta'?'cuadra exacto':p.facturas.length>1?'combina':'monto idéntico'}</span>
             </div>
             <div style={{background:C.bgSoft,borderRadius:9,padding:'9px 11px',marginBottom:9}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:C.muted,letterSpacing:.4}}>PAGO RECIBIDO · BANCO</span><span style={{fontSize:15,fontWeight:700,color:C.accent}}>{fmtM(m.monto)}</span></div>
@@ -18130,8 +18149,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               {m.descripcion&&<div style={{fontSize:10,color:C.done,marginTop:3,fontStyle:'italic'}}>glosa: "{m.descripcion}"</div>}
               <div style={{fontSize:9,color:vinc?C.greenText:C.soonText,marginTop:4}}>{vinc?'✓ RUT ya vinculado a este cliente':'RUT nuevo → se aprende al aprobar'}</div>
             </div>
-            <div style={{fontSize:9,fontWeight:700,color:C.done,letterSpacing:.4,marginBottom:5}}>SE APLICA A{p.facturas.length>1?` · ${p.facturas.length} facturas`:''}</div>
-            {p.facturas.map(f=>{ const prev=aplicadoByFactura[f.id]||0; return (
+            <div style={{fontSize:9,fontWeight:700,color:C.done,letterSpacing:.4,marginBottom:5}}>SE APLICA A{facturas.length>1?` · ${facturas.length} facturas`:''}</div>
+            {facturas.map(f=>{ const prev=aplicadoByFactura[f.id]||0; return (
               <div key={f.id} style={{borderLeft:`2.5px solid ${C.accent}`,padding:'1px 0 1px 10px',marginBottom:7}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:12,fontWeight:700,color:C.text}}>Factura N°{folioN(f.invoice_no)}</span><span style={{fontSize:12,fontWeight:700,color:C.accent}}>{fmtM(saldoFactura(f))}</span></div>
                 {(f.receptor_name||f.receptor_rut)&&<div style={{fontSize:10,color:C.text,marginTop:2}}>{f.receptor_name||''}{f.receptor_rut?<> · <b style={{color:C.azulInfo}}>{f.receptor_rut}</b></>:''}{rutEq(m.rut_contraparte,f.receptor_rut)&&<span style={{fontSize:9,fontWeight:600,color:C.greenText,background:C.greenBg,padding:'1px 6px',borderRadius:20,marginLeft:3}}>mismo RUT</span>}</div>}
@@ -18139,8 +18158,34 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <div style={{fontSize:10,color:C.done,marginTop:2}}>{cli?.abogado_responsable?`resp. ${cli.abogado_responsable} · `:''}emitida {fdate(f.issued_at)}{f.due?` · vence ${fdate(f.due)}`:''}{prev>0?` · abonos previos ${fmtM(prev)}`:' · sin abonos previos'}</div>
               </div>
             )})}
+            {p.fg&&<div style={{borderLeft:`2.5px solid ${C.normal}`,padding:'1px 0 1px 10px',marginBottom:7}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:12,fontWeight:700,color:C.text}}>Reembolso de fondos</span><span style={{fontSize:12,fontWeight:700,color:C.greenText}}>{fmtM(p.reembolso)}</span></div>
+              <div style={{fontSize:10,color:C.muted,marginTop:2}}>cubre gastos pendientes del cliente · entra como fondo a su saldo</div>
+            </div>}
+            {single&&!overridden&&p.alt&&p.alt.length>0&&<div style={{background:C.soonBg,borderRadius:8,padding:'8px 10px',marginBottom:8}}>
+              <span style={{fontSize:10,color:C.soonText}}><b>¿Por qué esta?</b> {cli?.name||'El cliente'} también tiene {p.alt.length===1?'otra factura':`${p.alt.length} facturas`} del mismo monto. </span>
+              <span onClick={()=>setPropPick(pp=>({...pp,[m.id]:p.alt[0].id}))} style={{fontSize:10,color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>Cambiar a F°{folioN(p.alt[0].invoice_no)}</span>
+            </div>}
+            {overridden&&<div style={{fontSize:10,color:C.soonText,marginBottom:8}}>Elegida por ti · <span onClick={()=>setPropPick(pp=>{const n={...pp};delete n[m.id];return n})} style={{color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>volver a la sugerida</span></div>}
+            {single&&<div style={{marginBottom:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                <span onClick={()=>{ setPropBuscar(buscando?null:m.id); setPropBuscaQ('') }} style={{fontSize:10,fontWeight:600,color:C.accent,cursor:'pointer'}}>{buscando?'Cerrar búsqueda':'Buscar otra factura'}</span>
+                {p.otras&&p.otras.n>0&&<span style={{fontSize:10,color:C.muted}}>Otras pendientes: {p.otras.n} · {fmtM(p.otras.total)}</span>}
+              </div>
+              {buscando&&<div style={{marginTop:7}}>
+                <input value={propBuscaQ} onChange={e=>setPropBuscaQ(e.target.value)} placeholder='Folio, concepto o monto…' style={{width:'100%',height:32,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:12,padding:'0 10px',boxSizing:'border-box',outline:'none',color:C.text,marginBottom:6}}/>
+                <div style={{maxHeight:170,overflowY:'auto'}}>
+                  {lista.length===0?<div style={{fontSize:11,color:C.done,padding:'6px 0'}}>Sin facturas con saldo.</div>:lista.map(b=>(
+                    <div key={b.id} onClick={()=>{ setPropPick(pp=>({...pp,[m.id]:b.id})); setPropBuscar(null) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0',borderTop:`0.5px solid #F2F4F6`,cursor:'pointer'}}>
+                      <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F°{folioN(b.invoice_no)}{b.concept?` · ${b.concept}`:''}</div><div style={{fontSize:10,color:C.muted}}>{fdate(b.issued_at)} · saldo {fmtM(saldoFactura(b))}</div></div>
+                      <span style={{flexShrink:0,fontSize:10,fontWeight:600,color:C.accent}}>Imputar →</span>
+                    </div>
+                  ))}
+                </div>
+              </div>}
+            </div>}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:2}}>
-              <div style={{display:'flex',gap:5,flexWrap:'wrap',minWidth:0}}>{p.reasons.map((r,i)=><span key={i} style={{fontSize:9,fontWeight:600,color:C.greenText,background:C.greenBg,padding:'2px 7px',borderRadius:20}}>{r}</span>)}</div>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',minWidth:0}}>{(overridden?['elegida por ti']:p.reasons).map((r,i)=><span key={i} style={{fontSize:9,fontWeight:600,color:overridden?C.soonText:C.greenText,background:overridden?C.soonBg:C.greenBg,padding:'2px 7px',borderRadius:20}}>{r}</span>)}</div>
               <button onClick={()=>aprobarProp(p)} disabled={busy===m.id} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:busy===m.id?C.done:C.normal,border:'none',borderRadius:7,padding:'6px 12px',cursor:busy===m.id?'default':'pointer'}}>{busy===m.id?'…':'Aprobar ✓'}</button>
             </div>
           </div>) }
