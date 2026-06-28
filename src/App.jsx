@@ -5658,19 +5658,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
     const to=(cl?.email||'').trim()
     if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
-    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
-    const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
-    const venc=b.due?fmtFechaDMY(b.due):''
-    const vencida=esVencidaG(b)   // tono: amable si está al día, firme si ya venció
-    if(!confirm(`¿Enviar recordatorio ${vencida?'(firme) ':'(amable) '}de cobro a ${to} por ${folio} (${monto})?`)) return
-    const apertura=vencida
-      ? `Nos dirigimos a ustedes para hacer presente que ${folio}${b.concept?` (${b.concept})`:''}, por ${monto}, se encuentra pendiente y vencida${venc?` (venció el ${venc})`:''}. Les agradeceremos regularizar el pago a la brevedad.`
-      : `Les recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.`
-    const texto=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\nLiberona Escala Abogados`
-    const pagoHtml=DATOS_PAGO_HTML
-    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${pagoHtml}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
-    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; alert('Recordatorio enviado desde la cuenta de oficina.') }
+    const r=recordatorioCobro(b)
+    if(!confirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
+    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; alert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
@@ -6584,6 +6574,22 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   ))}
                 </div>
               )}
+              {(()=>{ const porRecordar=vivos.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0&&esVencidaB(b)&&(diasDesde(recordadoMap[String(b.id)])==null||diasDesde(recordadoMap[String(b.id)])>=7)).sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,8); if(!porRecordar.length) return null; return (
+                <div style={{marginTop:13}}>
+                  <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'0 2px 6px'}}>Por recordar · {porRecordar.length}</div>
+                  <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+                    {porRecordar.map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const r=recordatorioCobro(b); const colN=r.nivel==='final'?C.overdueText:r.nivel==='firme'?C.soonText:C.muted; return (
+                      <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div>
+                          <div style={{fontSize:10,color:colN}}>{r.nivel} · {fmt(saldoBill(b))}</div>
+                        </div>
+                        <button onClick={()=>recordarCobro(b)} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:'pointer'}}>Recordar</button>
+                      </div>
+                    ) })}
+                  </div>
+                </div>
+              ) })()}
             </div>
           </div>
         )
@@ -11995,18 +12001,9 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const recordarCobro = async(b)=>{
     const to=(client.email||'').trim()
     if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
-    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
-    const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
-    const venc=b.due?fmtFechaDMY(b.due):''
-    const vencida = b.status==='Vencido' || (b.status==='Pendiente' && b.due && b.due < new Date().toISOString().slice(0,10))   // tono: amable al día, firme si venció
-    if(!confirm(`¿Enviar recordatorio ${vencida?'(firme) ':'(amable) '}de cobro a ${to} por ${folio} (${monto})?`)) return
-    const apertura=vencida
-      ? `Nos dirigimos a ustedes para hacer presente que ${folio}${b.concept?` (${b.concept})`:''}, por ${monto}, se encuentra pendiente y vencida${venc?` (venció el ${venc})`:''}. Les agradeceremos regularizar el pago a la brevedad.`
-      : `Les recordamos amablemente el pago pendiente de ${folio}${b.concept?` (${b.concept})`:''} por ${monto}${venc?`, con vencimiento ${venc}`:''}.`
-    const texto=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\nLiberona Escala Abogados`
-    const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${DATOS_PAGO_HTML}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
-    try{ await sendMailServer({to, subject:`${vencida?'Pago vencido':'Recordatorio de cobro'} — ${folio}`, html, text:texto}); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; alert('Recordatorio enviado desde la cuenta de oficina.') }
+    const r=recordatorioCobro(b)
+    if(!confirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
+    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; alert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
     catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Registrar pago (total o parcial/abono). Si el monto recibido < saldo → queda "abonado" (paid_amount) y la factura sigue pendiente.
@@ -12398,6 +12395,25 @@ async function acusePagoEmail(to, {folio, monto, fecha}){
 }
 // Envío de una factura por correo. Reusa el motor de la rendición (driveToken + sendGmailWithPdf + firma).
 // Plantilla genérica auto-rellenada + destinatarios de la ficha (contactos) + CC aprendido. PDF a mano por ahora (con la emisión DTE saldrá solo).
+// Contenido del recordatorio de cobro — FUENTE ÚNICA (Facturación y ficha). Secuencia escalada (dunning) por días de mora:
+// amable (al día) → firme (vencida ≤30d) → final (vencida >30d, anuncia gestiones de cobranza).
+function recordatorioCobro(b){
+  const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
+  const monto='$'+(saldoBill(b)||b.amount||0).toLocaleString('es-CL')
+  const venc=b.due?fmtFechaDMY(b.due):''
+  const dl=daysLeft(b.due); const diasVenc=(dl!=null&&dl<0)?-dl:0
+  const nivel=diasVenc<=0?'amable':diasVenc<=30?'firme':'final'
+  const concept=b.concept?` (${b.concept})`:''
+  const apertura=nivel==='amable'
+    ? `Les recordamos amablemente el pago pendiente de ${folio}${concept} por ${monto}${venc?`, con vencimiento ${venc}`:''}.`
+    : nivel==='firme'
+    ? `Nos dirigimos a ustedes para hacer presente que ${folio}${concept}, por ${monto}, se encuentra pendiente y vencida${venc?` (venció el ${venc})`:''}. Les agradeceremos regularizar el pago a la brevedad.`
+    : `Reiteramos que ${folio}${concept}, por ${monto}, se encuentra vencida hace ${diasVenc} días${venc?` (venció el ${venc})`:''} y aún sin pago. Les solicitamos regularizarla con urgencia; de lo contrario, nos veremos en la necesidad de iniciar las gestiones de cobranza que correspondan.`
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const text=`Estimados,\n\n${apertura}\n\n${DATOS_PAGO_TXT}\n\nSi ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.\n\nSaludos cordiales,\nLiberona Escala Abogados`
+  const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${DATOS_PAGO_HTML}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
+  return { nivel, folio, monto, subject:`${nivel==='amable'?'Recordatorio de cobro':'Pago vencido'} — ${folio}`, html, text }
+}
 // Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
 function facturaGlosa(factura, sale){
   const concept=(factura.concept||'').trim(), proyecto=(sale?.name||'').trim()
