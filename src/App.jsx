@@ -17544,12 +17544,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       // 2) Conciliación exacta (excluye los recién marcados internos; incluye los recién identificados por monto). Gastos no se toca (suele ser fondo). FIFO para recurrentes.
       const movsV = idIds.length ? movs.map(m=> idMap[m.id]?{...m,cliente_id:idMap[m.id]}:m) : movs
       const pend = movsV.filter(m=>esConciliable(m) && m.rol_cuenta!=='gastos' && !(concByMov[m.id]?.length) && !intSet.has(m.id)).slice().sort((a,b)=> (a.fecha||'')<(b.fecha||'')?-1:1)
-      const best={}, facCnt={}
-      pend.forEach(m=>{ const f=mejorCandidato(m); if(f){ best[m.id]=f.id; facCnt[f.id]=(facCnt[f.id]||0)+1 } })
-      for(const mov of pend){ const fid=best[mov.id]
-        if(fid && !used.has(fid) && (facCnt[fid]||0)<=1){
-          const f=facturasCliente(mov.cliente_id).find(x=>x.id===fid); if(!f) continue
-          used.add(fid); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
+      // Pareo greedy FIFO: `pend` viene ordenado por fecha (más antiguo primero) y cada pago toma su MEJOR factura
+      // EXACTA aún DISPONIBLE — `mejorCandidato(mov, used)` excluye las ya tomadas. Para recurrentes del mismo cliente
+      // y monto (N pagos ↔ N facturas iguales) esto las empareja en orden (pago antiguo → factura antigua), que es
+      // saldo-safe (el saldo del cliente baja igual sea cual sea la factura que marque). Antes un candado (facCnt<=1)
+      // saltaba TODO el set recurrente; ahora se cruzan solos. En el borde "2 pagos, 1 factura" concilia el que
+      // corresponde y deja el otro para revisar (antes dejaba los dos sin tocar).
+      for(const mov of pend){
+        const f=mejorCandidato(mov, used)
+        if(f){ used.add(f.id); if(f.status==='Pagado') enl++; else marc++; await reconciliar(mov, f, 'auto'); ok++; monto+=mov.monto; continue }
         const cb=comboExacto(mov, used) || comboExacto3(mov, used)
         if(cb){ cb.forEach(f=>used.add(f.id)); await reconciliarCombo(mov, cb); cmb++; ok++; monto+=mov.monto } }
     }catch(e){ alert('Error en conciliación automática: '+e.message) }
