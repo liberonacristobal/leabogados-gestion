@@ -26,10 +26,11 @@ export function getConfig() {
     seedUrl: `${dteBase}/CrSeed.jws`,
     tokenUrl: `${dteBase}/GetTokenFromSeed.jws`,
     rcvBase,
+    // EMISION DTE (Fase 2): subida del EnvioDTE (multipart) + consulta de estado por TrackID.
+    uploadUrl: prod ? 'https://palena.sii.cl/cgi_dte/UPL/DTEUpload' : 'https://maullin.sii.cl/cgi_dte/UPL/DTEUpload',
+    estadoUrl: `${dteBase}/QueryEstUp.jws`,
+    // RUT que ENVÍA el sobre (puede diferir del emisor); por defecto el de la empresa.
+    rutEnvia: Deno.env.get('SII_RUT_ENVIA') || Deno.env.get('SII_RUT_EMPRESA') || '',
     timeoutMs: 30000,
   }
 }
-
-// TODO FASE 2 (emision de DTEs — NO implementada): agregar aqui los endpoints
-// de envio (palena|maullin /cgi_dte/UPL/DTEUpload) y timbraje/folios CAF.
-// La danza de auth.ts se reutiliza tal cual; la emision vivira en emision.ts.

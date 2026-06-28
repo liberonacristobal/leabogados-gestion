@@ -24,7 +24,7 @@ const TTL_MS = 55 * 60 * 1000
 
 let tokenCache: { token: string; expira: number } | null = null
 
-interface Credenciales {
+export interface Credenciales {
   key: any
   certPemB64: string
   modulusB64: string
@@ -33,7 +33,8 @@ interface Credenciales {
 let credCache: Credenciales | null = null
 
 // Abre el .pfx (base64 en secreto) y extrae clave privada + certificado.
-function cargarCertificado(): Credenciales {
+// Exportada: la emisión de DTEs (firma.ts) reutiliza EXACTAMENTE el mismo certificado.
+export function cargarCertificado(): Credenciales {
   if (credCache) return credCache
   const { certB64, certPassword } = getConfig()
   if (!certB64) throw new Error('Falta el secreto SII_CERT_B64')
