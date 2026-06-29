@@ -15,9 +15,10 @@ Rol: experto en experiencia de usuario. Método: recorrido de las vistas princip
 - **Formato de monto mezclado en una misma foto**: en Facturación, "Etapas del cobro" mostraba `$65M` (abreviado) arriba y `$65.000.000` (completo) en el vencido/al-día anidado. → **Resuelto**: el anidado pasa a `fmtShort` (alineado con el resto de la app, ej. mini Cobranza). **Regla única que emergió**: *fotos/KPIs resumen → `fmtShort`; listas/filas de detalle → `fmt` (completo, exacto)*. Las demás `fmt` que quedan son filas de listas (correcto). Pendiente-si-se-pide: consistencia CROSS-foto (algunas fotos usan `fmt`/`fmtMon`, otras `fmtShort`) — es un sweep mayor, no un bug dentro de una foto.
 
 ### P1 — claridad y feedback
-- **Empty states pobres**: "Pipeline · 0 propuestas · —" (Ventas) y similares son cajas vacías sin guía. → Empty state que oriente la acción ("Sin propuestas — crea una con + Nueva propuesta").
-- **Íconos del header sin etiqueta** (banco=conciliación, gráfico=inteligencia): dependen de recordar. Para equipo chico es tolerable, pero un tooltip/label corto en el primer uso ayuda (reconocer > recordar).
-- **El ícono al final de cada fila de Clientes** (documento) no comunica su función → etiquetar o quitar.
+- **Empty states pobres**: "Pipeline · 0 propuestas · —" (Ventas). → ✅ HECHO: el tile vacío muestra "+ Crear la primera" y el toque abre directo "Nueva propuesta" (antes filtraba a una lista vacía).
+- ~~Íconos del header sin etiqueta~~ → **YA estaba resuelto**: los botones del header tienen `title` + `aria-label` ("Conciliación bancaria…", "Inteligencia de negocios", "Buscar o ir a ⌘K"). (Hallazgo de auditoría corregido al revisar el código — leer la captura no bastaba.)
+- ~~Ícono inerte al final de filas de Clientes~~ → **NO es inerte**: es el botón Archivar/Reactivar con su `title`. (Hallazgo corregido.)
+- *Aprendizaje: varias "fallas" de UX vistas solo en captura no eran tales al mirar el código — verificar siempre contra el código antes de afirmar.*
 
 ### P2 — densidad y targets mobile
 - **"Ventas por mes" (Dashboard)**: barras y etiquetas muy pequeñas en iPhone; el dato (`188`, `3.7k`) cuesta leerse. → Subir contraste/tamaño de la barra del mes actual y de su etiqueta; considerar tocar una barra → su detalle (todo clickeable).

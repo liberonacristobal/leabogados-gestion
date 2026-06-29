@@ -3789,11 +3789,13 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
             <div style={{fontSize:23,fontWeight:700,color:'#fff',lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
             <div style={{fontSize:9,color:C.onNavyLabel,marginTop:3}}>{actYr.length} activas · {termYr.length} terminadas · toca para {montoUF?'$':'UF'}</div>
           </div>
-          <div onClick={()=>setFStatus(fStatus==='Propuesta'?'':'Propuesta')} style={{flex:1,minWidth:0,background:fStatus==='Propuesta'?C.azulBg:'#fff',border:`1px solid ${fStatus==='Propuesta'?C.accent:C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+          {(()=>{ const vacio=propuestasFiltradas.length===0; return (
+          <div onClick={vacio?onAddPropuesta:()=>setFStatus(fStatus==='Propuesta'?'':'Propuesta')} title={vacio?'Crear la primera propuesta':'Ver propuestas'} style={{flex:1,minWidth:0,background:fStatus==='Propuesta'?C.azulBg:'#fff',border:`1px solid ${fStatus==='Propuesta'?C.accent:C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
             <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='clock' s={12} c={C.muted}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Pipeline</span></div>
-            <div style={{fontSize:18,fontWeight:700,color:C.muted,lineHeight:1.2,marginTop:2}}>{fmtUF(pipelineUF)}</div>
-            <div style={{fontSize:9,color:C.done,marginTop:2}}>{propuestasFiltradas.length} propuesta{propuestasFiltradas.length!==1?'s':''}</div>
+            <div style={{fontSize:18,fontWeight:700,color:C.muted,lineHeight:1.2,marginTop:2}}>{vacio?'—':fmtUF(pipelineUF)}</div>
+            <div style={{fontSize:9,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2}}>{vacio?'+ Crear la primera':`${propuestasFiltradas.length} propuesta${propuestasFiltradas.length!==1?'s':''}`}</div>
           </div>
+          )})()}
         </div>
       </div>
       <div style={{padding:'4px 20px 100px'}}>
