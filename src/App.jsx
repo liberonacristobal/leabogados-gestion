@@ -5449,6 +5449,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   const [saludCobranza,setSaludCobranza] = useState(false)   // panel de salud de cobranza (DSO, tasa, morosidad, top deudores)
+  const [recOpen,setRecOpen] = useState(()=>new Set())   // "Por recordar": clientes con su grupo expandido (default colapsado)
   const [siiPanel,setSiiPanel] = useState(null)    // panel del módulo Emisión electrónica SII: null | 'set' | 'libro'
   const [siiBusy,setSiiBusy] = useState(false)
   // Llamada a la edge function sii-sync (emisión/certificación). Reusa el token de sesión.
@@ -6634,17 +6635,36 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   ))}
                 </div>
               )}
-              {(()=>{ const porRecordar=vivos.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0&&esVencidaB(b)&&(diasDesde(recordadoMap[String(b.id)])==null||diasDesde(recordadoMap[String(b.id)])>=7)).sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,8); if(!porRecordar.length) return null; return (
+              {(()=>{ const porRecordar=vivos.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0&&esVencidaB(b)&&(diasDesde(recordadoMap[String(b.id)])==null||diasDesde(recordadoMap[String(b.id)])>=7)).sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,8); if(!porRecordar.length) return null;
+                // Agrupado por cliente (entidad natural): clientes con 1 factura = fila directa; con varias = grupo colapsable (Alejandro Lee ×4 ya no es muro plano).
+                const nivCol=n=>n==='final'?C.overdueText:n==='firme'?C.soonText:C.muted
+                const byCli={}; porRecordar.forEach(b=>{ const k=String(b.client_id||'—'); (byCli[k]=byCli[k]||[]).push(b) })
+                const grupos=Object.entries(byCli).map(([cid,items])=>({cid,items,total:items.reduce((a,b)=>a+saldoBill(b),0),name:clients.find(c=>String(c.id)===String(cid))?.name||'—',nivel:items.some(b=>recordatorioCobro(b).nivel==='final')?'final':items.some(b=>recordatorioCobro(b).nivel==='firme')?'firme':'suave'})).sort((a,b)=>b.total-a.total)
+                const recRow=(b,ind)=>{ const r=recordatorioCobro(b); return (
+                  <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:ind?'8px 12px 8px 22px':'9px 12px'}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:ind?11.5:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ind?'':(clients.find(c=>String(c.id)===String(b.client_id))?.name||'—')}{b.invoice_no?`${ind?'':' · '}F° ${folioN(b.invoice_no)}`:''}</div>
+                      <div style={{fontSize:10,color:nivCol(r.nivel)}}>{r.nivel} · {fmt(saldoBill(b))}</div>
+                    </div>
+                    <button onClick={()=>recordarCobro(b)} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:'pointer'}}>Recordar</button>
+                  </div>
+                ) }
+                return (
                 <div style={{marginTop:13}}>
                   <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'0 2px 6px'}}>Por recordar · {porRecordar.length}</div>
                   <div style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-                    {porRecordar.map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const r=recordatorioCobro(b); const colN=r.nivel==='final'?C.overdueText:r.nivel==='firme'?C.soonText:C.muted; return (
-                      <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
-                        <div style={{minWidth:0,flex:1}}>
-                          <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||'—'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div>
-                          <div style={{fontSize:10,color:colN}}>{r.nivel} · {fmt(saldoBill(b))}</div>
-                        </div>
-                        <button onClick={()=>recordarCobro(b)} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:'pointer'}}>Recordar</button>
+                    {grupos.map((g,gi)=>{ const op=recOpen.has(g.cid); return (
+                      <div key={g.cid} style={{borderTop:gi?`0.5px solid #F2F4F6`:'none'}}>
+                        {g.items.length===1 ? recRow(g.items[0],false) : (<>
+                          <div onClick={()=>setRecOpen(p=>{const n=new Set(p);n.has(g.cid)?n.delete(g.cid):n.add(g.cid);return n})} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',cursor:'pointer'}}>
+                            <div style={{minWidth:0,flex:1}}>
+                              <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}</div>
+                              <div style={{fontSize:10,color:nivCol(g.nivel)}}>{g.items.length} facturas · {fmt(g.total)}</div>
+                            </div>
+                            <span style={{fontSize:12,color:C.done,transform:op?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span>
+                          </div>
+                          {op&&g.items.map(b=>recRow(b,true))}
+                        </>)}
                       </div>
                     ) })}
                   </div>
