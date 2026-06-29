@@ -25,7 +25,7 @@ const toAscii = (s: string) =>
 async function sendMail(to: string, subject: string, html: string) {
   const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
   try {
-    await client.send({ from: `Gestion LE <${GMAIL_USER}>`, to, subject: toAscii(subject), content: "Ver el contenido en formato HTML.", html });
+    await client.send({ from: `Liberona Escala Abogados - Recordatorios <${GMAIL_USER}>`, to, subject: toAscii(subject), content: "Ver el contenido en formato HTML.", html });
   } finally { await client.close(); }
 }
 
