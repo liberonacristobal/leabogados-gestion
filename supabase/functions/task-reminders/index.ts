@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
-const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
+const CRON_SECRET = Deno.env.get("TASK_REMINDERS_SECRET") || Deno.env.get("CRON_SECRET") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
@@ -39,7 +39,9 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "No autorizado" }), { status: 403, headers: { "Content-Type": "application/json" } });
     }
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
-    const { data: tasks } = await sb.from("tasks").select("*").neq("status", "Terminado");
+    // Activa = status != 'Terminado'. OJO: el status NULL en SQL no pasa un .neq (NULL != x da NULL), así que filtramos en JS.
+    const { data: tasksRaw, error: tasksErr } = await sb.from("tasks").select("*");
+    const tasks = (tasksRaw || []).filter((t: any) => t.status !== "Terminado");
     const { data: clients } = await sb.from("clients").select("id,name");
     const cname = (id: string) => (clients || []).find((c: any) => String(c.id) === String(id))?.name || "";
 
@@ -56,7 +58,8 @@ serve(async (req) => {
       const dd = dueDaysOf(t.due);
       const bucket = dd < 0 ? "vencida" : (dd <= 3 ? "pronto" : null);
       if (!bucket) continue;
-      const resp: string[] = (Array.isArray(t.delegated_to) && t.delegated_to.length) ? t.delegated_to : (Array.isArray(t.assignees) ? t.assignees : []);
+      // Responsable: delegated_to si está delegada; si no, assignees; si no (tareas antiguas), who.
+      const resp: string[] = (Array.isArray(t.delegated_to) && t.delegated_to.length) ? t.delegated_to : (Array.isArray(t.assignees) && t.assignees.length ? t.assignees : (t.who ? [t.who] : []));
       for (const p of resp) { if (!p) continue; (byPerson[p] = byPerson[p] || []).push({ ...t, bucket, dd }); }
     }
 
@@ -90,7 +93,7 @@ serve(async (req) => {
       await sendMail(to, subject, html);
       sent.push({ name, to, vencidas: venc.length, porVencer: pronto.length });
     }
-    return new Response(JSON.stringify({ ok: true, dryRun, sent, count: sent.length }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+    return new Response(JSON.stringify({ ok: true, dryRun, sent, count: sent.length, escaneadas: (tasks || []).length, conVencimiento: (tasks || []).filter((t: any) => t.due).length, tareasError: tasksErr?.message || null }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
   }
