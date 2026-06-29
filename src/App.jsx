@@ -525,6 +525,27 @@ const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hideHeade
   </div>
 )
 
+// ── Diálogos propios (reemplazan alert/confirm/prompt nativos, que muestran el dominio en el navegador) ──
+let _dialogHost = null
+function appConfirm(opts){ const o = typeof opts==='string'?{message:opts}:(opts||{}); return _dialogHost ? _dialogHost({...o, kind:'confirm'}) : Promise.resolve(window.confirm(o.message)) }
+function appAlert(opts){ const o = typeof opts==='string'?{message:opts}:(opts||{}); return _dialogHost ? _dialogHost({...o, kind:'alert'}) : Promise.resolve(window.alert(o.message)) }
+function appPrompt(opts, def){ const o = typeof opts==='string'?{message:opts, def}:(opts||{}); return _dialogHost ? _dialogHost({...o, kind:'prompt'}) : Promise.resolve(window.prompt(o.message, o.def||'')) }
+function DialogHost(){
+  const [q,setQ] = useState(null); const [val,setVal] = useState('')
+  useEffect(()=>{ _dialogHost = (o)=> new Promise(resolve=>{ setVal(o.def||''); setQ({...o, resolve}) }); return ()=>{ _dialogHost=null } },[])
+  if(!q) return null
+  const done = v => { const r=q.resolve; setQ(null); r(v) }
+  const isAlert=q.kind==='alert', isPrompt=q.kind==='prompt'
+  return <Modal title={q.title||(isAlert?'Aviso':'Confirmar')} onClose={()=>done(isAlert?true:(isPrompt?null:false))} closeOnBackdrop={false}>
+    <div style={{fontSize:14,color:C.text,lineHeight:1.55,whiteSpace:'pre-wrap',marginBottom:isPrompt?12:18}}>{q.message}</div>
+    {isPrompt && <input autoFocus value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')done(val)}} style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',fontSize:14,color:C.text,outline:'none',boxSizing:'border-box',marginBottom:18,fontFamily:'inherit'}}/>}
+    <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+      {!isAlert && <button onClick={()=>done(isPrompt?null:false)} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 16px',fontSize:13,color:C.muted,cursor:'pointer',fontFamily:'inherit'}}>{q.cancelText||'Cancelar'}</button>}
+      <button onClick={()=>done(isPrompt?val:true)} style={{background:C.accent,border:'none',borderRadius:9,padding:'8px 18px',fontSize:13,fontWeight:600,color:'#fff',cursor:'pointer',fontFamily:'inherit'}}>{q.confirmText||(isAlert?'Entendido':isPrompt?'Guardar':'Confirmar')}</button>
+    </div>
+  </Modal>
+}
+
 function LoginScreen({loading}) {
   const sm = typeof window!=='undefined' && window.innerWidth < 600
   const bz = {sw: sm?23:29, gap: sm?9:11, pad: sm?'6px 19px':'7px 24px', br: sm?10:13, pb: sm?7:9, fd: sm?14:18}
@@ -1117,10 +1138,10 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
       const totalReal = marcados.reduce((a,e)=>a+(e.amount||0),0)
       // #1: ajustar la rendición a los gastos REALMENTE marcados (no dejar total/n inflados); si no se marcó ninguno, cancelarla
       if(erroresMarcado.length){
-        if(marcados.length===0){ await supabase.from('rendiciones').delete().eq('id',renderId); alert('No se pudo marcar ningún gasto. La liquidación se canceló; reintenta.'); setSaving(false); return }
+        if(marcados.length===0){ await supabase.from('rendiciones').delete().eq('id',renderId); appAlert('No se pudo marcar ningún gasto. La liquidación se canceló; reintenta.'); setSaving(false); return }
         const nClientesReal = [...new Set(marcados.map(e=>e.client_id).filter(Boolean))].length
         await supabase.from('rendiciones').update({ total: totalReal, n_gastos: marcados.length, n_clientes: nClientesReal }).eq('id',renderId)
-        alert(`Liquidación creada con ${marcados.length} gasto(s) por ${fmtCLP(totalReal)}. ${erroresMarcado.length} no se marcaron y siguen pendientes: ${erroresMarcado.join(', ')}.`)
+        appAlert(`Liquidación creada con ${marcados.length} gasto(s) por ${fmtCLP(totalReal)}. ${erroresMarcado.length} no se marcaron y siguen pendientes: ${erroresMarcado.join(', ')}.`)
       }
       // Estado local: usar SOLO los marcados (los que fallaron siguen en pendientes sin recargar)
       const marcadosIds = new Set(marcados.map(e=>e.id))
@@ -1169,7 +1190,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         correoOk = true
       }
       setToast({ n: marcados.length, total: totalReal, correo: correoOk })
-    } catch(e) { alert('Error: '+e.message) }
+    } catch(e) { appAlert('Error: '+e.message) }
     setSaving(false)
   }
 
@@ -1188,14 +1209,14 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
         setPettyCash(p=>[data,...p])
       }
       setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setEditCajaId(null); setShowNuevaCaja(false)
-    } catch(e) { alert('Error: '+e.message) }
+    } catch(e) { appAlert('Error: '+e.message) }
     setSaving(false)
   }
   const handleBorrarCaja = async() => {
-    if(!editCajaId || !confirm('¿Eliminar esta caja entregada? Hazlo solo si la registraste por error (no borra los gastos, solo el monto entregado).')) return
+    if(!editCajaId || !await appConfirm('¿Eliminar esta caja entregada? Hazlo solo si la registraste por error (no borra los gastos, solo el monto entregado).')) return
     setSaving(true)
     try { const {error} = await supabase.from('petty_cash').delete().eq('id',editCajaId); if(error) throw error; setPettyCash(p=>p.filter(x=>x.id!==editCajaId)); setNewMonto(''); setNewNota(''); setEditCajaId(null); setShowNuevaCaja(false) }
-    catch(e) { alert('Error: '+e.message) }
+    catch(e) { appAlert('Error: '+e.message) }
     setSaving(false)
   }
 
@@ -1509,7 +1530,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                         const mailLink=document.createElement('a'); mailLink.href='mailto:ee@leabogados.cl,cl@leabogados.cl?subject='+a2+'&body='+b2; mailLink.click()
                       }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:'#F5F7F9',color:C.muted,fontSize:11,fontWeight:500,cursor:'pointer'}}>Correo</button>
                       <button onClick={async()=>{
-                        if(!confirm('¿Reabrir esta liquidación? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
+                        if(!await appConfirm('¿Reabrir esta liquidación? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
                         try {
                           const {error:ue}=await supabase.from('expenses').update({rendered_at:null,render_id:null,rendered_by:null}).eq('render_id',r.id)
                           if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendición (quedarían huérfanos)
@@ -1517,7 +1538,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                           if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
                           if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
                           setOpenRendicion(null)
-                        } catch(err) { alert('Error: '+err.message) }
+                        } catch(err) { appAlert('Error: '+err.message) }
                       }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E24B4A',background:'transparent',color:C.overdue,fontSize:11,fontWeight:500,cursor:'pointer'}}>Reabrir</button>
                     </div>
                   </div>
@@ -2433,7 +2454,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim()
       if(txt) setIaHoy(txt)
-    }catch(e){ alert('No se pudo generar el resumen: '+(e?.message||e)) }
+    }catch(e){ appAlert('No se pudo generar el resumen: '+(e?.message||e)) }
     setIaHoyBusy(false)
   }
 
@@ -3303,7 +3324,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
       const txt=(data.content?.[0]?.text||'').trim().replace(/```json|```/g,'')
       const arr=JSON.parse(txt)
       if(Array.isArray(arr)) setAddForm(f=>({...f,areas:arr.filter(a=>areasFirma.includes(a))}))
-    }catch(_){ alert('No se pudo sugerir áreas, márcalas a mano.') }
+    }catch(_){ appAlert('No se pudo sugerir áreas, márcalas a mano.') }
     setIaAreasBusy(false)
   }
   const guardarNovedad = async () => {
@@ -3312,9 +3333,9 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     try{
       const row={tipo:addForm.tipo,numero:addForm.numero||null,fecha:addForm.fecha||null,titulo:addForm.titulo.trim(),url:addForm.url.trim()||null,resumen:addForm.resumen.trim()||null,areas:addForm.areas,prioridad:addForm.prioridad,vigente:true}
       const {error}=await supabase.from('sii_novedades').insert(row)
-      if(error){alert('Error: '+error.message);setAddBusy(false);return}
+      if(error){appAlert('Error: '+error.message);setAddBusy(false);return}
       await cargarSii(); setAddOpen(false); setAddForm({tipo:'circular',numero:'',fecha:'',titulo:'',url:'',resumen:'',prioridad:'media',areas:[]})
-    }catch(e){ alert('Error: '+(e?.message||e)) }
+    }catch(e){ appAlert('Error: '+(e?.message||e)) }
     setAddBusy(false)
   }
 
@@ -3339,8 +3360,8 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
       const prompt = `Eres asistente tributario de un estudio de abogados chileno. Explica en 2-3 frases, factual y en español de Chile, de qué se trata este foco del SII y por qué le importa al estudio y a sus clientes. Usa SOLO la información dada; NO inventes cifras, números de norma ni cites artículos que no aparezcan. Sin markdown.\n\nFOCO: ${n.titulo}\nTIPO: ${n.tipo||''} ${n.numero||''}\nRESUMEN: ${n.resumen||'(sin resumen)'}\nÁREAS: ${(n.areas||[]).join(', ')||'—'}`
       const data = await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
       const brief = (data.content?.[0]?.text||'').trim()
-      if(brief){ const {error}=await supabase.from('sii_novedades').update({brief}).eq('id',n.id); if(error){alert('No se pudo guardar: '+error.message)} else { await cargarSii() } }
-    }catch(e){ alert('No se pudo generar el brief: '+(e?.message||'reintenta')) }
+      if(brief){ const {error}=await supabase.from('sii_novedades').update({brief}).eq('id',n.id); if(error){appAlert('No se pudo guardar: '+error.message)} else { await cargarSii() } }
+    }catch(e){ appAlert('No se pudo generar el brief: '+(e?.message||'reintenta')) }
     setBriefBusy(false)
   }
 
@@ -3859,7 +3880,7 @@ function MiniClientForm({onSave,onCancel,defaultStatus='Activo'}) {
       const {data,error} = await supabase.from('clients').insert({...f,status:defaultStatus}).select().single()
       if(error) throw error
       onSave(data)
-    } catch(e) { alert('Error: '+e.message) }
+    } catch(e) { appAlert('Error: '+e.message) }
     setSaving(false)
   }
   return (
@@ -4218,7 +4239,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       const {data,error}=await supabase.from('client_entities').insert({client_id:f.client_id,name,rut:newRS.rut.trim()||null}).select().single()
       if(error)throw error
       setExtraEntities(p=>[...p,data]); up('entity_id',data.id); setNewRS({name:'',rut:''}); setRsMode(null)
-    }catch(e){ alert('No se pudo agregar la razón social: '+e.message) }
+    }catch(e){ appAlert('No se pudo agregar la razón social: '+e.message) }
     setSavingRS(false)
   }
   // Cobro mensual: el inicio se toma del Año/Mes de la venta por defecto (evita años distintos, como pasó con BM Soluciones).
@@ -4288,7 +4309,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     // Reparto: solo filas con proveedor elegido y monto. Si hay filas con monto pero SIN proveedor y ninguna completa, avisar.
     const repartoLimpio = (reparto||[]).filter(r=>r.proveedor_id && (parseFloat(r.valor)||0)>0)
     const hayIncompleto = (reparto||[]).some(r=>(parseFloat(r.valor)||0)>0 && !r.proveedor_id)
-    if(repartoLimpio.length===0 && hayIncompleto){ alert('Elige el proveedor en el reparto de costos antes de guardar (o quita la fila con la ×).'); return }
+    if(repartoLimpio.length===0 && hayIncompleto){ appAlert('Elige el proveedor en el reparto de costos antes de guardar (o quita la fila con la ×).'); return }
     const saveF = {...f}
     if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
@@ -4319,7 +4340,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
   const confirmAndSave = async() => {
     if(modMode==='ajustar') {
-      if(!newHon||!newVig){ alert('Completa el nuevo honorario y la fecha de vigencia.'); return }
+      if(!newHon||!newVig){ appAlert('Completa el nuevo honorario y la fecha de vigencia.'); return }
       setSavingTariff(true)
       const rec = await onSaveTariff(sale, {honorario:panelHon, costo:panelCosto||null, currency:moneda, vigente_desde:newVig+'-01', motivo:null})
       if(rec) {
@@ -4330,7 +4351,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         onSave({...updF, cobros, cobro_type:cobroType, cobro_config:cobroConfig, _actualizarPago:false})
       }
     } else {
-      if(!newFmt||!newVig){ alert('Elige el nuevo formato y la fecha de vigencia.'); return }
+      if(!newFmt||!newVig){ appAlert('Elige el nuevo formato y la fecha de vigencia.'); return }
       const vigDate=newVig+'-01'
       const baseHon=panelHon||(moneda==='CLP'?montoCLP:amountUF)||0
       const totalC=moneda==='CLP'?baseHon:baseHon*ufVal
@@ -5117,12 +5138,12 @@ function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
   const toggle = async(b) => {
     setBusy(b.id)
     try{ if(esEmitida(b)) await onStatusChange(b.id,'Programada'); else await onEmitir(b) }
-    catch(e){ alert('Error: '+(e.message||e)) }
+    catch(e){ appAlert('Error: '+(e.message||e)) }
     setBusy(null)
   }
 
   const descargarExcel = async() => {
-    if(items.length===0){ alert('No hay facturas en el mes seleccionado.'); return }
+    if(items.length===0){ appAlert('No hay facturas en el mes seleccionado.'); return }
     setDesc(true)
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
@@ -5132,7 +5153,7 @@ function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
       ws['!cols']=[{wch:26},{wch:34},{wch:14},{wch:14},{wch:14}]
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturar')
       XLSX.writeFile(wb,`Facturar_${mesKey}.xlsx`)
-    }catch(e){ alert('Error al generar Excel: '+e.message) }
+    }catch(e){ appAlert('Error al generar Excel: '+e.message) }
     setDesc(false)
   }
 
@@ -5444,9 +5465,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     try{
       const xml = await file.text()
       const docs = splitSetDTE(xml)
-      if(!docs.length){ alert('No encontré facturas (<DTE>) en ese archivo. Sube el "Archivo Respaldo" (XML) de MIPYME.'); setProcResp(false); return }
+      if(!docs.length){ appAlert('No encontré facturas (<DTE>) en ese archivo. Sube el "Archivo Respaldo" (XML) de MIPYME.'); setProcResp(false); return }
       const token = await driveToken()
-      if(!token){ if(confirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
+      if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
       const folders = await driveAdjuntosFolders(token)
       let adj=0, dup=0, sin=0; const sinList=[]
       for(const d of docs){
@@ -5466,9 +5487,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       let msg='Respaldo: '+adj+' factura(s) adjuntada(s) a su ficha (Drive)'
       if(dup) msg+=', '+dup+' ya tenían respaldo'
       if(sin) msg+=', '+sin+' sin factura en el sistema (folios: '+sinList.slice(0,10).join(', ')+(sinList.length>10?'…':'')+')'
-      alert(msg+'.')
+      appAlert(msg+'.')
       onRefresh&&onRefresh()
-    }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ alert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else alert('Error en el respaldo: '+(e.message||e)) }
+    }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
   }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
@@ -5483,9 +5504,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)})
     const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
   }
-  const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); alert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ alert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
-  const siiVerificarEstados = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'verificar-estados'}); alert(`Estados verificados en el SII:\n${d.revisados} revisado(s) · ${d.cambiados} actualizado(s)${d.rechazadas?`\n⚠ ${d.rechazadas} rechazada(s) — revisa tu correo`:''}.`); if(d.cambiados&&onRefresh) await onRefresh() }catch(e){ alert('No se pudo verificar estados: '+e.message) } setSiiBusy(false) }
-  const siiResumenSemanal = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'resumen-semanal'}); alert(`Resumen semanal enviado a los admins.\nEmitidas (7d): ${d.emitidasSemana} · Por cobrar: $${(d.porCobrar||0).toLocaleString('es-CL')} · Vencido: $${(d.vencido||0).toLocaleString('es-CL')}.`) }catch(e){ alert('No se pudo enviar el resumen: '+e.message) } setSiiBusy(false) }
+  const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); appAlert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ appAlert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
+  const siiVerificarEstados = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'verificar-estados'}); appAlert(`Estados verificados en el SII:\n${d.revisados} revisado(s) · ${d.cambiados} actualizado(s)${d.rechazadas?`\n⚠ ${d.rechazadas} rechazada(s) — revisa tu correo`:''}.`); if(d.cambiados&&onRefresh) await onRefresh() }catch(e){ appAlert('No se pudo verificar estados: '+e.message) } setSiiBusy(false) }
+  const siiResumenSemanal = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'resumen-semanal'}); appAlert(`Resumen semanal enviado a los admins.\nEmitidas (7d): ${d.emitidasSemana} · Por cobrar: $${(d.porCobrar||0).toLocaleString('es-CL')} · Vencido: $${(d.vencido||0).toLocaleString('es-CL')}.`) }catch(e){ appAlert('No se pudo enviar el resumen: '+e.message) } setSiiBusy(false) }
   const [foliosEstado,setFoliosEstado] = useState(null)   // [{tipoDte,disponibles}] folios CAF disponibles (para la alerta de folios bajos)
   useEffect(()=>{ let on=true; siiCall({action:'folios-estado'}).then(d=>{ if(on&&Array.isArray(d?.folios)) setFoliosEstado(d.folios) }).catch(()=>{}); return ()=>{on=false} },[])
   const [siiLog,setSiiLog] = useState(null)   // historial de emisión (tabla dte_log)
@@ -5511,8 +5532,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b))
     const conDest=porEnviar.filter(b=>factToMap[String(b.client_id)])
     const sinDest=porEnviar.length-conDest.length
-    if(!conDest.length){ alert('Ninguna factura por enviar tiene un destinatario recordado todavía.\nEnvíalas una a una: ahí eliges el correo y la app lo aprende para la próxima.'); return }
-    if(!confirm(`Enviar ${conDest.length} factura(s) a su destinatario recordado, desde la cuenta de oficina.${sinDest?`\n${sinDest} se omiten (sin correo recordado).`:''}\n\n¿Continuar?`)) return
+    if(!conDest.length){ appAlert('Ninguna factura por enviar tiene un destinatario recordado todavía.\nEnvíalas una a una: ahí eliges el correo y la app lo aprende para la próxima.'); return }
+    if(!await appConfirm(`Enviar ${conDest.length} factura(s) a su destinatario recordado, desde la cuenta de oficina.${sinDest?`\n${sinDest} se omiten (sin correo recordado).`:''}\n\n¿Continuar?`)) return
     setEnvioMasivoBusy(true)
     const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
     let ok=0, err=0
@@ -5532,7 +5553,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       }catch(_){ err++ }
     }
     setEnvioMasivoBusy(false)
-    alert(`Envío masivo listo.\nEnviadas: ${ok}${err?` · con error: ${err}`:''}${sinDest?` · omitidas sin correo: ${sinDest}`:''}`)
+    appAlert(`Envío masivo listo.\nEnviadas: ${ok}${err?` · con error: ${err}`:''}${sinDest?` · omitidas sin correo: ${sinDest}`:''}`)
   }
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
@@ -5646,7 +5667,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const pb = billing.find(b=>String(b.id)===String(payingId))||{}
     const total=pb.amount||0, ya=pb.paid_amount||0
     const monto=Math.max(0, parseInt(String(payMonto).replace(/[^\d]/g,''))||0)
-    if(monto<=0){ alert('Ingresa un monto mayor a 0.'); return }
+    if(monto<=0){ appAlert('Ingresa un monto mayor a 0.'); return }
     setPagando(true)
     if(ya+monto>=total){   // pago completo → Pagado (limpia abono parcial)
       const pend = (terceros||[]).filter(t=>String(t.billing_id)===String(payingId)&&t.estado==='pendiente')
@@ -5693,7 +5714,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   // Concilia un abono con una factura (calce exacto = pago total): inserta la conciliación + marca el movimiento + deja la factura pagada (onStatusChange).
   const conciliarPago = async(m, b) => {
     if(pagoBusy) return
-    if(!confirm(`¿Conciliar el pago de ${fmt(m.monto)} (${fmtDate(m.fecha)}) con la Factura N° ${folioN(b.invoice_no)}? Quedará pagada y enlazada al movimiento del banco.`)) return
+    if(!await appConfirm(`¿Conciliar el pago de ${fmt(m.monto)} (${fmtDate(m.fecha)}) con la Factura N° ${folioN(b.invoice_no)}? Quedará pagada y enlazada al movimiento del banco.`)) return
     setPagoBusy(true)
     try{
       const aplicado=saldoBill(b)
@@ -5705,8 +5726,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
       await onStatusChange(b.id,'Pagado',m.fecha)
       setPagosFor(null)
-      alert('Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.')
-    }catch(e){ alert('No se pudo conciliar: '+(e.message||e)) }
+      appAlert('Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.')
+    }catch(e){ appAlert('No se pudo conciliar: '+(e.message||e)) }
     setPagoBusy(false)
   }
   const [calcesOpen,setCalcesOpen] = useState(true)
@@ -5727,45 +5748,45 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const estadoCuentaEnviar = async(cli)=>{
     if(!cli) return
     const pend=(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(cli.id)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0).sort((a,b)=>(a.due||'')<(b.due||'')?-1:1)
-    if(!pend.length){ alert(`${cli.name} no tiene facturas pendientes.`); return }
+    if(!pend.length){ appAlert(`${cli.name} no tiene facturas pendientes.`); return }
     let to=(cli.email||'').trim()
     try{ const {data:lt}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(cli.id)).maybeSingle(); if(lt?.value) to=String(lt.value).trim() }catch(_){}
-    if(!to){ alert('El cliente no tiene correo (ni en la ficha ni recordado). Agrégalo para enviar el estado de cuenta.'); return }
+    if(!to){ appAlert('El cliente no tiene correo (ni en la ficha ni recordado). Agrégalo para enviar el estado de cuenta.'); return }
     const total=pend.reduce((s,b)=>s+saldoBill(b),0)
-    if(!confirm(`¿Enviar el estado de cuenta de ${cli.name} a ${to}?\n${pend.length} factura(s) pendiente(s) · total ${fmt(total)}`)) return
+    if(!await appConfirm(`¿Enviar el estado de cuenta de ${cli.name} a ${to}?\n${pend.length} factura(s) pendiente(s) · total ${fmt(total)}`)) return
     const filas=pend.map(b=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">N° ${folioN(b.invoice_no)||b.invoice_no}</td><td style="padding:6px 8px;border-bottom:1px solid #eee">${b.due?fmtFechaDMY(b.due):'—'}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">$${saldoBill(b).toLocaleString('es-CL')}</td></tr>`).join('')
     const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Junto con saludar, les compartimos el estado de cuenta con las facturas pendientes a la fecha:<br><br><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Factura</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Vence</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #003C50">Saldo</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="2" style="padding:8px 8px;font-weight:bold">Total adeudado</td><td style="padding:8px 8px;text-align:right;font-weight:bold;color:#003C50">$${total.toLocaleString('es-CL')}</td></tr></tfoot></table><br>${DATOS_PAGO_HTML}Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div></div>`
     const text=`Estado de cuenta — ${cli.name}\n\n${pend.map(b=>`N° ${folioN(b.invoice_no)||b.invoice_no} · vence ${b.due?fmtFechaDMY(b.due):'—'} · $${saldoBill(b).toLocaleString('es-CL')}`).join('\n')}\n\nTotal adeudado: ${fmt(total)}\n\n${DATOS_PAGO_TXT}\n\nSaludos cordiales,\nLiberona Escala Abogados`
-    try{ await sendMailServer({to, subject:'Estado de cuenta — Liberona Escala Abogados', html, text}); alert(`Estado de cuenta enviado a ${to}.`) }catch(e){ alert('No se pudo enviar: '+(e.message||e)) }
+    try{ await sendMailServer({to, subject:'Estado de cuenta — Liberona Escala Abogados', html, text}); appAlert(`Estado de cuenta enviado a ${to}.`) }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
   }
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   const recordarCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
     const to=(cl?.email||'').trim()
-    if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
+    if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const r=recordatorioCobro(b)
-    if(!confirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
-    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; alert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
-    catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
+    if(!await appConfirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
+    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
+    catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
   const acuseCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
     const to=(cl?.email||'').trim()
-    if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder enviar el acuse.'); return }
+    if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder enviar el acuse.'); return }
     const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
     const monto='$'+(b.amount||0).toLocaleString('es-CL')
-    if(!confirm(`¿Enviar acuse de pago a ${to} por ${folio} (${monto})?`)) return
-    try{ await acusePagoEmail(to,{folio,monto,fecha:b.paid_at?fmtFechaDMY(b.paid_at):''}); alert('Acuse de pago enviado desde la cuenta de oficina.') }
-    catch(e){ alert('No se pudo enviar el acuse: '+e.message) }
+    if(!await appConfirm(`¿Enviar acuse de pago a ${to} por ${folio} (${monto})?`)) return
+    try{ await acusePagoEmail(to,{folio,monto,fecha:b.paid_at?fmtFechaDMY(b.paid_at):''}); appAlert('Acuse de pago enviado desde la cuenta de oficina.') }
+    catch(e){ appAlert('No se pudo enviar el acuse: '+e.message) }
   }
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
-  const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(confirm(msg)) await emitirConRS(b) }
-  const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!confirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
+  const marcarEmitida = async(b) => { const ui=ufInfoDe(b); const msg=ui?`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy).\n¿Confirmas? Pasará a Pendiente de cobro.`:'¿Confirmas que la factura ya se emitió? Pasará a Pendiente de cobro.'; if(await appConfirm(msg)) await emitirConRS(b) }
+  const marcarEmitidasBulk = async() => { const ids=[...selected]; if(!ids.length) return; if(!await appConfirm(`¿Marcar ${ids.length} factura(s) como emitidas? Pasarán a Pendiente de cobro.`)) return; for(const id of ids){ const b=progMes.find(x=>x.id===id); if(b) await emitirConRS(b) } clearSel() }
 
   const [descargando,setDescargando] = useState(false)
   const descargarProgramadas = async() => {
-    if(filtered.length===0){ alert('No hay programadas en el filtro actual.'); return }
+    if(filtered.length===0){ appAlert('No hay programadas en el filtro actual.'); return }
     setDescargando(true)
     try{
       // UF del día vía el helper único (caché diario). Si falla, cae al último cacheado o sin "Monto hoy".
@@ -5811,7 +5832,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       const mesLbl = fMonth ? `_${MONTHS[parseInt(fMonth)-1]}` : ''
       const anioLbl = fYear ? `_${fYear}` : ''
       XLSX.writeFile(wb, `Programadas${mesLbl}${anioLbl}_${new Date().toISOString().slice(0,10)}.xlsx`)
-    }catch(e){ alert('Error al generar Excel: '+e.message) }
+    }catch(e){ appAlert('Error al generar Excel: '+e.message) }
     setDescargando(false)
   }
 
@@ -5850,7 +5871,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
 
   const descargarPorFacturar = async() => {
     const sel = progMes.filter(b=>selExcel.has(b.id))
-    if(!sel.length){ alert('Marca al menos una fila para exportar.'); return }
+    if(!sel.length){ appAlert('Marca al menos una fila para exportar.'); return }
     setDescExcel(true)
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
@@ -5872,7 +5893,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       ws['!cols']=[{wch:24},{wch:26},{wch:14},{wch:32},{wch:14},{wch:10},{wch:14},{wch:9}]
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Por facturar')
       XLSX.writeFile(wb,`Por_facturar_${mesKey}_${new Date().toISOString().slice(0,10)}.xlsx`)
-    }catch(e){ alert('Error al generar Excel: '+e.message) }
+    }catch(e){ appAlert('Error al generar Excel: '+e.message) }
     setDescExcel(false)
   }
 
@@ -5880,7 +5901,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const confirmarEmitida = async(b) => {
     const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
     const ent = emitEnt ? ents.find(e=>e.id===emitEnt) : (ents.length===1?ents[0]:null)
-    const ui=ufInfoDe(b); if(ui && !confirm(`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy)?`)) return
+    const ui=ufInfoDe(b); if(ui && !await appConfirm(`Emitir por ${fmtUF(ui.uf)} = ${fmt(ui.clpHoy)} (UF de hoy)?`)) return
     await onEmitir(b, ent||null)
     setEmitiendo(null); setEmitEnt('')
   }
@@ -5950,9 +5971,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   ):(!anulada&&!pagado&&!anticipada)?(
                     <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true);setPayMonto(String(Math.max(0,(b.amount||0)-(b.paid_amount||0))))}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Registrar pago</button>
                   ):(pagado&&onRevertirPago)?(
-                    <button onClick={()=>{ if(confirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Deshacer pago</button>
+                    <button onClick={async()=>{ if(await appConfirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Deshacer pago</button>
                   ):(anulada&&onReactivar)&&(
-                    <button onClick={()=>{ if(confirm('¿Reactivar esta factura anulada? Vuelve a su estado previo y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Reactivar</button>
+                    <button onClick={async()=>{ if(await appConfirm('¿Reactivar esta factura anulada? Vuelve a su estado previo y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Reactivar</button>
                   )}
                   <button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Editar</button>
                 </div></>}
@@ -6447,7 +6468,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     {clientSales.length>0&&<button onClick={()=>setAnioPickFor(anioPickFor===b.id?null:b.id)} style={cs()}>Asociar venta</button>}
                     <span style={{fontSize:11,color:C.done}}>año:</span>
                     {yearBtns.map(y=><button key={y} onClick={()=>onSetVentaAnio&&onSetVentaAnio(b,{sale_year:y})} style={cs()}>{y}</button>)}
-                    <button onClick={()=>{const v=prompt('Año de venta:'); const n=parseInt(v); if(n>1990&&n<2100) onSetVentaAnio&&onSetVentaAnio(b,{sale_year:n})}} style={cs()}>…</button>
+                    <button onClick={async()=>{const v=await appPrompt('Año de venta:'); const n=parseInt(v); if(n>1990&&n<2100) onSetVentaAnio&&onSetVentaAnio(b,{sale_year:n})}} style={cs()}>…</button>
                   </div>
                   {anioPickFor===b.id&&clientSales.length>0&&(
                     <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
@@ -6752,7 +6773,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <textarea value={siiSetJson} onChange={e=>setSiiSetJson(e.target.value)} spellCheck={false} style={{width:'100%',minHeight:170,boxSizing:'border-box',fontFamily:'monospace',fontSize:11,border:`1px solid ${C.border}`,borderRadius:8,padding:10,color:C.text,resize:'vertical'}}/>
               <div style={{display:'flex',gap:8,marginTop:10}}>
                 <button disabled={siiBusy} onClick={()=>siiEmitirSet(true)} style={{flex:1,fontSize:13,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'9px',cursor:'pointer',opacity:siiBusy?.6:1}}>Vista previa (XML)</button>
-                <button disabled={siiBusy} onClick={()=>{ if(confirm('¿Emitir el set al SII (ambiente certificación)?')) siiEmitirSet(false) }} style={{flex:1,fontSize:13,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'9px',cursor:'pointer',opacity:siiBusy?.6:1}}>Emitir set al SII</button>
+                <button disabled={siiBusy} onClick={async()=>{ if(await appConfirm('¿Emitir el set al SII (ambiente certificación)?')) siiEmitirSet(false) }} style={{flex:1,fontSize:13,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'9px',cursor:'pointer',opacity:siiBusy?.6:1}}>Emitir set al SII</button>
               </div>
             </>):(<>
               <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Genera el Libro de Ventas del período con las facturas ya emitidas en él.</div>
@@ -6986,7 +7007,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
         {bill?.id&&<button onClick={()=>printComprobante(f,clients.find(c=>String(c.id)===String(f.client_id))?.name)} title='Imprimir / Guardar PDF' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:500,cursor:'pointer'}}>Comprobante</button>}
         {bill?.id&&onAnular&&f.status!=='Anulado'&&f.status!=='Anulada'&&<button onClick={()=>{setMotivoBaja('');setObsBaja('');setAnularOpen(true)}} style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.soon}`,background:'#fff',color:C.soon,fontSize:13,fontWeight:500,cursor:'pointer'}}>Anular</button>}
         {bill?.id&&onEmitirDTE&&f.status!=='Anulado'&&f.status!=='Anulada'&&!bill.dte_track_id&&<button onClick={()=>onEmitirDTE(bill)} title='Generar y enviar la factura electrónica al SII (con vista previa antes de emitir)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Emitir al SII</button>}
-        {bill?.id&&bill.dte_xml&&<button onClick={async()=>{ try{ const doc=splitSetDTE(bill.dte_xml)[0]||bill.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ alert('No se pudo generar el PDF: '+(e.message||e)) } }} title='Ver el PDF oficial (con timbre) de la factura emitida' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.tealText}`,background:'#fff',color:C.tealText,fontSize:13,fontWeight:600,cursor:'pointer'}}>PDF</button>}
+        {bill?.id&&bill.dte_xml&&<button onClick={async()=>{ try{ const doc=splitSetDTE(bill.dte_xml)[0]||bill.dte_xml; const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }} title='Ver el PDF oficial (con timbre) de la factura emitida' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.tealText}`,background:'#fff',color:C.tealText,fontSize:13,fontWeight:600,cursor:'pointer'}}>PDF</button>}
         {bill?.id&&bill.dte_track_id&&onActualizarEstado&&(()=>{ const est=String(bill.dte_estado||'enviado'); const rech=/rech/i.test(est); const acep=/acep/i.test(est); return <button onClick={()=>onActualizarEstado(bill)} title='Re-consultar el estado del DTE en el SII (puede tardar en aceptarse o rechazarse)' style={{height:36,padding:'0 12px',borderRadius:8,border:`0.5px solid ${rech?C.overdue:acep?C.normal:C.soon}`,background:'#fff',color:rech?C.overdue:acep?C.greenText:C.soonText,fontSize:12,fontWeight:600,cursor:'pointer'}}>SII: {rech?'rechazada':acep?'aceptada':'enviado'} · actualizar</button> })()}
         <button onClick={onClose} style={{height:36,padding:'0 16px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
         <button disabled={saving||!f.client_id||!f.concept} onClick={()=>onSave({...f,_terceroProv:terceroProv,_terceroPagado:terceroPagado})} style={{height:36,padding:'0 18px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.concept)?.6:1}}>
@@ -7259,7 +7280,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
   const asignar=async()=>{ if(!selFac||!onAsignarFactura) return; setBusy(true); await onAsignarFactura(a,selFac); setBusy(false); onClose() }
   const inp={flex:1,fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 9px',outline:'none',background:'#fff',fontFamily:'inherit',minWidth:0,boxSizing:'border-box'}
   const lbl={fontSize:11,color:C.muted,width:62,flexShrink:0}
-  const papelera=(dispo&&onLiberar)?<button title='Eliminar anticipo' onClick={()=>{ if(confirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{background:'none',border:'none',cursor:'pointer',color:C.overdue,display:'inline-flex',alignItems:'center',padding:2}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'/></svg></button>:null
+  const papelera=(dispo&&onLiberar)?<button title='Eliminar anticipo' onClick={async()=>{ if(await appConfirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{background:'none',border:'none',cursor:'pointer',color:C.overdue,display:'inline-flex',alignItems:'center',padding:2}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'/></svg></button>:null
   return (
     <Modal title={<><span style={{color:C.accent}}>Anticipo</span><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false} titleRight={papelera}>
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
@@ -7444,7 +7465,7 @@ function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billing=[],sa
                 )}
                 {!disp&&!cubreCuotas&&a.billing_id&&onDeshacerConsumo&&(
                   <div style={{display:'flex',gap:7,marginTop:7}}>
-                    <button onClick={()=>{ if(confirm('¿Deshacer este anticipo? Vuelve a Disponible y, si no hay otro que la cubra, la factura vuelve a Pendiente.')) onDeshacerConsumo(a) }} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Deshacer</button>
+                    <button onClick={async()=>{ if(await appConfirm('¿Deshacer este anticipo? Vuelve a Disponible y, si no hay otro que la cubra, la factura vuelve a Pendiente.')) onDeshacerConsumo(a) }} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 11px',cursor:'pointer'}}>Deshacer</button>
                   </div>
                 )}
               </div>
@@ -7712,7 +7733,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     <span style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt0(t.monto)}</span>
                     <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:eb,color:ec}}>{el}</span>
-                    {t.estado==='pagado'&&onRevertirPago&&<button onClick={()=>{ if(confirm('¿Deshacer este pago? Vuelve a "Por pagar" y se borra fecha, referencia y documento.')) onRevertirPago(t) }} title='Deshacer pago' style={{background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,color:C.muted,fontSize:10,fontWeight:600,padding:'3px 8px',cursor:'pointer',whiteSpace:'nowrap'}}>Deshacer</button>}
+                    {t.estado==='pagado'&&onRevertirPago&&<button onClick={async()=>{ if(await appConfirm('¿Deshacer este pago? Vuelve a "Por pagar" y se borra fecha, referencia y documento.')) onRevertirPago(t) }} title='Deshacer pago' style={{background:'none',border:`0.5px solid ${C.border}`,borderRadius:7,color:C.muted,fontSize:10,fontWeight:600,padding:'3px 8px',cursor:'pointer',whiteSpace:'nowrap'}}>Deshacer</button>}
                   </div>
                 </div>
               )
@@ -7815,7 +7836,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   // Guarda el "Dirigido a" para reutilizarlo (insert si no hay contacto, update si cambió)
   const guardarDirigido = async()=>{
     const v=(atencion||'').trim(); if(!v) return
-    if(contacts[0]){ if(contacts[0].nombre!==v){ const {error}=await supabase.from('contacts').update({nombre:v}).eq('id',contacts[0].id); if(error){ alert('No se pudo guardar el contacto: '+error.message); return } setContacts(p=>p.map((c,i)=>i===0?{...c,nombre:v}:c)) } }
+    if(contacts[0]){ if(contacts[0].nombre!==v){ const {error}=await supabase.from('contacts').update({nombre:v}).eq('id',contacts[0].id); if(error){ appAlert('No se pudo guardar el contacto: '+error.message); return } setContacts(p=>p.map((c,i)=>i===0?{...c,nombre:v}:c)) } }
     else { const {data}=await supabase.from('contacts').insert({client_id:client.id,nombre:v}).select().single(); if(data) setContacts([data]) }
   }
 
@@ -7841,12 +7862,12 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       const arr = JSON.parse(raw)
       const updates = []
       ;(Array.isArray(arr)?arr:[]).forEach(o=>{ const e=sel[(o.i||0)-1]; if(e && o.concepto && o.concepto.trim() && o.concepto!==e.concept){ updates.push({id:e.id, concepto:o.concepto.trim()}) } })
-      if(!updates.length){ alert('Las descripciones ya estaban claras.'); setLimpiandoIA(false); return }
+      if(!updates.length){ appAlert('Las descripciones ya estaban claras.'); setLimpiandoIA(false); return }
       for(const u of updates){ await supabase.from('expenses').update({concept:u.concepto}).eq('id',u.id) }
       if(setExpenses) setExpenses(p=>p.map(e=>{ const u=updates.find(x=>x.id===e.id); return u?{...e,concept:u.concepto}:e }))
       logEvent('rendicion','limpiar_descripciones',{n:updates.length},currentUserName)
-      alert(`${updates.length} descripción(es) mejorada(s).`)
-    }catch(e){ alert('Error al mejorar con IA: '+(e?.message||e)) }
+      appAlert(`${updates.length} descripción(es) mejorada(s).`)
+    }catch(e){ appAlert('Error al mejorar con IA: '+(e?.message||e)) }
     setLimpiandoIA(false)
   }
   const generatePDFContent = (atencionVal) => {
@@ -7899,7 +7920,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
         const {error} = await supabase.from('expenses').update(patch).eq('id',e.id)
         if(error) falloMarca++
       }
-      if(falloMarca>0) alert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
+      if(falloMarca>0) appAlert(`Atención: ${falloMarca} de ${gastosSel.length} gasto(s) no se marcaron como rendidos. Revísalos antes de enviar al cliente.`)
       // Actualizar estado local
       if(setExpenses) setExpenses(p=>p.map(e=>gastosSel.find(g=>g.id===e.id)?{...e,client_rendered_at:now,client_render_id:renderId,...(proyecto&&!e.project?{project:proyecto}:{})}:e))
       const rendObj = {id:renderId,user_name:rendUser,client_id:client.id,periodo:periodoSel,total:totalSel,n_gastos:gastosSel.length,created_at:now,tipo:'cliente',correlativo:nextCorr,entity_id:selEnt||null,project:proyecto||null,subproject:(subproyecto||'').trim()||null,dirigido_a:(atencion||'').trim()||null,dirigido_email:atencionEmail||null,ot_numbers:otNums||null}
@@ -7909,7 +7930,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       if(modo==='pdf') { const w=window.open('','_blank'); if(w){ w.document.write(generatePDFContent(atencion)); w.document.close() } }
       setSelected(new Set())
       if(modo==='enviar' && onEnviar) onEnviar(rendObj)
-    } catch(e) { alert('Error: '+e.message) }
+    } catch(e) { appAlert('Error: '+e.message) }
     setSaving(false)
   }
 
@@ -7942,7 +7963,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       if(reembAjust&&setBilling) setBilling(p=>p.map(b=>b.id===reembAjust.id?{...b,amount:totalSel}:b))
       await guardarDirigido()
       onClose&&onClose()
-    } catch(e){ alert('Error: '+e.message) }
+    } catch(e){ appAlert('Error: '+e.message) }
     setSaving(false)
   }
 
@@ -8267,7 +8288,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
       const buf=await wb.xlsx.writeBuffer()
       const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
       const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Plantilla_carga_masiva.xlsx'; a.click(); URL.revokeObjectURL(a.href)
-    }catch(e){ alert('Error al generar la plantilla: '+e.message) }
+    }catch(e){ appAlert('Error al generar la plantilla: '+e.message) }
     setGenPlantilla(false)
   }
 
@@ -8313,7 +8334,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
       const buf=await wb.xlsx.writeBuffer()
       const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
       const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Modelo_notaria.xlsx'; a.click(); URL.revokeObjectURL(a.href)
-    }catch(e){ alert('Error al generar el modelo: '+e.message) }
+    }catch(e){ appAlert('Error al generar el modelo: '+e.message) }
     setGenPlantilla(false)
   }
 
@@ -8570,7 +8591,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           const r = buildRow(getField, parsed.length); if(r) parsed.push(r)
         })
       }
-      if(parsed.length===0){ alert('No se encontraron filas. Revisa que el Excel tenga una columna de Cliente (o RUT) y otra de Monto. Puedes descargar la plantilla modelo como referencia.'); setRows(null); setCargando(false); return }
+      if(parsed.length===0){ appAlert('No se encontraron filas. Revisa que el Excel tenga una columna de Cliente (o RUT) y otra de Monto. Puedes descargar la plantilla modelo como referencia.'); setRows(null); setCargando(false); return }
       // Detección de duplicados dentro del archivo (mismo RUT + fecha + monto + concepto). No bloquea, solo avisa.
       const keyOf = r => `${normRut(r.rut)}|${r.fecha}|${r.monto}|${(r.concepto||'').trim().toLowerCase()}|${(r.subconcepto||'').trim().toLowerCase()}|${(r.ot||'').trim().toLowerCase()}`
       const counts={}
@@ -8582,7 +8603,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       setCargando(false)
       runMatching(parsed)   // enriquece con fuzzy + IA (async, vuelve a setRows)
       return
-    }catch(err){ alert('Error al leer el Excel: '+err.message) }
+    }catch(err){ appAlert('Error al leer el Excel: '+err.message) }
     setCargando(false)
   }
 
@@ -8656,12 +8677,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 
   const guardar = async(incluirTodo=false) => {
     const target = incluirTodo ? (rows||[]) : listas
-    if(target.length===0){ alert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
+    if(target.length===0){ appAlert(incluirTodo?'No hay filas para cargar.':'No hay filas listas para cargar (con cliente y razón social resueltos, sin errores).'); return }
     setGuardando(true)
     try{
       const res = await onBulkImport(target, {tipo, filename:fileName})
       setResultado(res)
-    }catch(e){ alert('Error al importar: '+(e.message||e)) }
+    }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
 
@@ -8732,7 +8753,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const res = await onConciliar(actualizaciones, concil.nuevos, {tipo, filename:fileName})
       setConcilBefore(res.before||null)
       setResultado({concil:true, actualizados:res.actualizados, imported:res.importados, batchId:res.batchId})
-    }catch(e){ alert('Error al conciliar: '+(e.message||e)) }
+    }catch(e){ appAlert('Error al conciliar: '+(e.message||e)) }
     setGuardando(false)
   }
   // Acciones separadas (el usuario las hace por partes; volver a subir el archivo retoma sin duplicar).
@@ -8744,7 +8765,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const res = await onConciliar(actualizaciones, [], {tipo, filename:fileName})
       setConcilBefore(res.before||null)
       setResultado(prev=>({...(prev||{}), concil:true, actualizados:res.actualizados, imported:prev?.imported||0, batchId:prev?.batchId||null, corregirDone:true, nuevosPend:nuevosSel().length}))
-    }catch(e){ alert('Error al corregir: '+(e.message||e)) }
+    }catch(e){ appAlert('Error al corregir: '+(e.message||e)) }
     setGuardando(false)
   }
   const aplicarImportar = async()=>{
@@ -8753,7 +8774,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     try{
       const res = await onConciliar([], sel, {tipo, filename:fileName, cajaOwner:cajaOwner||null})
       setResultado(prev=>({...(prev||{}), concil:true, imported:res.importados, omitidos:res.omitidos||0, actualizados:prev?.actualizados||0, batchId:res.batchId, importarDone:true, actualizarPend:(prev?.corregirDone?0:corregirSel().length)}))
-    }catch(e){ alert('Error al importar: '+(e.message||e)) }
+    }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
 
@@ -8777,7 +8798,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {resultado.corregirDone&&!resultado.importarDone&&resultado.nuevosPend>0&&<button disabled={guardando} onClick={aplicarImportar} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora importa las ${resultado.nuevosPend} nuevas →`}</button>}
       {resultado.importarDone&&!resultado.corregirDone&&resultado.actualizarPend>0&&<button disabled={guardando} onClick={aplicarCorregir} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.azulInfo,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora corrige las ${resultado.actualizarPend} →`}</button>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
-      {resultado.concil&&concilBefore&&concilBefore.length>0&&<button onClick={async()=>{ if(confirm('¿Revertir las correcciones de cliente/categoría a como estaban antes?')){ const ok=await onUndoConciliar(concilBefore); if(ok){ setConcilBefore(null); onClose() } } }} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Revertir correcciones ({concilBefore.length})</button>}
+      {resultado.concil&&concilBefore&&concilBefore.length>0&&<button onClick={async()=>{ if(await appConfirm('¿Revertir las correcciones de cliente/categoría a como estaban antes?')){ const ok=await onUndoConciliar(concilBefore); if(ok){ setConcilBefore(null); onClose() } } }} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Revertir correcciones ({concilBefore.length})</button>}
       {resultado.batchId&&resultado.imported>0&&<button onClick={()=>setUndoTarget({batchId:resultado.batchId,count:resultado.imported})} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Deshacer importación</button>}
       {undoTarget&&<UndoConfirm target={undoTarget} undoing={undoing} onCancel={()=>setUndoTarget(null)} onConfirm={async()=>{ setUndoing(true); const ok=await onUndoImport(undoTarget.batchId); setUndoing(false); if(ok){ setUndoTarget(null); onClose() } }}/>}
     </div>
@@ -8995,7 +9016,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           {modo!=='conciliar'&&<div style={{display:'flex',gap:7,marginBottom:10,flexWrap:'wrap'}}>
             <button disabled={sugeridos.length===0} onClick={confirmarSugeridos} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:sugeridos.length?'pointer':'default',border:'1px solid #F0D88A',background:sugeridos.length?'#FFF8E1':'#F5F7F9',color:C.soon,opacity:sugeridos.length?1:.5}}>Confirmar sugeridos ({sugeridos.length})</button>
             <button disabled={guardando||listas.length===0} onClick={()=>guardar(false)} style={{flex:'1 1 120px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:listas.length?'pointer':'default',border:'none',background:C.accent,color:'#fff',opacity:listas.length?1:.5}}>Importar listos ({listas.length})</button>
-            <button disabled={guardando||rows.length===0} onClick={()=>{ if(confirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
+            <button disabled={guardando||rows.length===0} onClick={async()=>{ if(await appConfirm(`Importar las ${rows.length} filas, incluso las sin cliente (quedan sin asignar) y sin monto (como $0)?`)) guardar(true) }} style={{flex:'1 1 110px',padding:'9px 8px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.border}`,background:'#fff',color:C.accent}}>Importar todo ({rows.length})</button>
           </div>}
           {dups.length>0&&modo!=='conciliar'&&<div style={{fontSize:11,color:C.soon,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'8px 10px',marginBottom:8}}>
             <div onClick={()=>setShowDup(s=>!s)} style={{cursor:'pointer'}}>Se detectaron {dups.length} fila(s) duplicada(s) (mismo cliente, fecha, monto y concepto) dentro del archivo. <b style={{textDecoration:'underline'}}>{showDup?'ocultar':'ver cuáles'}</b></div>
@@ -9294,7 +9315,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const [hFichaDesde,setHFichaDesde] = useState('')
   const [hFichaHasta,setHFichaHasta] = useState('')
   const handleAnularRendicion = async(r) => {
-    if(!confirm('\u00bfAnular esta rendici\u00f3n? Queda registrada como ANULADA (con su PDF para auditor\u00eda), los gastos vuelven a estar disponibles para rendir y se anula el cobro de reembolso asociado.')) return
+    if(!await appConfirm('\u00bfAnular esta rendici\u00f3n? Queda registrada como ANULADA (con su PDF para auditor\u00eda), los gastos vuelven a estar disponibles para rendir y se anula el cobro de reembolso asociado.')) return
     try {
       const now = new Date().toISOString()
       // Foto del PDF ANTES de liberar los gastos: el registro anulado conserva su detalle aunque los gastos queden libres.
@@ -9309,13 +9330,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       if(re) throw re
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,...patch}:x))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
-      if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); alert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
-    } catch(e) { alert('Error: '+e.message) }
+      if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); appAlert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
+    } catch(e) { appAlert('Error: '+e.message) }
   }
   // Anula la rendición de UN gasto: lo desvincula y ajusta el total/contador de su rendición (la elimina si queda en 0).
   const anularGastoRendido = async(e, ev) => {
     ev.stopPropagation()
-    if(!confirm(`¿Anular la rendición de "${e.concept||'este gasto'}"? Volverá a quedar disponible para rendir.`)) return
+    if(!await appConfirm(`¿Anular la rendición de "${e.concept||'este gasto'}"? Volverá a quedar disponible para rendir.`)) return
     const renderId = e.client_render_id
     try {
       const {error} = await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('id',e.id)
@@ -9334,7 +9355,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
           else { await supabase.from('rendiciones').update({total:nuevoTotal,n_gastos:nuevoN}).eq('id',renderId); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===renderId?{...x,total:nuevoTotal,n_gastos:nuevoN}:x)) }
         }
       }
-    } catch(err){ alert('Error: '+err.message) }
+    } catch(err){ appAlert('Error: '+err.message) }
   }
   // Marcar un gasto de notaría como pagado a la notaría (sale de "por pagar" y de caja chica). Toggle: vuelve a tocar el badge para deshacer.
   const marcarNotariaPagado = async(e, ev) => {
@@ -9344,7 +9365,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       const {error} = await supabase.from('expenses').update({notaria_liquidado_at:nuevo}).eq('id',e.id)
       if(error) throw error
       if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,notaria_liquidado_at:nuevo}:x))
-    } catch(err){ alert('Error: '+err.message) }
+    } catch(err){ appAlert('Error: '+err.message) }
   }
   const [estadoFor,setEstadoFor] = useState(null)   // id del gasto con el menú "Estado" abierto
   // Clasifica un gasto antiguo de cliente: histórico (no descuenta el saldo) o descuenta. modo null = deshacer (vuelve al default que sí descuenta).
@@ -9356,7 +9377,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       const {error} = await supabase.from('expenses').update(patch).eq('id',e.id)
       if(error) throw error
       if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
-    } catch(err){ alert('Error: '+err.message) }
+    } catch(err){ appAlert('Error: '+err.message) }
   }
   // Clasifica en lote los gastos seleccionados en el overlay "Clasificar pagos".
   const clasifBulk = async(modo) => {
@@ -9367,7 +9388,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       if(error) throw error
       if(setExpenses) setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,...patch}:x))
       setSelClasif(new Set())
-    } catch(err){ alert('Error: '+err.message) }
+    } catch(err){ appAlert('Error: '+err.message) }
   }
   const [asignandoRS,setAsignandoRS] = useState(null) // client_id cuyo selector de RS esta abierto
   const [expandRend,setExpandRend] = useState(null)   // id de la rendición con el detalle desplegado
@@ -9511,7 +9532,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Gastos de notaría por $1 (o menos): escrituras/trabajos anulados, solo orden — no se liquidan, se pueden eliminar.
   const notariaAnulados = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)<=1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   const [notaAnulOpen,setNotaAnulOpen] = useState(false)
-  const eliminarGastoNota = async(e)=>{ if(!confirm('¿Eliminar este gasto anulado? Va a la papelera (reversible).')) return; try{ await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',e.id); setExpenses(p=>p.filter(x=>x.id!==e.id)) }catch(err){alert('Error: '+err.message)} }
+  const eliminarGastoNota = async(e)=>{ if(!await appConfirm('¿Eliminar este gasto anulado? Va a la papelera (reversible).')) return; try{ await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',e.id); setExpenses(p=>p.filter(x=>x.id!==e.id)) }catch(err){appAlert('Error: '+err.message)} }
   const notaSel = notariaPend.filter(e=>selNota.has(e.id))
   const notaTotal = notaSel.reduce((a,e)=>a+(e.amount||0),0)
   // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (caja chica + notaría pagada) − reservado para
@@ -9534,7 +9555,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const PERSONAS_NOTA = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   // Agrupa los pendientes: por cliente (con su saldo de fondos), personales (personal_de) y sin asignar.
   const notaGroups = useMemo(()=>{ const byClient={},personal={},sin=[]; notariaPend.forEach(e=>{ if(e.client_id){(byClient[e.client_id]=byClient[e.client_id]||[]).push(e)} else if(e.personal_de){(personal[e.personal_de]=personal[e.personal_de]||[]).push(e)} else sin.push(e) }); return {byClient,personal,sin} },[notariaPend])
-  const marcarPersonal = async(e,persona)=>{ const patch={personal_de:persona||null, paid_by_client: persona?false:(e.category==='Notaria')}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); setNotaPersonaPick(null) }catch(err){alert('Error: '+err.message)} }
+  const marcarPersonal = async(e,persona)=>{ const patch={personal_de:persona||null, paid_by_client: persona?false:(e.category==='Notaria')}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); setNotaPersonaPick(null) }catch(err){appAlert('Error: '+err.message)} }
   // Triage de gasto de oficina (Liberona Escala) → personal de un miembro: lo saca del folder de la oficina y queda como personal.
   const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
   // Repetir los costos fijos del mes anterior en el mes nuevo (sin re-tipear). created_by = admin → quedan estructurales.
@@ -9556,8 +9577,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   }
   // Catálogo de categorías de oficina que APRENDE: base + las ya usadas en gastos de la oficina (excluye las legales) + ordenadas.
   const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_BASE); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(e.category) }); return [...s] },[expenses,clients])
-  const setCatOficina = async(e,cat)=>{ setCatMenu(null); try{ await supabase.from('expenses').update({category:cat}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,category:cat}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ alert('No se pudo guardar la categoría: '+err.message) } }
-  const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at){ alert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)) }catch(err){alert('Error: '+err.message)} }
+  const setCatOficina = async(e,cat)=>{ setCatMenu(null); try{ await supabase.from('expenses').update({category:cat}).eq('id',e.id); setExpenses&&setExpenses(p=>p.map(x=>x.id===e.id?{...x,category:cat}:x)); const gk=glosaKey(e.concept||''); if(gk&&cat) learnPut('gasto_categoria',gk,cat) }catch(err){ appAlert('No se pudo guardar la categoría: '+err.message) } }
+  const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at){ appAlert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)) }catch(err){appAlert('Error: '+err.message)} }
   const notaRow = (e, bloqueado=false, adelanto=false) => { const on=selNota.has(e.id); return (
     <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?'#EEF3F6':'transparent',opacity:bloqueado?.5:1}}>
       <span style={{width:18,height:18,borderRadius:5,flexShrink:0,border:`1.5px solid ${bloqueado?C.done:(on?C.accent:C.done)}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:(bloqueado?<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><rect x='5' y='11' width='14' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>:null)}</span>
@@ -9589,13 +9610,13 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
       if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set()); setNotaConfirm(false)
-    }catch(e){alert('Error al liquidar: '+e.message)}
+    }catch(e){appAlert('Error al liquidar: '+e.message)}
     setNotaSending(false)
   }
   // Marcar como ya pagados (gastos históricos): registra la liquidación SIN correo (estado_envio='pagado').
   const marcarPagadoNotaria = async() => {
     if(!notaSel.length) return
-    if(!confirm(`¿Marcar ${notaSel.length} gasto(s) como ya pagados a la notaría? Salen de pendientes; no se envía correo.`)) return
+    if(!await appConfirm(`¿Marcar ${notaSel.length} gasto(s) como ya pagados a la notaría? Salen de pendientes; no se envía correo.`)) return
     try{
       const renderId=crypto.randomUUID(), now=new Date().toISOString()
       const periodo=periodoNota(notaSel), ot=[...new Set(notaSel.map(e=>e.ot_number).filter(Boolean))].join(', ')
@@ -9607,15 +9628,15 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
       if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set())
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   }
   // Estado de envío de una liquidación (compat filas viejas sin estado_envio: con sent_at→enviada, si no→pagado).
   const notaEstado = r => r.estado_envio || (r.sent_at?'enviada':'pagado')
   // Paso 2: enviar a la notaría el detalle + el comprobante de transferencia (ya transferiste). Marca 'enviada'.
   const enviarNotaria = async(r) => {
     const dest=cleanNotaDest(notaEmail)||NOTARIA_DEFAULT
-    if(!dest){ alert('Falta el correo de la notaría.'); return }
-    if(!compFile){ alert('Adjunta el comprobante de transferencia.'); return }
+    if(!dest){ appAlert('Falta el correo de la notaría.'); return }
+    if(!compFile){ appAlert('Adjunta el comprobante de transferencia.'); return }
     setNotaSending(true)
     // CC fijo: todo el estudio en copia, SIEMPRE, menos Rodrigo.
     const ccEstudio = 'cl@leabogados.cl, ee@leabogados.cl, mc@leabogados.cl, mp@leabogados.cl'
@@ -9651,23 +9672,23 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       let sent=false
       try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,cc:ccEstudio,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
       if(!sent){ try{ await sendMailServer({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
-      if(!sent){ alert('No se pudo enviar el correo. Revisa la conexión o reintenta.'); setNotaSending(false); return }
+      if(!sent){ appAlert('No se pudo enviar el correo. Revisa la conexión o reintenta.'); setNotaSending(false); return }
       const now=new Date().toISOString()
       await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}).eq('id',r.id)
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}:x))
       setNotaSend(null); setCompFile(null)
-    }catch(e){alert('Error al enviar: '+e.message)}
+    }catch(e){appAlert('Error al enviar: '+e.message)}
     setNotaSending(false)
   }
   // Reenvía una liquidación YA enviada: regenera el detalle y recupera el comprobante guardado en Drive. Cualquiera del equipo puede.
   // OJO: el cuerpo (html/texto) debe mantenerse en sync con enviarNotaria.
   const reenviarNotaria = async(r) => {
     const dest=cleanNotaDest(notaEmail)||NOTARIA_DEFAULT
-    if(!dest){ alert('Falta el correo de la notaría.'); return }
+    if(!dest){ appAlert('Falta el correo de la notaría.'); return }
     const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
-    if(!gs.length){ alert('Esta liquidación no tiene gastos vivos para reenviar.'); return }
+    if(!gs.length){ appAlert('Esta liquidación no tiene gastos vivos para reenviar.'); return }
     const periodo=r.periodo||periodoNota(gs)
-    if(!confirm(`¿Reenviar la liquidación (${periodo}) a la notaría?\n${dest}\nCon copia al estudio.`)) return
+    if(!await appConfirm(`¿Reenviar la liquidación (${periodo}) a la notaría?\n${dest}\nCon copia al estudio.`)) return
     setReenviando(r.id)
     const ccEstudio='cl@leabogados.cl, ee@leabogados.cl, mc@leabogados.cl, mp@leabogados.cl'
     try{
@@ -9693,33 +9714,33 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       let sent=false
       try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,cc:ccEstudio,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
       if(!sent){ try{ await sendMailServer({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
-      if(!sent){ alert('No se pudo reenviar. Revisa la conexión o reintenta.'); setReenviando(null); return }
-      alert('Reenviado a la notaría'+(conComp?' con el comprobante.':'.\n(No se pudo recuperar el comprobante de Drive; se reenvió solo el detalle.)'))
-    }catch(e){ alert('Error al reenviar: '+e.message) }
+      if(!sent){ appAlert('No se pudo reenviar. Revisa la conexión o reintenta.'); setReenviando(null); return }
+      appAlert('Reenviado a la notaría'+(conComp?' con el comprobante.':'.\n(No se pudo recuperar el comprobante de Drive; se reenvió solo el detalle.)'))
+    }catch(e){ appAlert('Error al reenviar: '+e.message) }
     setReenviando(null)
   }
   const deshacerNotaria = async(r) => {
-    if(!confirm('¿Deshacer esta liquidación de notaría? Los gastos vuelven a pendientes.')) return
+    if(!await appConfirm('¿Deshacer esta liquidación de notaría? Los gastos vuelven a pendientes.')) return
     try{
       await supabase.from('expenses').update({notaria_render_id:null,notaria_liquidado_at:null}).eq('notaria_render_id',r.id)
       await supabase.from('rendiciones').delete().eq('id',r.id)
       setExpenses(p=>p.map(e=>e.notaria_render_id===r.id?{...e,notaria_render_id:null,notaria_liquidado_at:null}:e))
       if(setRendiciones) setRendiciones(p=>p.filter(x=>x.id!==r.id))
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   }
   const fmtOt = ot => ot?(String(ot).toUpperCase().startsWith('OT')?ot:'OT-'+ot):'—'
   // Excel de una liquidación: OT · descripción · costo (lo que pidió el usuario, en ese orden).
   const descargarExcelNota = async(r) => {
     try{
       const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
-      if(!gs.length){ alert('Esta liquidación no tiene gastos vivos para exportar.'); return }
+      if(!gs.length){ appAlert('Esta liquidación no tiene gastos vivos para exportar.'); return }
       const fecha=fmtFechaDMY(r.created_at)||new Date().toISOString().slice(0,10)
       const total=gs.reduce((a,e)=>a+(e.amount||0),0)
       const XLSX=await loadXLSXStyle()
       const ws=buildLiquidacionExcelWS(XLSX,{gastos:gs,clients,titulo:`Liquidación Notaría Lascar al ${fecha}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`})
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
       XLSX.writeFile(wb,`Liquidacion Notaria Lascar al ${fecha}.xlsx`.replace(/[^\w .-]/g,''))
-    }catch(e){ alert('No se pudo generar el Excel: '+e.message) }
+    }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
   // Añadir gastos pendientes a una liquidación ya creada (corrección): los enlaza y suma al total/n_gastos/OT.
   const anadirGastosNota = async(r, ids) => {
@@ -9732,7 +9753,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:r.id,notaria_liquidado_at:now}:e))
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,total:(x.total||0)+addTot,n_gastos:(x.n_gastos||0)+ids.length,ot_numbers:newOts||null}:x))
       setNotaLiqAdd(null); setAddSel(new Set())
-    }catch(e){alert('Error al añadir: '+e.message)}
+    }catch(e){appAlert('Error al añadir: '+e.message)}
   }
 
   const CATS = {'Notaria':C.azulBg,'CBR':'#F2E9DE','Diario Oficial':'#ECE6F5','Registro Civil':'#EDE3F5','Movilización':C.tealBg,'Archivo Judicial':'#EFEAF6','Fondo':C.greenBg,'Otro':'#F5F7F9'}
@@ -9824,7 +9845,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               {!isFondo&&e.notaria_liquidado_at&&(isAdmin&&!e.notaria_render_id
                 ? <button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Pagado a la notaría · tocar para deshacer' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FAECE7',color:C.coralText,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}}>✓ Notaría <span style={{fontWeight:700,fontSize:11,lineHeight:1}}>✕</span></button>
                 : <span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:'#FAECE7',color:C.coralText,fontWeight:600}}>✓ Notaría</span>)}
-              {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):alert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>✓ Caja chica</button>}
+              {!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):appAlert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,border:'none',cursor:'pointer'}}>✓ Caja chica</button>}
               {movExp===e.id&&e.project&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:3,background:C.azulBg,color:C.accent,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{e.project}</span>}
               {movExp===e.id&&isImported&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:3,background:'#F1EFE8',color:C.grisText,fontWeight:600}}>Carga masiva</span>}
               {!isFondo&&e.pagado_cliente_at
@@ -9840,7 +9861,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               <div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}} onClick={stop}>
                 <div style={{position:'relative'}}>
                   <button onClick={()=>setCatMenu(catMenu===e.id?null:e.id)} style={{fontSize:11,fontWeight:600,color:catOk?C.accent:C.soonText,background:catOk?C.azulBg:'#FFF8E1',border:'none',borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>{catOk?e.category:'Sin categoría'} ▾</button>
-                  {catMenu===e.id&&<><div onClick={()=>setCatMenu(null)} style={{position:'fixed',inset:0,zIndex:90}}/><div style={{position:'absolute',top:28,left:0,zIndex:100,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',minWidth:165,overflow:'hidden',maxHeight:250,overflowY:'auto'}}>{catsOficina.map(c=><div key={c} onClick={()=>setCatOficina(e,c)} style={{padding:'7px 12px',fontSize:12,color:c===e.category?C.accent:C.text,fontWeight:c===e.category?600:400,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>{c}</div>)}<div onClick={()=>{ const nv=prompt('Nueva categoría de oficina:'); if(nv&&nv.trim()) setCatOficina(e,nv.trim()) }} style={{padding:'7px 12px',fontSize:12,color:C.accent,fontWeight:600,cursor:'pointer'}}>+ Nueva categoría…</div></div></>}
+                  {catMenu===e.id&&<><div onClick={()=>setCatMenu(null)} style={{position:'fixed',inset:0,zIndex:90}}/><div style={{position:'absolute',top:28,left:0,zIndex:100,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',minWidth:165,overflow:'hidden',maxHeight:250,overflowY:'auto'}}>{catsOficina.map(c=><div key={c} onClick={()=>setCatOficina(e,c)} style={{padding:'7px 12px',fontSize:12,color:c===e.category?C.accent:C.text,fontWeight:c===e.category?600:400,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}}>{c}</div>)}<div onClick={async()=>{ const nv=await appPrompt('Nueva categoría de oficina:'); if(nv&&nv.trim()) setCatOficina(e,nv.trim()) }} style={{padding:'7px 12px',fontSize:12,color:C.accent,fontWeight:600,cursor:'pointer'}}>+ Nueva categoría…</div></div></>}
                 </div>
                 {triageOpen===e.id ? (
                   <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
@@ -9995,7 +10016,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
             {cl&&!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar rendición':'Enviar rendición'}</button>}
             {cl&&!r.anulada_at&&r.sent_at&&<button onClick={()=>{ const devF=(expenses||[]).find(e=>e.type==='fondo'&&(e.amount||0)<0&&String(e.client_id)===String(r.client_id)&&new RegExp('rendici[oó]n n°\\s*'+(r.correlativo||'?'),'i').test(e.concept||'')); const amt=devF?Math.abs(devF.amount):Math.max(0,saldoCliente(expenses,r.client_id)); setDevEmailRend({rend:r,client:cl,amount:amt,fecha:devF?devF.date:new Date().toISOString().slice(0,10)}) }} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.azulInfo}`,background:'#fff',color:C.azulInfo,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.devolucion_at?'Reenviar devolución':'Enviar devolución'}</button>}
-            {cl&&!r.anulada_at&&<button onClick={async()=>{ const now=r.devolucion_at?null:new Date().toISOString(); try{ await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',r.id); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,devolucion_at:now}:x)) }catch(e){ alert('No se pudo marcar: '+(e.message||e)) } }} title={r.devolucion_at?'Quitar la marca':'Marcar como enviada sin mandar correo'} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${r.devolucion_at?C.greenText:C.border}`,background:r.devolucion_at?C.greenBg:'#fff',color:r.devolucion_at?C.greenText:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.devolucion_at?'Devolución enviada':'Marcar a mano'}</button>}
+            {cl&&!r.anulada_at&&<button onClick={async()=>{ const now=r.devolucion_at?null:new Date().toISOString(); try{ await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',r.id); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,devolucion_at:now}:x)) }catch(e){ appAlert('No se pudo marcar: '+(e.message||e)) } }} title={r.devolucion_at?'Quitar la marca':'Marcar como enviada sin mandar correo'} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${r.devolucion_at?C.greenText:C.border}`,background:r.devolucion_at?C.greenBg:'#fff',color:r.devolucion_at?C.greenText:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.devolucion_at?'Devolución enviada':'Marcar a mano'}</button>}
           </div>
         </div>}
       </div>
@@ -10489,7 +10510,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <div style={{fontSize:11,marginTop:2}}><span style={{color:C.greenText,fontWeight:600}}>con fondo {fmt(conFondo)}</span>{adelanto>0&&<span style={{color:C.overdueText,fontWeight:700}}> · adelanto {fmt(adelanto)}</span>}</div>
               </div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                <button onClick={()=>{ if(adelanto>0&&!confirm(`Liquidas ${fmt(notaTotal)}: ${fmt(conFondo)} con fondo y adelantas ${fmt(adelanto)}.\n\n¿Pagar igual?`)) return; setNotaConfirm(true) }} style={{height:26,padding:'0 10px',borderRadius:7,border:'none',background:adelanto>0?C.overdueText:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
+                <button onClick={async()=>{ if(adelanto>0&&!await appConfirm(`Liquidas ${fmt(notaTotal)}: ${fmt(conFondo)} con fondo y adelantas ${fmt(adelanto)}.\n\n¿Pagar igual?`)) return; setNotaConfirm(true) }} style={{height:26,padding:'0 10px',borderRadius:7,border:'none',background:adelanto>0?C.overdueText:C.accent,color:'#fff',fontSize:11,fontWeight:600,cursor:'pointer'}}>Liquidar</button>
                 <button onClick={marcarPagadoNotaria} style={{height:26,padding:'0 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Marcar pagado</button>
               </div>
             </div>) })()}
@@ -10615,7 +10636,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 : <label style={{border:`1.5px dashed ${C.muted}`,borderRadius:9,background:'#FAFBFC',padding:14,textAlign:'center',color:C.muted,fontSize:11,display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',marginBottom:14}}>
                     <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
                     <span>Toca para subir el comprobante del banco (imagen o PDF)</span>
-                    <input type='file' accept='image/*,application/pdf' onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(!f) return; if(f.size>15*1024*1024){ alert('El archivo supera 15 MB.'); return } setCompFile(f) }} style={{display:'none'}}/>
+                    <input type='file' accept='image/*,application/pdf' onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(!f) return; if(f.size>15*1024*1024){ appAlert('El archivo supera 15 MB.'); return } setCompFile(f) }} style={{display:'none'}}/>
                   </label>}
               <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Correo de la notaría</label>
               <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginBottom:16,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:'#F5F7F9',color:C.text,boxSizing:'border-box',outline:'none'}}/>
@@ -10642,7 +10663,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <span style={{fontSize:14,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
               </div>
               <div style={{display:'flex',justifyContent:'flex-end',gap:6,alignItems:'center'}}>
-                {onCreateOccasional&&<button onClick={async()=>{ const nm=prompt('Nombre del cliente ocasional:', e.concept||''); if(nm&&nm.trim()){ const c=await onCreateOccasional(nm.trim()); if(c) onAssignClientToExpense(e.id,c.id) } }} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional</button>}
+                {onCreateOccasional&&<button onClick={async()=>{ const nm=await appPrompt('Nombre del cliente ocasional:', e.concept||''); if(nm&&nm.trim()){ const c=await onCreateOccasional(nm.trim()); if(c) onAssignClientToExpense(e.id,c.id) } }} style={{fontSize:11,fontWeight:600,padding:'5px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer'}}>+ Ocasional</button>}
                 <AsignarClienteInline bill={{id:e.id}} clients={clients} onAssign={(_,cid)=>onAssignClientToExpense(e.id,cid)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/>
               </div>
             </div>
@@ -11014,7 +11035,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
         count++
       } catch(e){ errores.push(r.concept||r.category||'Fila') }
     }
-    if(errores.length) alert(`${errores.length} gasto(s) no se guardaron: ${errores.join(', ')}`)
+    if(errores.length) appAlert(`${errores.length} gasto(s) no se guardaron: ${errores.join(', ')}`)
     setSaved(count)
     setRows([{id:Date.now(),category:'CBR',concept:'',amount:'',date:hoy}])
     setSaving(false)
@@ -11187,7 +11208,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
             <ClientePicker clients={clients} onPick={cid=>{setF(p=>({...p,client_id:cid,entity_id:null}));setCambiarCli(false)}}/>
             <button type='button' onClick={()=>setCambiarCli(false)} style={{marginTop:5,fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0}}>cancelar</button>
           </div>
-        : <div onClick={()=>{ if(f.client_render_id||f.render_id||f.notaria_render_id){ alert('Este gasto está en una rendición/liquidación. Reábrela antes de moverlo a otro cliente.'); return } setCambiarCli(true) }} title='Tocar para cambiar de cliente' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8,padding:'8px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',cursor:'pointer'}}>
+        : <div onClick={()=>{ if(f.client_render_id||f.render_id||f.notaria_render_id){ appAlert('Este gasto está en una rendición/liquidación. Reábrela antes de moverlo a otro cliente.'); return } setCambiarCli(true) }} title='Tocar para cambiar de cliente' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8,padding:'8px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',cursor:'pointer'}}>
             <div style={{minWidth:0}}><div style={{fontSize:9,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.3}}>Cliente</div><div style={{fontSize:13,color:client?.name?C.accent:C.overdue,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name||'Sin cliente'}</div></div>
             <span style={{fontSize:11,color:C.azulInfo,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>Cambiar ▾</span>
           </div>
@@ -11602,16 +11623,16 @@ function ContactoTab({client, entities, onSaveFields}) {
         if(error)throw error; setContacts(p=>[...p,data])
       }
       resetC()
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSavingC(false)
   }
   const eliminarContacto = async (c)=>{
-    if(!confirm(`¿Eliminar a ${c.nombre}?`)) return
+    if(!await appConfirm(`¿Eliminar a ${c.nombre}?`)) return
     const {error}=await supabase.from('contacts').delete().eq('id',c.id)
-    if(error){alert('Error: '+error.message);return}
+    if(error){appAlert('Error: '+error.message);return}
     setContacts(p=>p.filter(x=>x.id!==c.id))
   }
-  const togglePrincipal = async (c)=>{ const nv=!c.principal; setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:nv}:x)); const {error}=await supabase.from('contacts').update({principal:nv}).eq('id',c.id); if(error){alert('Error: '+error.message); setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:!nv}:x))} }
+  const togglePrincipal = async (c)=>{ const nv=!c.principal; setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:nv}:x)); const {error}=await supabase.from('contacts').update({principal:nv}).eq('id',c.id); if(error){appAlert('Error: '+error.message); setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:!nv}:x))} }
   const initials = (n)=> (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
 
   const inp = {width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',fontSize:13,boxSizing:'border-box',outline:'none',color:C.text}
@@ -11886,8 +11907,8 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
       const j=await claudeCall({model:'claude-opus-4-8',max_tokens:60,messages:[{role:'user',content:prompt}]})
       const txt=(j?.content?.[0]?.text||'').trim()
       const m=g.sales.find(s=>txt.includes(String(s.id)))
-      if(m) setAiSug(p=>({...p,[idx]:m})); else alert('La IA no encontró una venta clara para esta serie.')
-    }catch(e){ alert('Error IA: '+e.message) }
+      if(m) setAiSug(p=>({...p,[idx]:m})); else appAlert('La IA no encontró una venta clara para esta serie.')
+    }catch(e){ appAlert('Error IA: '+e.message) }
     setAiBusy(null)
   }
 
@@ -12218,16 +12239,16 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   // Recordar cobro: correo al cliente (desde la cuenta de oficina) con el detalle de una factura vencida/pendiente.
   const recordarCobro = async(b)=>{
     const to=(client.email||'').trim()
-    if(!to){ alert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
+    if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const r=recordatorioCobro(b)
-    if(!confirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
-    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; alert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
-    catch(e){ alert('No se pudo enviar el recordatorio: '+e.message) }
+    if(!await appConfirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
+    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
+    catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Registrar pago (total o parcial/abono). Si el monto recibido < saldo → queda "abonado" (paid_amount) y la factura sigue pendiente.
-  const pagar = b => {
+  const pagar = async b => {
     const total=b.amount||0, ya=b.paid_amount||0, saldo=Math.max(0,total-ya)
-    const raw=prompt(`Registrar pago — ${b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'factura'}\nSaldo: ${fmt(saldo)}\n\nMonto recibido (deja el total para pago completo):`, String(saldo))
+    const raw=await appPrompt(`Registrar pago — ${b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'factura'}\nSaldo: ${fmt(saldo)}\n\nMonto recibido (deja el total para pago completo):`, String(saldo))
     if(raw==null) return
     const monto=parseInt(String(raw).replace(/[^\d]/g,''))||0
     if(monto<=0) return
@@ -12529,8 +12550,8 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${logoW}" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">Devolución de fondos${corr?` · Rendición N° ${corr}`:''}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma,logoC,'es')}</div></div>`
   }
   const enviar=async()=>{
-    if(!para.trim()){ alert('Falta el destinatario (Para).'); return }
-    if(!comp && !confirm('No adjuntaste el comprobante de transferencia. ¿Enviar igual?')) return
+    if(!para.trim()){ appAlert('Falta el destinatario (Para).'); return }
+    if(!comp && !await appConfirm('No adjuntaste el comprobante de transferencia. ¿Enviar igual?')) return
     setSending(true)
     const _strip=u=>String(u||'').replace(/^data:[^,]+,/,'')
     const logosInline=[{cid:'lealogow',b64:_strip(logoBlanco),mime:'image/png'},{cid:'lealogoc',b64:_strip(logoColor),mime:'image/png'}]
@@ -12538,13 +12559,13 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     const atts=comp?[{base64:comp.b64,name:comp.name,mime:comp.mime}]:[]
     let sent=false,err=null
     try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:ccStr,subject:asunto,bodyText:body,bodyHtml:buildHtml(body,true),inlineImages:logosInline,attachments:atts}); sent=true } }catch(e){ err=e }
-    if(!sent){ try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; alert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 } }
+    if(!sent){ try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; appAlert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 } }
     setSending(false)
     if(sent){ try{ if(cc.length) await supabase.from('learnings').upsert({kind:'rendicion_cc',key:String(client.id),value:cc.join(', ')},{onConflict:'kind,key'}) }catch(_){} try{ if((para||'').trim()) await supabase.from('learnings').upsert({kind:'rendicion_para',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}
       // Registrar el envío de la devolución en la rendición → chip "Devolución enviada" en el historial.
       try{ if(rend?.id){ const now=new Date().toISOString(); await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',rend.id); setRendiciones&&setRendiciones(p=>p.map(x=>x.id===rend.id?{...x,devolucion_at:now}:x)) } }catch(_){}
       onClose&&onClose() }
-    else alert('No se pudo enviar el correo de devolución.\n'+(err?.message||err||'—'))
+    else appAlert('No se pudo enviar el correo de devolución.\n'+(err?.message||err||'—'))
   }
   const inp={width:'100%',height:38,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 10px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:6,display:'block'}
@@ -12678,22 +12699,22 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim()
       if(txt) setBody(txt)
-    }catch(e){ alert('No se pudo redactar: '+(e?.message||e)) }
+    }catch(e){ appAlert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
   const buildHtml=()=>facturaCorreoHtml(body, firma, incPago)
   const enviar=async()=>{
-    if(!para.trim()){ alert('Falta el destinatario.'); return }
+    if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
     try{
       const token=await driveToken()
-      if(!token){ alert('No se pudo conectar a Gmail. Reingresa con tu correo @leabogados.cl.'); setSending(false); return }
+      if(!token){ appAlert('No se pudo conectar a Gmail. Reingresa con tu correo @leabogados.cl.'); setSending(false); return }
       await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${body}\n\n${DATOS_PAGO_TXT}`:body,bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       const at=new Date().toISOString()
       try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',factura.id) }catch(_){}
-      onSent&&onSent(factura.id,at); alert('Factura enviada al cliente.'); onClose()
-    }catch(e){ alert('Error al enviar: '+(e.message||e)) }
+      onSent&&onSent(factura.id,at); appAlert('Factura enviada al cliente.'); onClose()
+    }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
     setSending(false)
   }
   const fInp={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}
@@ -12833,16 +12854,16 @@ Saludos cordiales,`
       const txt = (data.content?.[0]?.text||'').trim()
       if(!txt) throw new Error('respuesta vacía')
       setBody(txt); logEvent('rendicion','correo_ia',{client_id:r.client_id},user?.name)
-    }catch(e){ alert('Error al redactar con IA: '+(e?.message||e)) }
+    }catch(e){ appAlert('Error al redactar con IA: '+(e?.message||e)) }
     setAiBusy(false)
   }
   const verPDF = () => {
-    const w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para ver el PDF.'); return }
+    const w=window.open('','_blank'); if(!w){ appAlert('Permite las ventanas emergentes para ver el PDF.'); return }
     w.document.write(rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang))   // diseño rico A (mismo que "Ver PDF" del historial)
     w.document.close()
   }
   const enviar = async() => {
-    if(!para.trim()){ alert('Falta el email del cliente.'); return }
+    if(!para.trim()){ appAlert('Falta el email del cliente.'); return }
     const texto = body
     const firmaTxt = firma.nombre ? [firma.nombre, firma.cargo, firma.telefono, 'Av. Kennedy Lateral 7900, Of. 905, Vitacura', 'Santiago - Chile', 'www.leabogados.cl'].filter(Boolean).join('\n') : ''
     const textoFull = firmaTxt ? texto+'\n\n'+firmaTxt : texto
@@ -12869,10 +12890,10 @@ Saludos cordiales,`
           const pdf = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
           await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:textoFull, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
           conAdjunto = true
-          alert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
+          appAlert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
         }catch(srvErr){
           // Último recurso: descargar el PDF REAL (jsPDF) y abrir Gmail para adjuntarlo a mano.
-          alert('No se pudo enviar automáticamente.\nGmail: '+(sendErr?.message||sendErr||'—')+'\nServidor: '+(srvErr?.message||srvErr||'—')+'\n\nDescargamos el PDF y abrimos Gmail para que lo adjuntes.')
+          appAlert('No se pudo enviar automáticamente.\nGmail: '+(sendErr?.message||sendErr||'—')+'\nServidor: '+(srvErr?.message||srvErr||'—')+'\n\nDescargamos el PDF y abrimos Gmail para que lo adjuntes.')
           try{
             const b64 = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
             const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
@@ -12901,9 +12922,9 @@ Saludos cordiales,`
       // Recordar el destinatario "Para" de la rendición → lo reusa la devolución (que va al mismo).
       try{ if((para||'').trim()){ await supabase.from('learnings').delete().eq('kind','rendicion_para').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_para',key:String(r.client_id),value:para.trim(),meta:{}}) } }catch(_){}
       try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
-      alert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
+      appAlert(conAdjunto?'Rendición enviada al cliente con el PDF adjunto.':'Se descargó el PDF y se abrió tu correo. Arrastra el PDF descargado al correo antes de enviar.')
       onClose()
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
     setSending(false)
   }
   return (
@@ -13377,7 +13398,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
   const [verProv,setVerProv] = useState(false)
 
   const handleAnularRendicion = async(r) => {
-    if(!confirm('\u00bfAnular esta rendici\u00f3n? Queda registrada como ANULADA (con su PDF para auditor\u00eda), los gastos vuelven a estar disponibles para rendir y se anula el cobro de reembolso asociado.')) return
+    if(!await appConfirm('\u00bfAnular esta rendici\u00f3n? Queda registrada como ANULADA (con su PDF para auditor\u00eda), los gastos vuelven a estar disponibles para rendir y se anula el cobro de reembolso asociado.')) return
     try {
       const now = new Date().toISOString()
       let pdf = r.pdf_html
@@ -13391,8 +13412,8 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
       if(re) throw re
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,...patch}:x))
       if(setExpenses) setExpenses(p=>p.map(e=>e.client_render_id===r.id?{...e,client_rendered_at:null,client_render_id:null}:e))
-      if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); alert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
-    } catch(e) { alert('Error: '+e.message) }
+      if(reembolsos.length&&setBilling){ setBilling(p=>p.map(b=>reembolsos.some(x=>x.id===b.id)?{...b,status:'Anulada'}:b)); appAlert(`También se anuló el cobro de reembolso asociado (${reembolsos.map(b=>fmtN(b.amount)).join(', ')}).`) }
+    } catch(e) { appAlert('Error: '+e.message) }
   }
   const [sFilter,setSFilter] = useState('Activo')
   const [respSel,setRespSel] = useState(()=>new Set())
@@ -13583,7 +13604,7 @@ function EntitiesEditor({clientId}) {
     try {
       const saved=await upsertClientEntity({client_id:clientId,name:name.trim(),rut:rut.trim()||null})
       setList(p=>sortN([...(p||[]),saved]));setName('');setRut('');setSugg([]);setShowSugg(false)
-    } catch(e){alert('Error: '+e.message)}
+    } catch(e){appAlert('Error: '+e.message)}
     setBusy(false)
   }
   const saveEdit=async()=>{
@@ -13591,14 +13612,14 @@ function EntitiesEditor({clientId}) {
     try {
       const saved=await upsertClientEntity({id:edit.id,client_id:clientId,name:edit.name.trim(),rut:edit.rut?.trim()||null})
       setList(p=>sortN(p.map(x=>x.id===saved.id?saved:x)));setEdit(null)
-    } catch(e){alert('Error: '+e.message)}
+    } catch(e){appAlert('Error: '+e.message)}
     setBusy(false)
   }
   const del=async id=>{
-    if(!confirm('Eliminar?')) return
-    try{await deleteClientEntity(id);setList(p=>p.filter(x=>x.id!==id))}catch(e){alert(e.message)}
+    if(!await appConfirm('Eliminar?')) return
+    try{await deleteClientEntity(id);setList(p=>p.filter(x=>x.id!==id))}catch(e){appAlert(e.message)}
   }
-  const asignar=async(ent)=>{ setBusy(true); try{ const saved=await upsertClientEntity({id:ent.id,client_id:clientId,name:ent.name,rut:ent.rut}); setList(p=>sortN([...(p||[]),saved])); setAll(p=>p.filter(x=>x.id!==ent.id)) }catch(e){alert('Error: '+e.message)} setBusy(false) }
+  const asignar=async(ent)=>{ setBusy(true); try{ const saved=await upsertClientEntity({id:ent.id,client_id:clientId,name:ent.name,rut:ent.rut}); setList(p=>sortN([...(p||[]),saved])); setAll(p=>p.filter(x=>x.id!==ent.id)) }catch(e){appAlert('Error: '+e.message)} setBusy(false) }
   const inS={padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:13,boxSizing:'border-box',outline:'none'}
   const iconBtn=col=>({width:30,height:30,flexShrink:0,borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',color:col,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'})
   return (
@@ -13698,16 +13719,16 @@ function ContactsEditor({clientId,clientName}) {
         if(error)throw error; setContacts(p=>[...(p||[]),data])
       }
       reset()
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setBusy(false)
   }
   const eliminar=async c=>{
-    if(!confirm(`¿Eliminar a ${c.nombre}?`)) return
+    if(!await appConfirm(`¿Eliminar a ${c.nombre}?`)) return
     const {error}=await supabase.from('contacts').delete().eq('id',c.id)
-    if(error){alert('Error: '+error.message);return}
+    if(error){appAlert('Error: '+error.message);return}
     setContacts(p=>p.filter(x=>x.id!==c.id))
   }
-  const togglePrincipal=async c=>{ const nv=!c.principal; setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:nv}:x)); const {error}=await supabase.from('contacts').update({principal:nv}).eq('id',c.id); if(error){alert('Error: '+error.message); setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:!nv}:x))} }
+  const togglePrincipal=async c=>{ const nv=!c.principal; setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:nv}:x)); const {error}=await supabase.from('contacts').update({principal:nv}).eq('id',c.id); if(error){appAlert('Error: '+error.message); setContacts(p=>p.map(x=>x.id===c.id?{...x,principal:!nv}:x))} }
   const initials=n=>(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
   const slug=s=>(s||'contacto').trim().replace(/\s+/g,'-').replace(/[^\w\-]/g,'').toLowerCase()
   const exportarUno=c=>descargarVCF(vCard(c,clientName),`${slug(c.nombre)}.vcf`)
@@ -14307,11 +14328,11 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
     if(!entityId) return
     supabase.from(table).select('*').eq(idField,entityId).order('created_at',{ascending:true}).then(({data})=>setItems(data||[]))
   },[entityId])
-  const reconnect = () => { alert('Tu acceso a Drive expiró. Te llevo a reconectar Drive; al volver, vuelve a adjuntar el archivo.'); connectDrive() }
+  const reconnect = () => { appAlert('Tu acceso a Drive expiró. Te llevo a reconectar Drive; al volver, vuelve a adjuntar el archivo.'); connectDrive() }
   const onPick = async(e) => {
     const file = e.target.files?.[0]; if(!file) return
     e.target.value=''
-    if(file.size > 15*1024*1024){ alert(`El archivo pesa ${(file.size/1048576).toFixed(1)} MB y supera el límite de 15 MB. Súbelo a Drive manualmente y pega el link como comentario.`); return }
+    if(file.size > 15*1024*1024){ appAlert(`El archivo pesa ${(file.size/1048576).toFixed(1)} MB y supera el límite de 15 MB. Súbelo a Drive manualmente y pega el link como comentario.`); return }
     setBusy(true)
     try{
       // Si no hay id todavía (tarea nueva), se crea silenciosamente antes de subir
@@ -14329,18 +14350,18 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
       setItems(p=>[...p,data]); onChange&&onChange(1, data)
     }catch(err){
       if(err instanceof DriveAuthError || err?.code===401){ reconnect() }
-      else alert('Error al subir: '+(err.message||err))
+      else appAlert('Error al subir: '+(err.message||err))
     }
     setBusy(false)
   }
   const del = async(a) => {
-    if(!confirm('¿Eliminar este archivo? Se enviará a la papelera de Drive.')) return
+    if(!await appConfirm('¿Eliminar este archivo? Se enviará a la papelera de Drive.')) return
     try{
       const token = await driveToken()
       if(token && a.drive_file_id){ try{ await driveTrash(token, a.drive_file_id) }catch(err){ if(err instanceof DriveAuthError){ reconnect(); return } } }
       await supabase.from(table).delete().eq('id',a.id)
       setItems(p=>p.filter(x=>x.id!==a.id)); onChange&&onChange(-1, a)
-    }catch(err){ alert('Error al eliminar: '+(err.message||err)) }
+    }catch(err){ appAlert('Error al eliminar: '+(err.message||err)) }
   }
   const fileRow = a => (
     <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
@@ -15423,7 +15444,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
   // Intenta la Calendar API (silencioso, 1 clic) y si no hay permiso cae al link pre-armado de Calendar,
   // que NO requiere ningún scope: así siempre funciona, esté o no autorizada la API.
   const agendarTarea = async(t)=>{
-    if(!t.due){ alert('Esta tarea no tiene fecha de vencimiento.'); return }
+    if(!t.due){ appAlert('Esta tarea no tiene fecha de vencimiento.'); return }
     const cl=clients.find(c=>c.id===t.client_id)
     const desc=[cl?('Cliente: '+cl.name):'',t.project?('Proyecto: '+t.project):'',t.assigned_by?('Asignada por '+t.assigned_by):''].filter(Boolean).join('\n')
     const end=new Date(t.due+'T00:00:00'); end.setDate(end.getDate()+1); const endISO=end.toISOString().slice(0,10)
@@ -15435,7 +15456,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,onAddTask,onEdit,
       const body={ summary:'Tarea: '+(t.title||''), description:desc, start:{date:t.due}, end:{date:endISO}, reminders:{useDefault:true} }
       const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)})
       if(!r.ok){ if(r.status===401||r.status===403){ abrirLink(); return } throw new Error('Calendar '+r.status) }
-      alert('Agregado a tu Google Calendar para el '+fmtFechaDMY(t.due)+'.')
+      appAlert('Agregado a tu Google Calendar para el '+fmtFechaDMY(t.due)+'.')
     }catch(e){ abrirLink() }
   }
 
@@ -15788,12 +15809,12 @@ function UsersView({onClose}) {
     setSaving(true)
     const {data,error} = await supabase.from('user_roles').insert({email:newEmail.trim().toLowerCase(),name:newName.trim()||newEmail.split('@')[0],role:newRole}).select().single()
     if(!error) { setUsers(p=>[...p,data]); setNewEmail(''); setNewName('') }
-    else alert('Error: '+error.message)
+    else appAlert('Error: '+error.message)
     setSaving(false)
   }
 
   const removeUser = async(id) => {
-    if(!confirm('¿Eliminar este usuario?')) return
+    if(!await appConfirm('¿Eliminar este usuario?')) return
     await supabase.from('user_roles').delete().eq('id',id)
     setUsers(p=>p.filter(u=>u.id!==id))
   }
@@ -15880,7 +15901,7 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
                 ['Otro Cliente SpA','77.987.654-3','1235','800000','05-03-2026','','Pendiente','Honorarios']]
       const ws=XLSX.utils.aoa_to_sheet([header,...ej]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturas')
       XLSX.writeFile(wb,'Plantilla_facturas.xlsx')
-    }catch(e){ alert('No se pudo generar la plantilla: '+e.message) }
+    }catch(e){ appAlert('No se pudo generar la plantilla: '+e.message) }
   }
   const matchClient = (nombre,rut) => {
     const rn=normRut(rut)
@@ -15927,9 +15948,9 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
       // Dedup dentro del MISMO archivo: la 2ª aparición de un N° de factura se marca como duplicada.
       const vistos=new Set()
       parsed.forEach(r=>{ if(r.factura){ if(vistos.has(r.factura)) r.dup=true; else vistos.add(r.factura) } })
-      if(parsed.length===0){ alert('No se encontraron filas. El Excel debe tener al menos columnas de Cliente (o RUT), Monto y Fecha. Tip: agrega una columna "Fecha pago" para que entren como pagadas.'); setRows(null); setCargando(false); return }
+      if(parsed.length===0){ appAlert('No se encontraron filas. El Excel debe tener al menos columnas de Cliente (o RUT), Monto y Fecha. Tip: agrega una columna "Fecha pago" para que entren como pagadas.'); setRows(null); setCargando(false); return }
       setRows(parsed)
-    }catch(err){ alert('Error al leer el Excel: '+err.message) }
+    }catch(err){ appAlert('Error al leer el Excel: '+err.message) }
     setCargando(false)
   }
   const asignar = async (rowId, clientId) => {
@@ -15951,7 +15972,7 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   const toggleEx = id => setRows(p=>p.map(r=>r.id===id?{...r,_skip:!r._skip}:r))
   const importar = async() => {
     const aImportar = (rows||[]).filter(r=>!r.error&&!r.dup&&!r._skip)
-    if(aImportar.length===0){ alert('No hay filas válidas para importar.'); return }
+    if(aImportar.length===0){ appAlert('No hay filas válidas para importar.'); return }
     setImportando(true)
     // Fila por fila: si un N° de factura ya existe (incl. borradas, que igual ocupan el número único), se omite esa sola y sigue.
     let ok=0, dups=0, errs=0, lastErr=''
@@ -15985,7 +16006,7 @@ ${muestra}`
       let txt = (j?.content?.[0]?.text||'').replace(/```json|```/g,'').trim()
       const rep = JSON.parse(txt)
       setIaReport(rep)
-    }catch(e){ alert('No se pudo analizar con IA: '+e.message) }
+    }catch(e){ appAlert('No se pudo analizar con IA: '+e.message) }
     setIaBusy(false)
   }
 
@@ -16158,12 +16179,12 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
       items.forEach(b=>learnPut('conciliacion_dup', b.id, 'dup', {concept:b.concept,client_id:b.client_id,amount:b.amount}))
       setResueltas(p=>[...items.map(b=>({b,tipo:'baja'})),...p])
       setToast(`${ids.length} cuota(s) dada(s) de baja — puedes deshacer en "Ya resueltas"`)
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
     setBusy(false)
   }
   const deshacerBaja = async(b)=>{
     setBusy(true)
-    try{ const {error}=await supabase.from('billing').update({deleted_at:null}).eq('id',b.id); if(error)throw error; if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,deleted_at:null}:x)); setResueltas(p=>p.filter(r=>!(r.tipo==='baja'&&r.b.id===b.id))); setToast('Cuota restaurada') }catch(e){ alert('Error: '+e.message) }
+    try{ const {error}=await supabase.from('billing').update({deleted_at:null}).eq('id',b.id); if(error)throw error; if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,deleted_at:null}:x)); setResueltas(p=>p.filter(r=>!(r.tipo==='baja'&&r.b.id===b.id))); setToast('Cuota restaurada') }catch(e){ appAlert('Error: '+e.message) }
     setBusy(false)
   }
   const noEsDuplicado = (b)=>{
@@ -16215,7 +16236,7 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
         )
       })()}
       {(()=>{ const alta=altaCerteza(); if(alta.length<2) return null; const tot=alta.reduce((a,b)=>a+(b.amount||0),0); return (
-        <button disabled={busy} onClick={()=>{ if(confirm(`Dar de baja ${alta.length} cuotas de alta certeza (≥85%) por ${fmt(tot)}? Van a Papelera (reversible).`)) darDeBaja(alta) }} style={{width:'100%',marginBottom:12,padding:'9px',borderRadius:9,border:`1px solid ${C.overdue}`,background:C.overdueBg,color:C.overdueText,fontSize:13,fontWeight:600,cursor:'pointer',opacity:busy?.6:1}}>Dar de baja las {alta.length} de alta certeza · {fmt(tot)}</button>
+        <button disabled={busy} onClick={async()=>{ if(await appConfirm(`Dar de baja ${alta.length} cuotas de alta certeza (≥85%) por ${fmt(tot)}? Van a Papelera (reversible).`)) darDeBaja(alta) }} style={{width:'100%',marginBottom:12,padding:'9px',borderRadius:9,border:`1px solid ${C.overdue}`,background:C.overdueBg,color:C.overdueText,fontSize:13,fontWeight:600,cursor:'pointer',opacity:busy?.6:1}}>Dar de baja las {alta.length} de alta certeza · {fmt(tot)}</button>
       )})()}
       {claves.length===0 && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'28px 0'}}>Sin duplicados sospechosos. Todo en orden.</div>}
       {cardFilter!=='conc' && claves.length>0 && !claves.some(cid=>(grupos[cid]||[]).filter(pasaFiltro).length>0) && <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'22px 0'}}>Nada en esta categoría.</div>}
@@ -16468,18 +16489,18 @@ function PapeleraModal({clients=[],onClose,onChanged}){
         }
       }
       await cargar(); onChanged&&onChanged()
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setBusy(false)
   }
   const purgar = async(tipo,row)=>{
-    if(!confirm('Eliminar DEFINITIVAMENTE. Esto no se puede deshacer. ¿Continuar?')) return
+    if(!await appConfirm('Eliminar DEFINITIVAMENTE. Esto no se puede deshacer. ¿Continuar?')) return
     setBusy(true)
     try{
       if(tipo==='ventas'){ await supabase.from('billing').delete().eq('sale_id',row.id); await supabase.from('sales').delete().eq('id',row.id) }
       else if(tipo==='cobros'){ await supabase.from('billing').delete().eq('id',row.id) }
       else { await supabase.from('expenses').delete().eq('id',row.id) }
       await cargar()
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setBusy(false)
   }
   const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
@@ -16546,11 +16567,11 @@ function RedProfesionalModal({preset=null, onClose, onSaved}){
       if(edit){ const {data,error}=await supabase.from('red_profesional').update(payload).eq('id',edit.id).select().single(); if(error)throw error; setRows(p=>p.map(x=>x.id===data.id?data:x)) }
       else { const {data,error}=await supabase.from('red_profesional').insert(payload).select().single(); if(error)throw error; setRows(p=>[data,...(p||[])]); onSaved&&onSaved(data) }
       resetF()
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
     setSaving(false)
   }
   const startEdit=(r)=>{ setEdit(r); setF({nombre:r.nombre||'',email:r.email||'',pais:r.pais||'',categoria:r.categoria||'',descripcion:r.descripcion||'',web:r.web||'',linkedin:r.linkedin||'',origen:r.origen||''}); setShowAdd(true) }
-  const eliminar=async(r)=>{ if(!confirm(`¿Eliminar a ${r.nombre} de la red?`)) return; await supabase.from('red_profesional').delete().eq('id',r.id); setRows(p=>p.filter(x=>x.id!==r.id)) }
+  const eliminar=async(r)=>{ if(!await appConfirm(`¿Eliminar a ${r.nombre} de la red?`)) return; await supabase.from('red_profesional').delete().eq('id',r.id); setRows(p=>p.filter(x=>x.id!==r.id)) }
   const chip = (active) => ({fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',cursor:'pointer',whiteSpace:'nowrap',border:active?'none':`0.5px solid ${C.border}`,background:active?C.accent:'#F5F7F9',color:active?'#fff':C.muted})
   return (
     <div style={{maxWidth:560}}>
@@ -16702,7 +16723,7 @@ function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
     }catch(e){ setErr(e.code===401?'Tu sesión de Google expiró. Cierra sesión y vuelve a entrar.':(e.message||String(e))); setPhase('error') }
   }
 
-  const crear = async(a)=>{ setBusy(a.id); try{ await onCrear({title:a.title, client_id:a.client_id, due:a.due, note:(a.note||'')+(a.note?' · ':'')+'(correo: '+(a.subject||'').slice(0,80)+')'}); setHechas(p=>new Set([...p,a.id])) }catch(e){ alert('No se pudo crear: '+e.message) } setBusy('') }
+  const crear = async(a)=>{ setBusy(a.id); try{ await onCrear({title:a.title, client_id:a.client_id, due:a.due, note:(a.note||'')+(a.note?' · ':'')+'(correo: '+(a.subject||'').slice(0,80)+')'}); setHechas(p=>new Set([...p,a.id])) }catch(e){ appAlert('No se pudo crear: '+e.message) } setBusy('') }
   const descartar = a=>{ learnPut('tarea_gmail_descartada',a.id,'descartada',{}); setDismissed(p=>new Set([...p,a.id])) }
   const visibles = props_.filter(a=>!hechas.has(a.id)&&!dismissed.has(a.id))
 
@@ -16874,7 +16895,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
         learnPut('dominio_cliente', a.domain, clientId, {})
         setProps(p=>p.map(x=>(!x.client_id && x.domain===a.domain && x.email!==a.email)?{...x,client_id:clientId,byDom:true}:x))
       }
-    }catch(e){ alert('No se pudo agregar: '+e.message) }
+    }catch(e){ appAlert('No se pudo agregar: '+e.message) }
     setBusyE('')
   }
   const aRed = async(a)=>{   // manda el contacto a Red profesional (web inferida del dominio; país/categoría se completan en la vista)
@@ -16883,7 +16904,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
       const {error}=await supabase.from('red_profesional').insert({nombre:(a.name||a.email.split('@')[0]).trim(), email:a.email, web:a.domain&&!PROV.test(a.domain)?a.domain:null})
       if(error) throw error
       setAccepted(p=>new Set([...p,a.email])); logEvent('contactos','a_red',{email:a.email},null)
-    }catch(e){ alert('No se pudo guardar en red: '+e.message) }
+    }catch(e){ appAlert('No se pudo guardar en red: '+e.message) }
     setBusyE('')
   }
   const descartar = a=>{ learnPut('contacto_descartado',a.email,'descartado',{}); setDismissed(p=>new Set([...p,a.email])) }
@@ -17168,17 +17189,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       // Aprende para sugerir en similares (cargos + abonos estructurales).
       if(cat && keyLearn && (mov.tipo==='cargo'||ESTRUCT_ABO.includes(cat))) learnPut('cartola_tipo', keyLearn, cat)
       setTagFor(null)
-    }catch(e){ alert('Error al clasificar: '+e.message) }
+    }catch(e){ appAlert('Error al clasificar: '+e.message) }
   }
   // Corrección manual: un movimiento mal marcado interno pasa a normal (queda pendiente para identificar/conciliar).
   const desmarcarInterno = async(mov)=>{
-    if(!window.confirm('¿Marcarlo como NO interno? Pasará a ser un movimiento normal para identificar y conciliar.')) return
+    if(!await appConfirm('¿Marcarlo como NO interno? Pasará a ser un movimiento normal para identificar y conciliar.')) return
     try{
       const cid = mov.rut_contraparte ? resolver(mov.rut_contraparte) : null
       const { error } = await supabase.from('cartola_movimientos').update({es_interno:false,estado:'pendiente',cliente_id:cid}).eq('id',mov.id)
       if(error) throw error
       setMovs(p=>p.map(x=>x.id===mov.id?{...x,es_interno:false,estado:'pendiente',cliente_id:cid}:x))
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
   }
   // Resolución de cliente por RUT: alias → razón social → cliente → receptor de factura.
   const resolver = useMemo(()=>{
@@ -17230,7 +17251,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       }
       setReportes(reps)
       await cargar()
-    }catch(e){ alert('Error al leer: '+e.message) }
+    }catch(e){ appAlert('Error al leer: '+e.message) }
     setImporting(false); setProg(null)
   }
 
@@ -17241,10 +17262,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     // override (sugerencia aceptada sin abrir el editor) usa el RUT/nombre del propio movimiento, no el formulario.
     const rut = override ? (mov.rut_contraparte||null) : ((editForm.rut||'').trim() || mov.rut_contraparte || null)
     const nombre = override ? (mov.nombre_contraparte||null) : ((editForm.nombre||'').trim() || mov.nombre_contraparte || null)
-    if(rut && esRutPropio(rut)){ alert('Ese es el RUT propio del estudio: es un movimiento interno, no se asocia a un cliente.'); return }
+    if(rut && esRutPropio(rut)){ appAlert('Ese es el RUT propio del estudio: es un movimiento interno, no se asocia a un cliente.'); return }
     // Seguridad del alias: si este RUT ya está mapeado a OTRO cliente, avisar y pedir confirmación (nunca cambiar en silencio).
     if(rut){ const prev=aliases.find(a=>crNormRut(a.rut_pagador)===crNormRut(rut))
-      if(prev && String(prev.cliente_id)!==String(clientId) && !window.confirm(`Este RUT ya está asociado a "${cmap[prev.cliente_id]||'otro cliente'}". ¿Reasignarlo a "${cmap[clientId]||'este cliente'}"? Afectará todos sus movimientos.`)) return }
+      if(prev && String(prev.cliente_id)!==String(clientId) && !await appConfirm(`Este RUT ya está asociado a "${cmap[prev.cliente_id]||'otro cliente'}". ¿Reasignarlo a "${cmap[clientId]||'este cliente'}"? Afectará todos sus movimientos.`)) return }
     try{
       const r1 = await supabase.from('cartola_movimientos').update({cliente_id:clientId,rut_contraparte:rut,nombre_contraparte:nombre}).eq('id',mov.id)
       if(r1.error) throw r1.error
@@ -17266,7 +17287,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         : (learnedK&&crNormRut(m.rut_contraparte)===learnedK&&!m.cliente_id ? {...m,cliente_id:clientId}
         : (learnedNom&&m.nombre_contraparte===learnedNom&&!m.cliente_id ? {...m,cliente_id:clientId} : m))))
       setEditMov(null); setEditForm({rut:'',nombre:''})
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
   }
   // Guardar solo RUT/nombre editados (sin asignar cliente): re-resuelve por si el RUT ya está en el sistema.
   const guardarRut = async(mov)=>{
@@ -17277,7 +17298,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(error) throw error
       setMovs(p=>p.map(m=>m.id===mov.id?{...m,rut_contraparte:rut,nombre_contraparte:nombre,cliente_id:cid}:m))
       setEditMov(null); setEditForm({rut:'',nombre:''})
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
   }
   // Cruce: para el abono interno (plata que llega), busca el abono real (cliente/proveedor) en la OTRA cuenta.
   // Match exacto = confiado. Casi-calce dentro de la ventana = discrepancia a revisar (no hay comisiones en traspasos propios).
@@ -17409,7 +17430,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const saldo = saldoFactura(factura)
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
-      if(aplicado<=0){ setBusy(null); alert(saldo<=0 ? `La Factura N°${folioN(factura.invoice_no)||'—'} ya está conciliada (sin saldo). Usa "Liberar calce" para soltarla y poder reasignar este pago.` : 'Este pago ya quedó completamente conciliado.'); return }   // INV-7: monto_aplicado siempre > 0; avisa por qué no se aplicó
+      if(aplicado<=0){ setBusy(null); appAlert(saldo<=0 ? `La Factura N°${folioN(factura.invoice_no)||'—'} ya está conciliada (sin saldo). Usa "Liberar calce" para soltarla y poder reasignar este pago.` : 'Este pago ya quedó completamente conciliado.'); return }   // INV-7: monto_aplicado siempre > 0; avisa por qué no se aplicó
       const manualExtra = Math.max(0, (factura.paid_amount||0) - (aplicadoByFactura[factura.id]||0))  // abono manual fuera de las filas de conciliación: súmalo, no lo reemplaces
       const aplTot = (aplicadoByFactura[factura.id]||0)+aplicado+manualExtra
       const ins = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'factura', factura_id:factura.id, monto_aplicado:aplicado, origen, marco_pago:marcaPago(factura,aplTot) }).select().single()
@@ -17421,8 +17442,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
-      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N°${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(confirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).then(()=>alert('Acuse de pago enviado al cliente.')).catch(e=>alert('No se pudo enviar el acuse: '+(e?.message||e))) } }
-    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar: '+e.message) }
+      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N°${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(await appConfirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).then(()=>appAlert('Acuse de pago enviado al cliente.')).catch(e=>appAlert('No se pudo enviar el acuse: '+(e?.message||e))) } }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('Error al conciliar: '+e.message) }
     setBusy(null)
   }
   // Detecta el caso "una transferencia paga 2 facturas": par de facturas del pool cuyos saldos suman el monto (±TOL).
@@ -17487,7 +17508,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
-    }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar combinación: '+e.message) }
+    }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('Error al conciliar combinación: '+e.message) }
     setBusy(null)
   }
 
@@ -17548,7 +17569,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const ups=[]
       for(const tr of ts){ const movAplicado=(tr.monto||0)-(restoMov[tr.id]||0); const estado=((tr.monto||0)-movAplicado)<=TOL?'conciliado':'parcial'; const { error:me }=await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',tr.id); if(me) throw me; ups.push({id:tr.id,estado,monto_conciliado:movAplicado}) }
       setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>{ const u=ups.find(z=>z.id===x.id); return u?{...x,estado:u.estado,monto_conciliado:u.monto_conciliado}:x })); setModalMov(null)
-    }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); alert('Error al conciliar el grupo: '+e.message) }
+    }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('Error al conciliar el grupo: '+e.message) }
     setBusy(null)
   }
   // Concilia "factura + gastos": aplica el saldo a la factura (la marca pagada) y registra el exceso como reembolso de
@@ -17577,7 +17598,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(me) throw me
       if(fondo) setExpenses&&setExpenses(p=>[fondo,...p])
       setConc(p=>[...p,crF,...(crG?[crG]:[])]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
-    }catch(e){ if(crG) await supabase.from('conciliacion').delete().eq('id',crG.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); if(crF) await supabase.from('conciliacion').delete().eq('id',crF.id); alert('Error al conciliar factura + gastos: '+e.message) }
+    }catch(e){ if(crG) await supabase.from('conciliacion').delete().eq('id',crG.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); if(crF) await supabase.from('conciliacion').delete().eq('id',crF.id); appAlert('Error al conciliar factura + gastos: '+e.message) }
     setBusy(null)
   }
   // Devolución de gastos (abono que es 100% reembolso de un gasto que el estudio adelantó): crea un fondo por el
@@ -17592,12 +17613,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   }
   const devolucionGastos = async(mov, gastoIds)=>{
     if(busy) return
-    if(!mov.cliente_id){ alert('Identifica el cliente antes de registrar la devolución.'); return }
+    if(!mov.cliente_id){ appAlert('Identifica el cliente antes de registrar la devolución.'); return }
     const resto=(mov.monto||0)-(mov.monto_conciliado||0)
-    if(resto<=0){ alert('Esta transferencia ya está totalmente conciliada.'); return }
+    if(resto<=0){ appAlert('Esta transferencia ya está totalmente conciliada.'); return }
     // #4: si ya existe un fondo igual sin respaldo, ofrecer vincular ese (no duplicar).
     const exD = fondoExistente(mov, resto)
-    if(exD && window.confirm(`Este cliente ya tiene un fondo de ${fmtM(exD.amount||0)}${exD.date?' del '+fmtFechaDMY(exD.date):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese fondo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){
+    if(exD && await appConfirm(`Este cliente ya tiene un fondo de ${fmtM(exD.amount||0)}${exD.date?' del '+fmtFechaDMY(exD.date):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese fondo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){
       await vincularFondo(mov, exD.id, resto); await marcarGastosReembolsados(exD.id, gastoIds); setDevolFor(null); return
     }
     setBusy(mov.id)
@@ -17612,13 +17633,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(me) throw me
       await marcarGastosReembolsados(fondo.id, gastoIds)
       setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x)); setDevolFor(null)
-    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); alert('Error al registrar devolución: '+e.message) }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); appAlert('Error al registrar devolución: '+e.message) }
     setBusy(null)
   }
   // Deja el resto del abono como saldo a favor del cliente (anticipo disponible, reutiliza la feature Anticipos).
   const saldoAFavor = async(mov)=>{
     if(busy) return
-    if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ alert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
+    if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ appAlert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
     setBusy(mov.id)
     let ant=null, cr=null
     try{
@@ -17632,14 +17653,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:(mov.monto||0) }).eq('id',mov.id)
       if(me) throw me
       setAnticipos&&setAnticipos(p=>[ant,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setPickFor(null)
-    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); alert('Error al crear saldo a favor: '+e.message) }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); appAlert('Error al crear saldo a favor: '+e.message) }
     setBusy(null)
   }
   // Split (abono sin factura que junta honorarios + gastos): adel → anticipo, resto → fondo por rendir. Marca el movimiento conciliado.
   const splitAdelantoFondo = async(mov, adelMonto)=>{
     if(busy) return
-    if(!mov.cliente_id){ alert('Identifica el cliente primero.'); return }
-    if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ alert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
+    if(!mov.cliente_id){ appAlert('Identifica el cliente primero.'); return }
+    if((concByMov[mov.id]||[]).some(c=>c.tipo_destino==='anticipo')){ appAlert('Este movimiento ya generó un adelanto. Deshaz la conciliación antes de rehacerla.'); return }
     const resto = (mov.monto||0) - (mov.monto_conciliado||0)
     const adel = Math.max(0, Math.min(adelMonto||0, resto)); const fond = resto - adel
     setBusy(mov.id)
@@ -17661,7 +17682,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       if(me) throw me
       if(ant) setAnticipos&&setAnticipos(p=>[ant,...p]); if(fondo) setExpenses&&setExpenses(p=>[fondo,...p])
       setConc(p=>[...p,...crs]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setSplitMov(null)
-    }catch(e){ for(const c of crs) await supabase.from('conciliacion').delete().eq('id',c.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); alert('Error al partir el abono: '+e.message) }
+    }catch(e){ for(const c of crs) await supabase.from('conciliacion').delete().eq('id',c.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); appAlert('Error al partir el abono: '+e.message) }
     setBusy(null)
   }
   // #4 — Evitar duplicar fondos: ¿el cliente ya tiene un fondo del mismo monto SIN respaldo bancario (cargado a mano,
@@ -17681,20 +17702,20 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
       if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); throw me }
       setConc(p=>[...p,ic.data]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x))
-    }catch(e){ alert('Error al vincular el fondo: '+e.message) }
+    }catch(e){ appAlert('Error al vincular el fondo: '+e.message) }
     setBusy(null)
   }
   // Fase 3.A — Provisión → fondo: acredita el abono al fondo del cliente (crea expenses type='fondo'), enlazado y reversible.
   const crearFondoProvision = async(mov)=>{
     if(busy) return
-    if(!mov.cliente_id){ alert('Identifica el cliente antes de acreditar el fondo.'); return }
+    if(!mov.cliente_id){ appAlert('Identifica el cliente antes de acreditar el fondo.'); return }
     // El fondo se acredita por el RESTO no aplicado (monto − lo ya conciliado a facturas/otros), no por el total
     // de la transferencia. Si no, una transferencia "factura + fondo" se contaría doble.
     const resto = (mov.monto||0) - (mov.monto_conciliado||0)
-    if(resto<=0){ alert('Esta transferencia ya está totalmente conciliada.'); return }
+    if(resto<=0){ appAlert('Esta transferencia ya está totalmente conciliada.'); return }
     // #4: si ya existe un fondo igual sin respaldo, ofrecer vincular ese (no duplicar).
     const ex = fondoExistente(mov, resto)
-    if(ex && window.confirm(`Este cliente ya tiene un fondo de ${fmtM(ex.amount||0)}${ex.date?' del '+fmtFechaDMY(ex.date):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese fondo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){
+    if(ex && await appConfirm(`Este cliente ya tiene un fondo de ${fmtM(ex.amount||0)}${ex.date?' del '+fmtFechaDMY(ex.date):''} cargado a mano (sin respaldo bancario).\n\nAceptar = VINCULAR ese fondo a esta transferencia (no duplica).\nCancelar = crear uno NUEVO.`)){
       await vincularFondo(mov, ex.id, resto); return
     }
     setBusy(mov.id)
@@ -17710,7 +17731,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConciliado }).eq('id',mov.id)
       if(me) throw me
       setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConciliado}:x))
-    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); alert('Error al crear fondo: '+e.message) }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); appAlert('Error al crear fondo: '+e.message) }
     setBusy(null)
   }
   // Fase 3.D — Cargo por cuenta de un cliente: la oficina pagó a un tercero (Notaría/CBR/proveedor) por un asunto del
@@ -17718,7 +17739,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Aprende glosa→cliente para no volver a preguntar. NO usa el RUT del beneficiario (un tercero sirve a varios clientes).
   const gastoPorCuentaCliente = async(mov, clientId, entityId, concept, category)=>{
     if(busy) return
-    if(!clientId){ alert('Elige el cliente antes de registrar el gasto.'); return }
+    if(!clientId){ appAlert('Elige el cliente antes de registrar el gasto.'); return }
     setBusy(mov.id)
     let gasto=null, cr=null
     try{
@@ -17734,7 +17755,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,cliente_id:clientId}:x))
       const gk=glosaKey(mov.descripcion); if(gk){ learnPut('cargo_cliente',gk,clientId,{category:category||null}); setCargoCliLearn(p=>({...p,[gk]:String(clientId)})) }
       setGcFor(null); setGcCli(null); setGcEnt(null)
-    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); alert('Error al registrar el gasto: '+e.message) }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); appAlert('Error al registrar el gasto: '+e.message) }
     setBusy(null)
   }
   // Pieza 3 — cliente interno (Oficina) y catálogo de categorías que aprende (mismo criterio que ExpensesView).
@@ -17743,8 +17764,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // Costo de OFICINA: el cargo es un gasto operativo de la firma → crea un gasto en el cliente interno con su categoría y concilia (reversible con Deshacer).
   const costoOficina = async(mov, category, subcategory=null)=>{
     if(busy) return
-    if(!ofiCli){ alert('No se encontró el cliente interno (Oficina).'); return }
-    if(!category){ alert('Elige la categoría del costo de oficina.'); return }
+    if(!ofiCli){ appAlert('No se encontró el cliente interno (Oficina).'); return }
+    if(!category){ appAlert('Elige la categoría del costo de oficina.'); return }
     setBusy(mov.id)
     let gasto=null, cr=null
     try{
@@ -17760,7 +17781,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Gastos Oficina'}:x))
       const gko=glosaKey(mov.descripcion); if(gko&&category){ learnPut('costo_oficina',gko,category,{subcategory:subcategory||null}); setCostoOfiLearn(p=>({...p,[gko]:{category,subcategory:subcategory||null}})) }   // aprende: el mismo cargo (arriendo/sueldos) el próximo mes se auto-sugiere
       setOfiFor(null)
-    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); alert('Error al registrar el costo de oficina: '+e.message) }
+    }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); appAlert('Error al registrar el costo de oficina: '+e.message) }
     setBusy(null)
   }
   // Deshace TODA la conciliación de un movimiento: revierte facturas/anticipos/fondos y deja el movimiento pendiente.
@@ -17770,7 +17791,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     // Si un saldo a favor ya se consumió (anticipo aplicado a una cuota), no se puede deshacer: borrar el vínculo
     // dejaría el movimiento "por conciliar" otra vez y podría generar un segundo anticipo por la misma plata.
     const antConsumido = rows.some(r=>{ if(r.tipo_destino!=='anticipo'||!r.anticipo_id) return false; const a=(anticipos||[]).find(x=>String(x.id)===String(r.anticipo_id)); return a && a.estado!=='disponible' })
-    if(antConsumido){ alert('No se puede deshacer: el saldo a favor ya se aplicó a una cuota. Revierte primero esa aplicación.'); return }
+    if(antConsumido){ appAlert('No se puede deshacer: el saldo a favor ya se aplicó a una cuota. Revierte primero esa aplicación.'); return }
     setBusy(mov.id)
     try{
       const restantes={}   // aplicado restante por factura, descontando fila a fila (varias filas a la misma factura)
@@ -17814,7 +17835,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       }
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0 }).eq('id',mov.id); if(me) throw me
       setConc(p=>p.filter(c=>c.movimiento_id!==mov.id)); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'pendiente',monto_conciliado:0}:x))
-    }catch(e){ alert('Error al deshacer: '+e.message) }
+    }catch(e){ appAlert('Error al deshacer: '+e.message) }
     setBusy(null)
   }
   // AUTO: concilia solo cuando hay UNA factura del cliente dentro de ±TOL (candidato único). El resto va a la bandeja.
@@ -17862,13 +17883,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       sinCalce = sinCalceList.length; sinCalceM = sinCalceList.reduce((s,m)=>s+(m.monto||0),0)
       const sinIdList = movsV.filter(m=> m.tipo==='abono' && !m.es_interno && !m.cliente_id && !RESUELTAS_ABO.includes(m.categoria) && !(concByMov[m.id]?.length))
       sinId = sinIdList.length; sinIdM = sinIdList.reduce((s,m)=>s+(m.monto||0),0)
-    }catch(e){ alert('Error en conciliación automática: '+e.message) }
+    }catch(e){ appAlert('Error en conciliación automática: '+e.message) }
     setAutoRun(false)
     const hecho = (ok||nInt)? `Conciliadas ${ok} · ${fmtM(monto)}.${marc?`\n${marc} marcaron la factura pagada`:''}${enl?` · ${enl} enlazaron facturas ya pagadas`:''}${cmb?` · ${cmb} pagaron varias facturas`:''}${nInt?`\n${nInt} traspasos internos marcados`:''}` : 'No hubo calces nuevos.'
     const queda = (sinId||sinCalce)
       ? `\n\nQuedan sin conciliar:${sinId?`\n· ${sinId} sin identificar (${fmtM(sinIdM)}) — falta cruzar el pagador`:''}${sinCalce?`\n· ${sinCalce} identificadas sin calce exacto (${fmtM(sinCalceM)}) — el monto no cuadra con una factura`:''}`
       : '\n\nNo queda nada por conciliar.'
-    alert(hecho+queda)
+    appAlert(hecho+queda)
   }
   // PROPUESTA de conciliación (Eje 1): el motor SUGIERE, no aplica. Reusa el MISMO calce exacto (mejorCandidato/combo)
   // que el auto, pero en vez de conciliar arma una lista con trazabilidad; el humano aprueba tarjeta por tarjeta.
@@ -18330,7 +18351,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     <div style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginBottom:6}}>Costo de oficina · {fmtM(monto)} — elige categoría:</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                       {catsOficinaConc.map(c=><button key={c} onClick={()=>{setOfiCat(c);setOfiSub('')}} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'3px 10px',cursor:'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{c}</button>)}
-                      <button onClick={()=>{const nv=prompt('Nueva categoría de oficina:'); if(nv&&nv.trim()){setOfiCat(nv.trim());setOfiSub('')}}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>+ Nueva…</button>
+                      <button onClick={async()=>{const nv=await appPrompt('Nueva categoría de oficina:'); if(nv&&nv.trim()){setOfiCat(nv.trim());setOfiSub('')}}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>+ Nueva…</button>
                       <button onClick={()=>setOfiFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                     </div>
                     </>) : (<>
@@ -18467,7 +18488,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                       {f.status==='Pagado'&&<div>Respaldo banco: <b style={{color:ap>0?C.greenText:C.overdueText}}>{ap>0?`${fmtM(ap)}${ap<(f.amount||0)?` de ${fmtM(f.amount)}`:''}`:'sin movimiento (marcada a mano)'}</b>{movsF.length?` · ${movsF.join(', ')}`:''}</div>}
                                       <div style={{display:'flex',gap:8,alignItems:'center',marginTop:6,flexWrap:'wrap'}}>
                                         <button disabled={busy===m.id} onClick={()=>{setDetFor(null);reconciliar(m,f,'manual')}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'none',background:C.accent,color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Conciliar con esta</button>
-                                        {ap>0&&(()=>{ const cr=(conc||[]).find(c=>String(c.factura_id)===String(f.id)&&c.tipo_destino==='factura'); const mm=cr&&(movs||[]).find(x=>String(x.id)===String(cr.movimiento_id)); return mm?<button disabled={busy===m.id} onClick={()=>{ if(confirm(`¿Liberar el calce de la Factura N°${folioN(f.invoice_no)}? El pago vuelve a "por conciliar" para reasignarlo.`)){ setDetFor(null); deshacer(mm) } }} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'1px solid #F0997B',background:'#fff',color:C.overdueText,cursor:busy===m.id?'default':'pointer'}}>Liberar calce</button>:null })()}
+                                        {ap>0&&(()=>{ const cr=(conc||[]).find(c=>String(c.factura_id)===String(f.id)&&c.tipo_destino==='factura'); const mm=cr&&(movs||[]).find(x=>String(x.id)===String(cr.movimiento_id)); return mm?<button disabled={busy===m.id} onClick={async()=>{ if(await appConfirm(`¿Liberar el calce de la Factura N°${folioN(f.invoice_no)}? El pago vuelve a "por conciliar" para reasignarlo.`)){ setDetFor(null); deshacer(mm) } }} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'1px solid #F0997B',background:'#fff',color:C.overdueText,cursor:busy===m.id?'default':'pointer'}}>Liberar calce</button>:null })()}
                                       </div>
                                     </div>) })()}
                                   </div>) })}
@@ -18567,7 +18588,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {tieneTarget
                   ? <button onClick={()=>aprobarProp(p)} disabled={busy===m.id} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:busy===m.id?C.done:C.normal,border:'none',borderRadius:7,padding:'6px 12px',cursor:busy===m.id?'default':'pointer'}}>{busy===m.id?'…':'Aprobar ✓'}</button>
                   : m.cliente_id?<div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>
-                      <button onClick={()=>{ if(confirm(`Registrar ${fmtM(m.monto)} como ADELANTO (anticipo) de este cliente?`)) saldoAFavor(m) }} disabled={busy===m.id} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>Adelanto</button>
+                      <button onClick={async()=>{ if(await appConfirm(`Registrar ${fmtM(m.monto)} como ADELANTO (anticipo) de este cliente?`)) saldoAFavor(m) }} disabled={busy===m.id} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>Adelanto</button>
                       <button onClick={()=>crearFondoProvision(m)} disabled={busy===m.id} style={{fontSize:10,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,padding:'5px 9px',cursor:'pointer'}}>Fondo por rendir</button>
                     </div>:<span style={{fontSize:10,color:C.done}}>identifica el cliente primero</span>}
               </div>
@@ -18796,7 +18817,7 @@ export default function App() {
     setPaletteOpen(false); recordRecent(item)
     if(item.type==='view'){ setTab(item.id); return }
     if(item.type==='cliente'){ handleOpenClientFicha(item.id); return }
-    if(item.type==='factura'){ const b=billing.find(x=>String(x.id)===String(item.id)); if(b) setModal({type:'billing',data:b}); else alert('Esa factura ya no está disponible.'); return }
+    if(item.type==='factura'){ const b=billing.find(x=>String(x.id)===String(item.id)); if(b) setModal({type:'billing',data:b}); else appAlert('Esa factura ya no está disponible.'); return }
     if(item.type==='venta'){ const v=sales.find(x=>String(x.id)===String(item.id)); if(v) setModal({type:'sale',data:v}); return }
     if(item.type==='tarea'){ const t=tasks.find(x=>String(x.id)===String(item.id)); if(t) setModal({type:'task',data:t}); return }
     if(item.type==='gasto'){ const e=expenses.find(x=>String(x.id)===String(item.id)); if(e) setModal({type:'expenseEdit',data:e}); return }
@@ -18901,8 +18922,8 @@ export default function App() {
       q('conciliación', supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino')),
       q('cobertura cartola', supabase.from('cartola_movimientos').select('fecha').order('fecha',{ascending:false}).limit(1)),
     ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia,cc,ch])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia);setConciliacion(cc);setCartolaHasta(ch&&ch[0]?String(ch[0].fecha).slice(0,10):null)
-      if(loadErrs.length) alert('No se pudieron cargar: '+loadErrs.join(', ')+'.\nAlgunas cifras pueden verse incompletas. Recarga la página antes de ingresar datos para no duplicar.')})
-      .catch(err=>{ console.error(err); alert('Error al cargar datos: '+(err?.message||err)+'\nRecarga la página.') }).finally(()=>{setLoading(false);setBooted(true)})
+      if(loadErrs.length) appAlert('No se pudieron cargar: '+loadErrs.join(', ')+'.\nAlgunas cifras pueden verse incompletas. Recarga la página antes de ingresar datos para no duplicar.')})
+      .catch(err=>{ console.error(err); appAlert('Error al cargar datos: '+(err?.message||err)+'\nRecarga la página.') }).finally(()=>{setLoading(false);setBooted(true)})
     // Auditoría de reasignaciones: carga aparte y silenciosa (si la tabla no existe aún, no molesta).
     supabase.from('expense_audit').select('*').order('created_at',{ascending:false}).limit(200).then(({data})=>{ if(data) setExpenseAudit(data) },()=>{})
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
@@ -18964,7 +18985,7 @@ export default function App() {
         const conservadas = (actuales||[]).filter(b=>!(b.status==='Programada'&&!b.invoice_no))
         const nNuevas = cobros.length
         const totalNuevas = cobros.reduce((a,c)=>a+(c.monto||0),0)
-        const ok = confirm(
+        const ok = await appConfirm(
           `Actualizar forma de pago:\n\n`+
           `• Se CONSERVAN ${conservadas.length} cuota(s) ya emitidas/pagadas (no se tocan).\n`+
           `• Se REEMPLAZAN ${programadas.length} cuota(s) programadas por ${nNuevas} nueva(s) (total ${fmt(totalNuevas)}).\n\n`+
@@ -19026,7 +19047,7 @@ export default function App() {
           if(nuevos.length) await supabase.from('terceros_pagos').insert(nuevos)
           const {data:nt} = await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
           if(nt) setTerceros(nt)
-        }catch(te){ alert('La venta se guardó, pero hubo un problema al guardar el reparto de terceros: '+te.message) }
+        }catch(te){ appAlert('La venta se guardó, pero hubo un problema al guardar el reparto de terceros: '+te.message) }
       }
       // Al activar una propuesta: si el cliente era Prospecto, pasa a Activo automáticamente
       if(_activandoPropuesta && data.client_id) {
@@ -19037,14 +19058,14 @@ export default function App() {
         }
       }
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[clients,clientEntities,terceros,proveedores,user])
 
   const handleRechazarPropuesta=useCallback(async(s)=>{
-    if(!confirm(`¿Marcar como rechazada la propuesta "${s.title}"?`)) return
+    if(!await appConfirm(`¿Marcar como rechazada la propuesta "${s.title}"?`)) return
     const {error}=await supabase.from('sales').update({status:'Rechazada',updated_at:new Date().toISOString()}).eq('id',s.id)
-    if(error){alert('Error: '+error.message);return}
+    if(error){appAlert('Error: '+error.message);return}
     setSales(p=>p.map(x=>x.id===s.id?{...x,status:'Rechazada'}:x))
   },[])
 
@@ -19073,14 +19094,14 @@ export default function App() {
           const scale = nuevoHon/oldHon
           let falloRecalc=0
           for(const b of prog){ const {error}=await supabase.from('billing').update({amount:Math.round((b.amount||0)*scale), updated_at:new Date().toISOString()}).eq('id',b.id); if(error) falloRecalc++ }
-          if(falloRecalc>0) alert(`Atención: ${falloRecalc} de ${prog.length} cuota(s) programada(s) no se recalcularon. Revísalas.`)
+          if(falloRecalc>0) appAlert(`Atención: ${falloRecalc} de ${prog.length} cuota(s) programada(s) no se recalcularon. Revísalas.`)
           const {data:nb}=await getBilling(); if(nb) setBilling(nb)
         } else {
-          alert('El tramo se guardó, pero no se pudo determinar el honorario anterior; las programadas no se recalcularon. Revísalas manualmente.')
+          appAlert('El tramo se guardó, pero no se pudo determinar el honorario anterior; las programadas no se recalcularon. Revísalas manualmente.')
         }
       }
       return data
-    }catch(e){ alert('Error: '+e.message); return null }
+    }catch(e){ appAlert('Error: '+e.message); return null }
   },[user])
 
   const handleCambiarFormato=useCallback(async(sale,{newFmt,newHon,newCosto,vigDate,motivo,nuevasCuotas})=>{
@@ -19095,7 +19116,7 @@ export default function App() {
       }
       const {data:nb}=await getBilling();if(nb)setBilling(nb)
       return rec
-    }catch(e){alert('Error: '+e.message);return null}
+    }catch(e){appAlert('Error: '+e.message);return null}
   },[user])
 
   const handleDeleteSale=useCallback(async(id)=>{
@@ -19103,7 +19124,7 @@ export default function App() {
       // Salvaguarda: avisar si hay facturas emitidas (con folio) asociadas (caso de alto riesgo: sí confirma)
       const {data:cuotas} = await supabase.from('billing').select('id,invoice_no').eq('sale_id',id)
       const emitidas = (cuotas||[]).filter(b=>b.invoice_no)
-      if(emitidas.length>0 && !confirm(`Esta venta tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar la venta y TODAS sus cuotas igual?`)) return
+      if(emitidas.length>0 && !await appConfirm(`Esta venta tiene ${emitidas.length} factura(s) ya emitida(s). ¿Eliminar la venta y TODAS sus cuotas igual?`)) return
       // Soft-delete: la venta y sus cuotas van a la papelera (restaurables), no se borran físicamente
       const now=new Date().toISOString()
       const saleRow=sales.find(x=>x.id===id)
@@ -19120,7 +19141,7 @@ export default function App() {
         if(saleRow) setSales(p=>p.some(x=>x.id===id)?p:[saleRow,...p])
         if(cuotasRows.length) setBilling(p=>[...cuotasRows.filter(c=>!p.some(x=>x.id===c.id)),...p])
       }})
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[sales,billing])
 
   const handleAssignRS=useCallback(async(clientId,entityId)=>{
@@ -19133,7 +19154,7 @@ export default function App() {
         await supabase.from('expenses').update({entity_id:null}).in('id',idList)
         setExpenses(p=>p.map(x=>ids.has(x.id)?{...x,entity_id:null}:x))
       }})
-    }catch(e){alert('Error al asignar razón social: '+e.message)}
+    }catch(e){appAlert('Error al asignar razón social: '+e.message)}
   },[])
 
   // Asignar razón social a UN gasto (por id), con deshacer. Reemplaza la asignación en bloque.
@@ -19144,7 +19165,7 @@ export default function App() {
       if(error)throw error
       setExpenses(p=>p.map(x=>x.id===expense.id?{...x,entity_id:entityId}:x))
       setUndoToast({msg:'Razón social asignada', onUndo:async()=>{ await supabase.from('expenses').update({entity_id:prevEnt}).eq('id',expense.id); setExpenses(p=>p.map(x=>x.id===expense.id?{...x,entity_id:prevEnt}:x)) }})
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[])
 
   const handleSaveExpense=useCallback(async(f)=>{
@@ -19178,7 +19199,7 @@ export default function App() {
           setRendiciones(prv=>prv.map(x=>x.id===r.id?{...x,total:nuevoTotal}:x)) }
       }
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[user,expenses,rendiciones,sales])
 
@@ -19194,7 +19215,7 @@ export default function App() {
       const {error}=await supabase.from('expenses').update(patch).eq('id',expense.id)
       if(error)throw error
       setExpenses(p=>p.map(x=>x.id===expense.id?{...x,...patch}:x))
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[])
 
   // Carga masiva (PP-19 commit 4): dedupe vs existentes, registra el lote, inserta en tandas de 100.
@@ -19280,7 +19301,7 @@ export default function App() {
       for(const b of (before||[])){ const patch={client_id:b.client_id,entity_id:b.entity_id,category:b.category}; if('created_by' in b) patch.created_by=b.created_by; if('paid_by_client' in b) patch.paid_by_client=b.paid_by_client; const {error}=await supabase.from('expenses').update(patch).eq('id',b.id); if(error) throw error }
       setExpenses(p=>p.map(e=>{ const b=(before||[]).find(x=>String(x.id)===String(e.id)); return b?{...e,client_id:b.client_id,entity_id:b.entity_id,category:b.category,...(('created_by' in b)?{created_by:b.created_by}:{}),...(('paid_by_client' in b)?{paid_by_client:b.paid_by_client}:{})}:e }))
       return true
-    }catch(e){ alert('No se pudo revertir: '+(e.message||e)); return false }
+    }catch(e){ appAlert('No se pudo revertir: '+(e.message||e)); return false }
   },[])
 
   // Deshacer una carga masiva: elimina sus gastos y marca el lote como anulado.
@@ -19293,7 +19314,7 @@ export default function App() {
       setExpenses(p=>p.filter(e=>e.bulk_import_id!==batchId))
       setBulkImports(p=>p.map(b=>b.id===batchId?{...b,status:'undone',undone_at:new Date().toISOString(),undone_by:user?.name||null}:b))
       return true
-    }catch(e){ alert('Error al deshacer: '+e.message); return false }
+    }catch(e){ appAlert('Error al deshacer: '+e.message); return false }
   },[user])
 
   // Memoria que aprende: guarda nombre-crudo → cliente. La próxima carga con ese nombre cae solo.
@@ -19330,15 +19351,15 @@ export default function App() {
         await supabase.from('expenses').update({client_id:null}).in('id',ids)
         setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:null}:e))
       }})
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
   },[expenses,handleLearnAlias])
 
   const handleDeleteExpense=useCallback(async(id)=>{
     const exp=expenses.find(x=>x.id===id)
     // Avisa si ya fue rendido al cliente O liquidado en caja chica (ambos descuadran). El gasto normal va a Papelera con toast Deshacer.
-    if((exp?.client_rendered_at||exp?.rendered_at) && !confirm('Este gasto ya fue incluido en una rendición o liquidación.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?')) return
+    if((exp?.client_rendered_at||exp?.rendered_at) && !await appConfirm('Este gasto ya fue incluido en una rendición o liquidación.\nEliminarlo descuadra el historial y los saldos.\n\n¿Eliminar de todas formas?')) return
     const {error}=await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',id)
-    if(error){ alert('No se pudo eliminar: '+error.message); return }
+    if(error){ appAlert('No se pudo eliminar: '+error.message); return }
     // Ajusta el total/contador de la rendición a la que pertenece — sea del cliente (client_render_id) o de caja chica (render_id).
     let rendBackup=null
     const renderId = exp?.client_render_id || exp?.render_id
@@ -19395,7 +19416,7 @@ export default function App() {
         }).catch(()=>{})
       }
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[user,tasks,clients])
 
@@ -19424,7 +19445,7 @@ export default function App() {
         }).catch(()=>{})
       }
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[user,clients])
 
@@ -19453,7 +19474,7 @@ export default function App() {
         }catch(ee){ /* el cliente ya quedó; la RS se puede agregar luego */ }
       }
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[])
 
@@ -19469,13 +19490,13 @@ export default function App() {
       const saved=await upsertClient({name:nm,is_occasional:true,status:'Activo',abogado_responsable:responsable||null,updated_at:new Date().toISOString()})
       setClients(p=>[...p,saved].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')))
       return saved
-    }catch(e){ alert('Error al crear cliente ocasional: '+e.message); return null }
+    }catch(e){ appAlert('Error al crear cliente ocasional: '+e.message); return null }
   },[clients])
 
   // Actualiza solo algunos campos del cliente (edición inline desde la ficha, sin abrir el modal)
   const handleUpdateClientFields=useCallback(async(id,patch)=>{
     const { data, error } = await supabase.from('clients').update({...patch,updated_at:new Date().toISOString()}).eq('id',id).select().single()
-    if(error){ alert('Error al guardar: '+error.message); throw error }
+    if(error){ appAlert('Error al guardar: '+error.message); throw error }
     setClients(p=>{const next=p.map(x=>x.id===id?data:x);return next.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))})
     return data
   },[])
@@ -19488,17 +19509,17 @@ export default function App() {
       + (anticipos||[]).filter(a=>String(a.client_id)===String(id)).length
     try{
       if(nMov===0){
-        if(!confirm('Este cliente no tiene movimientos. ¿Eliminarlo definitivamente?')) return
+        if(!await appConfirm('Este cliente no tiene movimientos. ¿Eliminarlo definitivamente?')) return
         await dbDeleteClient(id)
         setClients(p=>p.filter(x=>x.id!==id))
       } else {
-        if(!confirm(`Este cliente tiene ${nMov} movimiento(s) entre ventas, facturas, gastos y anticipos.\n\nNo se puede borrar sin dejar datos huérfanos, así que se ARCHIVA: pasa a Terminado y lo reactivas cuando quieras desde el filtro Terminados.\n\n¿Archivar?`)) return
+        if(!await appConfirm(`Este cliente tiene ${nMov} movimiento(s) entre ventas, facturas, gastos y anticipos.\n\nNo se puede borrar sin dejar datos huérfanos, así que se ARCHIVA: pasa a Terminado y lo reactivas cuando quieras desde el filtro Terminados.\n\n¿Archivar?`)) return
         const {error} = await supabase.from('clients').update({status:'Terminado',updated_at:new Date().toISOString()}).eq('id',id)
         if(error) throw error
         setClients(p=>p.map(x=>String(x.id)===String(id)?{...x,status:'Terminado'}:x))
       }
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[sales,billing,expenses,anticipos])
 
   const handleSaveBilling=useCallback(async(f)=>{
@@ -19537,7 +19558,7 @@ export default function App() {
           }
           const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
           if(nt) setTerceros(nt)
-        }catch(te){ alert('El cobro se guardó, pero hubo un problema con la cuenta por pagar al proveedor: '+te.message) }
+        }catch(te){ appAlert('El cobro se guardó, pero hubo un problema con la cuenta por pagar al proveedor: '+te.message) }
       }
       // Aprendizaje universal: si la factura trae razón social, la guarda en el catálogo
       if(saved.client_id && (saved.receptor_name||saved.receptor_rut)){
@@ -19549,7 +19570,7 @@ export default function App() {
         }
       }
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[clients,clientEntities,terceros,proveedores,user])
 
@@ -19562,7 +19583,7 @@ export default function App() {
       if(error)throw error
       setAnticipos(p=>[data,...p])
       setModal(null)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[user])
 
@@ -19579,11 +19600,11 @@ export default function App() {
       if(!esBanco){ if('monto' in fields) patch.monto=fields.monto; if('fecha' in fields) patch.fecha=fields.fecha }
       const {error}=await supabase.from('anticipos').update(patch).eq('id',a.id); if(error) throw error
       setAnticipos(p=>p.map(x=>String(x.id)===String(a.id)?{...x,...patch}:x))
-    }catch(e){alert('No se pudo guardar: '+e.message)}
+    }catch(e){appAlert('No se pudo guardar: '+e.message)}
   },[])
   // Liberar (eliminar) un anticipo disponible; si vino de conciliación, revierte el movimiento y borra el enlace.
   const handleLiberarAnticipo=useCallback(async(a)=>{
-    if(a.estado!=='disponible'){ alert('Solo se pueden liberar anticipos disponibles.'); return }
+    if(a.estado!=='disponible'){ appAlert('Solo se pueden liberar anticipos disponibles.'); return }
     try{
       const {data:concRows}=await supabase.from('conciliacion').select('id,movimiento_id').eq('anticipo_id',a.id)
       if(concRows&&concRows.length){
@@ -19593,14 +19614,14 @@ export default function App() {
       }
       const {error}=await supabase.from('anticipos').delete().eq('id',a.id); if(error) throw error
       setAnticipos(p=>p.filter(x=>String(x.id)!==String(a.id)))
-    }catch(e){alert('No se pudo liberar: '+e.message)}
+    }catch(e){appAlert('No se pudo liberar: '+e.message)}
   },[])
 
   // Asignar el anticipo a 1 factura nueva: crea 1 factura Pagada por el total de las programadas seleccionadas, las anula, y aplica este anticipo + otros disponibles (FIFO) hasta cubrir.
   const handleAsignarConsolidado=useCallback(async(anticipo,{cuotaIds,invoice_no,issued_at})=>{
     try{
       const cuotas=(billing||[]).filter(b=>cuotaIds.includes(b.id))
-      if(!cuotas.length){ alert('Selecciona al menos una cuota.'); return }
+      if(!cuotas.length){ appAlert('Selecciona al menos una cuota.'); return }
       const total=cuotas.reduce((s,b)=>s+(b.amount||0),0)
       const ref=cuotas[0]
       const sale_id=anticipo.sale_id||ref?.sale_id||null
@@ -19622,32 +19643,32 @@ export default function App() {
       if(surplus>0){ const base=toApply[toApply.length-1]; const reduced=Math.max(0,(base.monto||0)-surplus); await supabase.from('anticipos').update({monto:reduced}).eq('id',base.id); const {data:sr}=await supabase.from('anticipos').insert({client_id:base.client_id,entity_id:base.entity_id||null,monto:surplus,fecha:base.fecha,nota:'Saldo de anticipo',proyecto:base.proyecto||null,sale_id:base.sale_id||null,estado:'disponible',created_by:base.created_by||null}).select().single(); saldoRow=sr }
       const {data:nb}=await getBilling(); if(nb) setBilling(nb)
       setAnticipos(p=>{ const last=toApply[toApply.length-1]; let n=p.map(a=>{ if(!applyIds.includes(a.id)) return a; const upd={...a,estado:'consumido',billing_id:fac.id}; if(surplus>0&&String(a.id)===String(last.id)) upd.monto=Math.max(0,(a.monto||0)-surplus); return upd }); if(saldoRow) n=[saldoRow,...n]; return n })
-      alert(`Factura ${invoice_no?('N°'+invoice_no+' '):''}por ${fmt(total)} ${cubre?'(Pagada)':`(abono ${fmt(consumido)})`}. ${cuotas.length} cuota(s) anulada(s).`)
-    }catch(e){ alert('Error al asignar: '+e.message) }
+      appAlert(`Factura ${invoice_no?('N°'+invoice_no+' '):''}por ${fmt(total)} ${cubre?'(Pagada)':`(abono ${fmt(consumido)})`}. ${cuotas.length} cuota(s) anulada(s).`)
+    }catch(e){ appAlert('Error al asignar: '+e.message) }
   },[billing,sales,anticipos,user])
 
   // Reclasificar un anticipo a Fondo por rendir (era un fondo para gastos, no honorarios).
   const handleReclasificarFondo=useCallback(async(anticipo)=>{
-    if(anticipo.estado!=='disponible'){ alert('Solo se puede reclasificar un anticipo disponible.'); return }
-    if(!confirm(`¿Reclasificar este anticipo de ${fmt(anticipo.monto)} a Fondo por rendir? Pasa a ser un fondo para gastos del cliente.`)) return
+    if(anticipo.estado!=='disponible'){ appAlert('Solo se puede reclasificar un anticipo disponible.'); return }
+    if(!await appConfirm(`¿Reclasificar este anticipo de ${fmt(anticipo.monto)} a Fondo por rendir? Pasa a ser un fondo para gastos del cliente.`)) return
     try{
       const {data:fondo,error}=await supabase.from('expenses').insert({client_id:anticipo.client_id, entity_id:anticipo.entity_id||null, type:'fondo', amount:anticipo.monto, date:anticipo.fecha, concept:anticipo.proyecto||anticipo.nota||'Fondo (reclasificado de anticipo)', category:'Fondo', created_by:user?.email||null}).select().single(); if(error) throw error
       await supabase.from('conciliacion').update({tipo_destino:'fondo',gasto_id:fondo.id,anticipo_id:null}).eq('anticipo_id',anticipo.id)
       const {error:de}=await supabase.from('anticipos').delete().eq('id',anticipo.id); if(de) throw de
       setExpenses&&setExpenses(p=>[fondo,...p]); setAnticipos(p=>p.filter(a=>String(a.id)!==String(anticipo.id)))
-    }catch(e){ alert('Error al reclasificar: '+e.message) }
+    }catch(e){ appAlert('Error al reclasificar: '+e.message) }
   },[user])
 
   // Fusionar dos anticipos duplicados (manual + conciliación bancaria): conserva el "keep" (el verificado en banco) y le pasa proyecto/sale_id/entity_id del "drop"; borra el drop.
   const handleFusionarAnticipos=useCallback(async(keep,drop)=>{
     if(!keep||!drop||String(keep.id)===String(drop.id)) return
-    if(keep.estado!=='disponible'||drop.estado!=='disponible'){ alert('Solo se pueden fusionar anticipos disponibles.'); return }
+    if(keep.estado!=='disponible'||drop.estado!=='disponible'){ appAlert('Solo se pueden fusionar anticipos disponibles.'); return }
     try{
       const merged={ proyecto: keep.proyecto||drop.proyecto||null, sale_id: keep.sale_id||drop.sale_id||null, entity_id: keep.entity_id||drop.entity_id||null, nota: keep.nota||drop.nota||null }
       const {error:ue}=await supabase.from('anticipos').update(merged).eq('id',keep.id); if(ue) throw ue
       const {error:de}=await supabase.from('anticipos').delete().eq('id',drop.id); if(de) throw de
       setAnticipos(p=>p.filter(a=>String(a.id)!==String(drop.id)).map(a=>String(a.id)===String(keep.id)?{...a,...merged}:a))
-    }catch(e){alert('No se pudo fusionar: '+e.message)}
+    }catch(e){appAlert('No se pudo fusionar: '+e.message)}
   },[])
 
   const handleConsumeAnticipos=useCallback(async(ids,billingId)=>{
@@ -19678,16 +19699,16 @@ export default function App() {
         const { data, error:be } = await supabase.from('billing').update(upd).eq('id',billingId).select().single()
         if(be)throw be
         setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
-        if(surplus>0) alert(`Factura pagada. El excedente de ${fmt(surplus)} quedó como anticipo disponible.`)
+        if(surplus>0) appAlert(`Factura pagada. El excedente de ${fmt(surplus)} quedó como anticipo disponible.`)
       } else {
         // Abono parcial: reflejar el anticipo consumido en paid_amount para que el saldo de la factura baje (QW1).
         const nuevoPagado = yaPagado+consumido
         const { data, error:be } = await supabase.from('billing').update({paid_amount:nuevoPagado,updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
         if(be)throw be
         setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
-        alert(`Abono aplicado: ${fmt(consumido)}. La factura queda pendiente por ${fmt((fac.amount||0)-nuevoPagado)} (no se marcó pagada).`)
+        appAlert(`Abono aplicado: ${fmt(consumido)}. La factura queda pendiente por ${fmt((fac.amount||0)-nuevoPagado)} (no se marcó pagada).`)
       }
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[clients,billing,anticipos])
 
   // Cubrir cuotas programadas con un anticipo: esas cuotas pasan a 'Anticipada' (salen del flujo de caja
@@ -19711,7 +19732,7 @@ export default function App() {
       }
       setBilling(p=>p.map(b=>cuotaIds.includes(b.id)?{...b,status:'Anticipada',prepaid_anticipo_id:anticipoId}:b))
       setAnticipos(p=>{ let n=p.map(a=>a.id===anticipoId?{...a,estado:'consumido',monto:nuevoMonto}:a); if(saldoRow) n=[saldoRow,...n]; return n })
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[anticipos,billing])
   // Deshacer: las cuotas vuelven a 'Programada' y el anticipo a 'disponible'.
   const handleDescubrirCuotas=useCallback(async(anticipoId)=>{
@@ -19722,7 +19743,7 @@ export default function App() {
       if(ae)throw ae
       setBilling(p=>p.map(b=>String(b.prepaid_anticipo_id)===String(anticipoId)?{...b,status:'Programada',prepaid_anticipo_id:null}:b))
       setAnticipos(p=>p.map(a=>a.id===anticipoId?{...a,estado:'disponible',billing_id:null}:a))
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[])
 
   // Deshacer un anticipo CONSUMIDO contra una factura (no cuotas): vuelve a 'disponible' y, si ninguna otra anticipo cubre esa factura, la factura vuelve a Pendiente.
@@ -19739,14 +19760,14 @@ export default function App() {
           setBilling(p=>p.map(b=>String(b.id)===String(a.billing_id)?{...b,status:'Pendiente',paid_at:null}:b))
         }
       }
-    }catch(e){alert('No se pudo deshacer: '+e.message)}
+    }catch(e){appAlert('No se pudo deshacer: '+e.message)}
   },[anticipos])
 
   // Emitir UNA factura por el bloque de cuotas que cubrió un anticipo (queda Pagada, pagada con el anticipo).
   const handleFacturarBloqueAnticipo=useCallback(async(anticipo,{invoice_no,issued_at})=>{
     try{
       const cuotas=(billing||[]).filter(b=>String(b.prepaid_anticipo_id)===String(anticipo.id))
-      if(!cuotas.length){ alert('Este anticipo no cubre cuotas.'); return null }
+      if(!cuotas.length){ appAlert('Este anticipo no cubre cuotas.'); return null }
       const monto=cuotas.reduce((a,b)=>a+(b.amount||0),0)
       const ref=cuotas[0]
       const fecha=issued_at||new Date().toISOString().slice(0,10)
@@ -19758,7 +19779,7 @@ export default function App() {
       const {data:nb}=await getBilling(); if(nb)setBilling(nb)
       setAnticipos(p=>p.map(a=>a.id===anticipo.id?{...a,billing_id:data.id}:a))
       return data
-    }catch(e){alert('Error: '+e.message); return null}
+    }catch(e){appAlert('Error: '+e.message); return null}
   },[billing,sales])
 
   // Proveedores (PP terceros): crear/editar un proveedor del catálogo
@@ -19772,7 +19793,7 @@ export default function App() {
       }
       const {data,error}=await supabase.from('proveedores').insert(payload).select().single()
       if(error)throw error; setProveedores(p=>[...p,data].sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'))); setSaving(false); return data
-    }catch(e){alert('Error: '+e.message); setSaving(false); return null}
+    }catch(e){appAlert('Error: '+e.message); setSaving(false); return null}
   },[])
 
   // Asignar facturas a un proveedor desde Mis Proveedores: crea las cuentas por pagar (terceros_pagos) ancladas a cada factura.
@@ -19790,7 +19811,7 @@ export default function App() {
       const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
       if(nt)setTerceros(nt)
       return true
-    }catch(e){ alert('No se pudo asignar la factura: '+e.message); return false }
+    }catch(e){ appAlert('No se pudo asignar la factura: '+e.message); return false }
   },[proveedores,billing,user])
 
   // Conciliación: al cobrar la factura ancla, las cuentas por pagar de esa factura pasan
@@ -19802,7 +19823,7 @@ export default function App() {
       const {error}=await supabase.from('terceros_pagos').update({estado:'por_pagar'}).in('id',ids)
       if(error)throw error
       setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'por_pagar'}:t))
-    }catch(e){alert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
+    }catch(e){appAlert('La factura se marcó pagada, pero no se pudieron pasar los terceros a Por pagar: '+e.message)}
   },[terceros])
 
   // Pagar a un proveedor: la cuenta pasa a 'pagado' con fecha y referencia (transferencia manual).
@@ -19812,7 +19833,7 @@ export default function App() {
       if(error)throw error
       setTerceros(p=>p.map(t=>t.id===data.id?data:t))
       return data
-    }catch(e){alert('Error: '+e.message); return null}
+    }catch(e){appAlert('Error: '+e.message); return null}
   },[])
   // Pagar varias cuentas del mismo proveedor en una sola transferencia (mismo fecha y referencia).
   const handlePagarTercerosBulk=useCallback(async(ids,{pagado_at,referencia,factura_numero,factura_fecha})=>{
@@ -19822,7 +19843,7 @@ export default function App() {
       if(error)throw error
       setTerceros(p=>p.map(t=>{const u=(data||[]).find(d=>d.id===t.id); return u||t}))
       return data
-    }catch(e){alert('Error: '+e.message); return null}
+    }catch(e){appAlert('Error: '+e.message); return null}
   },[])
   // Resuelve un grupo de duplicados: conserva uno (y le limpia el folio "Factura ") y elimina los demás (soft-delete con deshacer).
   const handleResolveDup=useCallback(async(keepId,dropIds,opts={})=>{
@@ -19837,7 +19858,7 @@ export default function App() {
         if(opts.silent) return u
         setUndoToast(u)
       }
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
   },[billing])
   // Asigna en lote varias facturas a una venta (hermanas de una serie) — para que no queden huérfanas. Con deshacer.
   const handleAssignSeries=useCallback(async(saleId,ids,opts={})=>{
@@ -19848,7 +19869,7 @@ export default function App() {
       const u={msg:`${ids.length} factura${ids.length!==1?'s':''} asociada${ids.length!==1?'s':''} al proyecto`, onUndo: async()=>{ await supabase.from('billing').update({sale_id:null}).in('id',ids); setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,sale_id:null}:b)) }}
       if(opts.silent) return u
       setUndoToast(u)
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
   },[])
   // Conciliación: la programada se MARCA como reemplazada por la emitida (replaced_by_id) y se retira de las vistas (deleted_at). Reversible. Nunca al revés.
   const handleReplaceProgramada=useCallback(async(progId,realId,opts={})=>{
@@ -19859,7 +19880,7 @@ export default function App() {
       const u={msg:'Programada reemplazada por la factura emitida', onUndo: async()=>{ await supabase.from('billing').update({deleted_at:null,replaced_by_id:null}).eq('id',progId); if(row) setBilling(p=>p.some(x=>x.id===progId)?p:[row,...p]) }}
       if(opts.silent) return u
       setUndoToast(u)
-    }catch(e){ alert('Error: '+e.message) }
+    }catch(e){ appAlert('Error: '+e.message) }
   },[billing])
   const handleDeleteBilling=useCallback(async(id,opts={})=>{
     try{
@@ -19873,7 +19894,7 @@ export default function App() {
       if(opts.silent) return u
       setModal(null)
       setUndoToast(u)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[billing])
 
   const handleToggleClientStatus=useCallback(async(client)=>{
@@ -19882,7 +19903,7 @@ export default function App() {
       const {data,error} = await supabase.from('clients').update({status:nuevo,updated_at:new Date().toISOString()}).eq('id',client.id).select().single()
       if(error) throw error
       setClients(p=>p.map(x=>x.id===client.id?{...x,status:nuevo}:x))
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[])
 
   const handleAssignClient=useCallback(async(bill,clientId)=>{
@@ -19901,7 +19922,7 @@ export default function App() {
           if(ce) setClientEntities(ce)   // no vaciar el catálogo si el refetch falla
         }
       }
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[clientEntities])
 
   // Asignar el AÑO DE VENTA a una factura: por venta asociada (sale_id → el año deriva de sales.year)
@@ -19916,7 +19937,7 @@ export default function App() {
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
       const anio = sale_year!==undefined ? sale_year : (sales.find(s=>String(s.id)===String(sale_id))?.year)
       if(bill.client_id && anio!=null) learnPut('venta_anio_cliente', String(bill.client_id), anio)
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[sales])
 
   // Eliminar una o varias cuotas (usado por "Ya emitida"); el confirm lo hace el componente
@@ -19927,7 +19948,7 @@ export default function App() {
       const {error}=await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',arr)
       if(error)throw error
       setBilling(p=>p.filter(x=>!arr.includes(x.id)))
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[])
 
   const handleStatusChange=useCallback(async(id,status,paid_at,extra)=>{
@@ -19935,7 +19956,7 @@ export default function App() {
     if(paid_at!==undefined) updates.paid_at=paid_at
     if(extra&&typeof extra==='object') Object.assign(updates,extra)   // ej. {paid_amount} para abonos parciales
     const {error}=await supabase.from('billing').update(updates).eq('id',id)
-    if(error){ alert('No se pudo cambiar el estado: '+error.message); return }   // no actualizar UI si la DB no cambió
+    if(error){ appAlert('No se pudo cambiar el estado: '+error.message); return }   // no actualizar UI si la DB no cambió
     setBilling(p=>p.map(x=>x.id===id?{...x,status,...(paid_at!==undefined?{paid_at}:{}),...(extra&&typeof extra==='object'?extra:{})}:x))
   },[])
 
@@ -19947,7 +19968,7 @@ export default function App() {
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,status:'Pendiente',paid_at:null}:x))
       const ids=(terceros||[]).filter(t=>String(t.billing_id)===String(bill.id)&&t.estado==='por_pagar').map(t=>t.id)
       if(ids.length){ await supabase.from('terceros_pagos').update({estado:'pendiente'}).in('id',ids); setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'pendiente'}:t)) }
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[terceros])
 
   // "Ya emitida" (respaldo): convierte una programada en emitida (Pendiente) + asigna razón social
@@ -19958,7 +19979,7 @@ export default function App() {
       if(entity){ patch.entity_id=entity.id; patch.receptor_name=entity.name||null; patch.receptor_rut=entity.rut||null }
       await supabase.from('billing').update(patch).eq('id',bill.id)
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
-    }catch(e){alert('Error: '+e.message)}
+    }catch(e){appAlert('Error: '+e.message)}
   },[])
 
   // EMISIÓN ELECTRÓNICA (DTE directo al SII) vía edge function sii-sync (action:'emitir').
@@ -19974,15 +19995,15 @@ export default function App() {
       const ent = entity || (bill.entity_id?ents.find(e=>String(e.id)===String(bill.entity_id)):(ents.length===1?ents[0]:null))
       const recRut = ent?.rut || bill.receptor_rut
       const recRs  = ent?.name || bill.receptor_name
-      if(!recRut || !recRs){ alert('Falta RUT o razón social del receptor.\nAsigna la razón social a la factura antes de emitir al SII.'); return }
+      if(!recRut || !recRs){ appAlert('Falta RUT o razón social del receptor.\nAsigna la razón social a la factura antes de emitir al SII.'); return }
       // Validación pre-emisión: RUT con dígito verificador correcto (módulo 11) evita el rechazo más común del SII.
-      if(!rutValido(recRut)){ alert(`El RUT del receptor (${recRut}) no es válido — revisa el dígito verificador en la razón social antes de emitir.`); return }
-      if(!(Math.round(bill.amount||0)>0)){ alert('La factura no tiene monto. No se puede emitir.'); return }
+      if(!rutValido(recRut)){ appAlert(`El RUT del receptor (${recRut}) no es válido — revisa el dígito verificador en la razón social antes de emitir.`); return }
+      if(!(Math.round(bill.amount||0)>0)){ appAlert('La factura no tiene monto. No se puede emitir.'); return }
       const fecha = (bill.issued_at||'').slice(0,10) || new Date().toISOString().slice(0,10)
       const base = { action:'emitir', tipoDte:34, billingId:bill.id, fecha, receptor:{ rut:recRut, rs:recRs }, items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }] }
       const prev=await _siiFetch({...base, dryRun:true})
       setEmitirPreview({ prev, base, recRut, recRs, billId:bill.id, fecha })
-    }catch(e){ alert('No se pudo preparar la emisión: '+e.message) }
+    }catch(e){ appAlert('No se pudo preparar la emisión: '+e.message) }
   },[clientEntities])
   // Paso 2: emite de verdad al SII (desde el modal de vista previa). El motor persiste folio + dte_* en billing.
   const confirmEmitirDTE=useCallback(async()=>{
@@ -19998,7 +20019,7 @@ export default function App() {
       const fact=(billing||[]).find(x=>String(x.id)===String(ep.billId))
       let dest=null
       try{ const {data:lt}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(fact?.client_id)).maybeSingle(); dest=lt?.value||null }catch(_){}
-      if(dest && r.dteXml && confirm(`Factura emitida (folio ${r.folio}).\n¿Enviarla ahora al cliente (${dest})?`)){
+      if(dest && r.dteXml && await appConfirm(`Factura emitida (folio ${r.folio}).\n¿Enviarla ahora al cliente (${dest})?`)){
         try{
           const sale=(sales||[]).find(s=>String(s.id)===String(fact?.sale_id))
           const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
@@ -20009,12 +20030,12 @@ export default function App() {
           const at=new Date().toISOString()
           await supabase.from('billing').update({email_sent_at:at}).eq('id',ep.billId)
           setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at}:x))
-          alert(`Factura ${r.folio} emitida y enviada a ${dest}.`)
-        }catch(e){ alert(`Emitida (folio ${r.folio}), pero no se pudo enviar el correo: ${e.message}\nQueda en "Por enviar".`) }
+          appAlert(`Factura ${r.folio} emitida y enviada a ${dest}.`)
+        }catch(e){ appAlert(`Emitida (folio ${r.folio}), pero no se pudo enviar el correo: ${e.message}\nQueda en "Por enviar".`) }
       } else {
-        alert(`Emitida al SII.\nFolio ${r.folio} · estado ${r.estado||'enviado'}${dest?'':`\nQueda en "Por enviar".`}`)
+        appAlert(`Emitida al SII.\nFolio ${r.folio} · estado ${r.estado||'enviado'}${dest?'':`\nQueda en "Por enviar".`}`)
       }
-    }catch(e){ alert('No se pudo emitir al SII: '+e.message) }
+    }catch(e){ appAlert('No se pudo emitir al SII: '+e.message) }
     setEmitirBusy(false)
   },[emitirPreview,billing,sales,user])
   // Re-consultar el estado de un DTE en el SII (tarda en procesar; puede RECHAZAR). Actualiza dte_estado.
@@ -20023,8 +20044,8 @@ export default function App() {
     try{
       const r=await _siiFetch({action:'estado', trackId:bill.dte_track_id, billingId:bill.id})
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,dte_estado:r.estado}:x))
-      alert(`Estado en el SII: ${r.estado}${r.glosa?`\n${r.glosa}`:''}`)
-    }catch(e){ alert('No se pudo consultar el estado: '+e.message) }
+      appAlert(`Estado en el SII: ${r.estado}${r.glosa?`\n${r.glosa}`:''}`)
+    }catch(e){ appAlert('No se pudo consultar el estado: '+e.message) }
   },[])
 
   // Editar cuotas PROGRAMADAS (fecha/monto) sin rehacer la forma de cobro. Solo programadas; no toca emitidas/pagadas.
@@ -20036,7 +20057,7 @@ export default function App() {
         if(error) throw error
         setBilling(p=>p.map(x=>x.id===u.id?{...x,...patch}:x))
       }
-    }catch(e){alert('No se pudo actualizar la cuota: '+e.message)}
+    }catch(e){appAlert('No se pudo actualizar la cuota: '+e.message)}
   },[])
 
   // Dar de baja (anular) una factura: registra motivo, quién y cuándo.
@@ -20050,7 +20071,7 @@ export default function App() {
         const ent = bill.entity_id?ents.find(e=>String(e.id)===String(bill.entity_id)):(ents.length===1?ents[0]:null)
         const recRut = ent?.rut || bill.receptor_rut, recRs = ent?.name || bill.receptor_name
         if(!recRut||!recRs) throw new Error('Falta el receptor de la factura para emitir la Nota de Crédito.')
-        if(!confirm(`Esta factura fue emitida al SII (folio ${bill.folio||'—'}).\nPara anularla se emitirá una NOTA DE CRÉDITO electrónica que la deja sin efecto.\n\n¿Continuar?`)) return
+        if(!await appConfirm(`Esta factura fue emitida al SII (folio ${bill.folio||'—'}).\nPara anularla se emitirá una NOTA DE CRÉDITO electrónica que la deja sin efecto.\n\n¿Continuar?`)) return
         const r=await _siiFetch({ action:'emitir', tipoDte:61, exenta:true, fecha:new Date().toISOString().slice(0,10),
           receptor:{ rut:recRut, rs:recRs },
           items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }],
@@ -20064,7 +20085,7 @@ export default function App() {
       // Liberar anticipos consumidos contra esta factura (no dejar plata atada a una factura anulada). Los terceros se mantienen (el proveedor igual trabajó).
       const antLig=(anticipos||[]).filter(a=>String(a.billing_id)===String(bill.id))
       if(antLig.length){ const ids=antLig.map(a=>a.id); const {error:ae}=await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',ids); if(!ae) setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
-    }catch(e){alert('No se pudo dar de baja: '+e.message)}
+    }catch(e){appAlert('No se pudo dar de baja: '+e.message)}
   },[user,anticipos,clientEntities])
 
   // Reactivar una factura anulada por error: vuelve a Pendiente y borra el registro de baja.
@@ -20079,7 +20100,7 @@ export default function App() {
       const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
       if(error) throw error
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
-    }catch(e){alert('No se pudo reactivar: '+e.message)}
+    }catch(e){appAlert('No se pudo reactivar: '+e.message)}
   },[])
 
   // Deshacer un pago a proveedor (transferencia registrada por error): vuelve a "Por pagar" y borra fecha/referencia/documento.
@@ -20089,7 +20110,7 @@ export default function App() {
       if(error)throw error
       setTerceros(p=>p.map(t=>t.id===data.id?data:t))
       return data
-    }catch(e){alert('Error: '+e.message); return null}
+    }catch(e){appAlert('Error: '+e.message); return null}
   },[])
 
   // Una rendición NO genera factura/cobro de reembolso (regla: los reembolsos de gastos nunca se facturan).
@@ -20264,7 +20285,7 @@ export default function App() {
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
         {modal?.type==='billing'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {emitirPreview&&(()=>{ const ep=emitirPreview
-          const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ alert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ alert('No se pudo generar el PDF: '+(e.message||e)) } }
+          const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ appAlert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }
           return (
             <div onClick={()=>!emitirBusy&&setEmitirPreview(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
               <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:440,width:'100%',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
@@ -20295,7 +20316,7 @@ export default function App() {
           </div>
         )}
         {modal?.type==='cargaMasiva'&&<Modal title={modal.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onClose={()=>setModal(null)} closeOnBackdrop={false}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={()=>setModal(null)} notaria={!!modal.data?.notaria} onCreateOccasional={handleCreateOccasional} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
-        {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){alert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
+        {modal?.type==='clientLimited'&&<Modal title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {modal?.type==='fondo'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><FondoForm clients={clients} expenses={expenses} sales={sales} clientEntities={clientEntities} rendiciones={rendiciones} onSave={async(f)=>{ await handleSaveExpense(f); setModal(null); if(f.type==='fondo'&&((f.amount||0)<0||/^\s*devoluci/i.test(f.concept||''))){ const cl=clients.find(c=>String(c.id)===String(f.client_id))||null; const m=String(f.concept||'').match(/Rendici[oó]n N°\s*([\w-]+)/i); const rn=m&&m[1]!=='—'?m[1]:null; const rd=(rendiciones||[]).filter(r=>String(r.client_id)===String(f.client_id)&&r.tipo==='cliente'); const rec=(rn&&rd.find(r=>String(r.correlativo)===String(rn)))||[...rd].sort((a,b)=>(b.correlativo||0)-(a.correlativo||0))[0]||null; setDevEmail({client:cl,amount:Math.abs(f.amount||0),fecha:f.date,rend:rec,rendN:rn}) } }} onClose={()=>setModal(null)} saving={saving} preClient={modal.data||null} preDev={!!modal?.dev}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
         {modal?.type==='ajuste'&&<Modal title={<><span style={{color:C.accent}}>Ajustar saldo</span>{modal.data&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{modal.data.name}</span></>}</>} onClose={()=>setModal(null)} closeOnBackdrop={false}><AjusteModal client={modal.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);setModal(null)}} onClose={()=>setModal(null)}/></Modal>}
@@ -20324,10 +20345,11 @@ export default function App() {
       {undoToast&&(
         <div style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(20px + env(safe-area-inset-bottom))',zIndex:9999,display:'flex',alignItems:'center',gap:12,background:C.accent,color:'#fff',borderRadius:12,padding:'10px 12px 10px 16px',boxShadow:'0 6px 24px rgba(0,0,0,.22)',maxWidth:'calc(100vw - 32px)'}}>
           <span style={{fontSize:13,fontWeight:500,whiteSpace:'nowrap'}}>{undoToast.msg}</span>
-          <button onClick={async()=>{ const fn=undoToast.onUndo; setUndoToast(null); try{ if(fn) await fn() }catch(e){ alert('No se pudo deshacer: '+e.message) } }} style={{background:'rgba(255,255,255,.16)',border:'none',color:'#fff',fontSize:12,fontWeight:700,padding:'6px 13px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap'}}>Deshacer</button>
+          <button onClick={async()=>{ const fn=undoToast.onUndo; setUndoToast(null); try{ if(fn) await fn() }catch(e){ appAlert('No se pudo deshacer: '+e.message) } }} style={{background:'rgba(255,255,255,.16)',border:'none',color:'#fff',fontSize:12,fontWeight:700,padding:'6px 13px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap'}}>Deshacer</button>
           <button onClick={()=>setUndoToast(null)} style={{background:'none',border:'none',color:'rgba(255,255,255,.7)',fontSize:17,lineHeight:1,cursor:'pointer',padding:0}}>×</button>
         </div>
       )}
+      <DialogHost/>
     </>
   )
 }
