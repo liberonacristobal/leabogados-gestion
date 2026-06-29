@@ -4186,7 +4186,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       const AREAS = ['Corporativo','Tributario','Laboral','Otro']
       if(d.area){ const a=AREAS.find(x=>x.toLowerCase()===d.area?.toLowerCase()); if(a){ up('area',a); filled.add('area') } }
       const WHO_MAP = {'cl@leabogados.cl':'Cristóbal','ee@leabogados.cl':'Erasmo','mc@leabogados.cl':'Martín','mp@leabogados.cl':'Martina','rd@leabogados.cl':'Rodrigo'}
-      if(user?.email){ const nm=WHO_MAP[user.email]; if(nm){ up('responsible',nm); filled.add('responsible') } }
+      { const r = client?.abogado_responsable || (user?.email && WHO_MAP[user.email]); if(r){ up('responsible',r); filled.add('responsible') } }   // el abogado del cliente manda; el usuario es respaldo
       if(d.moneda==='CLP'){ up('moneda','CLP'); if(d.honorario_total){ up('amount_clp',String(d.honorario_total)); filled.add('amount_clp') } }
       else if(d.honorario_total){ up('amount_uf',String(d.honorario_total)); filled.add('amount_uf') }
       if(d.forma_cobro){ const MAP={cuotas:'cuotas',mensual:'mensual',porcentaje:'porcentaje',personalizada:'personalizada'}; const mapped=MAP[d.forma_cobro?.toLowerCase()]; if(mapped){ setCobroType(mapped); filled.add('cobro_type') } }
@@ -4550,7 +4550,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             {clientMatches.length>0&&(
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
                 {clientMatches.map(c=>(
-                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);up('client_id',c.id);setClientQ('')}}
+                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);up('client_id',c.id);if(c.abogado_responsable)up('responsible',c.abogado_responsable);setClientQ('')}}
                     style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
                     onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'}
                     onMouseLeave={e=>e.currentTarget.style.background='#fff'}>

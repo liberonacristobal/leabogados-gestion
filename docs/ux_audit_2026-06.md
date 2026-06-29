@@ -24,11 +24,11 @@ Rol: experto en experiencia de usuario. Método: recorrido de las vistas princip
 - ~~"Ventas por mes" — tocar barra → detalle~~ → **YA estaba**: las barras son clickeables (tap → detalle del mes) y el mes actual ya va en accent+bold. Lo único marginal son las etiquetas a 8px (no se tocó: subirlas arriesga overflow en 12 barras). (Hallazgo de captura corregido contra código.)
 - **Índice A-Z (Clientes)** — target táctil estrecho (~13px) → ✅ HECHO: font 10→11 y padding `0 1px`→`3px 6px`; target ~20px. Aplicado a las dos versiones (admin + limited).
 
-### Oportunidades de "la herramienta APRENDE" (loops que aún quedan)
-- **Sugerir responsable/área al crear venta** desde el patrón del cliente (quién suele atenderlo).
-- **Proactividad de cobranza**: un resumen "hoy: N por recordar / N vencen esta semana" empujado al inicio del día (ya hay recordatorios; falta el empujón diario consolidado).
-- **Transparencia del aprendizaje**: una vista "qué aprendió la app" (alias RUT→cliente, glosa→categoría, costos fijos) editable — construye confianza y permite corregir en un lugar.
-- **Auto-clasificación de cargos del banco** más allá de costo de oficina (proveedores recurrentes, impuestos) con el mismo patrón ✦.
+### Oportunidades de "la herramienta APRENDE" (loops)
+- **Responsable al crear venta** → ✅ HECHO: al pickear cliente, el RESPONSABLE se autocompleta con el `abogado_responsable` del cliente (manual + import IA); el usuario es respaldo. (Área no se hizo: no existe en el modelo de clientes.)
+- ~~Proactividad de cobranza~~ → **YA existe**: "Qué atender hoy" (panel determinista: facturas vencidas, por cobrar esta semana, caja chica sin liquidar…) + resumen IA. Mejora posible (no bug): hoy está colapsado por defecto — podría auto-expandirse al iniciar el día.
+- **Transparencia del aprendizaje** (PENDIENTE, el grande): vista "qué aprendió la app" (alias RUT→cliente, glosa→categoría/cliente, costo_oficina, costos fijos) editable — construye confianza y permite corregir en un lugar. Es el corazón visible de "la herramienta APRENDE".
+- **Auto-clasificación de cargos del banco** más allá de costo de oficina (proveedores recurrentes, impuestos) con el patrón ✦ — extender lo de `costo_oficina`.
 
 ## Temas grandes para la próxima versión
 1. **Una sola regla de formato de cifras** (helper único por contexto) — cierra la deuda de inconsistencia de una vez.
