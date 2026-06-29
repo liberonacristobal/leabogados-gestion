@@ -7,10 +7,13 @@ Fase 1 del plan de la nueva versión (`docs/plan_nueva_version.md`): el canon, h
 - Estado/conciliación: greenText, soon/soonBg/soonText, overdue/overdueBg/overdueText, greenBg, azulInfo/azulBg, tealBg/tealText, ambarBg/coralText, grisText, bgSoft, bgWarm.
 - **Regla**: SIEMPRE el token de `C`, nunca el hex suelto (excepto HTML de correo/PDF y atributos SVG). Deuda histórica de hex a mano → migrar gradualmente al tocar cada vista (no barrido a ciegas). Grises de fondo (`#F5F7F9`, `#FAFBFC`, `#F1EFE8`) → agregar a `C` como token al pasar.
 
-## Formato de cifras (regla única — UX P0)
-- **Fotos / KPIs resumen** → `fmtShort` (`$65M`, `$6,5M`). Consistente dentro de una foto: las partes anidadas igualan al protagonista.
-- **Listas / filas de detalle** → `fmt` (completo, exacto: `$65.000.000`). Ahí importa el monto preciso.
+## Formato de cifras (regla — corregida 2026-06-29)
+La distinción NO es foto vs lista, es **OVERVIEW vs DETALLE** (error que cometí y corregí en el piloto: la ficha es detalle, no overview):
+- **Overview / landing** (Dashboard, Facturación, Gastos, Ventas — escaneas MUCHAS entidades, importan tendencias) → `fmtShort` (`$65M`). Consistente dentro de la foto: las partes anidadas igualan al protagonista (esto fue el P0 de Facturación: el vencido anidado en `fmt` rompía la foto del landing).
+- **Detalle de UNA entidad** (ficha de cliente, su saldo/cobros/fondos, un cargo, un costo de oficina) → `fmt` COMPLETO. Ahí la exactitud de ESE dato importa (Cobrado `$28.530.000`, no `$29M` que esconde $530k). Vale para el protagonista-hero y sus resúmenes de sección.
+- **Listas / filas de detalle** → `fmt` completo.
 - UF con sus decimales; pesos sin decimales. Redondear solo al mostrar, nunca al calcular.
+- *Lección: una regla mal estatuida cascada en errores. Verificar el contexto real (¿overview o detalle?) antes de aplicar.*
 
 ## Canon de la foto (toda vista-resumen de cifras)
 1. Jerarquía, no paralelo: una cifra que es PARTE de otra va ANIDADA, nunca tarjeta hermana. Cero cifras duplicadas.
