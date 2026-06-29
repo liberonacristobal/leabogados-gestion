@@ -16364,6 +16364,8 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
 // ─── CENTRO DE APRENDIZAJE: lo que la app aprendió (learnings) — visible y borrable (des-aprender un match errado) ──
 function LearningCenter({clients=[], onClose}){
   const [rows,setRows] = useState(null)
+  const [edId,setEdId] = useState(null), [edVal,setEdVal] = useState(''), [edSub,setEdSub] = useState('')
+  const EDITABLES = {costo_oficina:1,gasto_categoria:1,gasto_proyecto:1,cartola_tipo:1}
   useEffect(()=>{
     if(DEMO){ setRows([
       {id:'l1',kind:'cargo_cliente',key:'arriendo notaria pago',value:'c1'},
@@ -16388,6 +16390,14 @@ function LearningCenter({clients=[], onClose}){
   const grupos = useMemo(()=>{ if(!rows) return null; const g={}; rows.forEach(r=>{ if(!KINDS[r.kind]) return; (g[r.kind]=g[r.kind]||[]).push(r) }); return Object.keys(KINDS).filter(k=>g[k]).map(k=>({k,...KINDS[k],items:g[k]})) },[rows])
   const keyTxt = r => r.kind==='gasto_proyecto' ? (String(r.key).split('::')[1]||r.key) : r.key
   const olvidar = async r => { if(!DEMO){ try{ await supabase.from('learnings').delete().eq('id',r.id) }catch(_){} } setRows(p=>(p||[]).filter(x=>x.id!==r.id)) }
+  const editar = r => { setEdId(r.id); setEdVal(r.value||''); setEdSub(r.meta&&r.meta.subcategory||'') }
+  const cancelar = () => { setEdId(null); setEdVal(''); setEdSub('') }
+  const guardar = async r => {
+    const nv = (edVal||'').trim(); if(!nv) return
+    const nm = r.kind==='costo_oficina' ? {...(r.meta||{}), subcategory:(edSub||'').trim()||undefined} : r.meta
+    if(!DEMO){ try{ await supabase.from('learnings').update({value:nv,meta:nm}).eq('id',r.id) }catch(_){} }
+    setRows(p=>(p||[]).map(x=>x.id===r.id?{...x,value:nv,meta:nm}:x)); cancelar()
+  }
   if(grupos===null) return <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
   const total = grupos.reduce((a,g)=>a+g.items.length,0)
   return (
@@ -16399,9 +16409,22 @@ function LearningCenter({clients=[], onClose}){
           <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>{g.lbl} · {g.items.length}</div>
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {g.items.map((r,i)=>(
-              <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.border}`:'none'}}>
-                <div style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:C.muted}}>{keyTxt(r)}</span> <span style={{color:C.done}}>→</span> <b style={{color:C.accent}}>{g.val(r)}</b></div>
-                <button onClick={()=>olvidar(r)} title='Dejar de sugerir esto' style={{flexShrink:0,fontSize:11,color:C.overdueText,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Olvidar</button>
+              <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',flexWrap:'wrap'}}>
+                {edId===r.id ? (
+                  <>
+                    <span style={{flexShrink:0,fontSize:12,color:C.muted,maxWidth:'42%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{keyTxt(r)} <span style={{color:C.done}}>→</span></span>
+                    <input value={edVal} onChange={e=>setEdVal(e.target.value)} autoFocus style={{flex:1,minWidth:90,height:32,fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:'0 8px',outline:'none'}}/>
+                    {r.kind==='costo_oficina' && <input value={edSub} onChange={e=>setEdSub(e.target.value)} placeholder='Subcategoría (opcional)' style={{flex:1,minWidth:90,height:32,fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:7,padding:'0 8px',outline:'none'}}/>}
+                    <button onClick={()=>guardar(r)} style={{flexShrink:0,fontSize:11,color:'#fff',background:C.accent,border:`1px solid ${C.accent}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Guardar</button>
+                    <button onClick={cancelar} style={{flexShrink:0,fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Cancelar</button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:C.muted}}>{keyTxt(r)}</span> <span style={{color:C.done}}>→</span> <b style={{color:C.accent}}>{g.val(r)}</b></div>
+                    {EDITABLES[r.kind] && <button onClick={()=>editar(r)} title='Corregir el valor' style={{flexShrink:0,fontSize:11,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Editar</button>}
+                    <button onClick={()=>olvidar(r)} title='Dejar de sugerir esto' style={{flexShrink:0,fontSize:11,color:C.overdueText,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Olvidar</button>
+                  </>
+                )}
               </div>
             ))}
           </div>
