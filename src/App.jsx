@@ -9558,6 +9558,19 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   const marcarPersonal = async(e,persona)=>{ const patch={personal_de:persona||null, paid_by_client: persona?false:(e.category==='Notaria')}; try{ await supabase.from('expenses').update(patch).eq('id',e.id); setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); setNotaPersonaPick(null) }catch(err){appAlert('Error: '+err.message)} }
   // Triage de gasto de oficina (Liberona Escala) → personal de un miembro: lo saca del folder de la oficina y queda como personal.
   const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
+  // Gastos pendientes de rendir al cliente (única fuente, misma def que el botón Rendir): gasto, descuenta saldo, no rendido al cliente.
+  const gastosPorRendir = cid => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at)
+  // Clientes con gastos sin rendir hace ≥30 días → aviso "Conviene rendir" (la app anticipa, no esperas a acordarte). La oficina queda fuera.
+  const rendirPend = useMemo(()=>{
+    const hoy=new Date(); hoy.setHours(0,0,0,0)
+    return (clients||[]).map(c=>{
+      if(esOficina(c.id)) return null
+      const por=gastosPorRendir(c.id); if(!por.length) return null
+      const oldest=por.reduce((m,e)=>(e.date&&(!m||e.date<m))?e.date:m,null); if(!oldest) return null
+      const dias=Math.floor((hoy-new Date(oldest+'T00:00:00'))/86400000); if(dias<30) return null
+      return {client:c, n:por.length, monto:por.reduce((a,e)=>a+(e.amount||0),0), dias}
+    }).filter(Boolean).sort((a,b)=>b.dias-a.dias)
+  },[expenses,clients])
   // Repetir los costos fijos del mes anterior en el mes nuevo (sin re-tipear). created_by = admin → quedan estructurales.
   const [ultRep,setUltRep] = useState(null)   // último "Repetir" (mes + ids creados) para poder Deshacer
   const repetirCostosFijos = async (items, mesISO) => {
@@ -10136,7 +10149,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>setShowHistorial(true)} title='Historial' aria-label='Historial' style={{background:'none',border:'none',color:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:4}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg></button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaBtnOpen(o=>!o);setNotaMenuOpen(false)}} style={{...chipBtn('soft'),fontWeight:500,background:notaBtnOpen?C.tealText:C.tealBg,color:notaBtnOpen?'#fff':C.tealText,border:`1px solid ${C.tealText}`}}>Notaría{notariaPend.length?` · ${notariaPend.length}`:''} {notaBtnOpen?'▴':'▾'}</button>}
             {!selectedClient&&!showOrphans&&!showNotaria&&!showHistorial&&<button onClick={()=>{setNotaMenuOpen(o=>!o);setNotaBtnOpen(false)}} style={chipBtn('primary')}>Cargar {notaMenuOpen?'▴':'▾'}</button>}
-            {selectedClient&&!esOficina(selectedClient.id)&&(()=>{ const por=(expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
+            {selectedClient&&!esOficina(selectedClient.id)&&(()=>{ const por=gastosPorRendir(selectedClient.id); const n=por.length, monto=por.reduce((a,e)=>a+(e.amount||0),0); const open=()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}; return n===0 ? <button onClick={open} title='Sin gastos por rendir' style={{...chipBtn('soft'),fontWeight:500,color:C.done,whiteSpace:'nowrap'}}>✓ Al día</button> : <button onClick={open} style={{...chipBtn('greenSolid'),whiteSpace:'nowrap'}}>↓ Rendir · {n} · {fmt(monto)}</button> })()}
           </div>
         </div>
 
@@ -10380,6 +10393,22 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 </div>
               </div>)
             })()}
+            {rendirPend.length>0&&(
+              <div style={{background:C.ambarBg,border:`0.5px solid ${C.soon}40`,borderRadius:12,padding:'12px 13px',marginBottom:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}><SIcon n='receipt' s={18} c={C.soonText}/><span style={{fontSize:13,fontWeight:700,color:C.soonText}}>Conviene rendir</span></div>
+                <div style={{fontSize:10,color:C.coralText,marginBottom:10}}>{rendirPend.length} cliente{rendirPend.length!==1?'s':''} con gastos sin rendir hace +30 días</div>
+                {rendirPend.slice(0,4).map((r,i)=>(
+                  <div key={r.client.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:`0.5px solid ${C.soon}40`,borderRadius:9,padding:'8px 10px',marginTop:i?6:0}}>
+                    <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(r.client)}} style={{flex:1,minWidth:0,cursor:onOpenClientFicha?'pointer':'default'}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.client.name}</div>
+                      <div style={{fontSize:11,color:C.soonText}}>{fmt(r.monto)} · {r.dias} días · {r.n} gasto{r.n!==1?'s':''}</div>
+                    </div>
+                    <button onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(r.client)}} style={{...chipBtn('greenSolid'),flexShrink:0}}>Rendir</button>
+                  </div>
+                ))}
+                {rendirPend.length>4&&<div style={{fontSize:10,color:C.coralText,marginTop:7,textAlign:'center'}}>+{rendirPend.length-4} cliente{rendirPend.length-4!==1?'s':''} más</div>}
+              </div>
+            )}
             {respCobranza.length>1&&(
               <div style={{marginBottom:8}}>
                 {respFilter&&<div style={{display:'flex',marginBottom:6}}><button onClick={()=>setRespFilter(null)} style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button></div>}
