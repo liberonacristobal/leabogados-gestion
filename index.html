@@ -2,6 +2,11 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
+  <script>
+    /* Dominio canónico: si caemos en *.vercel.app (p. ej. tras un redirect de OAuth), volvemos a
+       gestion.leabogados.cl conservando ruta, query y hash (los tokens de la sesión viajan en el hash). */
+    (function(){ try{ if(location.hostname.indexOf('.vercel.app')!==-1){ location.replace('https://gestion.leabogados.cl'+location.pathname+location.search+location.hash); } }catch(e){} })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
