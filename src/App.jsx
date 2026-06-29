@@ -2999,7 +2999,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         <div style={{padding:'16px 20px 0'}}>
           <div onClick={onOpenOficina} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
             <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div><div style={{fontSize:10,color:C.muted}}>la firma · sueldos, arriendo, gestión</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div></div>
             <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesOfi)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
             <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
           </div>
@@ -10439,11 +10439,11 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             {isAdmin&&!q.trim()&&!respFilter&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
               const gOfi=(expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
               if(!gOfi.length) return null
-              const ym=new Date().toISOString().slice(0,7); const mesEstr=gOfi.filter(e=>(e.date||'').slice(0,7)===ym&&!esGestionGasto(e)).reduce((a,e)=>a+(e.amount||0),0)
+              const ym=new Date().toISOString().slice(0,7); const mesTot=gOfi.filter(e=>(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
               return (<div onClick={()=>{setOfiLente('estructural');setSelectedClient(ofi)}} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',marginTop:6,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div><div style={{fontSize:10,color:C.muted}}>la firma · sueldos, arriendo, gestión (aparte de los clientes)</div></div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesEstr)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesTot)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
                 <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
               </div>)
             })()}
