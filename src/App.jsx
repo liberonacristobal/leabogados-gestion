@@ -852,7 +852,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
               </div>))}
             </div>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:1,flexShrink:0,position:'sticky',top:70,alignSelf:'flex-start'}}>
-              {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L=>{ const has=!!byLetter[L]; return <span key={L} onClick={has?()=>{const el=document.getElementById(idFor(L));el&&el.scrollIntoView({behavior:'smooth',block:'start'})}:undefined} style={{fontSize:10,fontWeight:has?700:400,color:has?C.accent:'#CBD5DB',cursor:has?'pointer':'default',lineHeight:1.3,padding:'0 1px'}}>{L}</span> })}
+              {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L=>{ const has=!!byLetter[L]; return <span key={L} onClick={has?()=>{const el=document.getElementById(idFor(L));el&&el.scrollIntoView({behavior:'smooth',block:'start'})}:undefined} style={{fontSize:11,fontWeight:has?700:400,color:has?C.accent:'#CBD5DB',cursor:has?'pointer':'default',lineHeight:1.3,padding:'3px 6px'}}>{L}</span> })}
             </div>
           </div>)
         })()}
@@ -13542,7 +13542,7 @@ function ClientsView({clients,sales,billing,setBilling,expenses,tasks,clientEnti
               </div>))}
             </div>
             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:1,flexShrink:0,position:'sticky',top:70,alignSelf:'flex-start'}}>
-              {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L=>{ const has=!!byLetter[L]; return <span key={L} onClick={has?()=>{const el=document.getElementById(idFor(L));el&&el.scrollIntoView({behavior:'smooth',block:'start'})}:undefined} style={{fontSize:10,fontWeight:has?700:400,color:has?C.accent:'#CBD5DB',cursor:has?'pointer':'default',lineHeight:1.3,padding:'0 1px'}}>{L}</span> })}
+              {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L=>{ const has=!!byLetter[L]; return <span key={L} onClick={has?()=>{const el=document.getElementById(idFor(L));el&&el.scrollIntoView({behavior:'smooth',block:'start'})}:undefined} style={{fontSize:11,fontWeight:has?700:400,color:has?C.accent:'#CBD5DB',cursor:has?'pointer':'default',lineHeight:1.3,padding:'3px 6px'}}>{L}</span> })}
             </div>
           </div>)
         })()}

@@ -21,8 +21,8 @@ Rol: experto en experiencia de usuario. Método: recorrido de las vistas princip
 - *Aprendizaje: varias "fallas" de UX vistas solo en captura no eran tales al mirar el código — verificar siempre contra el código antes de afirmar.*
 
 ### P2 — densidad y targets mobile
-- **"Ventas por mes" (Dashboard)**: barras y etiquetas muy pequeñas en iPhone; el dato (`188`, `3.7k`) cuesta leerse. → Subir contraste/tamaño de la barra del mes actual y de su etiqueta; considerar tocar una barra → su detalle (todo clickeable).
-- **Índice A-Z (Clientes)**: target táctil estrecho. → Engrosar la zona tocable.
+- ~~"Ventas por mes" — tocar barra → detalle~~ → **YA estaba**: las barras son clickeables (tap → detalle del mes) y el mes actual ya va en accent+bold. Lo único marginal son las etiquetas a 8px (no se tocó: subirlas arriesga overflow en 12 barras). (Hallazgo de captura corregido contra código.)
+- **Índice A-Z (Clientes)** — target táctil estrecho (~13px) → ✅ HECHO: font 10→11 y padding `0 1px`→`3px 6px`; target ~20px. Aplicado a las dos versiones (admin + limited).
 
 ### Oportunidades de "la herramienta APRENDE" (loops que aún quedan)
 - **Sugerir responsable/área al crear venta** desde el patrón del cliente (quién suele atenderlo).
