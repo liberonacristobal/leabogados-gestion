@@ -2238,7 +2238,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -2989,6 +2989,21 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
               </div>
             </div>
           </div>
+        )
+      })()}
+
+      {/* Acceso directo a Costos de oficina (admin) desde el Dashboard — menos clics a la vista de la firma */}
+      {onOpenOficina&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
+        const ym=new Date().toISOString().slice(0,7); const mesOfi=expenses.filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&(e.date||'').slice(0,7)===ym).reduce((a,e)=>a+(e.amount||0),0)
+        return (
+        <div style={{padding:'16px 20px 0'}}>
+          <div onClick={onOpenOficina} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
+            <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div><div style={{fontSize:10,color:C.muted}}>la firma · sueldos, arriendo, gestión</div></div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesOfi)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
+            <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
+          </div>
+        </div>
         )
       })()}
 
@@ -9120,7 +9135,7 @@ const CATS_OFICINA_BASE = [...CATS_OFICINA_ESTRUCTURAL, 'Otros']   // catálogo 
 const CATS_LEGALES = ['notaria','cbr','diario oficial','registro civil','fondo','otro']
 const _mesLabelOf = m => { const [y,mm]=m.split('-'); const nm=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(mm)]||mm; return `${nm} ${y}` }
 // Pieza 2: panel mensual de Costos de Oficina, por categoría, con NETO = costos (gasto) − recuperos (fondo).
-function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
+function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, onDeshacerRep}){
   // filtro: 'estructural' (admin: sueldos/arriendo) | 'gestion' (equipo: movilización/trámites) | null (todo)
   const [repAjustar,setRepAjustar] = useState(false)
   const [repMontos,setRepMontos] = useState({})
@@ -9166,6 +9181,12 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
         </div>
       </div>
       <div style={{borderTop:`0.5px solid ${C.border}`,marginTop:10,paddingTop:4}}>
+      {ultRep&&ultRep.mes===mes&&onDeshacerRep&&(
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.greenBg,borderRadius:8,padding:'7px 10px',margin:'4px 0 8px'}}>
+          <span style={{fontSize:11,color:C.greenText,fontWeight:600}}>✓ Cargaste {ultRep.n} costo{ultRep.n!==1?'s':''} de {_mesLabelOf(mes)}</span>
+          <button onClick={onDeshacerRep} style={{fontSize:11,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>Deshacer</button>
+        </div>
+      )}
       {yearOpen ? (
         <div>
           <div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.4px',margin:'4px 0'}}>{mes.slice(0,4)} · mes a mes</div>
@@ -9215,11 +9236,13 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
     </div>
   )
 }
-function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[]}) {
+function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened}) {
   const [catMenu,setCatMenu] = useState(null)   // id del gasto de oficina con el menú de categoría abierto
   const [ofiLente,setOfiLente] = useState('estructural')   // vista oficina: 'estructural' (sueldos/arriendo, admin) | 'gestion' (movilización/trámites, equipo)
   const [ofiMesOpen,setOfiMesOpen] = useState(null)   // oficina: meses desplegados en la lista (null = sin tocar → abre solo el más reciente)
   const [selectedClient,setSelectedClient] = useState(null)
+  // Gatillo desde el Dashboard: abrir directo el cliente-oficina (Costos de oficina) en su lente Estructural.
+  useEffect(()=>{ if(openOfi){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi){ setOfiLente('estructural'); setSelectedClient(ofi) } onOfiOpened&&onOfiOpened() } },[openOfi])
   const [notaMenuOpen,setNotaMenuOpen] = useState(false)   // pill "Gastos notariales" desplegada
   const [verArchivadosG,setVerArchivadosG] = useState(false)  // mostrar clientes Terminados en la lista de Gastos
   const [classifyFor,setClassifyFor] = useState(null)   // gasto importado con el menú de clasificación abierto
@@ -9509,14 +9532,21 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Triage de gasto de oficina (Liberona Escala) → personal de un miembro: lo saca del folder de la oficina y queda como personal.
   const esOficina = cid => { const c=clients.find(x=>String(x.id)===String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name||'')) }
   // Repetir los costos fijos del mes anterior en el mes nuevo (sin re-tipear). created_by = admin → quedan estructurales.
+  const [ultRep,setUltRep] = useState(null)   // último "Repetir" (mes + ids creados) para poder Deshacer
   const repetirCostosFijos = async (items, mesISO) => {
     if(!items?.length || !selectedClient) return
     const rows = items.map(it=>({ client_id:selectedClient.id, type:'gasto', amount:Math.round(it.amount||0), concept:it.concept||'Costo de oficina', category:it.category||null, subcategory:it.subcategory||null, date:`${mesISO}-01`, created_by:currentUserName||null }))
     try {
       const { data, error } = await supabase.from('expenses').insert(rows).select()
       if(error){ console.error('repetirCostosFijos',error); return }
-      if(data) setExpenses(p=>[...data, ...p])
+      if(data){ setExpenses(p=>[...data, ...p]); setUltRep({mes:mesISO, ids:data.map(d=>d.id), n:data.length}) }
     } catch(err){ console.error('repetirCostosFijos',err) }
+  }
+  const deshacerRepetir = async () => {
+    if(!ultRep?.ids?.length) return
+    const ids=ultRep.ids
+    try{ await supabase.from('expenses').delete().in('id',ids) }catch(err){ console.error('deshacerRepetir',err) }
+    setExpenses(p=>p.filter(x=>!ids.includes(x.id))); setUltRep(null)
   }
   // Catálogo de categorías de oficina que APRENDE: base + las ya usadas en gastos de la oficina (excluye las legales) + ordenadas.
   const catsOficina = useMemo(()=>{ const s=new Set(CATS_OFICINA_BASE); (expenses||[]).forEach(e=>{ if(esOficina(e.client_id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(e.category) }); return [...s] },[expenses,clients])
@@ -10111,7 +10141,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   <button key={k} onClick={()=>setOfiLente(k)} style={{padding:'3px 10px',borderRadius:6,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'transparent',color:on?C.accent:C.done,fontSize:10,fontWeight:600,cursor:'pointer',lineHeight:1,whiteSpace:'nowrap'}}>{l}</button>
                 )})}
               </div>
-              <OficinaCostPanel expenses={expenses} clientId={selectedClient.id} filtro={ofiLente} onRepetir={repetirCostosFijos}/>
+              <OficinaCostPanel expenses={expenses} clientId={selectedClient.id} filtro={ofiLente} onRepetir={repetirCostosFijos} ultRep={ultRep} onDeshacerRep={deshacerRepetir}/>
             </>)
           }
           return <KpiRow bal={rb.total}/>
@@ -18698,6 +18728,7 @@ export default function App() {
   const handleOpenConciliacion=useCallback((movId)=>{ setConcFocus(movId||null); setTab('conciliacion') },[])
   const [concPend,setConcPend]=useState(0)            // abonos sin conciliar (burbuja del icono de banco en el landing)
   const [openConcProp,setOpenConcProp]=useState(false) // gatillo: abrir el panel de propuesta al entrar a Conciliación
+  const [ofiOpen,setOfiOpen]=useState(false)           // gatillo: abrir el cliente-oficina (Costos de oficina) al entrar a Gastos desde el Dashboard
   // Cuenta de abonos sin conciliar para la burbuja (admin). Re-evalúa al cambiar de tab (tras conciliar y volver).
   useEffect(()=>{ if(userRole!=='admin') return; if(DEMO){ setConcPend(5); return }; let alive=true
     Promise.all([supabase.from('cartola_movimientos').select('id').eq('tipo','abono').eq('es_interno',false), supabase.from('conciliacion').select('movimiento_id')])
@@ -20121,13 +20152,13 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit}/>}
+            {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navOrigin} navOriginLabel={navOrigin?TAB_LABELS[navOrigin]:null} onBackOrigin={handleBackOrigin}/>}
