@@ -92,3 +92,27 @@ Con eso, corro el set en certificación y quedamos a un paso de la autorización
 > Fuentes: SII — *Etapas para ser facturador electrónico*, *Proceso de certificación (software propio/de
 > mercado)*, *Set de pruebas*, *Instructivo técnico de factura electrónica* (sii.cl/factura_electronica).
 > Montos/vigencias y la afectación a IVA, confirmar con el contador.
+
+---
+
+## Anexo — Postulación paso a paso (el Paso A2 en detalle)
+
+**Antes de empezar, ten a mano:**
+- El **certificado digital del representante legal**, instalado en el navegador (Chrome/Edge) o el `.pfx` + contraseña.
+- Hazlo en un **computador** (no celular).
+- Confirma con el contador (rápido): inicio de actividades vigente + primera categoría + sin situaciones pendientes con el SII. Si algo falla, el sistema te frena aquí.
+- Ten claro qué vas a marcar: **software propio** + DTE **34 (factura exenta)** y **61 (nota de crédito)**.
+
+**Pasos:**
+1. Entra a **sii.cl** → **Iniciar sesión**, autenticándote con el **certificado digital** (no la clave tributaria simple; este trámite lo hace el **representante legal** con certificado). El navegador te pedirá elegir el certificado.
+2. **Servicios online** → **Factura electrónica**.
+3. Entra a **"Sistema de facturación propio y de mercado"** (la sección de quienes emiten con su propio software, NO el sistema gratuito del SII).
+4. Abre el enlace de **inscripción / postulación** ("Inscríbase aquí"). Declara emisión con **software propio**.
+5. **Marca los DTE a certificar**: **34 — Factura electrónica exenta** y **61 — Nota de crédito electrónica**. (No marcar 33/39/52.)
+6. **Confirma** → quedas inscrito en el **Ambiente de Certificación y Prueba (Maullín)**.
+7. En esa misma sección aparecen las **"Opciones para el postulante"**: **"Generación de set de pruebas"** (genera/descarga el set), y más adelante "Declarar avance", "Ver estado de postulación", "Intercambio de información", "Upload de muestras impresas", "Declarar cumplimiento de requisitos".
+8. Solicita los **CAF de certificación** para el 34 y el 61: Factura electrónica → **"Solicitud de timbraje (CAF)"** → ambiente certificación → descarga los XML.
+
+**Posibles trabas:** si pide "verificación de contribuyente de IVA", eso es para factura **afecta (33)**; como emites **exenta (34)** normalmente no aplica — confírmalo con el contador. El certificado debe estar **vigente** y ser el del **representante legal**.
+
+**Cuando termines, pásame** (canal seguro): el **set de pruebas**, los **CAF de certificación (34 y 61)**, el **N° de resolución** y los **datos del emisor** (RUT, razón social, giro, Acteco, dirección/comuna de origen, sucursal SII).
