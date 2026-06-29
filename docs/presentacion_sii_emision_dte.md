@@ -37,6 +37,14 @@ el cuello de botella; **el SII sí**. Eso es lo que "la presentación al SII" si
 
 ---
 
+## Migración desde el sistema gratuito del SII
+
+El estudio **ya emite por el sistema gratuito del SII**. Migrar al software propio es más corto que partir de cero:
+- Ya es **facturador electrónico con certificado** → se salta la inscripción base; va **directo a certificar el software propio** (postular + set de pruebas, Parte A abajo).
+- **El gratuito sigue operativo durante toda la certificación** — cero interrupción; se factura por el gratuito hasta el día del cambio.
+- **Detalle propio de migrar — continuidad de folios**: al pedir el **CAF de producción**, el SII entrega el rango que **continúa** el último folio usado en el gratuito (lleva la cuenta por tipo de DTE). No se duplican ni se saltan; el contador lo verifica anotando el último folio emitido en el gratuito (34 y 61).
+- **Cutover**: al empezar a emitir desde la app para un tipo de DTE, **dejar de usarlo en el gratuito** (no mezclar folios). El gratuito queda como **contingencia** si el SII está caído.
+
 ## Parte A — El trámite ante el SII (lo hace el estudio / contador en sii.cl)
 
 **Esto corre el reloj. Conviene iniciarlo cuanto antes.** Pasos, en orden:
