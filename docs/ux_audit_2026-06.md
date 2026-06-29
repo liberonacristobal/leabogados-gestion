@@ -27,7 +27,7 @@ Rol: experto en experiencia de usuario. Método: recorrido de las vistas princip
 ### Oportunidades de "la herramienta APRENDE" (loops)
 - **Responsable al crear venta** → ✅ HECHO: al pickear cliente, el RESPONSABLE se autocompleta con el `abogado_responsable` del cliente (manual + import IA); el usuario es respaldo. (Área no se hizo: no existe en el modelo de clientes.)
 - ~~Proactividad de cobranza~~ → **YA existe**: "Qué atender hoy" (panel determinista: facturas vencidas, por cobrar esta semana, caja chica sin liquidar…) + resumen IA. Mejora posible (no bug): hoy está colapsado por defecto — podría auto-expandirse al iniciar el día.
-- **Transparencia del aprendizaje** (PENDIENTE, el grande): vista "qué aprendió la app" (alias RUT→cliente, glosa→categoría/cliente, costo_oficina, costos fijos) editable — construye confianza y permite corregir en un lugar. Es el corazón visible de "la herramienta APRENDE".
+- **Transparencia del aprendizaje** → ✅ HECHO (commit d3ed6b7): **Centro de aprendizaje** "Lo que aprendí" (menú ☰ admin) — `LearningCenter` lee `learnings`, agrupa por tipo con etiquetas claras y cada entrada tiene "Olvidar" (des-aprende). Es el corazón visible de "la herramienta APRENDE". Pendiente-si-se-pide: editar (no solo olvidar) + sumar los alias de tablas aparte (cliente_alias, import_aliases).
 - **Auto-clasificación de cargos del banco** más allá de costo de oficina (proveedores recurrentes, impuestos) con el patrón ✦ — extender lo de `costo_oficina`.
 
 ## Temas grandes para la próxima versión
