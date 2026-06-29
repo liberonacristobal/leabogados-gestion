@@ -26,9 +26,10 @@ async function sendViaSMTP(to: string, subject: string, html: string) {
   });
   try {
     await client.send({
-      from: `Gestión LE <${GMAIL_USER}>`,
+      from: `Gestion LE <${GMAIL_USER}>`,
       to,
-      subject,
+      // Asunto SOLO ASCII: denomailer rompe el encoded-word RFC 2047 con tildes y el correo llega crudo ("con crush"). El cuerpo HTML conserva las tildes.
+      subject: toAscii(subject),
       html,
     });
   } finally {
