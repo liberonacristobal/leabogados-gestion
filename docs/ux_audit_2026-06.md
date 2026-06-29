@@ -11,8 +11,8 @@ Rol: experto en experiencia de usuario. Método: recorrido de las vistas princip
 
 ## Hallazgos priorizados
 
-### P0 — consistencia de cifras (rigor + confianza)
-- **Formato de monto mezclado en una misma foto**: en Facturación, "Etapas del cobro" muestra `$65M` (abreviado) arriba y `$65.000.000` (completo) en el vencido/al-día anidado. Romper la lectura de un número que es PARTE de otro daña la confianza (regla "rigor matemático" + canon). → Definir UNA regla de formato por contexto (hero abreviado `fmtShort`; detalle también abreviado o ambos completos, pero no mezclar dentro de la misma foto). Barrer las demás fotos.
+### P0 — consistencia de cifras (rigor + confianza) — ✅ HECHO (commit pendiente)
+- **Formato de monto mezclado en una misma foto**: en Facturación, "Etapas del cobro" mostraba `$65M` (abreviado) arriba y `$65.000.000` (completo) en el vencido/al-día anidado. → **Resuelto**: el anidado pasa a `fmtShort` (alineado con el resto de la app, ej. mini Cobranza). **Regla única que emergió**: *fotos/KPIs resumen → `fmtShort`; listas/filas de detalle → `fmt` (completo, exacto)*. Las demás `fmt` que quedan son filas de listas (correcto). Pendiente-si-se-pide: consistencia CROSS-foto (algunas fotos usan `fmt`/`fmtMon`, otras `fmtShort`) — es un sweep mayor, no un bug dentro de una foto.
 
 ### P1 — claridad y feedback
 - **Empty states pobres**: "Pipeline · 0 propuestas · —" (Ventas) y similares son cajas vacías sin guía. → Empty state que oriente la acción ("Sin propuestas — crea una con + Nueva propuesta").

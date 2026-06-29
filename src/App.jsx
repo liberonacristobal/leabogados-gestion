@@ -6215,11 +6215,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <div style={{marginTop:12,paddingTop:11,borderTop:`0.5px solid ${C.border}`,display:'flex',gap:9}}>
                 <div onClick={()=>irAEstado('vencido')} style={{flex:1,background:C.overdueBg,borderRadius:9,padding:'8px 11px',cursor:'pointer'}}>
                   <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='alert' s={12} c={C.overdue}/><span style={{fontSize:8,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>De eso, vencido</span></div>
-                  <div style={{fontSize:17,fontWeight:700,color:C.overdueText}}>{fmt(venAll)}</div>
+                  <div style={{fontSize:17,fontWeight:700,color:C.overdueText}}>{fmtShort(venAll)}</div>
                 </div>
                 <div onClick={()=>irAEstado('emitidas')} style={{flex:1,background:C.azulBg,borderRadius:9,padding:'8px 11px',cursor:'pointer'}}>
                   <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:8,color:C.accent,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Al día</span></div>
-                  <div style={{fontSize:17,fontWeight:700,color:C.accent}}>{fmt(porCobrar-venAll)}</div>
+                  <div style={{fontSize:17,fontWeight:700,color:C.accent}}>{fmtShort(porCobrar-venAll)}</div>
                 </div>
               </div>
             </div>
