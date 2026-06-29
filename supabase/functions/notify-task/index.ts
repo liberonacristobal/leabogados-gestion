@@ -15,7 +15,7 @@ const EMAILS: Record<string, string> = {
 };
 
 // Envío por SMTP robusto (denomailer) — reemplaza la implementación a mano que fallaba con "Bad resource ID".
-async function sendViaSMTP(to: string, subject: string, html: string) {
+async function sendViaSMTP(to: string, subject: string, html: string, fromName = "Liberona Escala Abogados", replyTo?: string) {
   const client = new SMTPClient({
     connection: {
       hostname: "smtp.gmail.com",
@@ -25,13 +25,10 @@ async function sendViaSMTP(to: string, subject: string, html: string) {
     },
   });
   try {
-    await client.send({
-      from: `Gestion LE <${GMAIL_USER}>`,
-      to,
-      // Asunto SOLO ASCII: denomailer rompe el encoded-word RFC 2047 con tildes y el correo llega crudo ("con crush"). El cuerpo HTML conserva las tildes.
-      subject: toAscii(subject),
-      html,
-    });
+    // From y Asunto SOLO ASCII (denomailer rompe el encoded-word RFC 2047 con tildes → correo crudo "con crush"). El cuerpo HTML conserva las tildes.
+    const msg: Record<string, unknown> = { from: `${toAscii(fromName)} <${GMAIL_USER}>`, to, subject: toAscii(subject), html };
+    if (replyTo) msg.replyTo = replyTo;
+    await client.send(msg);
   } finally {
     await client.close();
   }
@@ -57,7 +54,7 @@ async function sendMail(
     connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } },
   });
   try {
-    const msg: Record<string, unknown> = { from: `Gestion LE <${GMAIL_USER}>`, to, subject: toAscii(subject) };
+    const msg: Record<string, unknown> = { from: `Liberona Escala Abogados <${GMAIL_USER}>`, to, subject: toAscii(subject) };
     if (cc) msg.cc = cc;
     if (html) msg.html = html;
     msg.content = text || (html ? "Ver el contenido en formato HTML." : subject);
@@ -199,7 +196,14 @@ serve(async (req) => {
 </body>
 </html>`;
 
-    await sendViaSMTP(toEmail, subject, html);
+    // Remitente híbrido: la persona que disparó el aviso (más personal, se puede responder) + la marca;
+    // "Liberona Escala Abogados" a secas si es del sistema. Reply-To a esa persona cuando la conocemos.
+    let fromPerson = by;
+    if (tipo === "delegada") fromPerson = task.delegated_by || by;
+    else if (tipo === "terminada") fromPerson = task.who || by;
+    const fromEmail = EMAILS[fromPerson];
+    const fromName = fromEmail ? `${fromPerson} - Liberona Escala Abogados` : "Liberona Escala Abogados";
+    await sendViaSMTP(toEmail, subject, html, fromName, fromEmail);
 
     return new Response(JSON.stringify({ ok: true, sent_to: toEmail }), {
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
