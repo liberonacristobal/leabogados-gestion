@@ -10994,7 +10994,7 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       {selectedClient&&(
         <>
           {saved>0&&<div style={{fontSize:12,color:C.normal,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
-          {balance!=null&&balance<=0&&(
+          {balance!=null&&balance<=0&&!(selectedClient.is_internal||/liberona\s+escala/i.test(selectedClient.name||''))&&(
             <div style={{fontSize:12,color:C.soonText,background:'#FFF8E1',border:`1px solid #FAC775`,borderRadius:8,padding:'9px 11px',marginBottom:10,lineHeight:1.4}}>
               Estás ingresando gastos a un cliente <b>sin fondos</b>. Pídele a Erasmo o Cristóbal que soliciten fondos a <b>{selectedClient.name}</b>.
             </div>
