@@ -16942,6 +16942,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [ofiSub,setOfiSub] = useState('')        // subcategoría opcional del costo de oficina
   const [cargoCliLearn,setCargoCliLearn] = useState({})  // glosaKey → client_id aprendido (cargo por cuenta de cliente)
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
+  const [costoOfiLearn,setCostoOfiLearn] = useState({})  // glosaKey → {category, subcategory} aprendido (costo de oficina recurrente: arriendo/sueldos/servicios vienen del banco cada mes)
+  useEffect(()=>{ supabase.from('learnings').select('key,value,meta').eq('kind','costo_oficina').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]={category:r.value,subcategory:(r.meta&&r.meta.subcategory)||null} }); setCostoOfiLearn(m) },()=>{}) },[])
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
   const fmtM = fmt
   const mesAbbr = iso => { if(!iso) return ''; const [y,mo]=String(iso).slice(0,7).split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return `${M[+mo-1]||mo} ${(y||'').slice(2)}` }
@@ -16971,6 +16973,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cartola_tipo').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setTipoAprendido(m) },()=>{}) },[])
   // Sugerencia de categoría aprendida (cartola_tipo) para un abono sin identificar: mismo RUT o mismo nombre.
   const tipoSugerido = m => { if(m.es_interno||m.categoria) return null; const k=crNormRut(m.rut_contraparte); if(k&&tipoAprendido[k]) return tipoAprendido[k]; const nk=m.nombre_contraparte?'n:'+_stripNom(m.nombre_contraparte):null; if(nk&&tipoAprendido[nk]) return tipoAprendido[nk]; return null }
+  // Costo de oficina aprendido por glosa (el mismo arriendo/sueldo/servicio que vuelve cada mes) → categoría + subcategoría sugeridas.
+  const costoOfiSugerido = m => { if(m.tipo!=='cargo'||m.es_interno||(concByMov[m.id]?.length)) return null; const gk=glosaKey(m.descripcion); return (gk&&costoOfiLearn[gk])||null }
   // Nombres de pila comunes: no alcanzan para identificar (dos "José Miguel" distintos no son el mismo cliente).
   const _NOM_COMUN = new Set(['jose','juan','maria','luis','carlos','miguel','francisco','pedro','pablo','jorge','manuel','andres','felipe','cristobal','catalina','daniel','ignacio','antonio','rodrigo','sebastian','alejandro','fernando','gonzalo','ricardo','roberto','eduardo','patricio','claudio','marcelo','rafael','victor','angel','mario','raul','sergio','hernan','ramon'])
   const nombreIdx = useMemo(()=>{ const idx=[]
@@ -17622,6 +17626,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Gastos Oficina' }).eq('id',mov.id)
       if(me) throw me
       setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Gastos Oficina'}:x))
+      const gko=glosaKey(mov.descripcion); if(gko&&category){ learnPut('costo_oficina',gko,category,{subcategory:subcategory||null}); setCostoOfiLearn(p=>({...p,[gko]:{category,subcategory:subcategory||null}})) }   // aprende: el mismo cargo (arriendo/sueldos) el próximo mes se auto-sugiere
       setOfiFor(null)
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); alert('Error al registrar el costo de oficina: '+e.message) }
     setBusy(null)
@@ -18182,8 +18187,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   if(ofiFor!==m.id){
                     const NO_OFI=['Socio','Proveedor','Notaría','Devolución','Cliente','Gastos Oficina']   // etiquetas que NO son costo de oficina (o son genéricas → piden categoría específica)
                     const catYa = m.categoria && !NO_OFI.includes(m.categoria) && !CATS_LEGALES.includes(String(m.categoria).trim().toLowerCase())   // ya marcado con una categoría de oficina (Contadora, Impuestos, Equipo…) → un toque la registra, sin volver a preguntar
+                    const sugOfi = !catYa && costoOfiSugerido(m)   // glosa aprendida (mismo arriendo/sueldo del mes pasado) → un toque
                     return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                      <button disabled={busy===m.id} onClick={()=> catYa ? costoOficina(m,m.categoria) : (setGcFor(null),setOfiFor(m.id),setOfiCat(null),setOfiSub(''))} title={catYa?`Registrar como costo de oficina · ${m.categoria}`:'Costo operativo de la firma (arriendo, contadora, servicios…); no es de un cliente'} style={{fontSize:10,fontWeight:catYa?700:600,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{catYa?`→ Costo de oficina · ${m.categoria}`:'Costo de oficina…'}</button></div>)
+                      {sugOfi&&<button disabled={busy===m.id} onClick={()=>costoOficina(m,sugOfi.category,sugOfi.subcategory)} title='Aprendido de la glosa — confirma para registrar el costo de oficina' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.greenBg,color:C.greenText,border:'none'}}>✦ ¿{sugOfi.category}{sugOfi.subcategory?` · ${sugOfi.subcategory}`:''}?</button>}
+                      <button disabled={busy===m.id} onClick={()=> catYa ? costoOficina(m,m.categoria) : (setGcFor(null),setOfiFor(m.id),setOfiCat(null),setOfiSub(''))} title={catYa?`Registrar como costo de oficina · ${m.categoria}`:'Costo operativo de la firma (arriendo, contadora, servicios…); no es de un cliente'} style={{fontSize:10,fontWeight:catYa?700:600,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{catYa?`→ Costo de oficina · ${m.categoria}`:(sugOfi?'Otra…':'Costo de oficina…')}</button></div>)
                   }
                   const monto=(m.monto||0)-(m.monto_conciliado||0)
                   return (<div style={{marginTop:6,padding:'8px 9px',background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8}} onClick={e=>e.stopPropagation()}>
