@@ -1195,7 +1195,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   }
 
   const handleNuevaCaja = async() => {
-    if(!newMonto||isNaN(parseInt(newMonto))) return
+    if(!newMonto||!(parseInt(newMonto)>0)) return
     setSaving(true)
     try {
       const patch = { amount: parseInt(newMonto), delivered_at: newFecha, delivered_by: newDeliveredBy||null, notes: newNota||null }
@@ -1696,71 +1696,6 @@ function BottomNav({tab,setTab,overdueN,userRole}) {
 
 const WHO_LIST = ['Cristóbal','Martín','Martina','Erasmo']
 
-function TasksByPerson({tasks,clients}) {
-  const [open,setOpen] = useState(null)
-  const active = tasks?.filter(t=>t.status==='Activo')||[]
-
-  return (
-    <div>
-      {WHO_LIST.map(who=>{
-        const mine = active.filter(t=>isAssignee(t,who))
-          .sort((a,b)=>(daysLeft(a.due)||999)-(daysLeft(b.due)||999))
-        if(mine.length===0) return null
-        const overdueN = mine.filter(t=>urgency(t.due,t.status)==='overdue').length
-        const urgentN  = mine.filter(t=>urgency(t.due,t.status)==='urgent').length
-        const isOpen = open===who
-        return (
-          <div key={who} style={{marginBottom:8,borderRadius:10,border:`1px solid ${C.border}`,overflow:'hidden',background:C.card}}>
-            <button onClick={()=>setOpen(isOpen?null:who)} style={{width:'100%',padding:'12px 14px',background:'none',border:'none',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',textAlign:'left'}}>
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:32,height:32,borderRadius:'50%',background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:C.accent,flexShrink:0}}>
-                  {who[0]}
-                </div>
-                <div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{who}</div>
-                  <div style={{fontSize:11,color:C.muted}}>{mine.length} tarea{mine.length!==1?'s':''} pendiente{mine.length!==1?'s':''}</div>
-                </div>
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                {overdueN>0&&<span style={{fontSize:10,fontWeight:700,color:'#fff',background:C.overdue,borderRadius:10,padding:'2px 7px'}}>{overdueN} venc.</span>}
-                {urgentN>0&&overdueN===0&&<span style={{fontSize:10,fontWeight:700,color:'#fff',background:C.soon,borderRadius:10,padding:'2px 7px'}}>{urgentN} urgente{urgentN!==1?'s':''}</span>}
-                <span style={{fontSize:16,color:C.muted,transform:isOpen?'rotate(180deg)':'none',transition:'transform .2s'}}>▾</span>
-              </div>
-            </button>
-            {isOpen&&(
-              <div style={{borderTop:`1px solid ${C.border}`}}>
-                {mine.map(t=>{
-                  const client=clients.find(c=>c.id===t.client_id)
-                  const u=urgency(t.due,t.status)
-                  const rowColor = u==='overdue'?C.overdueBg:u==='urgent'?'#FFF8E1':u==='soon'?'#FFFBF0':'#fff'
-                  return (
-                    <div key={t.id} style={{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,background:rowColor,display:'flex',gap:10,alignItems:'flex-start'}}>
-                      <div style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0,marginTop:4}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        {/* Línea 1: contexto (cliente · proyecto › subproyecto · días) */}
-                        <div style={{fontSize:11,color:C.muted,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:2}}>
-                          <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name?.split('/')[0].trim()||'—'}</span>
-                          {t.project&&<><span>·</span><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.project}{t.subproject?` › ${t.subproject}`:''}</span></>}
-                          {t.due&&<><span>·</span><DaysBadge due={t.due} status={t.status}/></>}
-                        </div>
-                        {/* Línea 2: la tarea, en cursiva */}
-                        <div style={{fontSize:13,fontWeight:500,fontStyle:'italic',color:C.text}}>{t.title}</div>
-                        {/* Línea 3: nota, más tenue */}
-                        {t.note&&<div style={{fontSize:11,color:C.muted,opacity:.75,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.note}</div>}
-                      </div>
-                      {u==='overdue'&&<span style={{fontSize:10,fontWeight:700,color:C.overdue,flexShrink:0}}>VENCIDA</span>}
-                      {t.due&&(()=>{ const dd=t.due.replace(/-/g,''); const cal=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Vence: '+(t.title||'Tarea')+(client?.name?' · '+client.name.split('/')[0].trim():''))}&dates=${dd}T090000/${dd}T091500&ctz=America/Santiago`; return <a href={cal} target='_blank' rel='noopener noreferrer' title='Agregar a Google Calendar' style={{flexShrink:0,fontSize:13,textDecoration:'none',opacity:.6,marginLeft:2}}>Agendar</a> })()}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 const META_UF = 9800
@@ -2236,7 +2171,7 @@ function computeAgingCartera(billingRows, clientesMap){
   const delta = { monto: totMesAnt>0?(total-totMesAnt):0, pct: totMesAnt>0?Math.round((total-totMesAnt)/totMesAnt*100):0 }
 
   // DSO ponderado por monto
-  const dsoRaw = total>0 ? pend.reduce((a,b)=>a+(b.amount||0)*(diasVenc(b)||0),0)/total : 0
+  const dsoRaw = total>0 ? pend.reduce((a,b)=>a+saldoBill(b)*(diasVenc(b)||0),0)/total : 0
   const dso = Math.max(0, Math.round(dsoRaw))
 
   // Top 5 por cliente, con el tramo más crítico del cliente
@@ -2245,7 +2180,7 @@ function computeAgingCartera(billingRows, clientesMap){
     const cid=b.client_id||'__none__'
     const nombre=(clientesMap&&clientesMap[cid])||b.receptor_name||'Sin cliente'
     if(!byClient[cid]) byClient[cid]={id:cid,nombre,facturas:0,monto:0,rank:0}
-    byClient[cid].monto+=(b.amount||0); byClient[cid].facturas+=1
+    byClient[cid].monto+=saldoBill(b); byClient[cid].facturas+=1
     const k=bucketDe(b), r=k==='overdue'?3:k==='warning'?2:1
     if(r>byClient[cid].rank) byClient[cid].rank=r
   })
@@ -2259,7 +2194,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,onOpenClientFicha}) {
   const yr = currentYear
   const bb = billing
   const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
@@ -2429,12 +2364,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.client_rendered_at&&!e.paid_by_client).map(e=>e.client_id))]
     const propTardias = sales.filter(s=>s.status==='Propuesta'&&s.created_at&&Math.floor((Date.now()-new Date(s.created_at))/86400000)>14)
     const sum = arr => arr.reduce((a,b)=>a+(b.amount||0),0)
+    const sumSaldo = arr => arr.reduce((a,b)=>a+saldoBill(b),0)
     const cnD = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
     const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.client_rendered_at&&!e.paid_by_client).reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot} }).sort((a,b)=>b.v-a.v)
     const items = [
-      vencidas.length&&{sev:0,dot:C.overdue,ico:'cash',lbl:'Facturas vencidas',sub:`${vencidas.length} factura${vencidas.length!==1?'s':''}`,amt:fmtShort(sum(vencidas)),go:'billing',navLbl:`Ver las ${vencidas.length}`,rows:vencidas.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(b.amount)})),iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sum(vencidas))}`},
+      vencidas.length&&{sev:0,dot:C.overdue,ico:'cash',lbl:'Facturas vencidas',sub:`${vencidas.length} factura${vencidas.length!==1?'s':''}`,amt:fmtShort(sumSaldo(vencidas)),go:'billing',navLbl:`Ver las ${vencidas.length}`,rows:vencidas.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b))})),iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sumSaldo(vencidas))}`},
       tareasVenc.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Tareas vencidas',sub:`${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''}`,amt:'',go:'tasks',navLbl:`Ver las ${tareasVenc.length}`,rows:tareasVenc.slice(0,3).map(t=>({name:t.title||'Tarea',val:''})),iaTxt:`${tareasVenc.length} tareas vencidas`},
-      porCobrar7.length&&{sev:1,dot:C.soon,ico:'cash',lbl:'Por cobrar esta semana',sub:`${porCobrar7.length} factura${porCobrar7.length!==1?'s':''}`,amt:fmtShort(sum(porCobrar7)),go:'billing',navLbl:`Ver las ${porCobrar7.length}`,rows:porCobrar7.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(b.amount)})),iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sum(porCobrar7))})`},
+      porCobrar7.length&&{sev:1,dot:C.soon,ico:'cash',lbl:'Por cobrar esta semana',sub:`${porCobrar7.length} factura${porCobrar7.length!==1?'s':''}`,amt:fmtShort(sumSaldo(porCobrar7)),go:'billing',navLbl:`Ver las ${porCobrar7.length}`,rows:porCobrar7.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b))})),iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sumSaldo(porCobrar7))})`},
       cajaSinLiq.length&&{sev:1,dot:C.soon,ico:'wallet',lbl:'Caja chica sin liquidar',sub:`${cajaSinLiq.length} gasto${cajaSinLiq.length!==1?'s':''}`,amt:fmtN(sum(cajaSinLiq)),go:'expenses',navLbl:`Ver los ${cajaSinLiq.length}`,rows:cajaSinLiq.slice(0,3).map(e=>({name:e.concept||'—',val:fmtN(e.amount)})),iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
       rendCli.length&&{sev:2,dot:C.normal,ico:'file',lbl:'Rendiciones por hacer',sub:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,amt:'',go:'expenses',navLbl:`Ver los ${rendCli.length}`,rows:rcRows.slice(0,3),iaTxt:`${rendCli.length} clientes con gastos por rendir`},
       propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:''})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
@@ -2660,7 +2596,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                       {bigDate(t.due,urgencyColor(t.due,t.status))}
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
-                        {(cl||t.project)&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?<span style={{color:C.muted,fontWeight:600}}>{cl.name}</span>:''}{t.project?`${cl?' › ':''}${t.project}`:''}</div>}
+                        {(cl||t.project)&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(cl.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{cl.name}</span>:''}{t.project?`${cl?' › ':''}${t.project}`:''}</div>}
                       </div>
                       <span onClick={e=>{e.stopPropagation();onCompleteTask&&onCompleteTask(t)}} title='Marcar terminada' style={{width:18,height:18,borderRadius:5,border:`1.5px solid #D7DEE3`,flexShrink:0,cursor:'pointer'}}/>
                     </div>
@@ -2863,7 +2799,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                               <div style={{fontSize:12,color:C.text,lineHeight:1.4}}>{explica}</div>
                               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                                 {venta&&<span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>Venta: {venta.title||'—'}</span>}
-                                {cli&&<span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>Cliente: {cli.name}</span>}
+                                {cli&&<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(cli.id)}} style={{fontSize:10,color:C.muted,background:C.bgSoft,borderRadius:6,padding:'3px 8px',cursor:'pointer'}}>Cliente: {cli.name}</span>}
                                 {t.tipo_costo&&<span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>{t.tipo_costo}</span>}
                                 <span style={{fontSize:10,color:C.muted,background:'#F5F7F9',borderRadius:6,padding:'3px 8px'}}>Monto a pagar: {fmt(t.monto)}</span>
                               </div>
@@ -11309,7 +11245,7 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.amount||!f.date} onClick={()=>onSave({...f,amount:parseInt(f.amount)||0,subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -18966,7 +18902,7 @@ export default function App() {
       const esCLP = (f.moneda||'UF')==='CLP'
       // Ventas en CLP: congelar la UF del día (la histórica de la fecha de venta) para que su equivalente en UF NO fluctúe. Al editar, se preserva la ya guardada.
       const ufHoyCache = readUFCache()?.value || null
-      const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)||null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?((parseFloat(f.uf_value)||ufHoyCache)||null):(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)||null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
+      const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)>0?parseFloat(f.amount_uf):null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?((parseFloat(f.uf_value)||ufHoyCache)||null):(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)>0?parseFloat(f.amount_clp):null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
@@ -20287,7 +20223,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
