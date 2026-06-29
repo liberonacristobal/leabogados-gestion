@@ -18196,6 +18196,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     </div>
                     </>) : (<>
                     <div style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginBottom:6}}>Costo de oficina · {fmtM(monto)} · <b>{ofiCat}</b></div>
+                    {(()=>{ const used=[...new Set((expenses||[]).filter(e=>ofiCli&&String(e.client_id)===String(ofiCli.id)&&e.category===ofiCat&&e.subcategory).map(e=>e.subcategory))].sort(); return used.length>0?<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>{used.map(s=>{const on=ofiSub.trim()===s; return <button key={s} onClick={()=>setOfiSub(on?'':s)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:on?C.accent:C.azulBg,color:on?'#fff':C.azulInfo,border:'none'}}>{s}</button>})}</div>:null })()}
                     <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                       <input list='ofi-subcats' value={ofiSub} onChange={e=>setOfiSub(e.target.value)} placeholder='Subcategoría (opcional)…' style={{flex:'1 1 150px',minWidth:0,fontSize:11,padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,outline:'none'}}/>
                       <datalist id='ofi-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
