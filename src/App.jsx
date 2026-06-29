@@ -955,7 +955,7 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
 }
 
 // ─── CAJA CHICA VIEW (limited) ─────────────────────────────────────────────
-function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUserEmail,pettyCash,setPettyCash,rendiciones,setRendiciones}) {
+function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUserEmail,pettyCash,setPettyCash,rendiciones,setRendiciones,onOpenClientFicha}) {
   const me = currentUserName || ''
   const [tab,setTab] = useState('liquidar') // liquidar | historial | caja
   const [selected,setSelected] = useState(new Set())
@@ -1424,7 +1424,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
                 {bigDate(e.date)}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
-                  <div style={{fontSize:10,color:C.done,marginTop:2}}>{client?<span style={{color:C.muted,fontWeight:600}}>{client.name}</span>:(e.category==='Fondo'?null:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>)}{(client||e.category!=='Fondo')?' · ':''}{e.created_by||me}{!e.category?<span style={{color:C.soon,fontWeight:600}}> · sin categoría</span>:''}</div>
+                  <div style={{fontSize:10,color:C.done,marginTop:2}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?null:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>)}{(client||e.category!=='Fondo')?' · ':''}{e.created_by||me}{!e.category?<span style={{color:C.soon,fontWeight:600}}> · sin categoría</span>:''}</div>
                 </div>
                 <div style={{flexShrink:0,marginLeft:8,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
                   <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(e.amount)}</span>
@@ -19850,17 +19850,23 @@ export default function App() {
   const handleDeleteBilling=useCallback(async(id,opts={})=>{
     try{
       const row=billing.find(x=>x.id===id)
+      // Liberar anticipos consumidos contra esta factura (no dejar plata atada a una fila eliminada) — espeja a handleAnularFactura.
+      const antLig=(anticipos||[]).filter(a=>a.billing_id!=null&&String(a.billing_id)===String(id))
+      const antPrev=antLig.map(a=>({id:a.id,estado:a.estado,billing_id:a.billing_id}))
+      if(antLig.length){ const aids=antLig.map(a=>a.id); await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',aids); setAnticipos(p=>p.map(a=>aids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
       await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',id)
       setBilling(p=>p.filter(x=>x.id!==id))
       const u={msg:'Cobro eliminado', onUndo:async()=>{
         await supabase.from('billing').update({deleted_at:null}).eq('id',id)
         if(row) setBilling(p=>p.some(x=>x.id===id)?p:[row,...p])
+        for(const a of antPrev){ await supabase.from('anticipos').update({estado:a.estado,billing_id:a.billing_id}).eq('id',a.id) }
+        if(antPrev.length) setAnticipos(p=>p.map(a=>{ const pr=antPrev.find(x=>x.id===a.id); return pr?{...a,estado:pr.estado,billing_id:pr.billing_id}:a }))
       }}
       if(opts.silent) return u
       setModal(null)
       setUndoToast(u)
     }catch(e){appAlert('Error: '+e.message)}
-  },[billing])
+  },[billing,anticipos])
 
   const handleToggleClientStatus=useCallback(async(client)=>{
     const nuevo = client.status==='Terminado' ? 'Activo' : 'Terminado'
@@ -19910,11 +19916,23 @@ export default function App() {
     const arr=Array.isArray(ids)?ids:[ids]
     if(arr.length===0) return
     try{
+      const rows=billing.filter(x=>arr.includes(x.id))
+      const arrS=arr.map(String)
+      // Liberar anticipos consumidos contra estas facturas (espeja a handleAnularFactura).
+      const antLig=(anticipos||[]).filter(a=>a.billing_id!=null&&arrS.includes(String(a.billing_id)))
+      const antPrev=antLig.map(a=>({id:a.id,estado:a.estado,billing_id:a.billing_id}))
+      if(antLig.length){ const aids=antLig.map(a=>a.id); await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',aids); setAnticipos(p=>p.map(a=>aids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
       const {error}=await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',arr)
       if(error)throw error
       setBilling(p=>p.filter(x=>!arr.includes(x.id)))
+      setUndoToast({msg:`${arr.length} cobro${arr.length!==1?'s':''} eliminado${arr.length!==1?'s':''}`, onUndo:async()=>{
+        await supabase.from('billing').update({deleted_at:null}).in('id',arr)
+        setBilling(p=>{ const have=new Set(p.map(x=>x.id)); return [...rows.filter(r=>!have.has(r.id)),...p] })
+        for(const a of antPrev){ await supabase.from('anticipos').update({estado:a.estado,billing_id:a.billing_id}).eq('id',a.id) }
+        if(antPrev.length) setAnticipos(p=>p.map(a=>{ const pr=antPrev.find(x=>x.id===a.id); return pr?{...a,estado:pr.estado,billing_id:pr.billing_id}:a }))
+      }})
     }catch(e){appAlert('Error: '+e.message)}
-  },[])
+  },[billing,anticipos])
 
   const handleStatusChange=useCallback(async(id,status,paid_at,extra)=>{
     const updates={status}
@@ -20230,7 +20248,7 @@ export default function App() {
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
-            {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})}/> }
+            {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
             {tab==='clients'&&userRole==='admin'&&<ClientsView clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'client',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onProveedores={()=>{}} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navOrigin} navOriginLabel={navOrigin?TAB_LABELS[navOrigin]:null} onBackOrigin={handleBackOrigin}/>}
           </div>
