@@ -13052,9 +13052,9 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
           {[
             ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent,'financiero'],
-            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?C.overdueBg:'#F5F7F9',totalPorCobrar>0?C.overdue:C.muted,'financiero'],
-            ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal,'financiero'],
-            ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?C.overdueBg:C.greenBg,saldoFondos<0?C.overdue:C.normal,null],
+            ['Por cobrar',totalPorCobrar>0?fmtShort(totalPorCobrar):'$0',totalPorCobrar>0?C.overdueBg:'#F5F7F9',totalPorCobrar>0?C.overdue:C.muted,'financiero'],
+            ['Cobrado',fmtShort(cobrado),'#E1F5EE',C.normal,'financiero'],
+            ['Saldo fondos',fmtShort(saldoFondos),saldoFondos<0?C.overdueBg:C.greenBg,saldoFondos<0?C.overdue:C.normal,null],
           ].map(([l,v,bg,col,go])=>(
             <div key={l} onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:bg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`,position:'relative',cursor:go?'pointer':'default'}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>{l}</div>
@@ -13197,7 +13197,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
         {/* Gastos y fondos */}
         <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8}}>
-          {RHdr({icon:'wallet',title:'Gastos y fondos',k:'gastos',summary:`saldo ${fmt(saldoFondos)}`,sumCol:saldoFondos<0?C.overdue:C.normal})}
+          {RHdr({icon:'wallet',title:'Gastos y fondos',k:'gastos',summary:`saldo ${fmtShort(saldoFondos)}`,sumCol:saldoFondos<0?C.overdue:C.normal})}
           {rSec.gastos&&<div style={{padding:'2px 13px 12px'}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-start',marginBottom:8}}>
               <button onClick={()=>onAddFondo(client)} style={chipBtn('green')}>+ Fondo</button>
