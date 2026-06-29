@@ -16357,6 +16357,56 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
   )
 }
 
+// ─── CENTRO DE APRENDIZAJE: lo que la app aprendió (learnings) — visible y borrable (des-aprender un match errado) ──
+function LearningCenter({clients=[], onClose}){
+  const [rows,setRows] = useState(null)
+  useEffect(()=>{
+    if(DEMO){ setRows([
+      {id:'l1',kind:'cargo_cliente',key:'arriendo notaria pago',value:'c1'},
+      {id:'l2',kind:'costo_oficina',key:'arriendo oficina pago',value:'Arriendo',meta:{subcategory:'Local'}},
+      {id:'l3',kind:'costo_oficina',key:'cuenta luz oficina',value:'Servicios',meta:{subcategory:'Luz'}},
+      {id:'l4',kind:'gasto_categoria',key:'uber notaria lascar',value:'Movilización'},
+      {id:'l5',kind:'gasto_cliente',key:'inscripcion conservador',value:'c2'},
+      {id:'l6',kind:'dominio_cliente',key:'andesretail.cl',value:'c1'},
+    ]); return }
+    supabase.from('learnings').select('id,kind,key,value,meta,created_at').order('created_at',{ascending:false}).then(({data})=>setRows(data||[]),()=>setRows([]))
+  },[])
+  const cn = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || '—'
+  const KINDS = {
+    cargo_cliente:   { lbl:'Cargo del banco → cliente',     val:r=>cn(r.value) },
+    costo_oficina:   { lbl:'Cargo → costo de oficina',       val:r=>`${r.value}${r.meta&&r.meta.subcategory?` · ${r.meta.subcategory}`:''}` },
+    gasto_cliente:   { lbl:'Glosa de gasto → cliente',       val:r=>cn(r.value) },
+    gasto_categoria: { lbl:'Glosa de gasto → categoría',     val:r=>r.value },
+    gasto_proyecto:  { lbl:'Glosa de gasto → proyecto',      val:r=>r.value },
+    cartola_tipo:    { lbl:'Pagador del banco → categoría',  val:r=>r.value },
+    dominio_cliente: { lbl:'Dominio de correo → cliente',    val:r=>cn(r.value) },
+  }
+  const grupos = useMemo(()=>{ if(!rows) return null; const g={}; rows.forEach(r=>{ if(!KINDS[r.kind]) return; (g[r.kind]=g[r.kind]||[]).push(r) }); return Object.keys(KINDS).filter(k=>g[k]).map(k=>({k,...KINDS[k],items:g[k]})) },[rows])
+  const keyTxt = r => r.kind==='gasto_proyecto' ? (String(r.key).split('::')[1]||r.key) : r.key
+  const olvidar = async r => { if(!DEMO){ try{ await supabase.from('learnings').delete().eq('id',r.id) }catch(_){} } setRows(p=>(p||[]).filter(x=>x.id!==r.id)) }
+  if(grupos===null) return <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
+  const total = grupos.reduce((a,g)=>a+g.items.length,0)
+  return (
+    <div style={{padding:'2px 2px 8px'}}>
+      <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.5}}>Cada decisión que tomas (asignar un cliente, clasificar un cargo) la app la recuerda para no volver a preguntar. Acá está todo lo aprendido — si un match quedó mal, tócalo en <b>Olvidar</b> y dejará de sugerirlo.</div>
+      {total===0 && <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Todavía no hay aprendizajes guardados. Se irán acumulando con el uso.</div>}
+      {grupos.map(g=>(
+        <div key={g.k} style={{marginBottom:16}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>{g.lbl} · {g.items.length}</div>
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            {g.items.map((r,i)=>(
+              <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.border}`:'none'}}>
+                <div style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:C.muted}}>{keyTxt(r)}</span> <span style={{color:C.done}}>→</span> <b style={{color:C.accent}}>{g.val(r)}</b></div>
+                <button onClick={()=>olvidar(r)} title='Dejar de sugerir esto' style={{flexShrink:0,fontSize:11,color:C.overdueText,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Olvidar</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── PAPELERA (soft-delete): ventas, cobros y gastos eliminados; restaurar o borrar definitivo ──
 function PapeleraModal({clients=[],onClose,onChanged}){
   const [data,setData] = useState(null)   // {ventas, cobros, gastos}
@@ -20121,6 +20171,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>
                   Papelera
                 </div>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'aprendizaje'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2z'/></svg>
+                  Lo que aprendí
+                </div>
                 <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>CUENTA</div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'users'})}} onMouseEnter={e=>e.currentTarget.style.background='#F5F7F9'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
@@ -20222,6 +20276,7 @@ export default function App() {
         {modal?.type==='drive'&&<Modal title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='aprendizaje'&&<Modal title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
