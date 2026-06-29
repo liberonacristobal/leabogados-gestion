@@ -93,7 +93,7 @@ serve(async (req) => {
       await sendMail(to, subject, html);
       sent.push({ name, to, vencidas: venc.length, porVencer: pronto.length });
     }
-    return new Response(JSON.stringify({ ok: true, dryRun, sent, count: sent.length, escaneadas: (tasks || []).length, conVencimiento: (tasks || []).filter((t: any) => t.due).length, tareasError: tasksErr?.message || null }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+    return new Response(JSON.stringify({ ok: true, dryRun, sent, count: sent.length, totalTareas: (tasksRaw || []).length, activas: (tasks || []).length, conVencimiento: (tasks || []).filter((t: any) => t.due).length, tareasError: tasksErr?.message || null }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
   }
