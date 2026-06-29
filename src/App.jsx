@@ -18840,6 +18840,8 @@ export default function App() {
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
     if(userRole==='limited' && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
+    // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
+    if(userRole==='admin' && !VIEWS_PALETTE.admin.some(([id])=>id===tab)) setTab('dashboard')
   },[userRole,tab])
 
   const [clientEntities,setClientEntities] = useState([])
