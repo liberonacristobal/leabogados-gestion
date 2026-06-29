@@ -3,4 +3,8 @@ node_modules
 dist
 *.pfx
 *.p12
+.env
+.env.local
+.env.*.local
 *.bak*
+.claude/launch.json
