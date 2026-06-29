@@ -10,8 +10,9 @@ y le manda UN correo resumen. Si una persona no tiene nada, no recibe correo.
 
 ## Agendar el cron (Supabase → SQL Editor)
 
-Mismas credenciales que los crons del SII que ya corren (`<ANON_KEY>` y `<CRON_SECRET>`).
-12:00 UTC ≈ 8:00 Chile (9:00 en horario de verano).
+La función va SIN verify_jwt (protegida por `CRON_SECRET`), así que NO necesita anon key — solo el secreto.
+`<CRON_SECRET>` = el mismo que ya usan los crons del SII. Para verlo: `select jobname, command from cron.job;`
+y cópialo del body de un job existente. 12:00 UTC ≈ 8:00 Chile (9:00 en horario de verano).
 
 ```sql
 select cron.schedule(
@@ -20,11 +21,8 @@ select cron.schedule(
   $$
   select net.http_post(
     url := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/task-reminders',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer <ANON_KEY>'
-    ),
-    body := jsonb_build_object('secret', '<CRON_SECRET>')
+    headers := '{"Content-Type":"application/json"}'::jsonb,
+    body := '{"secret":"<CRON_SECRET>"}'::jsonb
   );
   $$
 );
@@ -38,7 +36,6 @@ Ver agendados: `select * from cron.job;`
 ```bash
 curl -s -X POST 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/task-reminders' \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer <ANON_KEY>' \
   -d '{"secret":"<CRON_SECRET>","dryRun":true}'
 ```
 
