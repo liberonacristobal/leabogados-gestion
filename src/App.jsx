@@ -9110,11 +9110,13 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
     const byCat={}
     office.filter(e=>(e.date||'').slice(0,7)===mes).forEach(e=>{
       const cat=e.category||'Sin categoría'   // muestra la categoría real (Notaría/CBR/Movilización en Gestión; Sueldos/Arriendo en Estructural)
-      if(!byCat[cat]) byCat[cat]={costo:0,recupero:0}
+      if(!byCat[cat]) byCat[cat]={costo:0,recupero:0,subs:{}}
+      const monto = e.type==='fondo' ? -(e.amount||0) : (!e.no_descuenta_saldo ? (e.amount||0) : 0)
       if(e.type==='fondo') byCat[cat].recupero+=(e.amount||0)
       else if(!e.no_descuenta_saldo) byCat[cat].costo+=(e.amount||0)
+      const sub=(e.subcategory||'').trim(); if(sub&&monto) byCat[cat].subs[sub]=(byCat[cat].subs[sub]||0)+monto
     })
-    return Object.entries(byCat).map(([cat,v])=>({cat,...v,neto:v.costo-v.recupero})).sort((a,b)=>b.neto-a.neto)
+    return Object.entries(byCat).map(([cat,v])=>({cat,...v,neto:v.costo-v.recupero,subList:Object.entries(v.subs).map(([s,n])=>({s,n})).sort((a,b)=>b.n-a.n)})).sort((a,b)=>b.neto-a.neto)
   }, [office,mes])
   const totNeto = cats.reduce((a,c)=>a+c.neto,0)
   const yearNeto = useMemo(()=>{ const yr=mes.slice(0,4); let costo=0,recupero=0; office.filter(e=>(e.date||'').slice(0,4)===yr).forEach(e=>{ if(e.type==='fondo')recupero+=(e.amount||0); else if(!e.no_descuenta_saldo)costo+=(e.amount||0) }); return costo-recupero }, [office,mes])
@@ -9166,16 +9168,24 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir}){
             ))}
           </div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={()=>onRepetir(prevItems.map(it=>({concept:it.concept,category:it.category,amount:repMontos[it.id]??it.amount})), mes)} style={{flex:1,fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'8px',cursor:'pointer'}}>Cargar {_mesLabelOf(mes)} · {fmt(repTot)}</button>
+            <button onClick={()=>onRepetir(prevItems.map(it=>({concept:it.concept,category:it.category,subcategory:it.subcategory,amount:repMontos[it.id]??it.amount})), mes)} style={{flex:1,fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'8px',cursor:'pointer'}}>Cargar {_mesLabelOf(mes)} · {fmt(repTot)}</button>
             <button onClick={()=>setRepAjustar(a=>!a)} style={{fontSize:11.5,fontWeight:600,color:repAjustar?C.accent:C.muted,background:'#fff',border:`1px solid ${repAjustar?C.accent:C.border}`,borderRadius:7,padding:'8px 12px',cursor:'pointer'}}>{repAjustar?'Listo':'Ajustar'}</button>
           </div>
         </div>
       ) : cats.length===0 ? (
         <div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin costos en {_mesLabelOf(mes)}.</div>
       ) : cats.map(c=>(
-          <div key={c.cat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`0.5px solid ${C.border}`}}>
-            <span style={{fontSize:12.5,color:c.cat==='Sin categoría'?C.soonText:C.text,fontWeight:500}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
-            <span style={{fontSize:13,fontWeight:700,color:c.neto<0?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(c.neto)}</span>
+          <div key={c.cat} style={{borderBottom:`0.5px solid ${C.border}`}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0'}}>
+              <span style={{fontSize:12.5,color:c.cat==='Sin categoría'?C.soonText:C.text,fontWeight:500}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
+              <span style={{fontSize:13,fontWeight:700,color:c.neto<0?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(c.neto)}</span>
+            </div>
+            {c.subList.map(s=>(
+              <div key={s.s} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'3px 0 3px 14px'}}>
+                <span style={{fontSize:11.5,color:C.muted}}>· {s.s}</span>
+                <span style={{fontSize:11.5,fontWeight:600,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(s.n)}</span>
+              </div>
+            ))}
           </div>
         ))}
       </div>
@@ -9478,7 +9488,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
   // Repetir los costos fijos del mes anterior en el mes nuevo (sin re-tipear). created_by = admin → quedan estructurales.
   const repetirCostosFijos = async (items, mesISO) => {
     if(!items?.length || !selectedClient) return
-    const rows = items.map(it=>({ client_id:selectedClient.id, type:'gasto', amount:Math.round(it.amount||0), concept:it.concept||'Costo de oficina', category:it.category||null, date:`${mesISO}-01`, created_by:currentUserName||null }))
+    const rows = items.map(it=>({ client_id:selectedClient.id, type:'gasto', amount:Math.round(it.amount||0), concept:it.concept||'Costo de oficina', category:it.category||null, subcategory:it.subcategory||null, date:`${mesISO}-01`, created_by:currentUserName||null }))
     try {
       const { data, error } = await supabase.from('expenses').insert(rows).select()
       if(error){ console.error('repetirCostosFijos',error); return }
@@ -11143,9 +11153,9 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       {!isFondo&&f.category==='Notaria'&&(
         <FloatFld label='OT (notaría)'><input value={f.ot_number||''} onChange={e=>up('ot_number',e.target.value)} placeholder='Ej: OT-447206' style={fInp}/></FloatFld>
       )}
-      {!isFondo&&f.category==='Otro'&&(
+      {!isFondo&&(f.category==='Otro'||CATS_OFICINA_ESTRUCTURAL.includes(f.category))&&(
         <FloatFld label='Subcategoría'>
-          <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Aseo, Cafetería, Suscripción...' style={fInp}/>
+          <input list='expense-subcats' value={f.subcategory||''} onChange={e=>up('subcategory',e.target.value)} placeholder='Ej: Supermercado, Aseo, Insumos...' style={fInp}/>
           <datalist id='expense-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
         </FloatFld>
       )}
@@ -16928,6 +16938,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [gcCli,setGcCli] = useState(null)        // cliente elegido para el gasto por cuenta de cliente
   const [gcEnt,setGcEnt] = useState(null)        // razón social elegida para ese gasto
   const [ofiFor,setOfiFor] = useState(null)      // Pieza 3: cargo en flujo "costo de oficina" (mov id) — elige categoría
+  const [ofiCat,setOfiCat] = useState(null)      // categoría elegida (paso 1) → habilita el paso de subcategoría
+  const [ofiSub,setOfiSub] = useState('')        // subcategoría opcional del costo de oficina
   const [cargoCliLearn,setCargoCliLearn] = useState({})  // glosaKey → client_id aprendido (cargo por cuenta de cliente)
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const TOL = 0                                  // NO hay comisiones bancarias → calce EXACTO; cualquier diferencia = error a revisar
@@ -17593,7 +17605,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const ofiCli = clients.find(c=>c.is_internal || /liberona\s+escala/i.test(c.name||''))
   const catsOficinaConc = useMemo(()=>{ const s=new Set(CATS_OFICINA_BASE); if(ofiCli){ (expenses||[]).forEach(e=>{ if(String(e.client_id)===String(ofiCli.id)&&e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase())) s.add(e.category) }) } return [...s] },[expenses,ofiCli])
   // Costo de OFICINA: el cargo es un gasto operativo de la firma → crea un gasto en el cliente interno con su categoría y concilia (reversible con Deshacer).
-  const costoOficina = async(mov, category)=>{
+  const costoOficina = async(mov, category, subcategory=null)=>{
     if(busy) return
     if(!ofiCli){ alert('No se encontró el cliente interno (Oficina).'); return }
     if(!category){ alert('Elige la categoría del costo de oficina.'); return }
@@ -17601,7 +17613,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     let gasto=null, cr=null
     try{
       const monto=(mov.monto||0)-(mov.monto_conciliado||0)
-      const ins = await supabase.from('expenses').insert({ client_id:ofiCli.id, type:'gasto', amount:monto, date:mov.fecha, concept:(mov.descripcion||'Costo de oficina').slice(0,200), category, created_by:user?.email||null, paid_by_client:false }).select().single()
+      const ins = await supabase.from('expenses').insert({ client_id:ofiCli.id, type:'gasto', amount:monto, date:mov.fecha, concept:(mov.descripcion||'Costo de oficina').slice(0,200), category, subcategory:subcategory||null, created_by:user?.email||null, paid_by_client:false }).select().single()
       if(ins.error) throw ins.error; gasto=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', gasto_id:gasto.id, monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
@@ -18171,16 +18183,26 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     const NO_OFI=['Socio','Proveedor','Notaría','Devolución','Cliente','Gastos Oficina']   // etiquetas que NO son costo de oficina (o son genéricas → piden categoría específica)
                     const catYa = m.categoria && !NO_OFI.includes(m.categoria) && !CATS_LEGALES.includes(String(m.categoria).trim().toLowerCase())   // ya marcado con una categoría de oficina (Contadora, Impuestos, Equipo…) → un toque la registra, sin volver a preguntar
                     return (<div style={{marginTop:5,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
-                      <button disabled={busy===m.id} onClick={()=> catYa ? costoOficina(m,m.categoria) : (setGcFor(null),setOfiFor(m.id))} title={catYa?`Registrar como costo de oficina · ${m.categoria}`:'Costo operativo de la firma (arriendo, contadora, servicios…); no es de un cliente'} style={{fontSize:10,fontWeight:catYa?700:600,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{catYa?`→ Costo de oficina · ${m.categoria}`:'Costo de oficina…'}</button></div>)
+                      <button disabled={busy===m.id} onClick={()=> catYa ? costoOficina(m,m.categoria) : (setGcFor(null),setOfiFor(m.id),setOfiCat(null),setOfiSub(''))} title={catYa?`Registrar como costo de oficina · ${m.categoria}`:'Costo operativo de la firma (arriendo, contadora, servicios…); no es de un cliente'} style={{fontSize:10,fontWeight:catYa?700:600,borderRadius:20,padding:'2px 10px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{catYa?`→ Costo de oficina · ${m.categoria}`:'Costo de oficina…'}</button></div>)
                   }
                   const monto=(m.monto||0)-(m.monto_conciliado||0)
                   return (<div style={{marginTop:6,padding:'8px 9px',background:'#FAFBFC',border:`1px solid ${C.border}`,borderRadius:8}} onClick={e=>e.stopPropagation()}>
+                    {!ofiCat ? (<>
                     <div style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginBottom:6}}>Costo de oficina · {fmtM(monto)} — elige categoría:</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                      {catsOficinaConc.map(c=><button key={c} disabled={busy===m.id} onClick={()=>costoOficina(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'3px 10px',cursor:busy===m.id?'default':'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{c}</button>)}
-                      <button disabled={busy===m.id} onClick={()=>{const nv=prompt('Nueva categoría de oficina:'); if(nv&&nv.trim()) costoOficina(m,nv.trim())}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>+ Nueva…</button>
+                      {catsOficinaConc.map(c=><button key={c} onClick={()=>{setOfiCat(c);setOfiSub('')}} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'3px 10px',cursor:'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>{c}</button>)}
+                      <button onClick={()=>{const nv=prompt('Nueva categoría de oficina:'); if(nv&&nv.trim()){setOfiCat(nv.trim());setOfiSub('')}}} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',cursor:'pointer'}}>+ Nueva…</button>
                       <button onClick={()=>setOfiFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                     </div>
+                    </>) : (<>
+                    <div style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginBottom:6}}>Costo de oficina · {fmtM(monto)} · <b>{ofiCat}</b></div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                      <input list='ofi-subcats' value={ofiSub} onChange={e=>setOfiSub(e.target.value)} placeholder='Subcategoría (opcional)…' style={{flex:'1 1 150px',minWidth:0,fontSize:11,padding:'5px 8px',borderRadius:7,border:`1px solid ${C.border}`,outline:'none'}}/>
+                      <datalist id='ofi-subcats'>{[...new Set((expenses||[]).filter(e=>e.subcategory).map(e=>e.subcategory))].sort().map(s=><option key={s} value={s}/>)}</datalist>
+                      <button disabled={busy===m.id} onClick={()=>{costoOficina(m,ofiCat,ofiSub.trim()||null);setOfiCat(null);setOfiSub('')}} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'4px 13px',cursor:busy===m.id?'default':'pointer',background:C.accent,color:'#fff',border:'none'}}>Crear</button>
+                      <button onClick={()=>{setOfiCat(null);setOfiSub('')}} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>← Cambiar</button>
+                    </div>
+                    </>)}
                   </div>)
                 })()}
                 {/* Fase 3.A — Provisión de gastos → acreditar al fondo del cliente (proponer + confirmar) */}
