@@ -1080,8 +1080,11 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
   }
   const aplicarCategoria = async(e,category) => {
     if(!category) return
-    try{ await supabase.from('expenses').update({category}).eq('id',e.id) }catch(_){}
-    if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,category}:x))
+    const patch={category}
+    // Movilización = siempre de la oficina: si el gasto no tiene cliente, lo asigna al cliente interno (Liberona Escala).
+    if(category==='Movilización' && !e.client_id){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi) patch.client_id=ofi.id }
+    try{ await supabase.from('expenses').update(patch).eq('id',e.id) }catch(_){}
+    if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
     const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_categoria',gk,category)
     setPickCatFor(null)
   }
@@ -19044,6 +19047,8 @@ export default function App() {
       }
       // Atribución automática: registra quién ingresó el gasto (solo al crear, nunca al editar)
       if(f.type==='gasto' && !f.id && !p.created_by) p.created_by = user?.name || null
+      // Movilización = siempre de la oficina (def. del usuario): si no se asignó cliente, va al cliente interno (Liberona Escala). No re-elegir cliente para cada Uber.
+      if(p.type==='gasto' && p.category==='Movilización' && !p.client_id){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi) p.client_id=ofi.id }
       const prev = f.id ? (expenses||[]).find(x=>x.id===f.id) : null   // estado anterior: para reajustar la rendición si cambió el monto
       const{data,error}=await supabase.from('expenses').upsert(p).select().single()
       if(error)throw error
