@@ -1701,7 +1701,7 @@ const WHO_LIST = ['Cristóbal','Martín','Martina','Erasmo']
 const META_UF = 9800
 const META_CLP = 400000000
 
-function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[], embedded=false}) {
+function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[], embedded=false, onOpenClientFicha}) {
   const [horizon,setHorizon] = useState(6)
   const [cfVista,setCfVista] = useState('flujo')   // 'flujo' (3M/6M/12M) | 'dic' (proyección al 31-dic, inline)
   const [activePoint,setActivePoint] = useState(null)
@@ -1834,7 +1834,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
               {projFacturas.map(b=>(
                 <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
+                    <div onClick={b.client_id?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(b.client_id)}):undefined} style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b.client_id?'pointer':'default'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
                     <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
@@ -1897,7 +1897,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
               {activeDet.items.map(({b,tag,col})=>(
                 <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
+                    <div onClick={b.client_id?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(b.client_id)}):undefined} style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b.client_id?'pointer':'default'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
                     <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
@@ -1945,7 +1945,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
               {projFacturas.map(b=>(
                 <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
+                    <div onClick={b.client_id?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(b.client_id)}):undefined} style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b.client_id?'pointer':'default'}}>{clientesMap[b.client_id]||b.receptor_name||'—'}</div>
                     <div style={{fontSize:10,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N°${folioN(b.invoice_no)} · `:''}{b.concept||'—'}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
@@ -2366,14 +2366,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const sum = arr => arr.reduce((a,b)=>a+(b.amount||0),0)
     const sumSaldo = arr => arr.reduce((a,b)=>a+saldoBill(b),0)
     const cnD = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
-    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.client_rendered_at&&!e.paid_by_client).reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot} }).sort((a,b)=>b.v-a.v)
+    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.client_rendered_at&&!e.paid_by_client).reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot,cid} }).sort((a,b)=>b.v-a.v)
     const items = [
-      vencidas.length&&{sev:0,dot:C.overdue,ico:'cash',lbl:'Facturas vencidas',sub:`${vencidas.length} factura${vencidas.length!==1?'s':''}`,amt:fmtShort(sumSaldo(vencidas)),go:'billing',navLbl:`Ver las ${vencidas.length}`,rows:vencidas.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b))})),iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sumSaldo(vencidas))}`},
+      vencidas.length&&{sev:0,dot:C.overdue,ico:'cash',lbl:'Facturas vencidas',sub:`${vencidas.length} factura${vencidas.length!==1?'s':''}`,amt:fmtShort(sumSaldo(vencidas)),go:'billing',navLbl:`Ver las ${vencidas.length}`,rows:vencidas.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b)),cid:b.client_id})),iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sumSaldo(vencidas))}`},
       tareasVenc.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Tareas vencidas',sub:`${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''}`,amt:'',go:'tasks',navLbl:`Ver las ${tareasVenc.length}`,rows:tareasVenc.slice(0,3).map(t=>({name:t.title||'Tarea',val:''})),iaTxt:`${tareasVenc.length} tareas vencidas`},
-      porCobrar7.length&&{sev:1,dot:C.soon,ico:'cash',lbl:'Por cobrar esta semana',sub:`${porCobrar7.length} factura${porCobrar7.length!==1?'s':''}`,amt:fmtShort(sumSaldo(porCobrar7)),go:'billing',navLbl:`Ver las ${porCobrar7.length}`,rows:porCobrar7.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b))})),iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sumSaldo(porCobrar7))})`},
+      porCobrar7.length&&{sev:1,dot:C.soon,ico:'cash',lbl:'Por cobrar esta semana',sub:`${porCobrar7.length} factura${porCobrar7.length!==1?'s':''}`,amt:fmtShort(sumSaldo(porCobrar7)),go:'billing',navLbl:`Ver las ${porCobrar7.length}`,rows:porCobrar7.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b)),cid:b.client_id})),iaTxt:`${porCobrar7.length} cobros vencen esta semana (${fmtShort(sumSaldo(porCobrar7))})`},
       cajaSinLiq.length&&{sev:1,dot:C.soon,ico:'wallet',lbl:'Caja chica sin liquidar',sub:`${cajaSinLiq.length} gasto${cajaSinLiq.length!==1?'s':''}`,amt:fmtN(sum(cajaSinLiq)),go:'expenses',navLbl:`Ver los ${cajaSinLiq.length}`,rows:cajaSinLiq.slice(0,3).map(e=>({name:e.concept||'—',val:fmtN(e.amount)})),iaTxt:`${cajaSinLiq.length} gastos de caja chica sin liquidar`},
       rendCli.length&&{sev:2,dot:C.normal,ico:'file',lbl:'Rendiciones por hacer',sub:`${rendCli.length} cliente${rendCli.length!==1?'s':''}`,amt:'',go:'expenses',navLbl:`Ver los ${rendCli.length}`,rows:rcRows.slice(0,3),iaTxt:`${rendCli.length} clientes con gastos por rendir`},
-      propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:''})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
+      propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:'',cid:s.client_id})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
     ].filter(Boolean).sort((a,b)=>a.sev-b.sev)
     const head = vencidas.length ? `Hoy prioriza la cobranza: ${fmtShort(sum(vencidas))} en ${vencidas.length} factura${vencidas.length!==1?'s':''} vencida${vencidas.length!==1?'s':''}.`
       : tareasVenc.length ? `Tienes ${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''} vencida${tareasVenc.length!==1?'s':''} por resolver.`
@@ -2561,7 +2561,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                         <span style={{color:C.done,flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .15s',display:'inline-flex'}}>{chevSvg}</span>
                       </div>
                       {open&&<div style={{margin:'11px 0 1px 49px',display:'flex',flexDirection:'column',gap:9}}>
-                        {it.rows.map((r,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:12.5}}><span style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>{r.val?<span style={{color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.val}</span>:null}</div>)}
+                        {it.rows.map((r,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:12.5}}><span onClick={r.cid?(ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(r.cid)}):undefined} style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:r.cid?'pointer':'default'}}>{r.name}</span>{r.val?<span style={{color:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.val}</span>:null}</div>)}
                         <span onClick={()=>{onTareasClose&&onTareasClose();setTab(it.go)}} style={{fontSize:11.5,color:C.accent,fontWeight:600,cursor:'pointer'}}>{it.navLbl} →</span>
                       </div>}
                     </div>
@@ -2651,7 +2651,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           </div>
         </div>
         {cobLens==='proyeccion' ? (
-        <CashflowProjection embedded billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales}/>
+        <CashflowProjection embedded billing={billing} moneda={dashMoneda} ufRef={ufRef} clients={clients} sales={sales} onOpenClientFicha={onOpenClientFicha}/>
         ) : (
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:11}}>
@@ -2677,7 +2677,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             return (
               <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',margin:'10px 0 2px'}}>
                 {items.map((it,i)=>(
-                  <div key={it.id} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:i>0?`1px solid ${C.border}`:'none'}}>
+                  <div key={it.id} onClick={()=>it.id&&it.id!=='__none__'&&onOpenClientFicha&&onOpenClientFicha(it.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:(it.id&&it.id!=='__none__')?'pointer':'default'}}>
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.nombre}</div>
                       <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.concept||'—'}{it.dias>0?` · ${it.dias} días vencida`:it.due?` · vence ${fmtDate(it.due)}`:''}</div>
