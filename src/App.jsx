@@ -16354,6 +16354,61 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
 }
 
 // ─── CENTRO DE APRENDIZAJE: lo que la app aprendió (learnings) — visible y borrable (des-aprender un match errado) ──
+// Asistente de redacción legal con IA (claudeCall). Redacta en el FORMATO del estudio; el usuario valida/edita (compuerta humana).
+const ESTUDIO_BRIEF = `Eres redactor del estudio jurídico chileno Liberona Escala Abogados (práctica corporativa y tributaria). Socios: Cristóbal Liberona y Erasmo Escala. Membrete/firma del estudio: "Avenida Kennedy 7900, of. 905, Vitacura, Santiago", "+56 2 2405 3800", "leabogados.cl". Escribe en español jurídico chileno, formal, claro y preciso. El estudio factura SIEMPRE exento de IVA; los honorarios se expresan en UF. Usa SOLO los datos que entregue el usuario; si falta un dato clave (honorarios, alcance, nombres), déjalo marcado como [completar] en vez de inventarlo. Devuelve solo el documento, sin comentarios ni explicaciones.`
+const TIPOS_REDACCION = [
+  {k:'propuesta', lbl:'Propuesta de honorarios', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una PROPUESTA DE SERVICIOS PROFESIONALES con la estructura exacta del estudio:\n· Encabezado: "Propuesta de Servicios Profesionales" + subtítulo con el tipo de asesoría; destinatario(s) y empresa; "PRESENTE"; "Santiago, <fecha>"; "CONFIDENCIAL"; "Ref.: Propuesta de Servicios Legales - <tema>"; "De mi consideración:".\n· Intro: "Liberona Escala Abogados tiene el agrado de someter a su consideración la presente propuesta de servicios profesionales. El objeto de nuestro encargo es...".\n· "I. Alcance de los Servicios" (subsecciones A/B e ítems numerados según corresponda).\n· "II. Honorarios Profesionales" (Honorario Fijo / Retainer en UF; Honorario de Éxito / Success Fee como % si aplica).\n· "III. Forma de Pago" (ej. Retainer 50% a la aceptación y 50% al cierre; "la facturación se realizará mediante factura exenta de IVA").\n· "IV. Condiciones y Exclusiones" (no incluye litigios/arbitrajes salvo indicación expresa; un cambio sustancial de alcance requiere revisión de honorarios; los gastos de terceros —derechos notariales, CBR, certificados— son de cargo del cliente).\n· Cierre cordial + firma de un Socio (Cristóbal Liberona o Erasmo Escala), bajo él "Socio" y "Liberona Escala Abogados".`},
+  {k:'memo', lbl:'Memo', max:2200, sys:`${ESTUDIO_BRIEF}\n\nRedacta un MEMORÁNDUM legal: membrete del estudio ("CONFIDENCIAL", fecha, dirección, teléfono, leabogados.cl), una exposición ordenada de los hechos, el análisis jurídico/tributario aplicable y conclusiones/recomendaciones.`},
+  {k:'minuta', lbl:'Minuta de reunión', max:1600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una MINUTA DE REUNIÓN: encabezado (cliente, fecha, asistentes), puntos tratados numerados, acuerdos/decisiones y próximos pasos con responsables. Concisa y accionable.`},
+  {k:'clausula', lbl:'Cláusula', max:1400, sys:`${ESTUDIO_BRIEF}\n\nRedacta la o las CLÁUSULAS contractuales que pida el usuario, precisas y ejecutables bajo derecho chileno. Si aporta valor, ofrece alternativas de redacción.`},
+  {k:'correo', lbl:'Correo', max:1100, sys:`${ESTUDIO_BRIEF}\n\nRedacta un CORREO profesional (al cliente o contraparte) en el tono del estudio, claro y cordial. Empieza con "Asunto: ...".`},
+]
+function AsistenteRedaccion({clients=[], onClose}){
+  const [tipo,setTipo] = useState('propuesta')
+  const [cliente,setCliente] = useState('')
+  const [datos,setDatos] = useState('')
+  const [draft,setDraft] = useState('')
+  const [loading,setLoading] = useState(false)
+  const [err,setErr] = useState(null)
+  const [copiado,setCopiado] = useState(false)
+  const generar = async()=>{
+    if(!datos.trim()||loading) return
+    setLoading(true); setErr(null)
+    try{
+      const t=TIPOS_REDACCION.find(x=>x.k===tipo)
+      const hoy=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'})
+      const content=`Fecha de hoy: ${hoy}.\n${cliente.trim()?`Destinatario/cliente: ${cliente.trim()}\n`:''}Datos e instrucciones para el documento:\n${datos.trim()}`
+      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:t.max,system:t.sys,messages:[{role:'user',content}]})
+      setDraft(data?.content?.[0]?.text||'(sin respuesta)')
+    }catch(e){ setErr(e?.message||'No se pudo generar.') }
+    setLoading(false)
+  }
+  const copiar = ()=>{ try{ navigator.clipboard.writeText(draft); setCopiado(true); setTimeout(()=>setCopiado(false),1500) }catch(_){} }
+  const inp = {width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
+  return (
+    <div style={{padding:'2px 2px 6px'}}>
+      <div style={{fontSize:11,color:C.muted,marginBottom:12,lineHeight:1.5}}>La IA redacta en el formato del estudio. <b>Tú validas y editas</b> antes de usarlo — nada se envía solo.</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}}>
+        {TIPOS_REDACCION.map(t=>(<button key={t.k} onClick={()=>setTipo(t.k)} style={{fontSize:12,fontWeight:600,padding:'5px 12px',borderRadius:20,border:`1px solid ${tipo===t.k?C.accent:C.border}`,background:tipo===t.k?C.azulBg:'#fff',color:tipo===t.k?C.accent:C.muted,cursor:'pointer'}}>{t.lbl}</button>))}
+      </div>
+      <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Cliente / destinatario (opcional)' style={{...inp,marginBottom:8}} list='red-cli'/>
+      <datalist id='red-cli'>{(clients||[]).map(c=><option key={c.id} value={c.name}/>)}</datalist>
+      <textarea value={datos} onChange={e=>setDatos(e.target.value)} placeholder='Datos e instrucciones: de qué se trata, alcance, honorarios (UF), hechos clave…' rows={4} style={{...inp,resize:'vertical',marginBottom:10}}/>
+      <button onClick={generar} disabled={loading||!datos.trim()} style={{width:'100%',height:40,background:(loading||!datos.trim())?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(loading||!datos.trim())?'default':'pointer'}}>{loading?'Redactando…':'✦ Generar borrador'}</button>
+      {err&&<div style={{fontSize:11,color:C.overdueText,marginTop:8}}>{err}</div>}
+      {draft&&<div style={{marginTop:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Borrador · edítalo</span>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={generar} disabled={loading} style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>Regenerar</button>
+            <button onClick={copiar} style={{fontSize:11,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'3px 11px',cursor:'pointer'}}>{copiado?'Copiado ✓':'Copiar'}</button>
+          </div>
+        </div>
+        <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={16} style={{...inp,resize:'vertical',fontSize:12.5,lineHeight:1.5}}/>
+      </div>}
+    </div>
+  )
+}
 function LearningCenter({clients=[], onClose}){
   const [rows,setRows] = useState(null)
   const [edId,setEdId] = useState(null), [edVal,setEdVal] = useState(''), [edSub,setEdSub] = useState('')
@@ -20222,6 +20277,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>
                   Papelera
                 </div>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redaccion'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>
+                  Redactar con IA
+                </div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'aprendizaje'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2z'/></svg>
                   Lo que aprendí
@@ -20328,6 +20387,7 @@ export default function App() {
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='aprendizaje'&&<Modal title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='redaccion'&&<Modal title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
