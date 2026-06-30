@@ -2111,7 +2111,7 @@ const getScroll = () => { try{ const d=document.getElementById('main-scroll'); r
 const restoreScroll = (s) => { try{ window.scrollTo(0, s?.w||0); const d=document.getElementById('main-scroll'); if(d) d.scrollTop=s?.d||0 }catch(_){} }
 // Estado de UI que SOBREVIVE al desmontaje de la vista (store de módulo): para restaurar el acordeón/drill abierto al volver de un cross-link. Drop-in de useState.
 const _uiStore = {}
-function usePersistedState(key, def){ const [v,setV]=useState(()=> key in _uiStore ? _uiStore[key] : def); const set=useCallback(nv=>setV(prev=>{ const val=typeof nv==='function'?nv(prev):nv; _uiStore[key]=val; return val }),[key]); return [v,set] }
+function usePersistedState(key, def){ const [v,setV]=useState(()=> key in _uiStore ? _uiStore[key] : (typeof def==='function'?def():def)); const set=useCallback(nv=>setV(prev=>{ const val=typeof nv==='function'?nv(prev):nv; _uiStore[key]=val; return val }),[key]); return [v,set] }
 const writeUFCache = (date,value) => { try{ localStorage.setItem(UF_CACHE_KEY, JSON.stringify({date,value})) }catch(_){} }
 // Devuelve {value,date,isToday}. Usa caché si es de hoy; si no, llama a la API y cachea;
 // si la API falla, cae al último valor cacheado (aunque sea viejo); si no hay, {value:null}.
@@ -5391,7 +5391,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [filter,setFilter] = useState('resumen')
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
-  const [groupOpen,setGroupOpen] = useState({})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
+  const [groupOpen,setGroupOpen] = usePersistedState('bill_grp',{})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
   const [rsSel,setRsSel] = useState({})   // filtro por razón social dentro de cada cliente: clientId → entityId | 'all'
   // Navegación por estado: todas las KPI cards / tabs de estado llevan al MISMO acordeón "Por cliente" filtrado por ese estado (vistas coherentes, no listas viejas distintas).
   const ESTADO_MAP={emitidas:['Pendiente','Vencido'],programadas:['Programada'],vencido:['Vencido'],pagado:['Pagado']}
@@ -9208,7 +9208,7 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
 function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onAddFondo,onBulk,onAssignRS,onAssignClientToExpense,setExpenses,setRendiciones,rendiciones,currentUserName,currentUser,isAdmin,expenseAttachments,setExpenseAttachments,onRendicionComplete,billing,setBilling,pettyCash=[],onAssignCajaChica,onAssignGastoRS,onToggleClientStatus,onCreateOccasional,onSaveClientFields,onOpenClientFicha,expenseAudit=[],openOfi,onOfiOpened}) {
   const [catMenu,setCatMenu] = useState(null)   // id del gasto de oficina con el menú de categoría abierto
   const [ofiLente,setOfiLente] = useState('estructural')   // vista oficina: 'estructural' (sueldos/arriendo, admin) | 'gestion' (movilización/trámites, equipo)
-  const [ofiMesOpen,setOfiMesOpen] = useState(null)   // oficina: meses desplegados en la lista (null = sin tocar → abre solo el más reciente)
+  const [ofiMesOpen,setOfiMesOpen] = usePersistedState('ofi_mes',null)   // oficina: meses desplegados en la lista (null = sin tocar → abre solo el más reciente)
   const [selectedClient,setSelectedClient] = useState(null)
   // Gatillo desde el Dashboard: abrir directo el cliente-oficina (Costos de oficina) en su lente Estructural.
   useEffect(()=>{ if(openOfi){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi){ setOfiLente('estructural'); setSelectedClient(ofi) } onOfiOpened&&onOfiOpened() } },[openOfi])
@@ -17020,8 +17020,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [anioF,setAnioF] = useState('todos')       // filtro por año
   const [mesF,setMesF] = useState('todos')         // filtro por mes (01-12)
-  const [concYCol,setConcYCol] = useState(()=>new Set())   // cartola: años colapsados (default: todos abiertos)
-  const [concMOpen,setConcMOpen] = useState(null)          // cartola: meses abiertos en la lista (null = solo el más reciente)
+  const [concYCol,setConcYCol] = usePersistedState('conc_y',()=>new Set())   // cartola: años colapsados (default: todos abiertos)
+  const [concMOpen,setConcMOpen] = usePersistedState('conc_m',null)          // cartola: meses abiertos en la lista (null = solo el más reciente)
   const [respF,setRespF] = useState('todos')       // filtro por abogado responsable del cliente
   const [facChip,setFacChip] = useState(null)      // movimiento cuyo chip de factura está desplegado (Opción A)
   const [facMyc,setFacMyc] = useState(null)        // factura del detalle "Conciliar" (multi) desplegada
