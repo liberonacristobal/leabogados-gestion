@@ -11562,6 +11562,90 @@ function FichaTabs({tab,setTab,role}){
 
 // Tab "Contacto" de la ficha (reutilizado admin/limited): identificación + datos de
 // contacto (edición inline en clients) + personas de contacto (CRUD en tabla contacts)
+// Documentos del cliente en Drive (piezas 2+3): vincula la carpeta (auto por nombre, 1:1) y lista/abre sus archivos vía la edge function `drive`.
+function DocumentosDrive({client, onCount}){
+  const [folder,setFolder] = useState(undefined)   // undefined=cargando · null=sin vincular · {id,name}=vinculada
+  const [files,setFiles] = useState(null)
+  const [busy,setBusy] = useState(false)
+  const [err,setErr] = useState(null)
+  const [q,setQ] = useState('')
+  const [cand,setCand] = useState(null)
+  const msg = (e)=>{ const m=e?.message||''; return /No hay conexión|No autorizado|GOOGLE_OAUTH|configurar|Failed to fetch|NetworkError|Error 40|Error 50/i.test(m) ? 'No se pudo conectar con Drive. Si aún no lo activaste: menú ☰ (admin) → “Conectar Drive (permanente)”.' : (m||'No se pudo leer Drive.') }
+  const cargarArchivos = async(fid)=>{
+    setBusy(true); setErr(null)
+    try{
+      const data = await driveCall({action:'search', q:`'${fid}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`, pageSize:60})
+      const fs=data.files||[]; setFiles(fs); onCount&&onCount(fs.length)
+    }catch(e){ setErr(msg(e)) }
+    setBusy(false)
+  }
+  const vincular = async(f)=>{
+    try{ await supabase.from('client_drive').upsert({client_id:String(client.id), folder_id:f.id, folder_name:f.name, updated_at:new Date().toISOString()},{onConflict:'client_id'}) }catch(_){}
+    setFolder({id:f.id,name:f.name}); setCand(null); cargarArchivos(f.id)
+  }
+  const autoVincular = async()=>{
+    setBusy(true); setErr(null)
+    try{
+      const nm=(client.name||'').replace(/['\\]/g,' ').trim(); if(!nm){ setBusy(false); return }
+      const data = await driveCall({action:'search', q:`mimeType='application/vnd.google-apps.folder' and name='${nm}' and trashed=false`, pageSize:5})
+      const fs=data.files||[]
+      if(fs.length===1) await vincular(fs[0])
+      else if(fs.length>1) setCand(fs)
+    }catch(e){ setErr(msg(e)) }
+    setBusy(false)
+  }
+  const buscarCarpeta = async()=>{
+    if(!q.trim()||busy) return
+    setBusy(true); setErr(null)
+    try{
+      const data = await driveCall({action:'search', q:`mimeType='application/vnd.google-apps.folder' and name contains '${q.replace(/['\\]/g,' ').trim()}' and trashed=false`, pageSize:10})
+      setCand(data.files||[])
+    }catch(e){ setErr(msg(e)) }
+    setBusy(false)
+  }
+  useEffect(()=>{ let alive=true
+    ;(async()=>{
+      setFolder(undefined); setFiles(null); setErr(null); setCand(null); setQ('')
+      try{
+        const {data} = await supabase.from('client_drive').select('folder_id,folder_name').eq('client_id',String(client.id)).maybeSingle()
+        if(!alive) return
+        if(data&&data.folder_id){ setFolder({id:data.folder_id,name:data.folder_name}); cargarArchivos(data.folder_id) }
+        else { setFolder(null); autoVincular() }
+      }catch(_){ if(alive) setFolder(null) }
+    })()
+    return ()=>{ alive=false }
+  },[client.id])
+  const abrir = (f)=>{ try{ window.open('https://drive.google.com/open?id='+f.id,'_blank','noopener') }catch(_){} }
+  const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 9px',fontSize:12,color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
+  return (
+    <div>
+      {folder&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <span style={{fontSize:10.5,color:C.muted}}>Carpeta: <b style={{color:C.text}}>{folder.name}</b></span>
+        <button type='button' onClick={()=>{setFolder(null);setFiles(null);setCand(null)}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>cambiar</button>
+      </div>}
+      {busy&&<div style={{fontSize:11,color:C.muted}}>Buscando…</div>}
+      {err&&<div style={{fontSize:11,color:C.overdueText,marginBottom:6}}>{err}</div>}
+      {folder&&files&&files.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:240,overflowY:'auto'}}>
+        {files.map(f=>(<button key={f.id} type='button' onClick={()=>abrir(f)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',cursor:'pointer',textAlign:'left'}}>
+          <span style={{fontSize:11.5,color:C.accent,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
+          <span style={{fontSize:9.5,color:C.muted,flexShrink:0}}>{f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):''}</span>
+        </button>))}
+      </div>}
+      {folder&&files&&files.length===0&&!busy&&<div style={{fontSize:11,color:C.muted}}>Sin documentos en la carpeta.</div>}
+      {!folder&&!busy&&cand&&cand.length>0&&<div>
+        <div style={{fontSize:10.5,color:C.muted,marginBottom:6}}>Elige la carpeta de este cliente:</div>
+        <div style={{display:'flex',flexDirection:'column',gap:4}}>{cand.map(f=>(<button key={f.id} type='button' onClick={()=>vincular(f)} style={{...inp,textAlign:'left',cursor:'pointer',fontWeight:600,color:C.accent}}>{f.name}</button>))}</div>
+      </div>}
+      {!folder&&!busy&&(!cand||cand.length===0)&&!err&&<div>
+        <div style={{fontSize:10.5,color:C.muted,marginBottom:6}}>No vinculada aún. Busca la carpeta en tu Drive:</div>
+        <div style={{display:'flex',gap:6}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();buscarCarpeta()}}} placeholder={client.name||'Nombre de la carpeta'} style={inp}/>
+          <button type='button' onClick={buscarCarpeta} disabled={busy} style={{fontSize:11.5,fontWeight:600,color:'#fff',background:C.muted,border:'none',borderRadius:7,padding:'6px 11px',cursor:'pointer'}}>Buscar</button>
+        </div>
+      </div>}
+    </div>
+  )
+}
 function ContactoTab({client, entities, onSaveFields}) {
   const fields = ['rut']
   const fromClient = () => fields.reduce((o,k)=>{o[k]=client[k]||'';return o},{})
@@ -11573,6 +11657,7 @@ function ContactoTab({client, entities, onSaveFields}) {
   const set = (k,v)=>setForm(f=>({...f,[k]:v}))
   const [sec,setSec] = useState({})   // colapso de las secciones-icono (colapsadas por defecto)
   const tog = k => setSec(s=>({...s,[k]:!s[k]}))
+  const [docCount,setDocCount] = useState(null)   // nº de documentos del cliente en Drive (para el resumen de la sección)
   const guardar = async ()=>{
     setSavingF(true)
     try{ await onSaveFields(client.id, form) }catch(e){/* avisado en handler */}
@@ -11696,8 +11781,11 @@ function ContactoTab({client, entities, onSaveFields}) {
             )}
           </div>
         </IconSection>
-        <IconSection icon='mail' title='Destinatario de facturas' summary={(()=>{const p=contacts.find(c=>c.principal)||contacts[0];return p?(p.nombre||'').split(/\s+/)[0]:'—'})()} open={sec.dest} onToggle={()=>tog('dest')} last>
+        <IconSection icon='mail' title='Destinatario de facturas' summary={(()=>{const p=contacts.find(c=>c.principal)||contacts[0];return p?(p.nombre||'').split(/\s+/)[0]:'—'})()} open={sec.dest} onToggle={()=>tog('dest')}>
           <DestinatarioFacturasCard client={client} contacts={contacts} embedded/>
+        </IconSection>
+        <IconSection icon='file' title='Documentos (Drive)' summary={docCount==null?null:docCount} open={sec.docs} onToggle={()=>tog('docs')} last>
+          <DocumentosDrive client={client} onCount={setDocCount}/>
         </IconSection>
       </div>
     </div>
