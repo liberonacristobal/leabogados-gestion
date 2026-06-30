@@ -16360,6 +16360,7 @@ const TIPOS_REDACCION = [
   {k:'propuesta', lbl:'Propuesta de honorarios', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una PROPUESTA DE SERVICIOS PROFESIONALES con la estructura exacta del estudio:\n· Encabezado: "Propuesta de Servicios Profesionales" + subtítulo con el tipo de asesoría; destinatario(s) y empresa; "PRESENTE"; "Santiago, <fecha>"; "CONFIDENCIAL"; "Ref.: Propuesta de Servicios Legales - <tema>"; "De mi consideración:".\n· Intro: "Liberona Escala Abogados tiene el agrado de someter a su consideración la presente propuesta de servicios profesionales. El objeto de nuestro encargo es...".\n· "I. Alcance de los Servicios" (subsecciones A/B e ítems numerados según corresponda).\n· "II. Honorarios Profesionales" (Honorario Fijo / Retainer en UF; Honorario de Éxito / Success Fee como % si aplica).\n· "III. Forma de Pago" (ej. Retainer 50% a la aceptación y 50% al cierre; "la facturación se realizará mediante factura exenta de IVA").\n· "IV. Condiciones y Exclusiones" (no incluye litigios/arbitrajes salvo indicación expresa; un cambio sustancial de alcance requiere revisión de honorarios; los gastos de terceros —derechos notariales, CBR, certificados— son de cargo del cliente).\n· Cierre cordial + firma de un Socio (Cristóbal Liberona o Erasmo Escala), bajo él "Socio" y "Liberona Escala Abogados".`},
   {k:'memo', lbl:'Memo', max:2200, sys:`${ESTUDIO_BRIEF}\n\nRedacta un MEMORÁNDUM legal: membrete del estudio ("CONFIDENCIAL", fecha, dirección, teléfono, leabogados.cl), una exposición ordenada de los hechos, el análisis jurídico/tributario aplicable y conclusiones/recomendaciones.`},
   {k:'informe', lbl:'Informe tributario', max:3000, sys:`${ESTUDIO_BRIEF}\n\nRedacta un INFORME / OPINIÓN LEGAL TRIBUTARIA sobre la materia específica que indique el usuario, con la estructura y el estándar del estudio:\n· Encabezado: "Santiago, <fecha>"; destinatario ("Señores <X>", "Presente"); "Ref.: Opinión legal – <materia>"; "De nuestra consideración:".\n· Intro: "En nuestra calidad de asesores legales de <Sociedad>, RUT <X>, ... hemos examinado <la documentación/materia>...".\n· "I. Antecedentes y alcance de la revisión" (hechos, contratos y documentos tenidos a la vista).\n· "II. Marco normativo y análisis" (subsecciones II.1, II.2…; CITA las normas chilenas pertinentes —DL 824 sobre Impuesto a la Renta, DL 825 sobre IVA y sus artículos, Código Tributario, circulares/oficios del SII—; cuando haya requisitos copulativos, analízalos UNO A UNO y cierra cada uno, cuando corresponda, con "Este requisito se encuentra satisfecho").\n· "III. Conclusiones" (numeradas; usa el estándar "en términos jurídicamente razonables").\n· "IV. Reservas y limitaciones" (opinión emitida solo desde una perspectiva jurídica, sobre los antecedentes a la fecha, bajo estándar de razonabilidad jurídica, sin garantía de resultado ni pronunciamiento sobre la actuación futura del SII, en beneficio exclusivo del destinatario).\n· Firma de un Socio (Cristóbal Liberona o Erasmo Escala), "Socio", "Liberona Escala Abogados".\nSALVAGUARDA CRÍTICA: NUNCA inventes números de artículos, oficios, circulares ni jurisprudencia. Si no estás seguro de una cita normativa exacta, escríbela como [verificar cita]. Si falta un dato clave (norma, hechos, RUT), márcalo como [completar].`},
+  {k:'presentacion', lbl:'Presentación', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta el GUION/ESQUEMA de una PRESENTACIÓN profesional del estudio (para convertir a láminas) sobre la materia que indique el usuario. Estructura: portada (título + cliente + fecha); agenda; luego una lámina por sección con el formato "Lámina N — <título>" y 3-5 viñetas concisas; cierra con conclusiones/próximos pasos y una lámina de contacto del estudio. Si es una presentación de servicios/honorarios, refleja el alcance y la estructura de honorarios (UF, factura exenta de IVA). Marca datos faltantes como [completar].`},
   {k:'minuta', lbl:'Minuta de reunión', max:1600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una MINUTA DE REUNIÓN: encabezado (cliente, fecha, asistentes), puntos tratados numerados, acuerdos/decisiones y próximos pasos con responsables. Concisa y accionable.`},
   {k:'clausula', lbl:'Cláusula', max:1400, sys:`${ESTUDIO_BRIEF}\n\nRedacta la o las CLÁUSULAS contractuales que pida el usuario, precisas y ejecutables bajo derecho chileno. Si aporta valor, ofrece alternativas de redacción.`},
   {k:'correo', lbl:'Correo', max:1100, sys:`${ESTUDIO_BRIEF}\n\nRedacta un CORREO profesional (al cliente o contraparte) en el tono del estudio, claro y cordial. Empieza con "Asunto: ...".`},
@@ -16372,13 +16373,22 @@ function AsistenteRedaccion({clients=[], onClose}){
   const [loading,setLoading] = useState(false)
   const [err,setErr] = useState(null)
   const [copiado,setCopiado] = useState(false)
+  const [siiNov,setSiiNov] = useState([])   // radar SII (capa del BI) para cruzar memos/informes/presentaciones
+  const [cruzarSii,setCruzarSii] = useState(true)
+  const SII_TIPOS = ['memo','informe','presentacion']
+  useEffect(()=>{ supabase.from('sii_novedades').select('tipo,numero,titulo,areas,prioridad,resumen,brief,fecha,vigente').then(({data})=>setSiiNov((data||[]).filter(n=>n.vigente!==false)),()=>{}) },[])
   const generar = async()=>{
     if(!datos.trim()||loading) return
     setLoading(true); setErr(null)
     try{
       const t=TIPOS_REDACCION.find(x=>x.k===tipo)
       const hoy=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'})
-      const content=`Fecha de hoy: ${hoy}.\n${cliente.trim()?`Destinatario/cliente: ${cliente.trim()}\n`:''}Datos e instrucciones para el documento:\n${datos.trim()}`
+      let content=`Fecha de hoy: ${hoy}.\n${cliente.trim()?`Destinatario/cliente: ${cliente.trim()}\n`:''}Datos e instrucciones para el documento:\n${datos.trim()}`
+      if(cruzarSii&&SII_TIPOS.includes(tipo)&&siiNov.length){
+        const PRIO={alta:3,media:2,baja:1}
+        const digest=siiNov.slice().sort((a,b)=>(PRIO[b.prioridad]||0)-(PRIO[a.prioridad]||0)).slice(0,18).map(n=>`- ${`${(n.tipo||'').toUpperCase()} ${n.numero||''}`.trim()}: ${n.titulo}${n.areas&&n.areas.length?` (áreas: ${n.areas.join('/')})`:''}${(n.brief||n.resumen)?` — ${(n.brief||n.resumen).slice(0,160)}`:''}`).join('\n')
+        content+=`\n\nRADAR SII VIGENTE DEL ESTUDIO (contexto normativo actual, del módulo BI). Incorpora y CITA (tipo N° número) SOLO las novedades realmente pertinentes a este documento; ignora las que no apliquen. No inventes citas fuera de esta lista ni de la ley aplicable:\n${digest}`
+      }
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:t.max,system:t.sys,messages:[{role:'user',content}]})
       setDraft(data?.content?.[0]?.text||'(sin respuesta)')
     }catch(e){ setErr(e?.message||'No se pudo generar.') }
@@ -16395,6 +16405,12 @@ function AsistenteRedaccion({clients=[], onClose}){
       <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Cliente / destinatario (opcional)' style={{...inp,marginBottom:8}} list='red-cli'/>
       <datalist id='red-cli'>{(clients||[]).map(c=><option key={c.id} value={c.name}/>)}</datalist>
       <textarea value={datos} onChange={e=>setDatos(e.target.value)} placeholder='Datos e instrucciones: de qué se trata, alcance, honorarios (UF), hechos clave…' rows={4} style={{...inp,resize:'vertical',marginBottom:10}}/>
+      {SII_TIPOS.includes(tipo)&&siiNov.length>0&&(
+        <label style={{display:'flex',alignItems:'center',gap:7,fontSize:11.5,color:C.muted,margin:'0 2px 10px',cursor:'pointer'}}>
+          <input type='checkbox' checked={cruzarSii} onChange={e=>setCruzarSii(e.target.checked)} style={{accentColor:C.accent,width:15,height:15}}/>
+          Cruzar con el radar SII del estudio <span style={{color:C.azulInfo,fontWeight:600}}>({siiNov.length} novedades vigentes)</span>
+        </label>
+      )}
       <button onClick={generar} disabled={loading||!datos.trim()} style={{width:'100%',height:40,background:(loading||!datos.trim())?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(loading||!datos.trim())?'default':'pointer'}}>{loading?'Redactando…':'✦ Generar borrador'}</button>
       {err&&<div style={{fontSize:11,color:C.overdueText,marginTop:8}}>{err}</div>}
       {draft&&<div style={{marginTop:14}}>
