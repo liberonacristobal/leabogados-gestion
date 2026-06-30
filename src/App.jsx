@@ -16368,6 +16368,8 @@ const TIPOS_REDACCION = [
 ]
 // Carpetas-biblioteca de precedentes en el Drive del estudio (por tipo de documento). El OAuth de Drive ya está concedido (driveToken).
 const PREC_FOLDERS = { propuesta:'1MQg9_q0l20mjB-LftuYQywTE4T81Kxf3', memo:'1le4boJMW43HsTL0tHHnBsRwjzOc7leH0', informe:'1ETnlJmL324pgaTc6OFlFeKzYGmrCJ3mj', presentacion:'1EHLBt7bqVFvTXk6KHsrHuzR7Ic7bClG0', plan:'1le4boJMW43HsTL0tHHnBsRwjzOc7leH0' }
+// Biblioteca de cláusulas: categorías canónicas (la IA debe usar EXACTAMENTE una de estas al extraer).
+const CATS_CLAUSULA = ['Confidencialidad','No competencia','Declaraciones y garantías','Honorarios y pago','Pacto de accionistas','Testamentos y sucesorio','Protocolo familiar','Indemnidad y responsabilidad','Resolución de conflictos','General']
 // driveGet con auto-refresh: el provider_token de Google vence a la hora; si da 401, limpia el cacheado y reintenta con el de la sesión.
 async function driveGetAuth(url){
   let token=await driveToken()
@@ -16439,6 +16441,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
   const [precKw,setPrecKw]=useState(''); const [precBusy,setPrecBusy]=useState(false); const [precErr,setPrecErr]=useState(null)
   const [precFiles,setPrecFiles]=useState(null); const [precSel,setPrecSel]=useState(null); const [precTxt,setPrecTxt]=useState(''); const [precReading,setPrecReading]=useState(false)
   const [precFromIndex,setPrecFromIndex]=useState(false); const [idxBusy,setIdxBusy]=useState(false); const [idxMsg,setIdxMsg]=useState(null); const [precNeedAuth,setPrecNeedAuth]=useState(false)
+  const [clauMode,setClauMode]=useState('usar'); const [clauLib,setClauLib]=useState(null); const [clauCat,setClauCat]=useState(''); const [clauKw,setClauKw]=useState(''); const [clauBusy,setClauBusy]=useState(false); const [clauDocs,setClauDocs]=useState(null); const [extrBusy,setExtrBusy]=useState(null); const [extrMsg,setExtrMsg]=useState(null)
   useEffect(()=>{ setPrecFiles(null); setPrecSel(null); setPrecTxt(''); setPrecErr(null) },[tipo])   // no arrastrar un precedente de otro tipo
   useEffect(()=>{ try{ const d=JSON.parse(localStorage.getItem('redaccion_draft')||'null'); if(d&&(Date.now()-(d.ts||0))<10*60*1000){ if(d.tipo)setTipo(d.tipo); if(d.cliente!=null)setCliente(d.cliente); if(d.datos!=null)setDatos(d.datos) } localStorage.removeItem('redaccion_draft') }catch(_){} },[])   // volver de Reconectar Drive sin perder lo escrito
   const MIMES_PREC="(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')"
@@ -16503,6 +16506,43 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       try{ if(precFromIndex&&file.usos!=null) await supabase.from('precedentes_index').update({usos:(file.usos||0)+1}).eq('file_id',file.id) }catch(_){}
     }catch(e){ manejarDriveErr(e) }
     setPrecReading(false)
+  }
+  const cargarClausulas = async()=>{
+    setClauBusy(true); setPrecErr(null)
+    try{ const {data}=await supabase.from('clausulas').select('id,titulo,categoria,texto,usos').order('usos',{ascending:false}).order('titulo').limit(300); setClauLib(data||[]) }
+    catch(_){ setClauLib([]) }
+    setClauBusy(false)
+  }
+  useEffect(()=>{ if(tipo==='clausula'&&clauLib===null) cargarClausulas() },[tipo])   // carga la biblioteca al entrar a Cláusula
+  const usarClausula = (c)=>{ setPrecSel({name:c.titulo}); setPrecTxt(c.texto||''); try{ supabase.from('clausulas').update({usos:(c.usos||0)+1}).eq('id',c.id) }catch(_){} }
+  const buscarDocClausula = async()=>{
+    if(clauBusy) return
+    setClauBusy(true); setPrecErr(null); setPrecNeedAuth(false); setExtrMsg(null); setClauDocs(null)
+    try{
+      const kw=(clauKw.trim()||cliente.trim()).replace(/['\\]/g,' ').trim()
+      if(!kw) throw new Error('Escribe qué documento buscar (cliente, materia…).')
+      const q=encodeURIComponent(`trashed=false and (fullText contains '${kw}' or name contains '${kw}') and ${MIMES_PREC}`)
+      const data=await driveGetAuth(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=20`)
+      setClauDocs(data.files||[])
+    }catch(e){ manejarDriveErr(e) }
+    setClauBusy(false)
+  }
+  const extraerClausulas = async(file)=>{
+    if(extrBusy) return
+    setExtrBusy(file.id); setPrecErr(null); setExtrMsg(null)
+    try{
+      const txt = await leerDriveTexto(file)
+      if(!txt||txt.length<200) throw new Error('El documento no tiene texto suficiente.')
+      const sys = `Eres abogado chileno. Del documento legal extrae las CLÁUSULAS REUTILIZABLES (no los datos del caso). Devuelve SOLO un JSON array, sin markdown ni backticks, de objetos {titulo, categoria, texto}. titulo: nombre corto de la cláusula. categoria: EXACTAMENTE una de: ${CATS_CLAUSULA.join(' | ')}. texto: la cláusula redactada de forma reutilizable, reemplazando nombres/RUT/montos/fechas específicos del caso por marcadores [PARTE], [SOCIEDAD], [MONTO], [PLAZO], [FECHA]; conserva la redacción jurídica. Omite recitales y datos puramente del caso. Máximo 12 cláusulas.`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:3500,system:sys,messages:[{role:'user',content:txt.slice(0,14000)}]})
+      const out = data?.content?.[0]?.text||''
+      const m = out.match(/\[[\s\S]*\]/); let arr=[]; try{ arr = m?JSON.parse(m[0]):[] }catch(_){ arr=[] }
+      const rows = (Array.isArray(arr)?arr:[]).filter(c=>c&&c.titulo&&c.texto).map(c=>{ const cat=CATS_CLAUSULA.includes(c.categoria)?c.categoria:'General'; return { clave:`${cat}::${String(c.titulo).slice(0,80)}`.toLowerCase(), titulo:String(c.titulo).slice(0,120), categoria:cat, texto:String(c.texto), fuente:file.name, file_id:file.id, updated_at:new Date().toISOString() } })
+      if(!rows.length) throw new Error('No se encontraron cláusulas reutilizables en ese documento.')
+      const {error}=await supabase.from('clausulas').upsert(rows,{onConflict:'clave'}); if(error) throw error
+      setExtrMsg(`${rows.length} cláusulas guardadas desde "${file.name}".`); await cargarClausulas()
+    }catch(e){ if(e&&(e.code===401||/drive_auth/.test(e.message||''))) setPrecNeedAuth(true); else setPrecErr(e?.message||'No se pudo extraer.') }
+    setExtrBusy(null)
   }
   const generar = async()=>{
     if(!datos.trim()||loading) return
@@ -16572,6 +16612,45 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
           )}
           {precReading&&<div style={{fontSize:10.5,color:C.muted,marginTop:6}}>Leyendo el documento…</div>}
           {precSel&&precTxt&&!precReading&&<div style={{fontSize:10.5,color:C.normal,marginTop:6}}>Usando de base: <b>{precSel.name}</b></div>}
+        </div>
+      )}
+      {tipo==='clausula'&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',margin:'0 0 10px'}}>
+          <div style={{display:'flex',gap:6,marginBottom:8}}>
+            {[['usar','Usar guardadas'],['extraer','Extraer de un documento']].map(([k,l])=>(<button key={k} type='button' onClick={()=>setClauMode(k)} style={{fontSize:11.5,fontWeight:600,padding:'4px 10px',borderRadius:7,border:`1px solid ${clauMode===k?C.accent:C.border}`,background:clauMode===k?C.azulBg:'#fff',color:clauMode===k?C.accent:C.muted,cursor:'pointer'}}>{l}</button>))}
+          </div>
+          {clauMode==='usar'?(
+            <>
+              <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:7}}>
+                {['',...CATS_CLAUSULA].map(cat=>(<button key={cat||'todas'} type='button' onClick={()=>setClauCat(cat)} style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,border:`1px solid ${clauCat===cat?C.accent:C.border}`,background:clauCat===cat?C.azulBg:'#fff',color:clauCat===cat?C.accent:C.muted,cursor:'pointer'}}>{cat||'Todas'}</button>))}
+              </div>
+              <input value={clauKw} onChange={e=>setClauKw(e.target.value)} placeholder='Buscar en tus cláusulas…' style={{...inp,padding:'6px 9px',fontSize:12,marginBottom:7}}/>
+              {clauLib===null?<div style={{fontSize:11,color:C.muted}}>Cargando…</div>:(()=>{ const f=(clauLib||[]).filter(c=>(!clauCat||c.categoria===clauCat)&&(!clauKw.trim()||((c.titulo||'')+' '+(c.texto||'')).toLowerCase().includes(clauKw.toLowerCase()))); return f.length?(
+                <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:200,overflowY:'auto'}}>{f.slice(0,40).map(c=>{ const sel=precSel&&precSel.name===c.titulo; return (
+                  <button key={c.id} type='button' onClick={()=>usarClausula(c)} style={{textAlign:'left',padding:'6px 9px',borderRadius:7,border:`1px solid ${sel?C.accent:C.border}`,background:sel?C.azulBg:'#fff',cursor:'pointer'}}>
+                    <div style={{fontSize:11.5,fontWeight:600,color:sel?C.accent:C.text}}>{sel?'✓ ':''}{c.titulo} <span style={{fontSize:9,fontWeight:600,color:C.muted}}>· {c.categoria}</span></div>
+                    <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.texto}</div>
+                  </button>)})}</div>
+              ):<div style={{fontSize:11,color:C.muted}}>Sin cláusulas guardadas{clauCat?` en ${clauCat}`:''}. Usa "Extraer de un documento".</div> })()}
+            </>
+          ):(
+            <>
+              <div style={{display:'flex',gap:6}}>
+                <input value={clauKw} onChange={e=>setClauKw(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();buscarDocClausula()}}} placeholder='Documento del Drive (cliente, materia…)' style={{...inp,flex:1,padding:'6px 9px',fontSize:12,marginBottom:0}}/>
+                <button type='button' onClick={buscarDocClausula} disabled={clauBusy} style={{fontSize:11.5,fontWeight:600,color:'#fff',background:clauBusy?C.done:C.muted,border:'none',borderRadius:7,padding:'7px 11px',cursor:'pointer'}}>{clauBusy?'…':'Buscar'}</button>
+              </div>
+              {clauDocs&&clauDocs.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:170,overflowY:'auto',marginTop:7}}>{clauDocs.map(f=>(
+                <div key={f.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`}}>
+                  <span style={{fontSize:11.5,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
+                  <button type='button' onClick={()=>extraerClausulas(f)} disabled={!!extrBusy} style={{fontSize:10,fontWeight:700,color:C.accent,background:'none',border:`1px solid ${C.accent}`,borderRadius:6,padding:'3px 8px',cursor:'pointer',whiteSpace:'nowrap'}}>{extrBusy===f.id?'Extrayendo…':'Extraer'}</button>
+                </div>))}</div>}
+              {clauDocs&&clauDocs.length===0&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Sin resultados.</div>}
+              {extrMsg&&<div style={{fontSize:10,color:C.normal,marginTop:6}}>{extrMsg}</div>}
+            </>
+          )}
+          {precNeedAuth&&<div style={{fontSize:11,color:C.text,marginTop:7,background:C.ambarBg,borderRadius:7,padding:'7px 9px',lineHeight:1.4}}>Tu acceso a Drive expiró. <button type='button' onClick={reconectarDrive} style={{fontSize:11,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>Reconectar Drive</button></div>}
+          {precErr&&<div style={{fontSize:10.5,color:C.overdueText,marginTop:6}}>{precErr}</div>}
+          {precSel&&precTxt&&clauMode==='usar'&&<div style={{fontSize:10.5,color:C.normal,marginTop:6}}>Redactando sobre: <b>{precSel.name}</b></div>}
         </div>
       )}
       <button onClick={generar} disabled={loading||!datos.trim()} style={{width:'100%',height:40,background:(loading||!datos.trim())?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(loading||!datos.trim())?'default':'pointer'}}>{loading?'Redactando…':'✦ Generar borrador'}</button>
