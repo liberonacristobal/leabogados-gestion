@@ -9,7 +9,7 @@ import {
   supabase, signInWithGoogle, signOut, onAuthChange, getSession, getUserInfo,
   getClients, getBilling,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
-  getDriveToken, connectDrive, saveDriveToken,
+  getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh,
   upsertClient, deleteClient as dbDeleteClient,
   upsertBilling, updateBillingStatus, DEMO
 } from './supabase'
@@ -39,6 +39,18 @@ const C = {
 // Único puente a Claude. La API key NO vive en el front (sería pública en el bundle):
 // vive como secreto en la edge function claude-proxy, que valida el JWT del equipo.
 // Devuelve el JSON de Anthropic tal cual (el llamador lee data.content[0].text).
+async function driveCall(body){   // puente a la edge function `drive` (acceso permanente vía refresh token)
+  const {data:{session}} = await supabase.auth.getSession()
+  if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
+  const resp = await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/drive',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},
+    body:JSON.stringify(body)
+  })
+  const data = await resp.json().catch(()=>({}))
+  if(!resp.ok) throw new Error(data.error||('Error '+resp.status))
+  return data
+}
 async function claudeCall(body){
   const {data:{session}} = await supabase.auth.getSession()
   if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
@@ -19190,6 +19202,7 @@ export default function App() {
         const u = await loadUserRole(session.user.email)
         setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]})
         if(session.provider_token)saveDriveToken(session.provider_token)
+        if(session.provider_refresh_token)saveDriveRefresh(session.provider_refresh_token, session.user.email)   // conexión permanente de Drive (plan B)
       } else { setUser(null); setUserRole(null); setActualRole(null) }
     })
     return ()=>subscription.unsubscribe()
@@ -20568,6 +20581,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>
                   Redactar con IA
                 </div>
+                {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. ¿Continuar?')) connectDrivePermanente()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
+                  Conectar Drive (permanente)
+                </div>}
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'aprendizaje'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2z'/></svg>
                   Lo que aprendí
