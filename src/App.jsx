@@ -16821,6 +16821,8 @@ function LearningCenter({clients=[], onClose}){
     cartola_tipo:    { lbl:'Pagador del banco → categoría',  val:r=>r.value },
     dominio_cliente: { lbl:'Dominio de correo → cliente',    val:r=>cn(r.value) },
   }
+  const [openG,setOpenG] = useState(()=>new Set())   // grupos colapsados por defecto (acordeón)
+  const togG = k => setOpenG(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const grupos = useMemo(()=>{ if(!rows) return null; const g={}; rows.forEach(r=>{ if(!KINDS[r.kind]) return; (g[r.kind]=g[r.kind]||[]).push(r) }); return Object.keys(KINDS).filter(k=>g[k]).map(k=>({k,...KINDS[k],items:g[k]})) },[rows])
   const keyTxt = r => r.kind==='gasto_proyecto' ? (String(r.key).split('::')[1]||r.key) : r.key
   const olvidar = async r => { if(!DEMO){ try{ await supabase.from('learnings').delete().eq('id',r.id) }catch(_){} } setRows(p=>(p||[]).filter(x=>x.id!==r.id)) }
@@ -16838,10 +16840,14 @@ function LearningCenter({clients=[], onClose}){
     <div style={{padding:'2px 2px 8px'}}>
       <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.5}}>Cada decisión que tomas (asignar un cliente, clasificar un cargo) la app la recuerda para no volver a preguntar. Acá está todo lo aprendido — si un match quedó mal, tócalo en <b>Olvidar</b> y dejará de sugerirlo.</div>
       {total===0 && <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Todavía no hay aprendizajes guardados. Se irán acumulando con el uso.</div>}
-      {grupos.map(g=>(
-        <div key={g.k} style={{marginBottom:16}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:6}}>{g.lbl} · {g.items.length}</div>
-          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+      {grupos.map(g=>{ const op=openG.has(g.k); return (
+        <div key={g.k} style={{marginBottom:8,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+          <div onClick={()=>togG(g.k)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer',background:op?C.bgPanel:'transparent'}}>
+            <span style={{flex:1,fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>{g.lbl}</span>
+            <span style={{fontSize:11,color:C.muted,fontWeight:600}}>{g.items.length}</span>
+            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:op?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+          </div>
+          {op && <div style={{borderTop:`1px solid ${C.border}`}}>
             {g.items.map((r,i)=>(
               <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',flexWrap:'wrap'}}>
                 {edId===r.id ? (
@@ -16861,9 +16867,9 @@ function LearningCenter({clients=[], onClose}){
                 )}
               </div>
             ))}
-          </div>
+          </div>}
         </div>
-      ))}
+      )})}
     </div>
   )
 }
