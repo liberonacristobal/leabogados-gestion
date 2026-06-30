@@ -16365,6 +16365,26 @@ const TIPOS_REDACCION = [
   {k:'clausula', lbl:'Cláusula', max:1400, sys:`${ESTUDIO_BRIEF}\n\nRedacta la o las CLÁUSULAS contractuales que pida el usuario, precisas y ejecutables bajo derecho chileno. Si aporta valor, ofrece alternativas de redacción.`},
   {k:'correo', lbl:'Correo', max:1100, sys:`${ESTUDIO_BRIEF}\n\nRedacta un CORREO profesional (al cliente o contraparte) en el tono del estudio, claro y cordial. Empieza con "Asunto: ...".`},
 ]
+// Carpetas-biblioteca de precedentes en el Drive del estudio (por tipo de documento). El OAuth de Drive ya está concedido (driveToken).
+const PREC_FOLDERS = { propuesta:'1MQg9_q0l20mjB-LftuYQywTE4T81Kxf3', memo:'1le4boJMW43HsTL0tHHnBsRwjzOc7leH0', informe:'1ETnlJmL324pgaTc6OFlFeKzYGmrCJ3mj', presentacion:'1EHLBt7bqVFvTXk6KHsrHuzR7Ic7bClG0' }
+async function leerDriveTexto(token, file){   // lee un archivo de Drive a texto plano (gdoc/docx vía mammoth, pdf vía pdfjs) — mismo patrón que extractFromFile
+  const id=file.id, mt=file.mimeType||'', nm=(file.name||'').toLowerCase()
+  const isGDoc = mt==='application/vnd.google-apps.document'
+  const url = isGDoc
+    ? `https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+    : `https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`
+  const res = await fetch(url,{headers:{Authorization:'Bearer '+token}})
+  if(!res.ok) throw new Error('No se pudo leer el archivo ('+res.status+')')
+  const buf = await res.arrayBuffer()
+  if(!isGDoc && (mt==='application/pdf'||nm.endsWith('.pdf'))){
+    const pdf = await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise
+    let text=''
+    for(let i=1;i<=pdf.numPages;i++){ const page=await pdf.getPage(i); const c=await page.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
+    return text
+  }
+  const r = await mammoth.extractRawText({arrayBuffer:buf})
+  return r.value||''
+}
 function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[], onClose}){
   const [tipo,setTipo] = useState('propuesta')
   const [cliente,setCliente] = useState('')
@@ -16396,6 +16416,34 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     if(porCobrar>0) parts.push(`Saldo por cobrar actual: ${fmt(porCobrar)}.`)
     return parts.join(' ')
   }
+  const [precKw,setPrecKw]=useState(''); const [precBusy,setPrecBusy]=useState(false); const [precErr,setPrecErr]=useState(null)
+  const [precFiles,setPrecFiles]=useState(null); const [precSel,setPrecSel]=useState(null); const [precTxt,setPrecTxt]=useState(''); const [precReading,setPrecReading]=useState(false)
+  useEffect(()=>{ setPrecFiles(null); setPrecSel(null); setPrecTxt(''); setPrecErr(null) },[tipo])   // no arrastrar un precedente de otro tipo
+  const buscarPrec = async()=>{
+    const folder = PREC_FOLDERS[tipo]; if(!folder||precBusy) return
+    setPrecBusy(true); setPrecErr(null); setPrecFiles(null)
+    try{
+      const token = await driveToken()
+      if(!token) throw new Error('Conecta tu Google (cierra sesión y entra de nuevo) para leer el Drive.')
+      const mimes="(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')"
+      const kw=(precKw.trim()||cliente.trim()).replace(/['\\]/g,' ').trim()
+      const filt = kw ? ` and (fullText contains '${kw}' or name contains '${kw}')` : ''
+      const q = encodeURIComponent(`'${folder}' in parents and trashed=false and ${mimes}${filt}`)
+      const data = await driveGet(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=20&supportsAllDrives=true&includeItemsFromAllDrives=true`)
+      setPrecFiles(data.files||[])
+    }catch(e){ setPrecErr(e.message||'No se pudo buscar en Drive.') }
+    setPrecBusy(false)
+  }
+  const elegirPrec = async(file)=>{
+    if(precReading) return
+    setPrecReading(true); setPrecErr(null)
+    try{
+      const token = await driveToken()
+      const txt = (await leerDriveTexto(token, file)).slice(0,7000)
+      setPrecSel(file); setPrecTxt(txt)
+    }catch(e){ setPrecErr(e.message||'No se pudo leer el documento.') }
+    setPrecReading(false)
+  }
   const generar = async()=>{
     if(!datos.trim()||loading) return
     setLoading(true); setErr(null)
@@ -16409,6 +16457,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
         const digest=siiNov.slice().sort((a,b)=>(PRIO[b.prioridad]||0)-(PRIO[a.prioridad]||0)).slice(0,18).map(n=>`- ${`${(n.tipo||'').toUpperCase()} ${n.numero||''}`.trim()}: ${n.titulo}${n.areas&&n.areas.length?` (áreas: ${n.areas.join('/')})`:''}${(n.brief||n.resumen)?` — ${(n.brief||n.resumen).slice(0,160)}`:''}`).join('\n')
         content+=`\n\nRADAR SII VIGENTE DEL ESTUDIO (contexto normativo actual, del módulo BI). Incorpora y CITA (tipo N° número) SOLO las novedades realmente pertinentes a este documento; ignora las que no apliquen. No inventes citas fuera de esta lista ni de la ley aplicable:\n${digest}`
       }
+      if(precTxt&&precSel){ content+=`\n\nPRECEDENTE DEL ESTUDIO (documento real "${precSel.name}"): sigue su ESTRUCTURA, tono y cláusulas como modelo, pero ADAPTA todo al caso actual — NO copies datos, montos ni nombres del precedente.\n---\n${precTxt}\n---` }
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:t.max,system:t.sys,messages:[{role:'user',content}]})
       setDraft(data?.content?.[0]?.text||'(sin respuesta)')
     }catch(e){ setErr(e?.message||'No se pudo generar.') }
@@ -16436,6 +16485,28 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
           <input type='checkbox' checked={cruzarSii} onChange={e=>setCruzarSii(e.target.checked)} style={{accentColor:C.accent,width:15,height:15}}/>
           Cruzar con el radar SII del estudio <span style={{color:C.azulInfo,fontWeight:600}}>({siiNov.length} novedades vigentes)</span>
         </label>
+      )}
+      {PREC_FOLDERS[tipo]&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',margin:'0 0 10px'}}>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <input value={precKw} onChange={e=>setPrecKw(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();buscarPrec()}}} placeholder='Precedentes en tu Drive (cliente, tema…)' style={{...inp,flex:1,padding:'6px 9px',fontSize:12,marginBottom:0}}/>
+            <button type='button' onClick={buscarPrec} disabled={precBusy} style={{fontSize:11.5,fontWeight:600,color:'#fff',background:precBusy?C.done:C.muted,border:'none',borderRadius:7,padding:'7px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{precBusy?'Buscando…':'Buscar'}</button>
+          </div>
+          {precErr&&<div style={{fontSize:10.5,color:C.overdueText,marginTop:6}}>{precErr}</div>}
+          {precFiles&&precFiles.length===0&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Sin resultados en la carpeta.</div>}
+          {precFiles&&precFiles.length>0&&(
+            <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:170,overflowY:'auto',marginTop:7}}>
+              {precFiles.map(f=>{ const sel=precSel&&precSel.id===f.id; return (
+                <button key={f.id} type='button' onClick={()=>elegirPrec(f)} disabled={precReading} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:7,border:`1px solid ${sel?C.accent:C.border}`,background:sel?C.azulBg:'#fff',cursor:'pointer',textAlign:'left'}}>
+                  <span style={{fontSize:11.5,fontWeight:sel?700:500,color:sel?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sel?'✓ ':''}{f.name}</span>
+                  <span style={{fontSize:9.5,color:C.muted,flexShrink:0}}>{new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'})}</span>
+                </button>
+              )})}
+            </div>
+          )}
+          {precReading&&<div style={{fontSize:10.5,color:C.muted,marginTop:6}}>Leyendo el documento…</div>}
+          {precSel&&precTxt&&!precReading&&<div style={{fontSize:10.5,color:C.normal,marginTop:6}}>Usando de base: <b>{precSel.name}</b></div>}
+        </div>
       )}
       <button onClick={generar} disabled={loading||!datos.trim()} style={{width:'100%',height:40,background:(loading||!datos.trim())?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(loading||!datos.trim())?'default':'pointer'}}>{loading?'Redactando…':'✦ Generar borrador'}</button>
       {err&&<div style={{fontSize:11,color:C.overdueText,marginTop:8}}>{err}</div>}
