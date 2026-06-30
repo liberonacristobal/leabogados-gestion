@@ -16418,21 +16418,60 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
   }
   const [precKw,setPrecKw]=useState(''); const [precBusy,setPrecBusy]=useState(false); const [precErr,setPrecErr]=useState(null)
   const [precFiles,setPrecFiles]=useState(null); const [precSel,setPrecSel]=useState(null); const [precTxt,setPrecTxt]=useState(''); const [precReading,setPrecReading]=useState(false)
+  const [precFromIndex,setPrecFromIndex]=useState(false); const [idxBusy,setIdxBusy]=useState(false); const [idxMsg,setIdxMsg]=useState(null)
   useEffect(()=>{ setPrecFiles(null); setPrecSel(null); setPrecTxt(''); setPrecErr(null) },[tipo])   // no arrastrar un precedente de otro tipo
-  const buscarPrec = async()=>{
-    const folder = PREC_FOLDERS[tipo]; if(!folder||precBusy) return
+  const MIMES_PREC="(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')"
+  const buscarPrecLive = async()=>{   // Fase 1: búsqueda en vivo en el Drive (fallback si el índice está vacío/no existe)
+    const folder = PREC_FOLDERS[tipo]; if(!folder) return
+    const token = await driveToken()
+    if(!token) throw new Error('Conecta tu Google (cierra sesión y entra de nuevo) para leer el Drive.')
+    const kw=(precKw.trim()||cliente.trim()).replace(/['\\]/g,' ').trim()
+    const filt = kw ? ` and (fullText contains '${kw}' or name contains '${kw}')` : ''
+    const q = encodeURIComponent(`'${folder}' in parents and trashed=false and ${MIMES_PREC}${filt}`)
+    const data = await driveGet(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=20&supportsAllDrives=true&includeItemsFromAllDrives=true`)
+    setPrecFiles(data.files||[]); setPrecFromIndex(false)
+  }
+  const buscarPrec = async()=>{   // Fase 2: índice primero (instantáneo, ordenado por usos); si no hay, cae a la búsqueda en vivo
+    if(!PREC_FOLDERS[tipo]||precBusy) return
     setPrecBusy(true); setPrecErr(null); setPrecFiles(null)
     try{
-      const token = await driveToken()
-      if(!token) throw new Error('Conecta tu Google (cierra sesión y entra de nuevo) para leer el Drive.')
-      const mimes="(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')"
-      const kw=(precKw.trim()||cliente.trim()).replace(/['\\]/g,' ').trim()
-      const filt = kw ? ` and (fullText contains '${kw}' or name contains '${kw}')` : ''
-      const q = encodeURIComponent(`'${folder}' in parents and trashed=false and ${mimes}${filt}`)
-      const data = await driveGet(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=20&supportsAllDrives=true&includeItemsFromAllDrives=true`)
-      setPrecFiles(data.files||[])
-    }catch(e){ setPrecErr(e.message||'No se pudo buscar en Drive.') }
+      const kw=(precKw.trim()||cliente.trim()).toLowerCase()
+      let rows=null
+      try{
+        const {data,error}=await supabase.from('precedentes_index').select('file_id,title,mime_type,modified_time,usos').eq('tipo',tipo).order('usos',{ascending:false}).order('modified_time',{ascending:false}).limit(300)
+        if(!error&&data&&data.length) rows=data
+      }catch(_){}
+      if(rows){
+        const mapped=rows.map(r=>({id:r.file_id,name:r.title,mimeType:r.mime_type,modifiedTime:r.modified_time,usos:r.usos}))
+        const filt = kw ? mapped.filter(r=>(r.name||'').toLowerCase().includes(kw)) : mapped
+        setPrecFiles(filt.slice(0,30)); setPrecFromIndex(true)
+      } else {
+        await buscarPrecLive()
+      }
+    }catch(e){ setPrecErr(e.message||'No se pudo buscar.') }
     setPrecBusy(false)
+  }
+  const indexarPrecedentes = async()=>{   // recorre las carpetas-biblioteca y puebla precedentes_index (upsert, conserva usos)
+    if(idxBusy) return
+    setIdxBusy(true); setPrecErr(null); setIdxMsg(null)
+    try{
+      const token = await driveToken(); if(!token) throw new Error('Conecta tu Google para indexar el Drive.')
+      let total=0
+      for(const tp of Object.keys(PREC_FOLDERS)){
+        const folder=PREC_FOLDERS[tp]; let pageToken=null
+        do{
+          const q=encodeURIComponent(`'${folder}' in parents and trashed=false and ${MIMES_PREC}`)
+          const url=`https://www.googleapis.com/drive/v3/files?q=${q}&fields=nextPageToken,files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true${pageToken?`&pageToken=${encodeURIComponent(pageToken)}`:''}`
+          const data=await driveGet(token,url)
+          const rows=(data.files||[]).map(f=>({file_id:f.id,title:f.name,tipo:tp,mime_type:f.mimeType,modified_time:f.modifiedTime,updated_at:new Date().toISOString()}))
+          if(rows.length){ const {error}=await supabase.from('precedentes_index').upsert(rows,{onConflict:'file_id'}); if(error) throw error; total+=rows.length }
+          pageToken=data.nextPageToken||null
+        } while(pageToken)
+      }
+      setIdxMsg(`Índice actualizado: ${total} documentos.`)
+      await buscarPrec()
+    }catch(e){ setPrecErr(e.message||'No se pudo indexar.') }
+    setIdxBusy(false)
   }
   const elegirPrec = async(file)=>{
     if(precReading) return
@@ -16441,6 +16480,8 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       const token = await driveToken()
       const txt = (await leerDriveTexto(token, file)).slice(0,7000)
       setPrecSel(file); setPrecTxt(txt)
+      // aprende: el precedente que usas sube en el ranking (se ofrece primero la próxima vez)
+      try{ if(precFromIndex&&file.usos!=null) await supabase.from('precedentes_index').update({usos:(file.usos||0)+1}).eq('file_id',file.id) }catch(_){}
     }catch(e){ setPrecErr(e.message||'No se pudo leer el documento.') }
     setPrecReading(false)
   }
@@ -16492,6 +16533,11 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
             <input value={precKw} onChange={e=>setPrecKw(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();buscarPrec()}}} placeholder='Precedentes en tu Drive (cliente, tema…)' style={{...inp,flex:1,padding:'6px 9px',fontSize:12,marginBottom:0}}/>
             <button type='button' onClick={buscarPrec} disabled={precBusy} style={{fontSize:11.5,fontWeight:600,color:'#fff',background:precBusy?C.done:C.muted,border:'none',borderRadius:7,padding:'7px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{precBusy?'Buscando…':'Buscar'}</button>
           </div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:5}}>
+            <span style={{fontSize:9.5,color:C.muted}}>{precFromIndex?'desde tu índice':precFiles?'búsqueda en vivo':''}</span>
+            <button type='button' onClick={indexarPrecedentes} disabled={idxBusy} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{idxBusy?'Indexando…':'↻ Indexar Drive'}</button>
+          </div>
+          {idxMsg&&<div style={{fontSize:10,color:C.normal,marginTop:3}}>{idxMsg}</div>}
           {precErr&&<div style={{fontSize:10.5,color:C.overdueText,marginTop:6}}>{precErr}</div>}
           {precFiles&&precFiles.length===0&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Sin resultados en la carpeta.</div>}
           {precFiles&&precFiles.length>0&&(
