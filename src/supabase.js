@@ -47,6 +47,25 @@ export const signInWithGoogle = () =>
     },
   })
 
+// Conexión PERMANENTE de Drive: prompt:consent fuerza a Google a emitir un refresh_token,
+// que capturamos en onAuthChange y guardamos en drive_auth. Desde ahí la edge function `drive`
+// renueva el acceso sola, sin reconectar nunca.
+export const connectDrivePermanente = () =>
+  supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent' },
+      scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events',
+      redirectTo: window.location.origin,
+    },
+  })
+
+// Guarda el refresh_token (fila única id=1) para que el servidor renueve el acceso a Drive.
+export const saveDriveRefresh = async (refresh_token, email) => {
+  if (!refresh_token) return
+  try { await supabase.from('drive_auth').upsert({ id: 1, refresh_token, email, updated_at: new Date().toISOString() }, { onConflict: 'id' }) } catch (_) {}
+}
+
 export const signOut = () => supabase.auth.signOut()
 
 export const getSession = () => supabase.auth.getSession()

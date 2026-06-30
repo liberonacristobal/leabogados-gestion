@@ -1,9 +1,9 @@
-// drive-sa — acceso PERMANENTE a Drive vía CUENTA DE SERVICIO (no depende del login de nadie).
+// drive — acceso PERMANENTE a Drive vía REFRESH TOKEN (sin llave de cuenta de servicio).
 //
-// La app usa esto para revisar los documentos de los clientes en sus carpetas de Drive.
-// La cuenta de servicio (secreto GOOGLE_SA_KEY) ve SOLO las carpetas que se le compartan
-// en Drive, y con scope de SOLO LECTURA. Nunca expira para el usuario: el servidor firma
-// un JWT con la llave de la SA y obtiene un token fresco cuando hace falta.
+// Lee el refresh_token guardado en la tabla `drive_auth` (lo dejó la app al "Conectar Drive
+// permanente") y lo cambia por un access_token fresco usando el OAuth client de la app
+// (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET). El token se cachea en memoria ~1h.
+// No depende de que nadie esté logueado: se renueva solo.
 //
 // Seguridad: verify_jwt=true (config.toml) + gate por email @leabogados.cl (igual que claude-proxy).
 //
@@ -13,7 +13,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const SA_RAW = Deno.env.get("GOOGLE_SA_KEY") || "";
+const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
+const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
+const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
 const TEAM = [
   "cl@leabogados.cl", "ee@leabogados.cl", "mc@leabogados.cl",
   "mp@leabogados.cl", "rd@leabogados.cl", "rodrigo@leabogados.cl",
@@ -35,39 +39,28 @@ function emailDelJwt(req: Request): string | null {
   } catch { return null; }
 }
 
-const b64url = (b: Uint8Array) =>
-  btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const b64urlStr = (s: string) =>
-  btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function getRefreshToken(): Promise<string | null> {
+  const r = await fetch(`${SB_URL}/rest/v1/drive_auth?id=eq.1&select=refresh_token`, {
+    headers: { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY },
+  });
+  if (!r.ok) return null;
+  const d = await r.json();
+  return (Array.isArray(d) && d[0]?.refresh_token) || null;
+}
 
-// Token de la cuenta de servicio, cacheado en memoria (~1h).
 let _tok = ""; let _exp = 0;
 async function getToken(): Promise<string> {
   if (_tok && _exp > Date.now() + 60000) return _tok;
-  const sa = JSON.parse(SA_RAW);
-  const now = Math.floor(Date.now() / 1000);
-  const header = b64urlStr(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const claims = b64urlStr(JSON.stringify({
-    iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/drive.readonly",
-    aud: "https://oauth2.googleapis.com/token",
-    exp: now + 3600, iat: now,
-  }));
-  const unsigned = `${header}.${claims}`;
-  const pem = String(sa.private_key || "").replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
-  const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey(
-    "pkcs8", der.buffer, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"],
-  );
-  const sig = new Uint8Array(await crypto.subtle.sign({ name: "RSASSA-PKCS1-v1_5" }, key, new TextEncoder().encode(unsigned)));
-  const jwt = `${unsigned}.${b64url(sig)}`;
+  const rt = await getRefreshToken();
+  if (!rt) throw new Error("No hay conexión de Drive guardada. Conéctalo desde la app (menú → Conectar Drive permanente).");
+  const body = new URLSearchParams({
+    client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: rt, grant_type: "refresh_token",
+  });
   const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${jwt}`,
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
   });
   const d = await r.json();
-  if (!r.ok) throw new Error(d.error_description || d.error || "No se pudo autenticar la cuenta de servicio");
+  if (!r.ok) throw new Error(d.error_description || d.error || "No se pudo renovar el token de Drive");
   _tok = d.access_token; _exp = Date.now() + (d.expires_in || 3600) * 1000;
   return _tok;
 }
@@ -75,11 +68,11 @@ async function getToken(): Promise<string> {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
-  if (!SA_RAW) return json({ error: "Falta configurar GOOGLE_SA_KEY en el servidor" }, 500);
+  if (!CLIENT_ID || !CLIENT_SECRET) return json({ error: "Falta configurar GOOGLE_OAUTH_CLIENT_ID/SECRET en el servidor" }, 500);
 
   const email = emailDelJwt(req);
   if (!email || !TEAM.includes(email)) {
-    console.log(`[drive-sa] acceso denegado (email: ${email || "sin email"})`);
+    console.log(`[drive] acceso denegado (email: ${email || "sin email"})`);
     return json({ error: "No autorizado" }, 403);
   }
 

@@ -299,7 +299,20 @@
       "Bash(Error:)",
       "Bash('Error ')",
       "WebFetch(domain:www.ey.com)",
-      "Bash(cp \"/Users/cristobal.liberona/.claude/projects/-Users-cristobal-liberona-Downloads-leabogados-gestion/7ddacddf-f325-424b-aea4-ffaf948bd6d0/tool-results/webfetch-1782125768347-5z872f.bin\" /tmp/oficio207_2026.pdf && file /tmp/oficio207_2026.pdf)"
+      "Bash(cp \"/Users/cristobal.liberona/.claude/projects/-Users-cristobal-liberona-Downloads-leabogados-gestion/7ddacddf-f325-424b-aea4-ffaf948bd6d0/tool-results/webfetch-1782125768347-5z872f.bin\" /tmp/oficio207_2026.pdf && file /tmp/oficio207_2026.pdf)",
+      "WebFetch(domain:tax.normaviva.cl)",
+      "Bash(npx eslint *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(perl -0pi -e \"s/\\\\['Por emitir',b=>!b\\\\.invoice_no/['Por facturar',b=>!b.invoice_no/g\" src/App.jsx)",
+      "Bash(perl -0pi -e \"s/Pendientes \\\\\\(dentro de plazo\\\\\\)/Por cobrar/g\" src/App.jsx)",
+      "Bash(perl -0pi -e \"s/⚠ Conciliar \\\\\\(ya facturada\\\\\\)/Vincular factura emitida/g\" src/App.jsx)",
+      "Bash(perl -0pi -e \"s/\\\\['Programada','Programadas'\\\\],\\\\['Pendiente','Emitidas'\\\\]/['Programada','Por facturar'],['Pendiente','Por cobrar']/g\" src/App.jsx)",
+      "Bash(xargs -I{} sh -c 'sed -n \"{},$\\(\\( {}+90 \\)\\)p\" src/App.jsx')",
+      "Bash(printf '%s\\\\n' '- [Design system \\(canon codificado\\)]\\(design-system-canon.md\\) — docs/design_system.md: Fase 1 del plan; el canon \\(tokens C, regla única de formato, foto, navegación, componentes, persona, APRENDE, reglas duras\\) en un solo lugar buildable; base para reconstruir vista por vista')",
+      "WebFetch(domain:www.chileatiende.gob.cl)",
+      "Bash(git check-ignore *)",
+      "mcp__09aa9f4b-8883-492c-89e6-128e23255e22__search_files",
+      "mcp__09aa9f4b-8883-492c-89e6-128e23255e22__read_file_content"
     ]
   }
 }

@@ -22,8 +22,8 @@ verify_jwt = true
 import_map = "./functions/claude-proxy/deno.json"
 entrypoint = "./functions/claude-proxy/index.ts"
 
-[functions.drive-sa]
+[functions.drive]
 enabled = true
 verify_jwt = true
-import_map = "./functions/drive-sa/deno.json"
-entrypoint = "./functions/drive-sa/index.ts"
+import_map = "./functions/drive/deno.json"
+entrypoint = "./functions/drive/index.ts"
