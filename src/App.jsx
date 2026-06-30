@@ -16564,6 +16564,33 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     setLoading(false)
   }
   const copiar = ()=>{ try{ navigator.clipboard.writeText(draft); setCopiado(true); setTimeout(()=>setCopiado(false),1500) }catch(_){} }
+  const mdToHtml = (md)=>{   // markdown del borrador → HTML para Word (.doc)
+    const esc = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const inline = s=>{ let x=esc(s); x=x.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>'); x=x.replace(/\*([^*\n]+)\*/g,'<i>$1</i>'); return x }
+    let html='', inUl=false, inOl=false
+    const close=()=>{ if(inUl){html+='</ul>';inUl=false} if(inOl){html+='</ol>';inOl=false} }
+    for(const raw of String(md||'').split('\n')){
+      const l=raw.replace(/\s+$/,''); let m
+      if(/^\s*---+\s*$/.test(l)){ close(); html+='<hr/>'; continue }
+      if(m=l.match(/^###\s+(.*)/)){ close(); html+='<h3>'+inline(m[1])+'</h3>'; continue }
+      if(m=l.match(/^##\s+(.*)/)){ close(); html+='<h2>'+inline(m[1])+'</h2>'; continue }
+      if(m=l.match(/^#\s+(.*)/)){ close(); html+='<h1>'+inline(m[1])+'</h1>'; continue }
+      if(m=l.match(/^\s*[-*•]\s+(.*)/)){ if(inOl){html+='</ol>';inOl=false} if(!inUl){html+='<ul>';inUl=true} html+='<li>'+inline(m[1])+'</li>'; continue }
+      if(m=l.match(/^\s*\d+[.)]\s+(.*)/)){ if(inUl){html+='</ul>';inUl=false} if(!inOl){html+='<ol>';inOl=true} html+='<li>'+inline(m[1])+'</li>'; continue }
+      if(l.trim()===''){ close(); html+='<p></p>'; continue }
+      close(); html+='<p>'+inline(l)+'</p>'
+    }
+    close(); return html
+  }
+  const descargarWord = ()=>{
+    if(!draft) return
+    const t=TIPOS_REDACCION.find(x=>x.k===tipo)
+    const html=`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><style>@page{margin:2.5cm} body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a;line-height:1.45} h1{font-size:15pt;margin:14pt 0 6pt} h2{font-size:13pt;margin:12pt 0 5pt} h3{font-size:12pt;margin:10pt 0 4pt} p{margin:0 0 8pt} ul,ol{margin:0 0 8pt 18pt} hr{border:none;border-top:1px solid #999;margin:10pt 0}</style></head><body>${mdToHtml(draft)}</body></html>`
+    const blob=new Blob(['﻿',html],{type:'application/msword'})
+    const url=URL.createObjectURL(blob)
+    const fn=(`${t?.lbl||'Documento'}${cliente.trim()?' - '+cliente.trim():''}`).replace(/[^\w\sáéíóúñÁÉÍÓÚÑ.\-]/g,'').trim()||'Documento'
+    const a=document.createElement('a'); a.href=url; a.download=fn+'.doc'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500)
+  }
   const inp = {width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
   return (
     <div style={{padding:'2px 2px 6px'}}>
@@ -16660,6 +16687,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
           <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Borrador · edítalo</span>
           <div style={{display:'flex',gap:8}}>
             <button onClick={generar} disabled={loading} style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>Regenerar</button>
+            <button onClick={descargarWord} style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>Word</button>
             <button onClick={copiar} style={{fontSize:11,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'3px 11px',cursor:'pointer'}}>{copiado?'Copiado ✓':'Copiar'}</button>
           </div>
         </div>
