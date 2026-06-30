@@ -1468,14 +1468,14 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
             </div>
           </div>
           {/* CAJAS ENTREGADAS */}
-          <div style={{borderTop:'0.5px solid #F5F7F9',padding:'11px 14px'}}>
+          <div style={{borderTop:`0.5px solid ${C.bgSoft}`,padding:'11px 14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:9}}>
               <span style={secLbl}>Cajas entregadas</span>
               <button onClick={()=>{ setEditCajaId(null); setNewMonto(''); setNewNota(''); setNewFecha(new Date().toISOString().slice(0,10)); setNewDeliveredBy('Cristóbal'); setCajaOtra(false); setShowNuevaCaja(true) }} style={{height:26,padding:'0 12px',border:'none',borderRadius:8,background:C.accent,color:'#fff',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Nueva Caja</button>
             </div>
             {cajasOrd.length===0&&<div style={{fontSize:12,color:C.done,padding:'4px 0'}}>Aún no hay cajas registradas.</div>}
             {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at; return (
-              <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||'Cristóbal'); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'0.5px solid #F5F7F9',cursor:editable?'pointer':'default'}}>
+              <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||'Cristóbal'); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmtCLP(p.amount)}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>editar</span>}</div>
                   <div style={{fontSize:10,color:C.done,marginTop:1}}>Entregado por {p.delivered_by||'—'}{p.delivered_at?` · ${fmtD(p.delivered_at)}`:''}</div>
@@ -1493,7 +1493,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               const isOpen=openRendicion===r.id
               const gastosR=expenses.filter(e=>e.render_id===r.id)
               return (
-              <div key={r.id} style={{borderBottom:'0.5px solid #F5F7F9'}}>
+              <div key={r.id} style={{borderBottom:`0.5px solid ${C.bgSoft}`}}>
                 <div onClick={()=>setOpenRendicion(isOpen?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',cursor:'pointer'}}>
                   <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{bigDate(r.created_at)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.done,marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div></div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -3139,7 +3139,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [addBusy,setAddBusy] = useState(false)
   const [iaAreasBusy,setIaAreasBusy] = useState(false)
   const areasFirma = useMemo(()=>[...new Set((sales||[]).filter(s=>['Activo','Terminado'].includes(s.status)).map(s=>s.area).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')),[sales])
-  const ufRef = (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
+  const ufRef = (readUFCache()?.value) || (sales.find(s=>s.uf_value>0)?.uf_value) || UF_FALLBACK
   const yr = currentYear
   const hoy = new Date().toISOString().slice(0,10)
   const mesesDesde = d => { if(!d) return 999; const a=new Date(hoy), b=new Date(String(d).slice(0,10)); if(isNaN(b.getTime())) return 999; return (a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()) }
