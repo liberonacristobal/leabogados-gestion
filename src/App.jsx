@@ -16365,7 +16365,7 @@ const TIPOS_REDACCION = [
   {k:'clausula', lbl:'Cláusula', max:1400, sys:`${ESTUDIO_BRIEF}\n\nRedacta la o las CLÁUSULAS contractuales que pida el usuario, precisas y ejecutables bajo derecho chileno. Si aporta valor, ofrece alternativas de redacción.`},
   {k:'correo', lbl:'Correo', max:1100, sys:`${ESTUDIO_BRIEF}\n\nRedacta un CORREO profesional (al cliente o contraparte) en el tono del estudio, claro y cordial. Empieza con "Asunto: ...".`},
 ]
-function AsistenteRedaccion({clients=[], onClose}){
+function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[], onClose}){
   const [tipo,setTipo] = useState('propuesta')
   const [cliente,setCliente] = useState('')
   const [datos,setDatos] = useState('')
@@ -16377,6 +16377,25 @@ function AsistenteRedaccion({clients=[], onClose}){
   const [cruzarSii,setCruzarSii] = useState(true)
   const SII_TIPOS = ['memo','informe','presentacion']
   useEffect(()=>{ supabase.from('sii_novedades').select('tipo,numero,titulo,areas,prioridad,resumen,brief,fecha,vigente').then(({data})=>setSiiNov((data||[]).filter(n=>n.vigente!==false)),()=>{}) },[])
+  const [cruzarCliente,setCruzarCliente] = useState(true)
+  const cliObj = (clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim()) || (cliente.trim().length>=3 ? (clients||[]).find(c=>c.name&&c.name.toLowerCase().includes(cliente.trim().toLowerCase())) : null)
+  const perfilCliente = (c)=>{   // fuente única: ventaHistoricaUF + saldoBill (sin re-implementar fórmulas)
+    const cid=c.id
+    const rs=rsLabel(cid, clients, clientEntities)
+    const ruts=[...new Set((clientEntities||[]).filter(e=>String(e.client_id)===String(cid)).map(e=>e.rut).filter(Boolean))]
+    const vts=(sales||[]).filter(s=>String(s.client_id)===String(cid)&&!s.deleted_at&&['Activo','Terminado'].includes(s.status))
+    const areas=[...new Set(vts.map(s=>s.area).filter(Boolean))]
+    const encargos=[...new Set(vts.map(s=>s.title).filter(Boolean))].slice(0,6)
+    const vendidoUF=ventaHistoricaUF(cid, sales)
+    const porCobrar=(billing||[]).filter(b=>String(b.client_id)===String(cid)).reduce((a,b)=>a+saldoBill(b),0)
+    const parts=[`Cliente: ${c.name}${rs&&rs!==c.name?` (RS: ${rs})`:''}.`]
+    if(ruts.length) parts.push(`RUT: ${ruts.join(', ')}.`)
+    if(areas.length) parts.push(`Áreas contratadas con el estudio: ${areas.join(', ')}.`)
+    if(encargos.length) parts.push(`Encargos: ${encargos.join('; ')}.`)
+    if(vendidoUF>0) parts.push(`Vendido histórico al estudio: ${fmtUF(vendidoUF)}.`)
+    if(porCobrar>0) parts.push(`Saldo por cobrar actual: ${fmt(porCobrar)}.`)
+    return parts.join(' ')
+  }
   const generar = async()=>{
     if(!datos.trim()||loading) return
     setLoading(true); setErr(null)
@@ -16384,6 +16403,7 @@ function AsistenteRedaccion({clients=[], onClose}){
       const t=TIPOS_REDACCION.find(x=>x.k===tipo)
       const hoy=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'})
       let content=`Fecha de hoy: ${hoy}.\n${cliente.trim()?`Destinatario/cliente: ${cliente.trim()}\n`:''}Datos e instrucciones para el documento:\n${datos.trim()}`
+      if(cruzarCliente&&cliObj){ content+=`\n\nPERFIL DEL CLIENTE (de nuestra base de datos; úsalo para contextualizar y personalizar, no lo recites textual): ${perfilCliente(cliObj)}` }
       if(cruzarSii&&SII_TIPOS.includes(tipo)&&siiNov.length){
         const PRIO={alta:3,media:2,baja:1}
         const digest=siiNov.slice().sort((a,b)=>(PRIO[b.prioridad]||0)-(PRIO[a.prioridad]||0)).slice(0,18).map(n=>`- ${`${(n.tipo||'').toUpperCase()} ${n.numero||''}`.trim()}: ${n.titulo}${n.areas&&n.areas.length?` (áreas: ${n.areas.join('/')})`:''}${(n.brief||n.resumen)?` — ${(n.brief||n.resumen).slice(0,160)}`:''}`).join('\n')
@@ -16405,6 +16425,12 @@ function AsistenteRedaccion({clients=[], onClose}){
       <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Cliente / destinatario (opcional)' style={{...inp,marginBottom:8}} list='red-cli'/>
       <datalist id='red-cli'>{(clients||[]).map(c=><option key={c.id} value={c.name}/>)}</datalist>
       <textarea value={datos} onChange={e=>setDatos(e.target.value)} placeholder='Datos e instrucciones: de qué se trata, alcance, honorarios (UF), hechos clave…' rows={4} style={{...inp,resize:'vertical',marginBottom:10}}/>
+      {cliObj&&(
+        <label style={{display:'flex',alignItems:'center',gap:7,fontSize:11.5,color:C.muted,margin:'0 2px 10px',cursor:'pointer'}}>
+          <input type='checkbox' checked={cruzarCliente} onChange={e=>setCruzarCliente(e.target.checked)} style={{accentColor:C.accent,width:15,height:15}}/>
+          Cruzar con la ficha de <span style={{color:C.azulInfo,fontWeight:600,margin:'0 3px'}}>{cliObj.name}</span> (ventas, áreas, por cobrar)
+        </label>
+      )}
       {SII_TIPOS.includes(tipo)&&siiNov.length>0&&(
         <label style={{display:'flex',alignItems:'center',gap:7,fontSize:11.5,color:C.muted,margin:'0 2px 10px',cursor:'pointer'}}>
           <input type='checkbox' checked={cruzarSii} onChange={e=>setCruzarSii(e.target.checked)} style={{accentColor:C.accent,width:15,height:15}}/>
@@ -20404,7 +20430,7 @@ export default function App() {
         {modal?.type==='importExcel'&&<Modal title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='aprendizaje'&&<Modal title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='redaccion'&&<Modal title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='redaccion'&&<Modal title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
