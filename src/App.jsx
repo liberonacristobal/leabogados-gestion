@@ -1964,7 +1964,7 @@ function CashflowProjection({billing, moneda='CLP', ufRef=0, clients=[], sales=[
 
 
 function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[],onOpenClientFicha}) {
-  const [openRec,setOpenRec] = useState(false)
+  const [openRec,setOpenRec] = usePersistedState('d_rec',false)
   const yr = currentYear
   const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   const data = useMemo(()=>{
@@ -2109,6 +2109,9 @@ const readUFCache = () => { try{ const c=JSON.parse(localStorage.getItem(UF_CACH
 // Posición de scroll para "volver al lugar exacto" (captura window + el contenedor #main-scroll; restaura ambos).
 const getScroll = () => { try{ const d=document.getElementById('main-scroll'); return {w:window.scrollY||0, d:d?d.scrollTop:0} }catch(_){ return {w:0,d:0} } }
 const restoreScroll = (s) => { try{ window.scrollTo(0, s?.w||0); const d=document.getElementById('main-scroll'); if(d) d.scrollTop=s?.d||0 }catch(_){} }
+// Estado de UI que SOBREVIVE al desmontaje de la vista (store de módulo): para restaurar el acordeón/drill abierto al volver de un cross-link. Drop-in de useState.
+const _uiStore = {}
+function usePersistedState(key, def){ const [v,setV]=useState(()=> key in _uiStore ? _uiStore[key] : def); const set=useCallback(nv=>setV(prev=>{ const val=typeof nv==='function'?nv(prev):nv; _uiStore[key]=val; return val }),[key]); return [v,set] }
 const writeUFCache = (date,value) => { try{ localStorage.setItem(UF_CACHE_KEY, JSON.stringify({date,value})) }catch(_){} }
 // Devuelve {value,date,isToday}. Usa caché si es de hoy; si no, llama a la API y cachea;
 // si la API falla, cae al último valor cacheado (aunque sea viejo); si no hay, {value:null}.
@@ -2238,7 +2241,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const balances = {}
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+saldoDelta(e) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
-  const [openCobranza,setOpenCobranza] = useState(false)
+  const [openCobranza,setOpenCobranza] = usePersistedState('d_cob',false)
   const [funnelKpi,setFunnelKpi] = useState(null)   // paso del funnel (facturado/cobrado/programado) abierto para ver su detalle
   const [cajaExp,setCajaExp] = useState(null)  // persona de caja chica con su detalle desplegado
   const [cpExp,setCpExp] = useState(null)       // cuenta por pagar a proveedor con su origen desplegado
@@ -2251,7 +2254,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [payRef,setPayRef] = useState('')
   const [verTareasEquipo,setVerTareasEquipo] = useState(false)
   const [tareaPersOpen,setTareaPersOpen] = useState({})
-  const [tareaHoyOpen,setTareaHoyOpen] = useState({})   // tiles "Hoy" desplegados (acordeón)
+  const [tareaHoyOpen,setTareaHoyOpen] = usePersistedState('d_atenHoy',{})   // tiles "Hoy" desplegados (acordeón)
   const [tareasCorte,setTareasCorte] = useState('todas')   // tablero equipo: 'todas' | 'delegaron' | 'delegue'
   const [payDoc,setPayDoc] = useState('')          // N° documento fiscal del proveedor (factura/boleta)
   const [payDocF,setPayDocF] = useState('')        // fecha del documento
@@ -2328,7 +2331,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const HistIcon = () => <svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M3 3v5h5'/><path d='M3.05 13A9 9 0 1 0 6 5.3L3 8'/><path d='M12 7v5l3 2'/></svg>
 
   // --- Revenue target: detalle de las ventas que componen el "Vendido" (bruto) del año seleccionado ---
-  const [revOpen,setRevOpen] = useState(false)
+  const [revOpen,setRevOpen] = usePersistedState('d_rev',false)
   const ventasDelAnio = useMemo(()=> sales
     .filter(s=>s.year===selYear && !['Borrador','Propuesta','Rechazada'].includes(s.status))
     .map(s=>({s, bruto: clpDeVenta(s), brutoUF: ufDeVenta(s)}))
@@ -2337,8 +2340,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
   // --- Aging de cartera ---
   const clientesMap = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[c.id,c.name])),[clients])
-  const [top5Open,setTop5Open] = useState(false)
-  const [agingBucket,setAgingBucket] = useState(null)   // tramo del aging abierto para ver su detalle
+  const [top5Open,setTop5Open] = usePersistedState('d_top5',false)
+  const [agingBucket,setAgingBucket] = usePersistedState('d_aging',null)   // tramo del aging abierto para ver su detalle
   const [cobLens,setCobLens] = useState('antiguedad')   // foto Cobranza: 'antiguedad' (aging) | 'proyeccion' (flujo) — dos lentes del MISMO por cobrar
   const agingData = useMemo(()=>computeAgingCartera(billing.filter(b=>b.billing_type!=='reembolso'), clientesMap),[billing,clientesMap])
 
