@@ -17360,6 +17360,49 @@ async function escanearTareasGmail(clients=[], onProgress){
   }
   return out
 }
+
+// Fase 2B — Escáner Gmail → novedades de CARTERA (client-side, tu buzón). La IA cruza correos con proyectos activos
+// y propone: (update) nuevo "en qué está" de un proyecto; (nuevo) proyecto para un cliente sin uno. Compuerta humana.
+async function escanearCarteraGmail(clients=[], proyectos=[], onProgress){
+  const token=await driveToken()
+  if(!token){ const e=new Error('Sin token de Google'); e.code=401; throw e }
+  const q=encodeURIComponent('is:unread -in:spam -in:trash')
+  const CAP=120; let ids=[], pageToken=''
+  while(ids.length<CAP){
+    const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100${pageToken?`&pageToken=${pageToken}`:''}`,{headers:{Authorization:'Bearer '+token}})
+    if(!r.ok){ const e=new Error('Gmail '+r.status); e.code=r.status; throw e }
+    const j=await r.json(); (j.messages||[]).forEach(m=>ids.push(m.id)); pageToken=j.nextPageToken; if(!pageToken) break
+  }
+  ids=ids.slice(0,CAP); if(!ids.length) return []
+  const correos=[]; let done=0
+  const fetchMeta=async(id)=>{ try{
+    const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,{headers:{Authorization:'Bearer '+token}})
+    if(!r.ok) return; const j=await r.json(); const H={}; (j.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
+    const from=H['from']||'', subj=H['subject']||''; const m=from.match(/<(.+?)>/); const email=(m?m[1]:from).trim().toLowerCase()
+    if(!email.includes('@')) return
+    if(/no-?reply|noreply|notif|mailer-daemon|newsletter|bounce|postmaster/.test(email)) return
+    correos.push({from:email, fromName:(from.replace(/<.+?>/,'').replace(/["']/g,'').trim())||email, subject:subj, snippet:(j.snippet||'')})
+  }catch(_){} ; done++; if(onProgress&&done%10===0) onProgress(done,ids.length) }
+  for(let i=0;i<ids.length;i+=8){ await Promise.all(ids.slice(i,i+8).map(fetchMeta)) }
+  if(!correos.length) return []
+  const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:String(c.id),nombre:c.name}))
+  const proyList=proyectos.filter(p=>p.activo!==false).map(p=>({id:String(p.id),cliente_id:String(p.cliente_id||''),nombre:p.nombre_proyecto,estado_actual:p.nota||''}))
+  const hoyISO=new Date().toISOString().slice(0,10); const out=[]
+  for(let i=0;i<correos.length;i+=20){
+    const batch=correos.slice(i,i+20)
+    const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, preview), la lista de CLIENTES y la de PROYECTOS activos (con su "estado_actual" = en qué está). Para cada correo con relevancia real para un proyecto o cliente decide: (a) actualiza un PROYECTO existente → {"tipo":"update","proyecto_id":"<id de la lista>","sugerencia":"nuevo 'en qué está' en 1 frase","fuente":"Remitente — Asunto"}; (b) tema NUEVO de un cliente SIN proyecto → {"tipo":"nuevo","cliente_id":"<id o null>","sugerencia":"tema/nombre del proyecto en pocas palabras","fuente":"Remitente — Asunto"}. Ignora newsletters, notificaciones, publicidad y lo irrelevante. Sé conservador: solo lo que claramente mueve un proyecto. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
+    try{
+      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+      const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+      ;(Array.isArray(arr)?arr:[]).forEach(x=>{
+        if(!x||!x.tipo||!x.sugerencia) return
+        if(x.tipo==='update'){ if(proyList.some(p=>p.id===String(x.proyecto_id))) out.push({tipo:'update',proyecto_id:String(x.proyecto_id),sugerencia:String(x.sugerencia).slice(0,240),fuente:String(x.fuente||'')}) }
+        else if(x.tipo==='nuevo'){ const cid=(x.cliente_id&&clientList.some(c=>c.id===String(x.cliente_id)))?String(x.cliente_id):null; out.push({tipo:'nuevo',cliente_id:cid,sugerencia:String(x.sugerencia).slice(0,120),fuente:String(x.fuente||'')}) }
+      })
+    }catch(_){}
+  }
+  return out
+}
 // Escáner Gmail → tareas (modal): usa el helper de arriba. Compuerta humana: crear / editar / descartar.
 function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
   const [phase,setPhase] = useState('idle')
@@ -17733,6 +17776,9 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const [nf,setNf] = useState(NF0)
   const [clientQ,setClientQ] = useState('')
   const [alcanceFor,setAlcanceFor] = useState(null)   // Fase 2A: proyecto sobre el que leer la propuesta
+  const [novedades,setNovedades] = useState([])       // Fase 2B: sugerencias del correo pendientes de revisar
+  const [escaneando,setEscaneando] = useState(false)
+  const [novOpen,setNovOpen] = useState(true)
 
   const rows = useMemo(()=>{
     let arr = (proyectos||[]).filter(p=>p.activo!==false)
@@ -17784,6 +17830,39 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
     setProyectos(prev=>[...(data||[]),...prev])
   }
 
+  // Fase 2B: escaneo del correo (client-side, tu buzón). Corre 1×/día al abrir (solo admin) + botón manual. Cache en localStorage.
+  const NOV_KEY = 'cartera_nov_'+HOY
+  const escanear = async (forzar) => {
+    if(escaneando) return
+    setEscaneando(true)
+    try{
+      const res = await escanearCarteraGmail(clients, proyectos)
+      setNovedades(res); try{ localStorage.setItem(NOV_KEY, JSON.stringify(res)); localStorage.setItem('cartera_nov_dia', HOY) }catch(_){}
+      if(forzar && !res.length) appAlert('Sin novedades en el correo por ahora.')
+    }catch(e){ if(forzar) appAlert(e?.code===401?'Entra con tu correo de la oficina (Google) para que pueda leer el correo.':'No se pudo leer el correo: '+(e?.message||'')) }
+    setEscaneando(false)
+  }
+  useEffect(()=>{
+    if(!esAdmin) return
+    if(DEMO){ setNovedades([
+      {tipo:'update',proyecto_id:(proyectos[0]&&proyectos[0].id)||'p1',sugerencia:'Recibidos los poderes; falta agendar la firma ante notario',fuente:'Juan Pérez — RE: Poderes firmados'},
+      {tipo:'nuevo',cliente_id:(clients.find(c=>!c.is_internal)||{}).id||null,sugerencia:'Posible constitución de sociedad',fuente:'gerencia@metalurgica — Consulta constitución'},
+    ]); return }
+    try{ const dia=localStorage.getItem('cartera_nov_dia'); if(dia===HOY){ const c=localStorage.getItem(NOV_KEY); if(c){ setNovedades(JSON.parse(c)||[]); return } } }catch(_){}
+    escanear(false)   // primer ingreso del día → escanea solo
+  },[])   // eslint-disable-line
+  const cerrarNov = (idx) => { setNovedades(prev=>{ const nx=prev.filter((_,i)=>i!==idx); try{ localStorage.setItem(NOV_KEY, JSON.stringify(nx)) }catch(_){}; return nx }) }
+  const aceptarNov = async (n, idx) => {
+    if(n.tipo==='update'){ const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); if(p) await patch(p,{nota:n.sugerencia}); cerrarNov(idx) }
+    else if(n.tipo==='nuevo'){
+      if(!n.cliente_id){ appAlert('Esta novedad no trae cliente; créala a mano con "+ Nuevo".'); return }
+      const row={ cliente_id:String(n.cliente_id), nombre_proyecto:n.sugerencia, responsable:esAdmin?'CL':(miInicial||null), nota:null, estado:'verde', etapa_idx:0, origen:'correo', activo:true, ultima_actividad:HOY }
+      const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
+      if(error){ appAlert('No se pudo crear: '+error.message); return }
+      setProyectos(prev=>[data,...prev]); cerrarNov(idx)
+    }
+  }
+
   const nCrit = rows.filter(p=>(p.estado||'verde')==='rojo').length
   const chipSty = (on,col,bg) => ({ fontSize:12, fontWeight:500, color:on?'#fff':col, background:on?C.accent:bg, borderRadius:20, padding:'4px 12px', border:'none', cursor:'pointer' })
 
@@ -17792,6 +17871,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
         <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
         <span style={{ fontSize:17, fontWeight:600, color:C.accent, flex:1 }}>Proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</span>
+        {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer el correo con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar correo'}</button>}
         <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.azul3||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
       </div>
 
@@ -17799,6 +17879,32 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
         <div onClick={backfill} style={{ display:'flex', alignItems:'center', gap:8, background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px', marginBottom:10, cursor:'pointer' }}>
           <span style={{ fontSize:12, color:C.accent, flex:1 }}>{activasSinProyecto.length} venta{activasSinProyecto.length!==1?'s':''} activa{activasSinProyecto.length!==1?'s':''} sin proyecto en el panel</span>
           <span style={{ fontSize:12, fontWeight:600, color:C.accent, whiteSpace:'nowrap' }}>Generar →</span>
+        </div>
+      )}
+
+      {esAdmin&&novedades.length>0&&(
+        <div style={{ marginBottom:12, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', background:'#fff' }}>
+          <div onClick={()=>setNovOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', cursor:'pointer', background:C.azulBg||'#E6F1FB' }}>
+            <span style={{ fontSize:12, fontWeight:600, color:C.azulInfo||'#185FA5', flex:1 }}>Novedades del correo · {novedades.length}</span>
+            <span style={{ fontSize:12, color:C.azulInfo||'#185FA5' }}>{novOpen?'▾':'▸'}</span>
+          </div>
+          {novOpen&&novedades.map((n,idx)=>{
+            const cli = n.tipo==='update' ? (()=>{ const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); return p?cnm(p.cliente_id):'' })() : cnm(n.cliente_id)
+            return (
+              <div key={idx} style={{ padding:'10px 12px', borderTop:`1px solid ${C.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                  {n.tipo==='nuevo'&&<span style={{ fontSize:9.5, fontWeight:700, color:C.azulInfo||'#185FA5', background:C.azulBg||'#E6F1FB', borderRadius:20, padding:'1px 7px' }}>NUEVO</span>}
+                  <span style={{ fontSize:13, fontWeight:600, color:C.accent }}>{cli||'Sin cliente'}</span>
+                </div>
+                <div style={{ fontSize:13, color:C.text, marginBottom:3 }}>{n.sugerencia}</div>
+                {n.fuente&&<div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>{n.fuente}</div>}
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={()=>aceptarNov(n,idx)} style={{ fontSize:12, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>{n.tipo==='nuevo'?'Crear proyecto':'Aceptar'}</button>
+                  <button onClick={()=>cerrarNov(idx)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Descartar</button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
