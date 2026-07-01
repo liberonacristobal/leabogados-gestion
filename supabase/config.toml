@@ -27,3 +27,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/drive/deno.json"
 entrypoint = "./functions/drive/index.ts"
+
+[functions.procesar-cartola]
+enabled = true
+verify_jwt = false
+import_map = "./functions/procesar-cartola/deno.json"
+entrypoint = "./functions/procesar-cartola/index.ts"
