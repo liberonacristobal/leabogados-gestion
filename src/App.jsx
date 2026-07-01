@@ -5687,6 +5687,19 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const abonosDe = b => concFac.filter(c=>String(c.factura_id)===String(b.id)).map(c=>({c, m:abonos.find(a=>String(a.id)===String(c.movimiento_id))})).filter(x=>x.m)
   const [pagosFor,setPagosFor] = useState(null)   // factura.id cuyo "Buscar pago" está abierto
   const [pagoBusy,setPagoBusy] = useState(false)
+  const [otraFor,setOtraFor] = useState(null)     // abono.id cuyo selector "Otra factura" está abierto
+  const [otraQ,setOtraQ] = useState('')
+  // Otras facturas para conciliar un abono: TODAS las del cliente (o mismo RUT) que NO estén pagadas-conciliadas (saldo>0).
+  // Orden: mismo RUT del receptor → misma RS → emitida antes del pago y más cercana (criterio fecha/rut/rs).
+  const otrasFacturas = (m) => {
+    const rut=nrG(m.rut_contraparte), q=otraQ.trim().toLowerCase()
+    const mCli=m.cliente_id?String(m.cliente_id):null
+    return (bb||[]).filter(b=>!b.deleted_at && esEmitida(b) && saldoBill(b)>0 && ((mCli&&String(efClientIdG(b))===mCli) || (rut&&nrG(b.receptor_rut)===rut)))
+      .filter(b=>!q || (`factura ${folioN(b.invoice_no)} ${b.concept||''} ${b.receptor_name||''}`).toLowerCase().includes(q))
+      .map(b=>{ const rutM=!!(rut&&nrG(b.receptor_rut)===rut); const rsM=!!(m.nombre_contraparte&&b.receptor_name&&_normTxt(b.receptor_name)===_normTxt(m.nombre_contraparte)); const before=!!(b.issued_at&&b.issued_at<=m.fecha); const prox=Math.abs((new Date(b.issued_at||0).getTime()-new Date(m.fecha||0).getTime())/86400000); const exacto=saldoBill(b)===((m.monto||0)-(m.monto_conciliado||0)); return {b,rutM,rsM,before,prox,exacto} })
+      .sort((a,z)=> (z.exacto?1:0)-(a.exacto?1:0) || (z.rutM?1:0)-(a.rutM?1:0) || (z.rsM?1:0)-(a.rsM?1:0) || (z.before?1:0)-(a.before?1:0) || a.prox-z.prox)
+      .slice(0,25)
+  }
   // Abonos del banco que CALZAN exacto con el saldo de la factura, del mismo cliente o RUT del receptor, no conciliados.
   const pagosDe = b => { const cid=efClientIdG(b); const rut=nrG(b.receptor_rut); const saldo=saldoBill(b)
     return abonos.filter(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); if(m.estado==='conciliado'||resto<=0) return false; const mc=cid&&String(m.cliente_id)===String(cid); const mr=rut&&nrG(m.rut_contraparte)===rut; return (mc||mr)&&resto===saldo })
@@ -5695,19 +5708,27 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   // Concilia un abono con una factura (calce exacto = pago total): inserta la conciliación + marca el movimiento + deja la factura pagada (onStatusChange).
   const conciliarPago = async(m, b) => {
     if(pagoBusy) return
-    if(!await appConfirm(`¿Conciliar el pago de ${fmt(m.monto)} (${fmtDate(m.fecha)}) con la Factura N° ${folioN(b.invoice_no)}? Quedará pagada y enlazada al movimiento del banco.`)) return
+    const saldo=saldoBill(b)
+    const resto=(m.monto||0)-(m.monto_conciliado||0)
+    const aplicado=Math.min(resto,saldo)
+    if(aplicado<=0){ appAlert('Ese movimiento ya no tiene saldo por aplicar.'); return }
+    const cubre=aplicado>=saldo   // el abono cubre TODO el saldo de la factura → queda pagada; si no, es pago parcial
+    const msg = cubre
+      ? `¿Conciliar el pago de ${fmt(m.monto)} (${fmtDate(m.fecha)}) con la Factura N° ${folioN(b.invoice_no)}? Quedará pagada y enlazada al movimiento del banco.`
+      : `El pago (${fmt(resto)}) es MENOR que el saldo de la Factura N° ${folioN(b.invoice_no)} (${fmt(saldo)}).\n¿Aplicar ${fmt(aplicado)} como pago PARCIAL? La factura seguirá pendiente con saldo ${fmt(saldo-aplicado)}.`
+    if(!await appConfirm(msg)) return
     setPagoBusy(true)
     try{
-      const aplicado=saldoBill(b)
-      const ins=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'factura',factura_id:b.id,monto_aplicado:aplicado,origen:'manual',marco_pago:true}).select().single()
+      const ins=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'factura',factura_id:b.id,monto_aplicado:aplicado,origen:'manual',marco_pago:cubre}).select().single()
       if(ins.error) throw ins.error
+      setConcFac(p=>[...p,{factura_id:b.id,movimiento_id:m.id,monto_aplicado:aplicado}])   // refleja el saldo nuevo en vivo
       const movAplicado=(m.monto_conciliado||0)+aplicado
       const estado=((m.monto||0)-movAplicado)<=0?'conciliado':'parcial'
       await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',m.id)
       setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
-      await onStatusChange(b.id,'Pagado',m.fecha)
-      setPagosFor(null)
-      appAlert('Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.')
+      if(cubre) await onStatusChange(b.id,'Pagado',m.fecha)   // SOLO marca pagada si el abono cubre el saldo; en parcial la factura sigue pendiente
+      setPagosFor(null); setOtraFor(null)
+      appAlert(cubre?'Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.':'Pago parcial aplicado. La factura mantiene su saldo restante.')
     }catch(e){ appAlert('No se pudo conciliar: '+(e.message||e)) }
     setPagoBusy(false)
   }
@@ -6083,7 +6104,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       const rsDistinta=rN&&cliName&&_normTxt(rN)!==_normTxt(cliName)
                       return (<div key={f.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:7,padding:'6px 8px',marginBottom:4,border:`1px solid ${contested?C.coralText:ok?C.greenText:'transparent'}`}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:10.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {folioN(f.invoice_no)} · {f.concept||'—'}</div>
+                        <div style={{fontSize:10.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(f.invoice_no)} · {f.concept||'—'}</div>
                         <div style={{fontSize:9,color:C.muted}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)} · {fmt(saldoBill(f))}</div>
                         <div style={{fontSize:9,fontWeight:ok?700:400,color:ok?C.greenText:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{ok?'✓ ':'→ '}{cliName||rN||'sin cliente'}{sameClient?' · mismo cliente':sameRut?' · mismo RUT':''}</div>
                         {rsDistinta&&<div style={{fontSize:8.5,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>emitida a {rN}{rRut?` · ${rRut}`:''}</div>}
@@ -6091,6 +6112,22 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       </div>
                       <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:9.5,color:ok?'#fff':C.tealText,border:`0.5px solid ${C.tealText}`,background:ok?C.tealText:'#fff',borderRadius:20,padding:'4px 10px',fontWeight:600,cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar con esta</button>
                     </div>)})}
+                    {otraFor!==m.id
+                      ? <button onClick={()=>{setOtraFor(m.id);setOtraQ('')}} style={{fontSize:9,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:'2px 0'}}>+ Conciliar con otra factura…</button>
+                      : <div style={{marginTop:4,borderTop:`1px solid ${C.border}`,paddingTop:6}}>
+                          <input value={otraQ} onChange={e=>setOtraQ(e.target.value)} placeholder='Buscar factura del cliente…' style={{width:'100%',boxSizing:'border-box',fontSize:9.5,padding:'4px 7px',borderRadius:6,border:`1px solid ${C.border}`,marginBottom:5}}/>
+                          {(()=>{ const lst=otrasFacturas(m); if(!lst.length) return <div style={{fontSize:9,color:C.muted,padding:'2px 0'}}>Sin otras facturas con saldo de este cliente.</div>
+                            return lst.map(({b:f,rutM,rsM,exacto})=>{ const cliName=clients.find(c=>String(c.id)===String(efClientIdG(f)))?.name||''; const rN=f.receptor_name||''
+                              return (<div key={f.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:7,padding:'5px 8px',marginBottom:3}}>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:10,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(f.invoice_no)} · {f.concept||'—'}</div>
+                                  <div style={{fontSize:8.5,color:exacto?C.greenText:C.muted}}>Emitida {fmtDate(f.issued_at)} · saldo {fmt(saldoBill(f))}{exacto?' · calza exacto':' · monto distinto'}</div>
+                                  <div style={{fontSize:8.5,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName||rN||'—'}{rutM?' · mismo RUT':rsM?' · misma RS':''}{rN&&cliName&&_normTxt(rN)!==_normTxt(cliName)?` · a ${rN}`:''}</div>
+                                </div>
+                                <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:9,color:exacto?'#fff':C.accent,background:exacto?C.tealText:'#fff',border:`0.5px solid ${exacto?C.tealText:C.border}`,borderRadius:20,padding:'3px 9px',fontWeight:600,cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{exacto?'Conciliar':'Parcial'}</button>
+                              </div>) }) })()}
+                          <button onClick={()=>setOtraFor(null)} style={{fontSize:9,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'3px 0'}}>Cerrar</button>
+                        </div>}
                   </div>
                 ))}
               </div>}
