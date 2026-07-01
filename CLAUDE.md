@@ -85,7 +85,7 @@ En una frase: **un protagonista con sus partes anidadas, cero cifras repetidas, 
 
 ## Flujo de trabajo
 
-- Cambios estructurales o grandes: mostrarme el plan antes de tocar código.
-- Cambios pequeños y acotados: hacerlos directo y avisar.
+- **Autonomía autorizada (2026-07-01):** avanza el backlog sin pedir permiso. Construye, verifica en demo (build verde + `?demo=1` sin crash), commitea+push y avisa; toma decisiones de diseño razonables y muéstralas en la respuesta MIENTRAS construyes (ya NO hace falta esperar OK del plan, ni siquiera para features grandes). Crea el SQL de las tablas nuevas para que el usuario lo corra; despliega edge functions cuando haga falta.
+- **Igual PAUSA y avisa (por seguridad, no por permiso):** (a) cambios de CIFRAS/fórmulas que no puedas verificar sin datos reales de producción → muestra el análisis, no ejecutes a ciegas (cero tolerancia a errores de cifra); (b) cosas de alto riesgo que solo se prueban en prod (cerrar el relay de notify-task, envíos de correo) → constrúyelas pero avisa que hay que probarlas antes de confiar; (c) acciones destructivas/irreversibles sobre datos reales, credenciales/OAuth/secretos, trámites externos (SII), y enviar correos/mensajes en su nombre → confirmar siempre.
 - Mantener un `CHANGELOG.md` en la raíz: agregar una línea con fecha y resumen por cada cambio publicado.
 - Comentar en el código SOLO la lógica compleja o no obvia. No comentar lo trivial.
