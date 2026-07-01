@@ -16564,6 +16564,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     return parts.join(' ')
   }
   const [cliDocSel,setCliDocSel]=useState(null); const [cliDocTxt,setCliDocTxt]=useState(''); const [cliDocBusy,setCliDocBusy]=useState(false); const [cliDocErr,setCliDocErr]=useState(null); const [mostrarDocCli,setMostrarDocCli]=useState(false)
+  const [cliFolder,setCliFolder]=useState(null); const [guardando,setGuardando]=useState(false); const [guardadoUrl,setGuardadoUrl]=useState(null); const [guardadoErr,setGuardadoErr]=useState(null)
   const usarDocCliente = async(file)=>{   // lee un documento de la carpeta del cliente y lo deja como contexto de la redacción
     setCliDocBusy(true); setCliDocErr(null)
     try{ const txt=(await leerDriveTextoSA(file)).slice(0,8000); setCliDocSel(file); setCliDocTxt(txt); setMostrarDocCli(false) }
@@ -16575,7 +16576,11 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
   const [precFromIndex,setPrecFromIndex]=useState(false); const [idxBusy,setIdxBusy]=useState(false); const [idxMsg,setIdxMsg]=useState(null); const [precNeedAuth,setPrecNeedAuth]=useState(false)
   const [clauMode,setClauMode]=useState('usar'); const [clauLib,setClauLib]=useState(null); const [clauCat,setClauCat]=useState(''); const [clauKw,setClauKw]=useState(''); const [clauBusy,setClauBusy]=useState(false); const [clauDocs,setClauDocs]=useState(null); const [extrBusy,setExtrBusy]=useState(null); const [extrMsg,setExtrMsg]=useState(null)
   useEffect(()=>{ setPrecFiles(null); setPrecSel(null); setPrecTxt(''); setPrecErr(null) },[tipo])   // no arrastrar un precedente de otro tipo
-  useEffect(()=>{ setCliDocSel(null); setCliDocTxt(''); setMostrarDocCli(false); setCliDocErr(null) },[cliObj&&cliObj.id])   // reset del documento al cambiar de cliente
+  useEffect(()=>{ setCliDocSel(null); setCliDocTxt(''); setMostrarDocCli(false); setCliDocErr(null); setGuardadoUrl(null); setGuardadoErr(null)   // reset + busca la carpeta del cliente al cambiar
+    let alive=true; if(!cliObj){ setCliFolder(null); return ()=>{alive=false} }
+    ;(async()=>{ try{ const {data}=await supabase.from('client_drive').select('folder_id,folder_name').eq('client_id',String(cliObj.id)).maybeSingle(); if(alive) setCliFolder(data&&data.folder_id?{id:data.folder_id,name:data.folder_name}:null) }catch(_){ if(alive) setCliFolder(null) } })()
+    return ()=>{alive=false}
+  },[cliObj&&cliObj.id])
   useEffect(()=>{ try{ const d=JSON.parse(localStorage.getItem('redaccion_draft')||'null'); if(d&&(Date.now()-(d.ts||0))<10*60*1000){ if(d.tipo)setTipo(d.tipo); if(d.cliente!=null)setCliente(d.cliente); if(d.datos!=null)setDatos(d.datos) } localStorage.removeItem('redaccion_draft') }catch(_){} },[])   // volver de Reconectar Drive sin perder lo escrito
   const MIMES_PREC="(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')"
   const manejarDriveErr = (e)=>{ const m=e?.message||''; if((e&&e.code===401)||/drive_auth|No hay conexión|No autorizado|GOOGLE_OAUTH|configurar|Failed to fetch|NetworkError|Error 40|Error 50/i.test(m)){ setPrecNeedAuth(true); setPrecErr(null) } else { setPrecErr(m||'No se pudo conectar con Drive.') } }
@@ -16751,6 +16756,18 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     const fn=(`${t?.lbl||'Documento'}${cliente.trim()?' - '+cliente.trim():''}`).replace(/[^\w\sáéíóúñÁÉÍÓÚÑ.\-]/g,'').trim()||'Documento'
     const a=document.createElement('a'); a.href=url; a.download=fn+'.doc'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500)
   }
+  const guardarEnDrive = async()=>{
+    if(!draft||!cliFolder||guardando) return
+    setGuardando(true); setGuardadoUrl(null); setGuardadoErr(null)
+    try{
+      const t=TIPOS_REDACCION.find(x=>x.k===tipo)
+      const html=`<html><head><meta charset='utf-8'></head><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a">${mdToHtml(draft)}</body></html>`
+      const name=(`${t?.lbl||'Documento'}${cliente.trim()?' - '+cliente.trim():''}`).replace(/[^\w\sáéíóúñÁÉÍÓÚÑ.\-]/g,'').trim()||'Documento'
+      const d=await driveCall({action:'upload', folderId:cliFolder.id, name, html})
+      setGuardadoUrl(d.url||null)
+    }catch(e){ const m=e?.message||''; setGuardadoErr(/No hay conexión|No autorizado|Failed to fetch|GOOGLE_OAUTH/i.test(m)?'Conecta Drive desde el menú ☰ para guardar.':(m||'No se pudo guardar en Drive.')) }
+    setGuardando(false)
+  }
   const inp = {width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 11px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
   return (
     <div style={{padding:'2px 2px 6px'}}>
@@ -16862,6 +16879,11 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
           </div>
         </div>
         <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={16} style={{...inp,resize:'vertical',fontSize:12.5,lineHeight:1.5}}/>
+        {cliFolder&&<div style={{marginTop:8,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <button type='button' onClick={guardarEnDrive} disabled={guardando} style={{fontSize:11,fontWeight:600,color:'#fff',background:guardando?C.done:C.accent,border:'none',borderRadius:7,padding:'5px 11px',cursor:guardando?'default':'pointer'}}>{guardando?'Guardando…':`Guardar en la carpeta de ${cliFolder.name}`}</button>
+          {guardadoUrl&&<a href={guardadoUrl} target='_blank' rel='noopener' style={{fontSize:10.5,color:C.normal,fontWeight:600}}>Guardado ✓ · abrir en Drive</a>}
+          {guardadoErr&&<span style={{fontSize:10.5,color:C.overdueText}}>{guardadoErr}</span>}
+        </div>}
       </div>}
     </div>
   )
