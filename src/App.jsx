@@ -6116,10 +6116,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                             <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(f.issued_at)}</div>
                             <div style={{fontSize:10,fontWeight:sameRut?600:400,color:sameRut?C.greenText:(rRut?C.soonText:C.muted),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rN||'sin RS'}</div>
                             <div style={{fontSize:10,fontWeight:sameRut?600:400,color:sameRut?C.greenText:C.muted}}>{rRut||''}</div>
+                            {f.concept&&<div style={{fontSize:9,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:3}}>{f.concept}</div>}
                           </div>
                         </div>
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,gap:8}}>
-                          <span style={{fontSize:9,fontWeight:600,color:sameRut?C.greenText:C.soonText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{sameRut?'✓ mismo RUT · mismo monto':'RS distinta del pagador'}{contested?' · otro abono también la reclama':''}</span>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:7,gap:8}}>
+                          {contested?<span style={{fontSize:9,fontWeight:600,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>Otro abono también la reclama</span>:<span/>}
                           <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 14px',cursor:pagoBusy?'default':'pointer',flexShrink:0}}>Conciliar</button>
                         </div>
                       </div>)})}
