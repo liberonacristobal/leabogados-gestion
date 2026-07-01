@@ -3976,6 +3976,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
   const [clientQ,setClientQ] = useState('')
   const [showNewClient,setShowNewClient] = useState(false)
   const [selectedClient,setSelectedClient] = useState(initialClients.find(c=>c.id===sale?.client_id)||null)
+  const [reasignCli,setReasignCli] = useState(false)   // reasignar la venta/propuesta a otro cliente (click en el nombre)
   const [rsMode,setRsMode] = useState(null)   // razón social: null=mostrar asignada · 'pick'=elegir otra · 'new'=agregar
   const [newRS,setNewRS] = useState({name:'',rut:''})
   const [extraEntities,setExtraEntities] = useState([])   // razones sociales creadas dentro de este form
@@ -4541,21 +4542,25 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         </div>
       )}
 
-      {/* 1. Cliente */}
-      {!selectedClient ? (
-        <Fld label='Cliente'>
+      {/* 1. Cliente — reasignable: click en "Cambiar" para mover la venta/propuesta a otro cliente */}
+      {(!selectedClient || reasignCli) ? (
+        <Fld label={reasignCli?<>Reasignar a otro cliente {selectedClient&&<span style={{fontWeight:400,color:C.muted}}>· hoy: {selectedClient.name}</span>}</>:'Cliente'}>
           <div style={{position:'relative'}}>
             <div style={{display:'flex',gap:6}}>
               <Inp value={clientQ} onChange={e=>setClientQ(e.target.value)} placeholder='Buscar cliente...' autoFocus style={{flex:1}}/>
-              <button onClick={()=>setShowNewClient(true)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>+ Nuevo</button>
+              {reasignCli
+                ? <button onClick={()=>{setReasignCli(false);setClientQ('')}} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Cancelar</button>
+                : <button onClick={()=>setShowNewClient(true)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>+ Nuevo</button>}
             </div>
             {clientMatches.length>0&&(
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:100,marginTop:4,maxHeight:200,overflowY:'auto'}}>
                 {clientMatches.map(c=>(
-                  <div key={c.id} onMouseDown={()=>{setSelectedClient(c);up('client_id',c.id);if(c.abogado_responsable)up('responsible',c.abogado_responsable);
-                    // Anticipa: área y formato de cobro = los más usados en las ventas pasadas de este cliente (no re-elegir lo de siempre).
-                    const past=(sales||[]).filter(s=>String(s.client_id)===String(c.id)&&!['Borrador','Rechazada','Propuesta'].includes(s.status));
-                    if(past.length){ const mode=k=>{const m={};past.forEach(s=>{if(s[k])m[s[k]]=(m[s[k]]||0)+1});const e=Object.entries(m).sort((a,b)=>b[1]-a[1])[0];return e?e[0]:null}; const ar=mode('area');if(ar)up('area',ar); const co=mode('cobro_type');if(co)setCobroType(co) }
+                  <div key={c.id} onMouseDown={()=>{ const rea=reasignCli; setSelectedClient(c);up('client_id',c.id);
+                    if(rea){ up('entity_id',''); setRsMode(null); setReasignCli(false) }   // al reasignar, la RS del cliente anterior deja de valer: se re-elige
+                    else { if(c.abogado_responsable)up('responsible',c.abogado_responsable);
+                      // Anticipa: área y formato de cobro = los más usados en las ventas pasadas de este cliente (no re-elegir lo de siempre).
+                      const past=(sales||[]).filter(s=>String(s.client_id)===String(c.id)&&!['Borrador','Rechazada','Propuesta'].includes(s.status));
+                      if(past.length){ const mode=k=>{const m={};past.forEach(s=>{if(s[k])m[s[k]]=(m[s[k]]||0)+1});const e=Object.entries(m).sort((a,b)=>b[1]-a[1])[0];return e?e[0]:null}; const ar=mode('area');if(ar)up('area',ar); const co=mode('cobro_type');if(co)setCobroType(co) } }
                     setClientQ('')}}
                     style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
                     onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft}
@@ -4567,13 +4572,17 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               </div>
             )}
           </div>
+          {reasignCli&&sale?.id&&<div style={{fontSize:11,color:C.coralText,marginTop:6}}>Mueve esta {f.status==='Propuesta'?'propuesta':'venta'} a otro cliente. Las facturas ya emitidas mantienen su receptor; revisa la razón social a facturar tras cambiar.</div>}
         </Fld>
-      ) : (sale?.id ? null : (
-        <div style={{marginBottom:10,padding:'10px 14px',borderRadius:8,background:C.azulBg,border:`1px solid ${C.accent}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
-          {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
+      ) : (
+        <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Reasignar a otro cliente' style={{marginBottom:10,padding:'9px 12px',borderRadius:8,background:C.azulBg,border:`1px solid ${C.accent}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
+            {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
+          </div>
+          <span style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:6,padding:'5px 11px',flexShrink:0}}>Cambiar</span>
         </div>
-      ))}
+      )}
       {showNewClient&&<MiniClientForm defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
       {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
 
@@ -17919,6 +17928,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const [q,setQ] = useState('')
   const [sortBy,setSortBy] = usePersistedState('cartera_sort','sinmover')   // sinmover | plazo | prioridad | cliente (recuerda al volver)
   const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
+  const [soloMios,setSoloMios] = usePersistedState('cartera_solomios',false) // admin: ver solo donde soy responsable
   const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
@@ -17935,6 +17945,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const rows = useMemo(()=>{
     let arr = (proyectos||[]).filter(p=>p.activo!==false)
     if(!esAdmin) arr = arr.filter(p=>(p.responsable||'')===miInicial)
+    else if(soloMios && miInicial) arr = arr.filter(p=>(p.responsable||'')===miInicial)
     if(estadoF!=='todos') arr = arr.filter(p=>(p.estado||'verde')===estadoF)
     if(q){ const s=q.toLowerCase(); arr = arr.filter(p=>(cnm(p.cliente_id)+' '+(p.nombre_proyecto||'')+' '+(p.nota||'')).toLowerCase().includes(s)) }
     const key = p => { const d=cartDias(p.ultima_actividad); return d==null?Infinity:d }
@@ -17945,7 +17956,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
       if(sortBy==='cliente') return cnm(a.cliente_id).localeCompare(cnm(b.cliente_id),'es')
       return 0
     })
-  },[proyectos,esAdmin,miInicial,estadoF,q,sortBy,clients])
+  },[proyectos,esAdmin,miInicial,soloMios,estadoF,q,sortBy,clients])
 
   const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
@@ -18118,6 +18129,9 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
           <option value='prioridad'>Prioridad</option>
           <option value='cliente'>Cliente</option>
         </select>
+        {esAdmin && miInicial && (
+          <button onClick={()=>setSoloMios(v=>!v)} style={chipSty(soloMios,C.accent,C.azulBg)}>Míos</button>
+        )}
         {[['todos','Todos',C.muted,'#EEF1F3'],['rojo','Rojo','#A32D2D','#FCEBEB'],['ambar','Ámbar','#854F0B','#FAEEDA'],['verde','Verde','#0F6E56','#E1F5EE']].map(([v,l,col,bg])=>(
           <button key={v} onClick={()=>setEstadoF(v)} style={chipSty(estadoF===v,col,bg)}>{l}</button>
         ))}

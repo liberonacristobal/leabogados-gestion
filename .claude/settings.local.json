@@ -312,7 +312,10 @@
       "WebFetch(domain:www.chileatiende.gob.cl)",
       "Bash(git check-ignore *)",
       "mcp__09aa9f4b-8883-492c-89e6-128e23255e22__search_files",
-      "mcp__09aa9f4b-8883-492c-89e6-128e23255e22__read_file_content"
+      "mcp__09aa9f4b-8883-492c-89e6-128e23255e22__read_file_content",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(ls node_modules/xlsx)"
     ]
   }
 }
