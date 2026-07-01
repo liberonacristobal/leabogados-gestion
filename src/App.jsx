@@ -17403,6 +17403,38 @@ async function escanearCarteraGmail(clients=[], proyectos=[], onProgress){
   }
   return out
 }
+
+// Fase 2C — Calendar → hitos de CARTERA (client-side, scope calendar.events ya concedido). Liga eventos próximos a proyectos.
+async function escanearCarteraCalendario(clients=[], proyectos=[]){
+  const token=await driveToken()
+  if(!token){ const e=new Error('Sin token de Google'); e.code=401; throw e }
+  const now=Date.now(); const timeMin=new Date(now-3*864e5).toISOString(); const timeMax=new Date(now+35*864e5).toISOString()
+  const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=60`
+  const r=await fetch(url,{headers:{Authorization:'Bearer '+token}})
+  if(!r.ok){ const e=new Error('Calendar '+r.status); e.code=r.status; throw e }
+  const j=await r.json(); const events=(j.items||[]).filter(e=>e.status!=='cancelled'&&(e.summary||'').trim())
+  if(!events.length) return []
+  const evs=events.map(e=>{ const dt=e.start?.dateTime||'', d=e.start?.date||''; const fecha=(dt||d||'').slice(0,10)
+    const cuando = dt ? new Date(dt).toLocaleString('es-CL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : (d? new Date(d+'T00:00').toLocaleDateString('es-CL',{weekday:'short',day:'numeric',month:'short'})+' · todo el día' : '')
+    return { titulo:(e.summary||'').slice(0,160), fecha, cuando, asistentes:(e.attendees||[]).map(a=>a.email).filter(Boolean).slice(0,8), ubicacion:e.location||'' } }).filter(e=>e.fecha)
+  const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:String(c.id),nombre:c.name}))
+  const proyList=proyectos.filter(p=>p.activo!==false).map(p=>({id:String(p.id),cliente_id:String(p.cliente_id||''),nombre:p.nombre_proyecto}))
+  const hoyISO=new Date().toISOString().slice(0,10)
+  const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso EVENTOS del calendario (título, fecha, asistentes, ubicación), CLIENTES y PROYECTOS activos. Para cada evento que claramente corresponda a un cliente/proyecto (audiencia, reunión, vencimiento, hito), devuelve {"tipo":"hito","proyecto_id":"<id de la lista o null>","cliente_id":"<id o null>","titulo":"...","fecha":"YYYY-MM-DD"}. Enlaza a un PROYECTO existente por su cliente siempre que puedas. Ignora eventos personales o irrelevantes. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nEVENTOS:\n${JSON.stringify(evs)}`
+  try{
+    const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2000,messages:[{role:'user',content:prompt}]})
+    const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
+    const out=[]
+    ;(Array.isArray(arr)?arr:[]).forEach(x=>{
+      if(!x||x.tipo!=='hito'||!x.titulo||!/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')) return
+      const pid=(x.proyecto_id&&proyList.some(p=>p.id===String(x.proyecto_id)))?String(x.proyecto_id):null
+      if(!pid) return   // v1: solo hitos ligados a un proyecto existente
+      const ev=evs.find(e=>e.titulo===x.titulo)
+      out.push({tipo:'hito',proyecto_id:pid,titulo:String(x.titulo).slice(0,160),fecha:x.fecha,fuente:ev?.cuando||x.fecha})
+    })
+    return out
+  }catch(_){ return [] }
+}
 // Escáner Gmail → tareas (modal): usa el helper de arriba. Compuerta humana: crear / editar / descartar.
 function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
   const [phase,setPhase] = useState('idle')
@@ -17835,17 +17867,18 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const escanear = async (forzar) => {
     if(escaneando) return
     setEscaneando(true)
-    try{
-      const res = await escanearCarteraGmail(clients, proyectos)
-      setNovedades(res); try{ localStorage.setItem(NOV_KEY, JSON.stringify(res)); localStorage.setItem('cartera_nov_dia', HOY) }catch(_){}
-      if(forzar && !res.length) appAlert('Sin novedades en el correo por ahora.')
-    }catch(e){ if(forzar) appAlert(e?.code===401?'Entra con tu correo de la oficina (Google) para que pueda leer el correo.':'No se pudo leer el correo: '+(e?.message||'')) }
+    let res=[], noToken=false
+    try{ res = res.concat(await escanearCarteraGmail(clients, proyectos)) }catch(e){ if(e?.code===401) noToken=true }
+    try{ res = res.concat(await escanearCarteraCalendario(clients, proyectos)) }catch(e){ if(e?.code===401) noToken=true }
+    setNovedades(res); try{ localStorage.setItem(NOV_KEY, JSON.stringify(res)); localStorage.setItem('cartera_nov_dia', HOY) }catch(_){}
+    if(forzar){ if(noToken) appAlert('Entra con tu correo de la oficina (Google) para leer correo y calendario.'); else if(!res.length) appAlert('Sin novedades por ahora.') }
     setEscaneando(false)
   }
   useEffect(()=>{
     if(!esAdmin) return
     if(DEMO){ setNovedades([
       {tipo:'update',proyecto_id:(proyectos[0]&&proyectos[0].id)||'p1',sugerencia:'Recibidos los poderes; falta agendar la firma ante notario',fuente:'Juan Pérez — RE: Poderes firmados'},
+      {tipo:'hito',proyecto_id:(proyectos[1]&&proyectos[1].id)||'p2',titulo:'Audiencia de conciliación',fecha:new Date(Date.now()+9*864e5).toISOString().slice(0,10),fuente:'lun 14 jul · 09:30 · Juzgado Civil'},
       {tipo:'nuevo',cliente_id:(clients.find(c=>!c.is_internal)||{}).id||null,sugerencia:'Posible constitución de sociedad',fuente:'gerencia@metalurgica — Consulta constitución'},
     ]); return }
     try{ const dia=localStorage.getItem('cartera_nov_dia'); if(dia===HOY){ const c=localStorage.getItem(NOV_KEY); if(c){ setNovedades(JSON.parse(c)||[]); return } } }catch(_){}
@@ -17854,6 +17887,12 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const cerrarNov = (idx) => { setNovedades(prev=>{ const nx=prev.filter((_,i)=>i!==idx); try{ localStorage.setItem(NOV_KEY, JSON.stringify(nx)) }catch(_){}; return nx }) }
   const aceptarNov = async (n, idx) => {
     if(n.tipo==='update'){ const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); if(p) await patch(p,{nota:n.sugerencia}); cerrarNov(idx) }
+    else if(n.tipo==='hito'){
+      const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); if(!p){ appAlert('Ese proyecto ya no está.'); return }
+      await patch(p,{ plazo:n.fecha, plazo_label:n.titulo })
+      if(p.cliente_id) supabase.from('plazos').insert({client_id:String(p.cliente_id),titulo:n.titulo,fecha:n.fecha,tipo:'hito',fuente:'calendario'}).then(()=>{},()=>{})
+      cerrarNov(idx)
+    }
     else if(n.tipo==='nuevo'){
       if(!n.cliente_id){ appAlert('Esta novedad no trae cliente; créala a mano con "+ Nuevo".'); return }
       const row={ cliente_id:String(n.cliente_id), nombre_proyecto:n.sugerencia, responsable:esAdmin?'CL':(miInicial||null), nota:null, estado:'verde', etapa_idx:0, origen:'correo', activo:true, ultima_actividad:HOY }
@@ -17871,7 +17910,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
         <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
         <span style={{ fontSize:17, fontWeight:600, color:C.accent, flex:1 }}>Proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</span>
-        {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer el correo con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar correo'}</button>}
+        {esAdmin&&<button onClick={()=>escanear(true)} disabled={escaneando} title='Leer correo y calendario con IA y proponer novedades' style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:escaneando?'default':'pointer', padding:'4px 6px' }}>{escaneando?'Leyendo…':'Revisar'}</button>}
         <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.azul3||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
       </div>
 
@@ -17885,21 +17924,24 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
       {esAdmin&&novedades.length>0&&(
         <div style={{ marginBottom:12, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', background:'#fff' }}>
           <div onClick={()=>setNovOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', cursor:'pointer', background:C.azulBg||'#E6F1FB' }}>
-            <span style={{ fontSize:12, fontWeight:600, color:C.azulInfo||'#185FA5', flex:1 }}>Novedades del correo · {novedades.length}</span>
+            <span style={{ fontSize:12, fontWeight:600, color:C.azulInfo||'#185FA5', flex:1 }}>Novedades · correo y agenda · {novedades.length}</span>
             <span style={{ fontSize:12, color:C.azulInfo||'#185FA5' }}>{novOpen?'▾':'▸'}</span>
           </div>
           {novOpen&&novedades.map((n,idx)=>{
-            const cli = n.tipo==='update' ? (()=>{ const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); return p?cnm(p.cliente_id):'' })() : cnm(n.cliente_id)
+            const cli = (n.tipo==='update'||n.tipo==='hito') ? (()=>{ const p=proyectos.find(x=>String(x.id)===String(n.proyecto_id)); return p?cnm(p.cliente_id):'' })() : cnm(n.cliente_id)
+            const texto = n.tipo==='hito' ? n.titulo : n.sugerencia
+            const tag = n.tipo==='nuevo'?'NUEVO':n.tipo==='hito'?'AGENDA':null
+            const btn = n.tipo==='nuevo'?'Crear proyecto':n.tipo==='hito'?'Fijar como hito':'Aceptar'
             return (
               <div key={idx} style={{ padding:'10px 12px', borderTop:`1px solid ${C.border}` }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                  {n.tipo==='nuevo'&&<span style={{ fontSize:9.5, fontWeight:700, color:C.azulInfo||'#185FA5', background:C.azulBg||'#E6F1FB', borderRadius:20, padding:'1px 7px' }}>NUEVO</span>}
+                  {tag&&<span style={{ fontSize:9.5, fontWeight:700, color:C.azulInfo||'#185FA5', background:C.azulBg||'#E6F1FB', borderRadius:20, padding:'1px 7px' }}>{tag}</span>}
                   <span style={{ fontSize:13, fontWeight:600, color:C.accent }}>{cli||'Sin cliente'}</span>
                 </div>
-                <div style={{ fontSize:13, color:C.text, marginBottom:3 }}>{n.sugerencia}</div>
+                <div style={{ fontSize:13, color:C.text, marginBottom:3 }}>{texto}</div>
                 {n.fuente&&<div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>{n.fuente}</div>}
                 <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={()=>aceptarNov(n,idx)} style={{ fontSize:12, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>{n.tipo==='nuevo'?'Crear proyecto':'Aceptar'}</button>
+                  <button onClick={()=>aceptarNov(n,idx)} style={{ fontSize:12, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>{btn}</button>
                   <button onClick={()=>cerrarNov(idx)} style={{ fontSize:12, fontWeight:600, color:C.muted, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Descartar</button>
                 </div>
               </div>
