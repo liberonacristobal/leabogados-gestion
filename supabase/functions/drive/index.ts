@@ -115,6 +115,24 @@ serve(async (req) => {
       return json({ base64: btoa(bin), mime });
     }
 
+    if (body.action === "upload") {
+      const folderId = String(body.folderId || "");
+      const name = String(body.name || "Documento");
+      const html = String(body.html || "");
+      if (!folderId || !html) return json({ error: "Faltan folderId o html" }, 400);
+      const boundary = "leadoc" + Date.now() + Math.floor(Math.random() * 1e9);
+      const meta = { name, mimeType: "application/vnd.google-apps.document", parents: [folderId] };
+      const multipart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${html}\r\n--${boundary}--`;
+      const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id", {
+        method: "POST",
+        headers: { ...H, "Content-Type": `multipart/related; boundary=${boundary}` },
+        body: multipart,
+      });
+      const d = await r.json();
+      if (!r.ok) return json({ error: d?.error?.message || `Drive ${r.status}` }, r.status);
+      return json({ id: d.id, url: "https://drive.google.com/open?id=" + d.id });
+    }
+
     return json({ error: "Acción no soportada" }, 400);
   } catch (err) {
     return json({ error: (err as Error).message }, 502);
