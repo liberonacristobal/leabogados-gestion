@@ -6069,10 +6069,15 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmt(m.monto)}</span><span style={{fontSize:9,color:C.muted}}>{fmtDate(m.fecha)}{m.n_operacion?` · Op ${m.n_operacion}`:''}</span></div>
                     <div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div>
                     <div style={{fontSize:9,color:C.coralText,fontWeight:600,margin:'6px 0 4px'}}>↓ calza con {facturas.length} facturas del mismo monto — elige cuál:</div>
-                    {facturas.map(f=>(<div key={f.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:7,padding:'6px 8px',marginBottom:4}}>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:10.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {folioN(f.invoice_no)} · {f.concept||'—'}</div><div style={{fontSize:9,color:C.muted}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)} · {fmt(saldoBill(f))}</div></div>
-                      <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:9.5,color:C.tealText,border:`0.5px solid ${C.tealText}`,background:'#fff',borderRadius:20,padding:'4px 10px',fontWeight:600,cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar con esta</button>
-                    </div>))}
+                    {facturas.map(f=>{
+                      const rRut=f.receptor_rut||''
+                      const ent=rRut?clientEntities.find(e=>nrG(e.rut)===nrG(rRut)):null
+                      const rN=f.receptor_name||ent?.name||clients.find(c=>String(c.id)===String(f.client_id))?.name||''
+                      const match=!!rRut&&!!m.rut_contraparte&&nrG(rRut)===nrG(m.rut_contraparte)
+                      return (<div key={f.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:7,padding:'6px 8px',marginBottom:4,border:match?`1px solid ${C.greenText}`:'1px solid transparent'}}>
+                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:10.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {folioN(f.invoice_no)} · {f.concept||'—'}</div><div style={{fontSize:9,color:C.muted}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)} · {fmt(saldoBill(f))}</div><div style={{fontSize:9,fontWeight:match?700:400,color:match?C.greenText:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{match?'✓ ':'→ '}{rN||'sin razón social'}{rRut?` · ${rRut}`:''}</div></div>
+                      <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:9.5,color:match?'#fff':C.tealText,border:`0.5px solid ${C.tealText}`,background:match?C.tealText:'#fff',borderRadius:20,padding:'4px 10px',fontWeight:600,cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar con esta</button>
+                    </div>)})}
                   </div>
                 ))}
               </div>}
