@@ -16578,14 +16578,14 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
   useEffect(()=>{ setCliDocSel(null); setCliDocTxt(''); setMostrarDocCli(false); setCliDocErr(null) },[cliObj&&cliObj.id])   // reset del documento al cambiar de cliente
   useEffect(()=>{ try{ const d=JSON.parse(localStorage.getItem('redaccion_draft')||'null'); if(d&&(Date.now()-(d.ts||0))<10*60*1000){ if(d.tipo)setTipo(d.tipo); if(d.cliente!=null)setCliente(d.cliente); if(d.datos!=null)setDatos(d.datos) } localStorage.removeItem('redaccion_draft') }catch(_){} },[])   // volver de Reconectar Drive sin perder lo escrito
   const MIMES_PREC="(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')"
-  const manejarDriveErr = (e)=>{ if(e&&(e.code===401||/drive_auth/.test(e.message||''))){ setPrecNeedAuth(true); setPrecErr(null) } else { setPrecErr(e?.message||'No se pudo conectar con Drive.') } }
-  const reconectarDrive = ()=>{ try{ localStorage.setItem('redaccion_draft', JSON.stringify({tipo,cliente,datos,ts:Date.now()})) }catch(_){}; connectDrive() }
+  const manejarDriveErr = (e)=>{ const m=e?.message||''; if((e&&e.code===401)||/drive_auth|No hay conexión|No autorizado|GOOGLE_OAUTH|configurar|Failed to fetch|NetworkError|Error 40|Error 50/i.test(m)){ setPrecNeedAuth(true); setPrecErr(null) } else { setPrecErr(m||'No se pudo conectar con Drive.') } }
+  const reconectarDrive = ()=>{ try{ localStorage.setItem('redaccion_draft', JSON.stringify({tipo,cliente,datos,ts:Date.now()})) }catch(_){}; connectDrivePermanente() }
   const buscarPrecLive = async()=>{   // Fase 1: búsqueda en vivo en el Drive (fallback si el índice está vacío/no existe)
     const folder = PREC_FOLDERS[tipo]; if(!folder) return
     const kw=(precKw.trim()||cliente.trim()).replace(/['\\]/g,' ').trim()
     const filt = kw ? ` and (fullText contains '${kw}' or name contains '${kw}')` : ''
-    const q = encodeURIComponent(`'${folder}' in parents and trashed=false and ${MIMES_PREC}${filt}`)
-    const data = await driveGetAuth(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=20`)
+    const q = `'${folder}' in parents and trashed=false and ${MIMES_PREC}${filt}`
+    const data = await driveCall({action:'search', q, pageSize:20})
     setPrecFiles(data.files||[]); setPrecFromIndex(false)
   }
   const buscarPrec = async()=>{   // Fase 2: índice primero (instantáneo, ordenado por usos); si no hay, cae a la búsqueda en vivo
@@ -16633,7 +16633,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     if(precReading) return
     setPrecReading(true); setPrecErr(null); setPrecNeedAuth(false)
     try{
-      const txt = (await leerDriveTexto(file)).slice(0,7000)
+      const txt = (await leerDriveTextoSA(file)).slice(0,7000)
       setPrecSel(file); setPrecTxt(txt)
       // aprende: el precedente que usas sube en el ranking (se ofrece primero la próxima vez)
       try{ if(precFromIndex&&file.usos!=null) await supabase.from('precedentes_index').update({usos:(file.usos||0)+1}).eq('file_id',file.id) }catch(_){}
@@ -16654,8 +16654,8 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     try{
       const kw=(clauKw.trim()||cliente.trim()).replace(/['\\]/g,' ').trim()
       if(!kw) throw new Error('Escribe qué documento buscar (cliente, materia…).')
-      const q=encodeURIComponent(`trashed=false and (fullText contains '${kw}' or name contains '${kw}') and ${MIMES_PREC}`)
-      const data=await driveGetAuth(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime+desc&pageSize=20`)
+      const q=`trashed=false and (fullText contains '${kw}' or name contains '${kw}') and ${MIMES_PREC}`
+      const data=await driveCall({action:'search', q, pageSize:20})
       setClauDocs(data.files||[])
     }catch(e){ manejarDriveErr(e) }
     setClauBusy(false)
@@ -16664,7 +16664,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     if(extrBusy) return
     setExtrBusy(file.id); setPrecErr(null); setExtrMsg(null)
     try{
-      const txt = await leerDriveTexto(file)
+      const txt = await leerDriveTextoSA(file)
       if(!txt||txt.length<200) throw new Error('El documento no tiene texto suficiente.')
       const sys = `Eres abogado chileno. Del documento legal extrae las CLÁUSULAS REUTILIZABLES (no los datos del caso). Devuelve SOLO un JSON array, sin markdown ni backticks, de objetos {titulo, categoria, texto}. titulo: nombre corto de la cláusula. categoria: EXACTAMENTE una de: ${CATS_CLAUSULA.join(' | ')}. texto: la cláusula redactada de forma reutilizable, reemplazando nombres/RUT/montos/fechas específicos del caso por marcadores [PARTE], [SOCIEDAD], [MONTO], [PLAZO], [FECHA]; conserva la redacción jurídica. Omite recitales y datos puramente del caso. Máximo 12 cláusulas.`
       const data = await claudeCall({model:'claude-opus-4-8',max_tokens:3500,system:sys,messages:[{role:'user',content:txt.slice(0,14000)}]})
@@ -16715,6 +16715,32 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       close(); html+='<p>'+inline(l)+'</p>'
     }
     close(); return html
+  }
+  const parseSlides = (md)=>{   // "Lámina N — título" / "## título" delimitan láminas; viñetas y párrafos van al cuerpo
+    const isTitle = l => /^#{1,3}\s+\S/.test(l) || /^#{0,3}\s*L[áa]mina\b/i.test(l)
+    const clean = s => s.replace(/^#{1,3}\s+/,'').replace(/^#{0,3}\s*L[áa]mina\s*\d*\s*[—–:.-]*\s*/i,'').replace(/\*\*/g,'').replace(/\*/g,'').trim()
+    const slides=[]; let cur=null
+    for(const raw of String(md||'').split('\n')){
+      const l=raw.replace(/\s+$/,''); if(!l.trim()||/^\s*---+\s*$/.test(l)) continue
+      if(isTitle(l)){ cur={title:clean(l),bullets:[]}; slides.push(cur); continue }
+      const b=l.replace(/^\s*[-*•]\s+/,'').replace(/\*\*/g,'').replace(/\*/g,'').trim()
+      if(!cur){ cur={title:b,bullets:[]}; slides.push(cur); continue }
+      cur.bullets.push(b)
+    }
+    return slides.filter(s=>s.title||s.bullets.length)
+  }
+  const descargarPPTX = async()=>{
+    if(!draft) return
+    const P = (await import('https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/+esm')).default
+    const pptx = new P(); pptx.layout='LAYOUT_WIDE'
+    const NAVY='003C50', GRAF='3D3D3D'
+    parseSlides(draft).forEach((s,i)=>{
+      const sl=pptx.addSlide()
+      sl.addText(s.title||'', {x:0.6,y:0.5,w:12,h:1,fontSize:i===0?30:22,bold:true,color:NAVY,fontFace:'Calibri'})
+      if(s.bullets.length) sl.addText(s.bullets.map(b=>({text:b,options:{bullet:true,fontSize:16,color:GRAF,paraSpaceAfter:8}})),{x:0.9,y:1.7,w:11.5,h:5.3,fontFace:'Calibri',valign:'top'})
+    })
+    const fn=(`Presentación${cliente.trim()?' - '+cliente.trim():''}`).replace(/[^\w\sáéíóúñÁÉÍÓÚÑ.\-]/g,'').trim()||'Presentación'
+    await pptx.writeFile({fileName:fn+'.pptx'})
   }
   const descargarWord = ()=>{
     if(!draft) return
@@ -16830,6 +16856,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
           <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Borrador · edítalo</span>
           <div style={{display:'flex',gap:8}}>
             <button onClick={generar} disabled={loading} style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>Regenerar</button>
+            {tipo==='presentacion'&&<button onClick={descargarPPTX} style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>PPTX</button>}
             <button onClick={descargarWord} style={{fontSize:11,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:'pointer'}}>Word</button>
             <button onClick={copiar} style={{fontSize:11,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'3px 11px',cursor:'pointer'}}>{copiado?'Copiado ✓':'Copiar'}</button>
           </div>
