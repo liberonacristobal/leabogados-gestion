@@ -17770,6 +17770,17 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
     setProyectos(prev=>[data,...prev]); setNuevo(false); setNf(NF0); setClientQ('')
   }
 
+  // La app SUGIERE: ventas Activas que aún no tienen proyecto en el panel (para el backfill de un toque).
+  const activasSinProyecto = useMemo(()=>{ const have=new Set((proyectos||[]).map(p=>p.sale_id&&String(p.sale_id)).filter(Boolean)); return (sales||[]).filter(s=>s.status==='Activo'&&!s.deleted_at&&!have.has(String(s.id))) },[sales,proyectos])
+  const backfill = async () => {
+    if(!activasSinProyecto.length) return
+    if(!(await appConfirm(`¿Crear ${activasSinProyecto.length} proyecto${activasSinProyecto.length!==1?'s':''} desde tus ventas activas? Podrás editar etapa, plazo y nota de cada uno.`))) return
+    const nuevos = activasSinProyecto.map(s=>({ sale_id:String(s.id), cliente_id:s.client_id?String(s.client_id):null, nombre_proyecto:s.title||'Proyecto', responsable:INICIALES_RESP[s.responsible||s.abogado_responsable]||null, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:HOY }))
+    const { data,error } = await supabase.from('proyectos_cartera').insert(nuevos).select()
+    if(error){ appAlert('No se pudo generar: '+error.message); return }
+    setProyectos(prev=>[...(data||[]),...prev])
+  }
+
   const nCrit = rows.filter(p=>(p.estado||'verde')==='rojo').length
   const chipSty = (on,col,bg) => ({ fontSize:12, fontWeight:500, color:on?'#fff':col, background:on?C.accent:bg, borderRadius:20, padding:'4px 12px', border:'none', cursor:'pointer' })
 
@@ -17780,6 +17791,13 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
         <span style={{ fontSize:17, fontWeight:600, color:C.accent, flex:1 }}>Proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</span>
         <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.azul3||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
       </div>
+
+      {activasSinProyecto.length>0&&(
+        <div onClick={backfill} style={{ display:'flex', alignItems:'center', gap:8, background:C.azulBg||'#E6F1FB', border:`1px solid ${C.border}`, borderRadius:10, padding:'9px 12px', marginBottom:10, cursor:'pointer' }}>
+          <span style={{ fontSize:12, color:C.accent, flex:1 }}>{activasSinProyecto.length} venta{activasSinProyecto.length!==1?'s':''} activa{activasSinProyecto.length!==1?'s':''} sin proyecto en el panel</span>
+          <span style={{ fontSize:12, fontWeight:600, color:C.accent, whiteSpace:'nowrap' }}>Generar →</span>
+        </div>
+      )}
 
       {nuevo&&(
         <div style={{ background:C.bgSoft||'#F5F7F9', border:`1px solid ${C.border}`, borderRadius:12, padding:12, marginBottom:12 }}>
@@ -19892,6 +19910,19 @@ export default function App() {
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
   },[session?.user?.id])
 
+  // Auto-crear proyecto de cartera cuando una venta queda Activa (idempotente: no duplica por sale_id).
+  // Solo Activo (Propuesta/Borrador/Rechazada NO generan proyecto, igual que no generan facturación).
+  const proyCarteraRef = useRef([])
+  useEffect(()=>{ proyCarteraRef.current = proyectosCartera },[proyectosCartera])
+  const ensureProyectoCartera = async (sale) => {
+    if(!sale || sale.status!=='Activo' || !sale.id) return
+    if(proyCarteraRef.current.some(p=>String(p.sale_id)===String(sale.id))) return
+    const resp = INICIALES_RESP[sale.responsible||sale.abogado_responsable] || null
+    const row = { sale_id:String(sale.id), cliente_id:sale.client_id?String(sale.client_id):null, nombre_proyecto:sale.title||'Proyecto', responsable:resp, estado:'verde', etapa_idx:0, origen:'venta', activo:true, ultima_actividad:new Date().toISOString().slice(0,10) }
+    const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
+    if(!error && data) setProyectosCartera(prev=> prev.some(p=>String(p.sale_id)===String(sale.id))?prev:[data,...prev])
+  }
+
   const handleSaveSale=useCallback(async(f)=>{
     setSaving(true)
     try{
@@ -19904,6 +19935,7 @@ export default function App() {
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
+      ensureProyectoCartera(data)   // si quedó Activa, aparece en el Panel de Cartera (idempotente)
       // Insertar cuotas (función reutilizable)
       const insertarCuotas = async() => {
         // Resguardo: no crear una programada por un cobro ya cubierto por facturas PAGADAS de esta venta.
