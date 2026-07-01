@@ -5723,7 +5723,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       if(amb){ const r=revMap[p.abono.id]=revMap[p.abono.id]||{abono:p.abono,facturas:[]}; if(!r.facturas.some(f=>String(f.id)===String(p.factura.id))) r.facturas.push(p.factura) }
       else clean.push(p) })
     clean.sort((a,z)=> (z.rut?1:0)-(a.rut?1:0) || (esVencidaG(z.factura)?1:0)-(esVencidaG(a.factura)?1:0) || String(z.abono.fecha||'').localeCompare(String(a.abono.fecha||'')) )
-    return {clean, revisar:Object.values(revMap)}
+    // Facturas "en disputa": una misma factura calza con 2+ abonos → solo uno puede pagarla. Se avisa para no doble-conciliar.
+    const contested = new Set(Object.keys(aboPorFac).filter(fid=>aboPorFac[fid].size>1))
+    return {clean, revisar:Object.values(revMap), contested}
   },[bb, abonos, clientEntities])
   // Estado de cuenta: correo al cliente con TODAS sus facturas pendientes + total adeudado (práctica estándar de cobranza). Compuerta de confirmación.
   const estadoCuentaEnviar = async(cli)=>{
@@ -6071,12 +6073,23 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <div style={{fontSize:9,color:C.coralText,fontWeight:600,margin:'6px 0 4px'}}>↓ calza con {facturas.length} facturas del mismo monto — elige cuál:</div>
                     {facturas.map(f=>{
                       const rRut=f.receptor_rut||''
-                      const ent=rRut?clientEntities.find(e=>nrG(e.rut)===nrG(rRut)):null
-                      const rN=f.receptor_name||ent?.name||clients.find(c=>String(c.id)===String(f.client_id))?.name||''
-                      const match=!!rRut&&!!m.rut_contraparte&&nrG(rRut)===nrG(m.rut_contraparte)
-                      return (<div key={f.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:7,padding:'6px 8px',marginBottom:4,border:match?`1px solid ${C.greenText}`:'1px solid transparent'}}>
-                      <div style={{flex:1,minWidth:0}}><div style={{fontSize:10.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {folioN(f.invoice_no)} · {f.concept||'—'}</div><div style={{fontSize:9,color:C.muted}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)} · {fmt(saldoBill(f))}</div><div style={{fontSize:9,fontWeight:match?700:400,color:match?C.greenText:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{match?'✓ ':'→ '}{rN||'sin razón social'}{rRut?` · ${rRut}`:''}</div></div>
-                      <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:9.5,color:match?'#fff':C.tealText,border:`0.5px solid ${C.tealText}`,background:match?C.tealText:'#fff',borderRadius:20,padding:'4px 10px',fontWeight:600,cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar con esta</button>
+                      const fClient=efClientIdG(f)
+                      const cliName=clients.find(c=>String(c.id)===String(fClient))?.name||''
+                      const rN=f.receptor_name||(rRut?clientEntities.find(e=>nrG(e.rut)===nrG(rRut))?.name:'')||''
+                      const sameClient=!!fClient&&String(fClient)===String(m.cliente_id)
+                      const sameRut=!!rRut&&!!m.rut_contraparte&&nrG(rRut)===nrG(m.rut_contraparte)
+                      const ok=sameClient||sameRut
+                      const contested=calcesSugeridos.contested.has(String(f.id))
+                      const rsDistinta=rN&&cliName&&_normTxt(rN)!==_normTxt(cliName)
+                      return (<div key={f.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:7,padding:'6px 8px',marginBottom:4,border:`1px solid ${contested?C.coralText:ok?C.greenText:'transparent'}`}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:10.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F° {folioN(f.invoice_no)} · {f.concept||'—'}</div>
+                        <div style={{fontSize:9,color:C.muted}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)} · {fmt(saldoBill(f))}</div>
+                        <div style={{fontSize:9,fontWeight:ok?700:400,color:ok?C.greenText:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{ok?'✓ ':'→ '}{cliName||rN||'sin cliente'}{sameClient?' · mismo cliente':sameRut?' · mismo RUT':''}</div>
+                        {rsDistinta&&<div style={{fontSize:8.5,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>emitida a {rN}{rRut?` · ${rRut}`:''}</div>}
+                        {contested&&<div style={{fontSize:8.5,fontWeight:600,color:C.coralText,marginTop:1}}>⚠ otro abono del mismo monto también la reclama — solo uno la paga</div>}
+                      </div>
+                      <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:9.5,color:ok?'#fff':C.tealText,border:`0.5px solid ${C.tealText}`,background:ok?C.tealText:'#fff',borderRadius:20,padding:'4px 10px',fontWeight:600,cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar con esta</button>
                     </div>)})}
                   </div>
                 ))}
