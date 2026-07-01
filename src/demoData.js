@@ -16,6 +16,13 @@ export const demoData = {
     { id:'c7', name:'Transportes Volcán SpA',      rut:'76.888.999-0', status:'Activo',    type:'Empresa', abogado_responsable:'Cristóbal', is_internal:false },
     { id:'c8', name:'Agrícola Las Vertientes Ltda',rut:'77.121.314-5', status:'Prospecto', type:'Empresa', abogado_responsable:'Erasmo',    is_internal:false },
   ],
+  proyectos_cartera: [
+    { id:'p1', cliente_id:'c1', nombre_proyecto:'Reestructuración societaria', estado:'rojo',  etapa_idx:2, responsable:'CL', nota:'Esperando poderes del segundo socio para firmar', plazo_label:'Firma de escritura ante notario', plazo:new Date(Date.now()-4*864e5).toISOString().slice(0,10),  ultima_actividad:new Date(Date.now()-18*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
+    { id:'p2', cliente_id:'c3', nombre_proyecto:'Regularización de servidumbre', estado:'ambar', etapa_idx:1, responsable:'RD', nota:'Redactando minuta para el CBR', plazo_label:null, plazo:new Date(Date.now()+5*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-9*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
+    { id:'p3', cliente_id:'c6', nombre_proyecto:'Constitución de sociedad', estado:'ambar', etapa_idx:0, responsable:'EE', nota:'Reuniendo antecedentes de los socios', plazo_label:null, plazo:new Date(Date.now()+6*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-12*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
+    { id:'p4', cliente_id:'c5', nombre_proyecto:'Contrato de distribución', estado:'verde', etapa_idx:3, responsable:'MP', nota:'Enviado a revisión del cliente', plazo_label:null, plazo:new Date(Date.now()+21*864e5).toISOString().slice(0,10), ultima_actividad:new Date(Date.now()-2*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
+    { id:'p5', cliente_id:'c4', nombre_proyecto:'Due diligence de compra', estado:'verde', etapa_idx:1, responsable:'MC', nota:'Revisando carpeta tributaria en Drive', plazo_label:null, plazo:null, ultima_actividad:new Date(Date.now()-1*864e5).toISOString().slice(0,10), origen:'manual', activo:true },
+  ],
   client_entities: [
     { id:'e1',  client_id:'c1', name:'Comercial Andes SpA', rut:'76.111.222-3' },
     { id:'e1b', client_id:'c1', name:'Andes Retail SpA',    rut:'76.111.999-1' },
