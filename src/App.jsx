@@ -5090,7 +5090,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], onEmitir, onStatusChange}) {
   const now = new Date()
   const [year,setYear] = useState(String(now.getFullYear()))
   const [month,setMonth] = useState(String(now.getMonth()+1).padStart(2,'0'))
@@ -5128,10 +5128,20 @@ function ChecklistFacturacion({billing, clients, onEmitir, onStatusChange}) {
     setDesc(true)
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const header=['Cliente','Concepto','Monto','Estado','Vencimiento']
-      const rows=items.map(b=>{ const c=clients.find(x=>x.id===b.client_id); return [c?.name||'Sin cliente', b.concept||'', b.amount||0, esEmitida(b)?'Emitida':'Por facturar', b.due||''] })
+      const header=['Cliente','Razón social','RUT','Concepto','Monto','Estado','Vencimiento']
+      const rows=items.map(b=>{
+        const c=clients.find(x=>x.id===b.client_id)
+        // Razón social + RUT desde client_entities (fuente única), igual que "↓ Programadas".
+        const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
+        let rs=null
+        if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null
+        else if(ents.length===1) rs=ents[0]
+        const rsName=rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||''))
+        const rsRut=rs?(rs.rut||''):(b.entity_id?'':(ents.length>1?'':(b.receptor_rut||'')))
+        return [c?.name||'Sin cliente', rsName, rsRut, b.concept||'', b.amount||0, esEmitida(b)?'Emitida':'Por facturar', b.due||'']
+      })
       const ws=XLSX.utils.aoa_to_sheet([header,...rows])
-      ws['!cols']=[{wch:26},{wch:34},{wch:14},{wch:14},{wch:14}]
+      ws['!cols']=[{wch:24},{wch:26},{wch:14},{wch:32},{wch:14},{wch:12},{wch:14}]
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturar')
       XLSX.writeFile(wb,`Facturar_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
@@ -6004,6 +6014,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={()=>{setFilter(filter==='checklist'?'resumen':'checklist');clearSel&&clearSel()}} title='Facturas a emitir este mes + Excel' style={chipBtn(filter==='checklist'?'primary':'soft')}>{filter==='checklist'?'← Volver':'Facturas del mes'}</button>
             {filter==='resumen'&&<button onClick={()=>{setFilter('clientes');clearSel&&clearSel()}} title='Detalle por cliente' style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:'0.5px solid '+C.accent,background:'#fff',color:C.accent}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>Por cliente</button>}
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
@@ -6508,7 +6519,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
