@@ -18329,6 +18329,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
   const [detFor,setDetFor] = useState(null)
   const [facBuscaQ,setFacBuscaQ] = useState('')  // buscador del estado de cuenta del cliente en el panel del pago      // id de la factura con el detalle expandido en el selector "Otra factura"
+  const [rsConcOpen,setRsConcOpen] = useState(()=>new Set())   // por RS: mostrar las cobradas-conciliadas (colapsadas por defecto)
   const [modalMov,setModalMov] = useState(null)  // id del movimiento abierto en el modal de detalle
   // Salto desde el Estado de cuenta del cliente: limpia filtros, abre el movimiento y hace scroll. Espera a que carguen los movs.
   useEffect(()=>{ if(!focusMovId) return; const m=movs.find(x=>x.id===focusMovId); if(!m) return
@@ -19808,10 +19809,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             {facsAll.length>=8&&<input value={facBuscaQ} onChange={e=>setFacBuscaQ(e.target.value)} onClick={e=>e.stopPropagation()} placeholder='Buscar factura: N°, concepto, monto…' style={{width:'100%',boxSizing:'border-box',fontSize:11,padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,marginBottom:5,outline:'none'}}/>}
                             <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Facturas del cliente{facsAll.length?` · ${facsAll.length}`:''} <span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>· nueva→antigua</span></div>
                             {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Este cliente no tiene facturas emitidas — clasifícalo arriba como <b>Saldo a Favor</b> o <b>Fondo por Rendir</b>.</span>}
-                            {Object.entries(grupos).map(([rs,fs])=>(
-                              <div key={rs} style={{marginBottom:5}}>
-                                <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
-                                {fs.map(f=>{ const open=detFor===f.id; return (
+                            {Object.entries(grupos).map(([rs,fs])=>{
+                              const esConc=f=>{ const ap=aplicadoByFactura[f.id]||0; return (f.amount||0)>0 && ap>=(f.amount||0) }
+                              const activas=fs.filter(f=>!esConc(f)), conciliadas=fs.filter(f=>esConc(f)); const concShown=rsConcOpen.has(rs)
+                              const renderFac=f=>{ const open=detFor===f.id; return (
                                   <div key={f.id}>
                                     <div onClick={()=>setDetFor(open?null:f.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,fontSize:11,padding:'4px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
                                       <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(f.invoice_no)||'—'}</b> · {(f.concept||'sin concepto').slice(0,26)} <span style={{color:C.done}}>· {fmtFechaDMY(f.issued_at)}</span></span>
@@ -19830,9 +19831,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                         {ap>0&&(()=>{ const cr=(conc||[]).find(c=>String(c.factura_id)===String(f.id)&&c.tipo_destino==='factura'); const mm=cr&&(movs||[]).find(x=>String(x.id)===String(cr.movimiento_id)); return mm?<button disabled={busy===m.id} onClick={async()=>{ if(await appConfirm(`¿Liberar el calce de la Factura N°${folioN(f.invoice_no)}? El pago vuelve a "por conciliar" para reasignarlo.`)){ setDetFor(null); deshacer(mm) } }} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'4px 12px',border:'1px solid #F0997B',background:'#fff',color:C.overdueText,cursor:busy===m.id?'default':'pointer'}}>Liberar calce</button>:null })()}
                                       </div>
                                     </div>) })()}
-                                  </div>) })}
+                                  </div>) }
+                              return (
+                              <div key={rs} style={{marginBottom:5}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:1}}>{rs}</div>
+                                {activas.map(renderFac)}
+                                {conciliadas.length>0&&<>
+                                  <div onClick={()=>setRsConcOpen(s=>{const n=new Set(s); n.has(rs)?n.delete(rs):n.add(rs); return n})} style={{fontSize:9,fontWeight:600,color:C.muted,cursor:'pointer',padding:'4px 0'}}>{conciliadas.length} cobrada{conciliadas.length!==1?'s':''} y conciliada{conciliadas.length!==1?'s':''} {concShown?'▾':'▸'}</div>
+                                  {concShown&&conciliadas.map(renderFac)}
+                                </>}
                               </div>
-                            ))}
+                            )})}
                           </div>) })()}
                       </>}
                     </div>
