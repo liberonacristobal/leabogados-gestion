@@ -5094,7 +5094,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const now = new Date()
   const [year,setYear] = useState(String(now.getFullYear()))
   const [month,setMonth] = useState(String(now.getMonth()+1).padStart(2,'0'))
-  const [emitOpen,setEmitOpen] = useState(false)   // "Ya emitidas" colapsadas por defecto
+  const [mesesEmitOpen,setMesesEmitOpen] = useState(()=>new Set())   // meses de "Emitidas" abiertos (colapsadas por defecto)
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const ufState = useUF()
@@ -5109,8 +5109,9 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
     .sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
   ,[billing,mesKey])
   const porEmitir = items.filter(b=>!esEmitida(b))   // las Programadas de este mes = las que debo emitir
-  const emitidas = items.filter(esEmitida)
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
+  // Emitidas (con folio): archivo AGRUPADO POR MES, todas, colapsadas por defecto — no solo el mes seleccionado.
+  const emitidasPorMes = (()=>{ const g={}; billing.filter(b=>!b.deleted_at&&esEmitida(b)&&b.due).forEach(b=>{ const k=(b.due||'').slice(0,7); (g[k]=g[k]||[]).push(b) }); return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1) })()
 
   const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+(b.amount||0),0)
   const emitidasCLP = items.filter(esEmitida).reduce((a,b)=>a+(b.amount||0),0)
@@ -5208,26 +5209,30 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
               <div style={{fontSize:10,color:C.grisText,marginTop:1}}>vence pago {b.due?fmtDate(b.due):'—'}</div>
             </div>
             <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,textAlign:'right'}}>{fmt(b.amount)}</div>
-            <button onClick={()=>toggle(b)} disabled={busy===b.id} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 13px',cursor:busy===b.id?'default':'pointer',flexShrink:0}}>{busy===b.id?'…':'Emitir'}</button>
           </div>
         )})}
       </div>
 
-      {/* Emitidas — con folio (aparecen en el SII); colapsadas. Cada una con su estado definido. */}
-      {emitidas.length>0&&(
-        <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
-          <div onClick={()=>setEmitOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer',background:C.greenBg}}>
-            <span style={{fontSize:11,fontWeight:700,color:C.greenText,flex:1}}>Emitidas · {emitidas.length} · {fmt(emitidasCLP)}</span>
-            <span style={{fontSize:12,color:C.greenText}}>{emitOpen?'▾':'▸'}</span>
-          </div>
-          {emitOpen&&emitidas.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b); return (
-            <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:'#fff'}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
-                <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+      {/* Emitidas — con folio (aparecen en el SII), AGRUPADAS Y COLAPSADAS POR MES. Cada una con su estado definido. */}
+      {emitidasPorMes.length>0&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Emitidas · por mes</div>
+          {emitidasPorMes.map(([mk,fs])=>{ const open=mesesEmitOpen.has(mk); const yy=mk.slice(0,4), mm=mk.slice(5,7); const total=fs.reduce((a,b)=>a+(b.amount||0),0); return (
+            <div key={mk} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:6}}>
+              <div onClick={()=>setMesesEmitOpen(s=>{ const n=new Set(s); n.has(mk)?n.delete(mk):n.add(mk); return n })} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer',background:C.greenBg}}>
+                <span style={{fontSize:11,fontWeight:700,color:C.greenText,flex:1}}>{MESES[parseInt(mm,10)-1]||mm} {yy} · {fs.length} · {fmt(total)}</span>
+                <span style={{fontSize:12,color:C.greenText}}>{open?'▾':'▸'}</span>
               </div>
-              {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
-              <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
+              {open&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b); return (
+                <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:'#fff'}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
+                    <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+                  </div>
+                  {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
+                  <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
+                </div>
+              )})}
             </div>
           )})}
         </div>
@@ -5235,7 +5240,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
 
       {/* Footer */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <div style={{fontSize:12,color:C.muted}}>{porEmitir.length} por emitir · {emitidas.length} emitidas</div>
+        <div style={{fontSize:12,color:C.muted}}>{porEmitir.length} por emitir este mes</div>
         <button onClick={descargarExcel} disabled={desc} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:desc?'default':'pointer',opacity:desc?.6:1}}>{desc?'Generando...':'↓ Descargar por emitir'}</button>
       </div>
     </div>
@@ -6342,7 +6347,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 </div>
               </div>
             </div>
-            <div style={{fontSize:9,color:C.done,marginBottom:10,paddingLeft:2}}>Cobrado y Por facturar del año · Por cobrar y Vencido = saldo vivo</div>
             {(()=>{ const rech=(billing||[]).filter(b=>!b.deleted_at&&/rech/i.test(b.dte_estado||'')); if(!rech.length) return null; return (
               <div onClick={()=>go('clientes')} title='El SII rechazó estas facturas electrónicas — revísalas y vuelve a emitir' style={{display:'flex',alignItems:'center',gap:11,background:C.overdueBg,borderLeft:`3px solid ${C.overdue}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdue} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg></span>
