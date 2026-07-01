@@ -2225,7 +2225,7 @@ function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,onOpenClientFicha,onOpenPlazos}) {
+function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,onOpenClientFicha,onOpenPlazos}) {
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   const yr = currentYear
@@ -2404,6 +2404,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const plzVenc=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha<today)
     const plzProx=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha>=today&&p.fecha<=en7plz)
     const fmtPlz=f=>{ try{ return new Date(f+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) }catch(_){ return f||'' } }
+    // Cartera: proyectos críticos (rojo) y sin mover +2 semanas → al panel
+    const diasCart=iso=>iso?Math.floor((Date.now()-new Date(iso+'T00:00').getTime())/86400000):null
+    const cartCrit=(proyectosCartera||[]).filter(p=>p.activo!==false&&(p.estado||'verde')==='rojo')
+    const cartStale=(proyectosCartera||[]).filter(p=>p.activo!==false&&(p.estado||'verde')!=='rojo'&&diasCart(p.ultima_actividad)!=null&&diasCart(p.ultima_actividad)>=14)
     const items = [
       vencidas.length&&{sev:0,dot:C.overdue,ico:'cash',lbl:'Facturas vencidas',sub:`${vencidas.length} factura${vencidas.length!==1?'s':''}`,amt:fmtShort(sumSaldo(vencidas)),go:'billing',navLbl:`Ver las ${vencidas.length}`,rows:vencidas.slice(0,3).map(b=>({name:cnD(b.client_id),val:fmtN(saldoBill(b)),cid:b.client_id})),iaTxt:`${vencidas.length} facturas vencidas por ${fmtShort(sumSaldo(vencidas))}`},
       tareasVenc.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Tareas vencidas',sub:`${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''}`,amt:'',go:'tasks',navLbl:`Ver las ${tareasVenc.length}`,rows:tareasVenc.slice(0,3).map(t=>({name:t.title||'Tarea',val:''})),iaTxt:`${tareasVenc.length} tareas vencidas`},
@@ -2413,13 +2417,15 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       propTardias.length&&{sev:2,dot:C.done,ico:'clock',lbl:'Propuestas tardías (+14d)',sub:`${propTardias.length} propuesta${propTardias.length!==1?'s':''}`,amt:fmtShort(Math.round(propTardias.reduce((a,s)=>a+clpDeVenta(s),0))),go:'sales',navLbl:`Ver las ${propTardias.length}`,rows:propTardias.slice(0,3).map(s=>({name:s.title||cnD(s.client_id),val:'',cid:s.client_id})),iaTxt:`${propTardias.length} propuestas hace +14 días sin cerrar`},
       plzVenc.length&&{sev:0,dot:C.overdue,ico:'clock',lbl:'Plazos vencidos',sub:`${plzVenc.length} plazo${plzVenc.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzVenc.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzVenc.length} plazos vencidos`},
       plzProx.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Plazos esta semana',sub:`${plzProx.length} plazo${plzProx.length!==1?'s':''}`,amt:'',onNav:()=>onOpenPlazos&&onOpenPlazos(),navLbl:'Ver plazos',rows:plzProx.slice(0,3).map(p=>({name:p.titulo||'Plazo',val:fmtPlz(p.fecha),cid:p.client_id})),iaTxt:`${plzProx.length} plazos vencen esta semana`},
+      cartCrit.length&&{sev:0,dot:C.overdue,ico:'alert',lbl:'Proyectos críticos',sub:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver cartera',rows:cartCrit.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartCrit.length} proyecto${cartCrit.length!==1?'s':''} en rojo`},
+      cartStale.length&&{sev:1,dot:C.soon,ico:'clock',lbl:'Proyectos sin mover +2 semanas',sub:`${cartStale.length} proyecto${cartStale.length!==1?'s':''}`,amt:'',onNav:()=>setTab&&setTab('cartera'),navLbl:'Ver cartera',rows:cartStale.slice(0,3).map(p=>({name:cnD(p.cliente_id),val:'',cid:p.cliente_id})),iaTxt:`${cartStale.length} proyecto${cartStale.length!==1?'s':''} sin mover +2 semanas`},
     ].filter(Boolean).sort((a,b)=>a.sev-b.sev)
     const head = vencidas.length ? `Hoy prioriza la cobranza: ${fmtShort(sum(vencidas))} en ${vencidas.length} factura${vencidas.length!==1?'s':''} vencida${vencidas.length!==1?'s':''}.`
       : tareasVenc.length ? `Tienes ${tareasVenc.length} tarea${tareasVenc.length!==1?'s':''} vencida${tareasVenc.length!==1?'s':''} por resolver.`
       : porCobrar7.length ? `Vence cobranza esta semana: ${fmtShort(sum(porCobrar7))} en ${porCobrar7.length}.`
       : items.length ? 'Pendientes menores por revisar.' : 'Todo al día.'
     return {items, head}
-  },[bb,tasks,expenses,sales,negatives,totalNeg,clients,plazos])
+  },[bb,tasks,expenses,sales,negatives,totalNeg,clients,plazos,proyectosCartera])
 
   const resumenHoyIA = async()=>{
     if(!atenderHoy.items.length){ setIaHoy('Todo al día — sin pendientes urgentes.'); return }
@@ -17811,6 +17817,8 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const [novedades,setNovedades] = useState([])       // Fase 2B: sugerencias del correo pendientes de revisar
   const [escaneando,setEscaneando] = useState(false)
   const [novOpen,setNovOpen] = useState(true)
+  const [archivados,setArchivados] = useState([])     // proyectos archivados (activo=false), para ver/reponer
+  const [archOpen,setArchOpen] = useState(false)
 
   const rows = useMemo(()=>{
     let arr = (proyectos||[]).filter(p=>p.activo!==false)
@@ -17839,11 +17847,23 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const setEstado = (p,e) => patch(p,{ estado:e })
   const guardarNota = p => { if((draft||'')!==(p.nota||'')) patch(p,{ nota:draft||null }) }
   const archivar = async p => {
-    if(!(await appConfirm(`¿Archivar "${p.nombre_proyecto||cnm(p.cliente_id)}"? Sale del panel; no se borra.`))) return
-    setProyectos(prev=>prev.map(x=>x.id===p.id?{...x,activo:false}:x)); setOpenId(null)
+    if(!(await appConfirm(`¿Archivar "${p.nombre_proyecto||cnm(p.cliente_id)}"? Sale del panel; queda en Archivados, no se borra.`))) return
+    setProyectos(prev=>prev.filter(x=>x.id!==p.id)); setArchivados(prev=>[{...p,activo:false},...prev]); setOpenId(null)
     const { error } = await supabase.from('proyectos_cartera').update({activo:false,updated_at:new Date().toISOString()}).eq('id',p.id)
     if(error) appAlert('No se pudo archivar: '+error.message)
   }
+  const reponer = async p => {
+    setArchivados(prev=>prev.filter(x=>x.id!==p.id)); setProyectos(prev=>[{...p,activo:true,ultima_actividad:HOY},...prev])
+    const { error } = await supabase.from('proyectos_cartera').update({activo:true,ultima_actividad:HOY,updated_at:new Date().toISOString()}).eq('id',p.id)
+    if(error) appAlert('No se pudo reponer: '+error.message)
+  }
+  useEffect(()=>{
+    if(DEMO){ setArchivados([
+      {id:'pa1',cliente_id:'c5',nombre_proyecto:'Registro de marca',responsable:'CL',estado:'verde',activo:false},
+      {id:'pa2',cliente_id:'c7',nombre_proyecto:'Contrato de flota',responsable:'EE',estado:'verde',activo:false},
+    ]); return }
+    supabase.from('proyectos_cartera').select('*').eq('activo',false).order('updated_at',{ascending:false}).limit(50).then(({data})=>{ if(data) setArchivados(data) },()=>{})
+  },[])   // eslint-disable-line
   const crear = async () => {
     if(!nf.cliente_id||!nf.nombre.trim()){ appAlert('Elige un cliente y escribe el nombre del proyecto.'); return }
     const row = { cliente_id:nf.cliente_id, nombre_proyecto:nf.nombre.trim(), responsable:nf.responsable||null, nota:nf.nota.trim()||null, plazo:nf.plazo||null, estado:'verde', etapa_idx:0, origen:'manual', activo:true, ultima_actividad:HOY }
@@ -18003,10 +18023,11 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
                   <div onClick={()=>abrir(p)} style={{ padding:'12px 13px', cursor:'pointer' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
                           <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
                           <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:170 }}>{cnm(p.cliente_id)||'—'}</span>
                           <span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>· {p.nombre_proyecto||etapa}</span>
+                          {p.plazo&&dP!=null&&(dP<0||dP<=7)&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
                         </div>
                         {p.nota&&<div style={{ fontSize:13, color:C.text, marginTop:5, paddingLeft:15 }}>{p.nota}</div>}
                       </div>
@@ -18058,6 +18079,21 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
               )
             })}
           </div>}
+
+      {archivados.length>0&&(
+        <div style={{ marginTop:10, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', background:'#fff' }}>
+          <div onClick={()=>setArchOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer' }}>
+            <span style={{ fontSize:12, fontWeight:600, color:C.muted, flex:1 }}>Archivados · {archivados.length}</span>
+            <span style={{ fontSize:12, color:C.muted }}>{archOpen?'▾':'▸'}</span>
+          </div>
+          {archOpen&&archivados.map(p=>(
+            <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}` }}>
+              <span style={{ fontSize:13, color:C.muted, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||'—'}{p.nombre_proyecto?` · ${p.nombre_proyecto}`:''}</span>
+              <button onClick={()=>reponer(p)} style={{ fontSize:11, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.border}`, borderRadius:20, padding:'3px 10px', cursor:'pointer', flexShrink:0 }}>Reponer</button>
+            </div>
+          ))}
+        </div>
+      )}
       {alcanceFor&&<CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/>}
     </div>
   )
@@ -21526,7 +21562,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
