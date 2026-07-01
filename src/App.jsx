@@ -11564,24 +11564,30 @@ function FichaTabs({tab,setTab,role}){
 // contacto (edición inline en clients) + personas de contacto (CRUD en tabla contacts)
 // Documentos del cliente en Drive (piezas 2+3): vincula la carpeta (auto por nombre, 1:1) y lista/abre sus archivos vía la edge function `drive`.
 function DocumentosDrive({client, onCount}){
-  const [folder,setFolder] = useState(undefined)   // undefined=cargando · null=sin vincular · {id,name}=vinculada
-  const [files,setFiles] = useState(null)
+  const [folder,setFolder] = useState(undefined)   // undefined=cargando · null=sin vincular · {id,name}=vinculada (raíz)
+  const [path,setPath] = useState([])              // navegación: [{id,name}] desde la raíz
+  const [items,setItems] = useState(null)          // contenido del nivel actual (subcarpetas + archivos)
+  const FOLDER='application/vnd.google-apps.folder'
   const [busy,setBusy] = useState(false)
   const [err,setErr] = useState(null)
   const [q,setQ] = useState('')
   const [cand,setCand] = useState(null)
   const msg = (e)=>{ const m=e?.message||''; return /No hay conexión|No autorizado|GOOGLE_OAUTH|configurar|Failed to fetch|NetworkError|Error 40|Error 50/i.test(m) ? 'No se pudo conectar con Drive. Si aún no lo activaste: menú ☰ (admin) → “Conectar Drive (permanente)”.' : (m||'No se pudo leer Drive.') }
-  const cargarArchivos = async(fid)=>{
+  const cargarNivel = async(fid, reportar)=>{
     setBusy(true); setErr(null)
     try{
-      const data = await driveCall({action:'search', q:`'${fid}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`, pageSize:60})
-      const fs=data.files||[]; setFiles(fs); onCount&&onCount(fs.length)
-    }catch(e){ setErr(msg(e)) }
+      const data = await driveCall({action:'search', q:`'${fid}' in parents and trashed=false`, pageSize:100})
+      const fs=(data.files||[]).slice().sort((a,b)=>{ const af=a.mimeType===FOLDER,bf=b.mimeType===FOLDER; if(af!==bf) return af?-1:1; return (a.name||'').localeCompare(b.name||'') })
+      setItems(fs); if(reportar) onCount&&onCount(fs.length)
+    }catch(e){ setErr(msg(e)); setItems(null) }
     setBusy(false)
   }
+  const entrarRaiz = (f)=>{ setFolder({id:f.id,name:f.name}); setPath([{id:f.id,name:f.name}]); cargarNivel(f.id, true) }
+  const entrarSub = (f)=>{ setPath(p=>[...p,{id:f.id,name:f.name}]); cargarNivel(f.id) }
+  const irNivel = (i)=>{ const nueva=path.slice(0,i+1); setPath(nueva); cargarNivel(nueva[nueva.length-1].id) }
   const vincular = async(f)=>{
     try{ await supabase.from('client_drive').upsert({client_id:String(client.id), folder_id:f.id, folder_name:f.name, updated_at:new Date().toISOString()},{onConflict:'client_id'}) }catch(_){}
-    setFolder({id:f.id,name:f.name}); setCand(null); cargarArchivos(f.id)
+    setCand(null); entrarRaiz(f)
   }
   const autoVincular = async()=>{
     setBusy(true); setErr(null)
@@ -11605,11 +11611,11 @@ function DocumentosDrive({client, onCount}){
   }
   useEffect(()=>{ let alive=true
     ;(async()=>{
-      setFolder(undefined); setFiles(null); setErr(null); setCand(null); setQ('')
+      setFolder(undefined); setItems(null); setPath([]); setErr(null); setCand(null); setQ('')
       try{
         const {data} = await supabase.from('client_drive').select('folder_id,folder_name').eq('client_id',String(client.id)).maybeSingle()
         if(!alive) return
-        if(data&&data.folder_id){ setFolder({id:data.folder_id,name:data.folder_name}); cargarArchivos(data.folder_id) }
+        if(data&&data.folder_id) entrarRaiz({id:data.folder_id,name:data.folder_name})
         else { setFolder(null); autoVincular() }
       }catch(_){ if(alive) setFolder(null) }
     })()
@@ -11619,19 +11625,27 @@ function DocumentosDrive({client, onCount}){
   const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 9px',fontSize:12,color:C.text,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}
   return (
     <div>
-      {folder&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <span style={{fontSize:10.5,color:C.muted}}>Carpeta: <b style={{color:C.text}}>{folder.name}</b></span>
-        <button type='button' onClick={()=>{setFolder(null);setFiles(null);setCand(null)}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>cambiar</button>
+      {folder&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
+        <div style={{fontSize:10.5,color:C.muted,display:'flex',flexWrap:'wrap',alignItems:'center',gap:3,minWidth:0}}>
+          {path.map((p,i)=>(<span key={p.id} style={{display:'inline-flex',alignItems:'center',gap:3}}>
+            {i>0&&<span style={{color:C.done}}>›</span>}
+            <span onClick={i<path.length-1?()=>irNivel(i):undefined} style={{color:i<path.length-1?C.azulInfo:C.text,fontWeight:i===path.length-1?700:400,cursor:i<path.length-1?'pointer':'default',maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+          </span>))}
+        </div>
+        <button type='button' onClick={()=>{setFolder(null);setItems(null);setPath([]);setCand(null)}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>cambiar</button>
       </div>}
-      {busy&&<div style={{fontSize:11,color:C.muted}}>Buscando…</div>}
+      {busy&&<div style={{fontSize:11,color:C.muted}}>Cargando…</div>}
       {err&&<div style={{fontSize:11,color:C.overdueText,marginBottom:6}}>{err}</div>}
-      {folder&&files&&files.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:240,overflowY:'auto'}}>
-        {files.map(f=>(<button key={f.id} type='button' onClick={()=>abrir(f)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:'#fff',cursor:'pointer',textAlign:'left'}}>
-          <span style={{fontSize:11.5,color:C.accent,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
-          <span style={{fontSize:9.5,color:C.muted,flexShrink:0}}>{f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):''}</span>
-        </button>))}
+      {folder&&items&&items.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:280,overflowY:'auto'}}>
+        {items.map(f=>{ const esCarpeta=f.mimeType===FOLDER; return (
+          <button key={f.id} type='button' onClick={()=>esCarpeta?entrarSub(f):abrir(f)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:esCarpeta?C.bgSoft:'#fff',cursor:'pointer',textAlign:'left'}}>
+            <SIcon n={esCarpeta?'building':'file'} s={14} c={esCarpeta?C.muted:C.accent}/>
+            <span style={{flex:1,minWidth:0,fontSize:11.5,color:esCarpeta?C.text:C.accent,fontWeight:esCarpeta?600:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
+            <span style={{fontSize:9.5,color:C.muted,flexShrink:0}}>{esCarpeta?'›':(f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'')}</span>
+          </button>
+        )})}
       </div>}
-      {folder&&files&&files.length===0&&!busy&&<div style={{fontSize:11,color:C.muted}}>Sin documentos en la carpeta.</div>}
+      {folder&&items&&items.length===0&&!busy&&<div style={{fontSize:11,color:C.muted}}>Carpeta vacía.</div>}
       {!folder&&!busy&&cand&&cand.length>0&&<div>
         <div style={{fontSize:10.5,color:C.muted,marginBottom:6}}>Elige la carpeta de este cliente:</div>
         <div style={{display:'flex',flexDirection:'column',gap:4}}>{cand.map(f=>(<button key={f.id} type='button' onClick={()=>vincular(f)} style={{...inp,textAlign:'left',cursor:'pointer',fontWeight:600,color:C.accent}}>{f.name}</button>))}</div>
