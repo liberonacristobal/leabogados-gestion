@@ -5100,7 +5100,8 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const ufState = useUF()
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const EMIT = ['Pendiente','Vencido','Propuesta']
-  const esEmitida = b => b.status!=='Programada'
+  // REGLA: una factura solo está EMITIDA si tiene folio/número (aparece en el SII). Sin folio NUNCA es emitida.
+  const esEmitida = b => !!(b.invoice_no||b.folio)
   const mesKey = `${year}-${month}`
 
   const items = useMemo(()=> billing
@@ -5185,7 +5186,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           <div style={{fontSize:13,fontWeight:600,color:C.soon}}>{fmt(porFacturarCLP)}</div>
         </div>
         <div style={{background:C.greenBg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Ya emitidas</div>
+          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Emitidas</div>
           <div style={{fontSize:13,fontWeight:600,color:C.greenText}}>{fmt(emitidasCLP)}</div>
         </div>
         <div style={{background:C.azulBg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
@@ -5212,22 +5213,21 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         )})}
       </div>
 
-      {/* Ya emitidas — colapsadas (no son las que debo emitir) */}
+      {/* Emitidas — con folio (aparecen en el SII); colapsadas. Cada una con su estado definido. */}
       {emitidas.length>0&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
           <div onClick={()=>setEmitOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer',background:C.greenBg}}>
-            <span style={{fontSize:11,fontWeight:700,color:C.greenText,flex:1}}>Ya emitidas · {emitidas.length} · {fmt(emitidasCLP)}</span>
+            <span style={{fontSize:11,fontWeight:700,color:C.greenText,flex:1}}>Emitidas · {emitidas.length} · {fmt(emitidasCLP)}</span>
             <span style={{fontSize:12,color:C.greenText}}>{emitOpen?'▾':'▸'}</span>
           </div>
-          {emitOpen&&emitidas.map(b=>{ const c=clients.find(x=>x.id===b.client_id); return (
+          {emitOpen&&emitidas.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b); return (
             <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:'#fff'}}>
-              <span style={{color:C.greenText,flexShrink:0,fontSize:13}}>✓</span>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'}</div>
+                <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
                 <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
               </div>
+              {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
               <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
-              <button onClick={()=>toggle(b)} disabled={busy===b.id} style={{fontSize:10,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'3px 9px',cursor:busy===b.id?'default':'pointer',flexShrink:0}}>Deshacer</button>
             </div>
           )})}
         </div>
