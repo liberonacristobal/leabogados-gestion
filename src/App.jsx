@@ -5198,7 +5198,10 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
       </div>
 
       {/* Por emitir — las Programadas del mes (lo que debo emitir) */}
-      <div style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Por emitir · {porEmitir.length}{porEmitir.length?` · ${fmt(porEmitirTotal)}`:''}</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,margin:'0 2px 6px'}}>
+        <span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.4}}>Por emitir · {porEmitir.length}{porEmitir.length?` · ${fmt(porEmitirTotal)}`:''}</span>
+        <button onClick={descargarExcel} disabled={desc} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:desc?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{desc?'…':'↓ Descargar mes'}</button>
+      </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
         {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todo emitido este mes ✓</div>}
         {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); return (
@@ -5237,12 +5240,6 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           )})}
         </div>
       )}
-
-      {/* Footer */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <div style={{fontSize:12,color:C.muted}}>{porEmitir.length} por emitir este mes</div>
-        <button onClick={descargarExcel} disabled={desc} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:desc?'default':'pointer',opacity:desc?.6:1}}>{desc?'Generando...':'↓ Descargar por emitir'}</button>
-      </div>
     </div>
   )
 }
