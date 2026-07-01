@@ -5702,7 +5702,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   }
   // Abonos del banco que CALZAN exacto con el saldo de la factura, del mismo cliente o RUT del receptor, no conciliados.
   const pagosDe = b => { const cid=efClientIdG(b); const rut=nrG(b.receptor_rut); const saldo=saldoBill(b)
-    return abonos.filter(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); if(m.estado==='conciliado'||resto<=0) return false; const mc=cid&&String(m.cliente_id)===String(cid); const mr=rut&&nrG(m.rut_contraparte)===rut; return (mc||mr)&&resto===saldo })
+    return abonos.filter(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); if(m.estado==='conciliado'||resto<=0) return false
+        const mrut=nrG(m.rut_contraparte); const mc=cid&&String(m.cliente_id)===String(cid); const mr=!!rut&&!!mrut&&mrut===rut
+        // Si ABONO y FACTURA tienen RUT, exige que COINCIDA (misma RS); no basta el mismo cliente. Si a alguno le falta el RUT, cae a cliente.
+        const match = (rut&&mrut) ? mr : mc
+        return match && resto===saldo })
       .map(m=>({m, rut:!!(rut&&nrG(m.rut_contraparte)===rut)}))
       .sort((a,z)=>(z.rut?1:0)-(a.rut?1:0)||String(z.m.fecha||'').localeCompare(String(a.m.fecha||''))) }
   // Concilia un abono con una factura (calce exacto = pago total): inserta la conciliación + marca el movimiento + deja la factura pagada (onStatusChange).
@@ -6062,18 +6066,19 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <span style={{fontSize:10,color:C.muted}}>{calcesOpen?'▲':'▼'}</span>
             </div>
             {calcesOpen&&<div style={{marginTop:8}}>
-              {calcesSugeridos.clean.map(({factura:f,abono:m,rut})=>{ const cl=clients.find(c=>String(c.id)===String(efClientIdG(f))); return (
+              {calcesSugeridos.clean.map(({factura:f,abono:m,rut})=>{ const cl=clients.find(c=>String(c.id)===String(m.cliente_id))||clients.find(c=>String(c.id)===String(efClientIdG(f))); const cliName=cl?.name||f.receptor_name||m.nombre_contraparte||'—'; return (
                 <div key={`${f.id}-${m.id}`} style={{background:'#fff',border:`1px solid ${C.normal}`,borderRadius:11,overflow:'hidden',marginBottom:8}}>
                   <div style={{background:C.greenBg,padding:'6px 11px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                     <span style={{fontSize:9,fontWeight:700,color:C.greenText}}>1:1 · MONTO EXACTO{rut?' · RUT ✓':' · MISMO CLIENTE'}</span>
                     <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.normal,border:'none',borderRadius:20,padding:'4px 13px',cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar pago</button>
                   </div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.accent,padding:'7px 11px 0'}}>{cliName}</div>
                   <div style={{display:'flex'}}>
                     <div style={{flex:1,minWidth:0,padding:'9px 11px',borderRight:`1px dashed ${C.border}`}}>
                       <div style={{fontSize:8.5,fontWeight:700,color:C.muted,letterSpacing:.4}}>FACTURA</div>
                       <div style={{fontSize:14,fontWeight:700,color:C.accent,margin:'3px 0'}}>{fmt(saldoBill(f))}</div>
-                      <div style={{fontSize:11,fontWeight:600,color:C.text}}>F° {folioN(f.invoice_no)}</div>
-                      <div style={{fontSize:10,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||f.receptor_name||'—'}</div>
+                      <div style={{fontSize:11,fontWeight:600,color:C.text}}>Factura N° {folioN(f.invoice_no)}</div>
+                      <div style={{fontSize:10,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.receptor_name||cl?.name||'—'}</div>
                       <div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.concept||'—'}</div>
                       <div style={{fontSize:9,color:C.muted,marginTop:2}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)}</div>
                     </div>
