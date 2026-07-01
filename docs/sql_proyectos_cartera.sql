@@ -12,6 +12,7 @@ create table proyectos_cartera (
   plazo_label       text,                        -- descripción del próximo hito
   responsable       text,                        -- CL | EE | MC | MP | RD
   nota              text,                        -- "en qué está / tema abierto" (protagonista de la fila)
+  alcance           text,                        -- resumen del alcance leído de la propuesta con IA (Fase 2A)
   ultima_actividad  date,                        -- última acción; ordena "sin mover" + "hace X días"
   drive_folder_id   text,                        -- Fase 2 (dejar listo, no se usa aún)
   origen            text default 'manual',       -- manual | venta
@@ -25,3 +26,6 @@ create policy team_all on proyectos_cartera for all to authenticated
   using ((auth.jwt() ->> 'email') like '%@leabogados.cl')
   with check ((auth.jwt() ->> 'email') like '%@leabogados.cl');
 notify pgrst, 'reload schema';
+
+-- Si YA corriste el create arriba (tabla existente), corre SOLO esta línea para agregar el alcance (Fase 2A):
+-- ALTER TABLE proyectos_cartera ADD COLUMN IF NOT EXISTS alcance text; NOTIFY pgrst, 'reload schema';
