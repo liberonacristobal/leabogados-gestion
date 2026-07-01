@@ -16906,6 +16906,7 @@ function PlazosModal({clients=[], onClose}){
   const [extBusy,setExtBusy]=useState(false); const [extErr,setExtErr]=useState(null)
   const [extracted,setExtracted]=useState(null); const [saving,setSaving]=useState(false)
   const [openB,setOpenB]=useState(()=>new Set(['vencidos','prox']))
+  const [mManual,setMManual]=useState(false); const [mF,setMF]=useState({titulo:'',fecha:'',tipo:'plazo'}); const [mSaving,setMSaving]=useState(false)
   const togB=k=>setOpenB(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const cargar=async()=>{ try{ const {data}=await supabase.from('plazos').select('*').order('fecha',{ascending:true,nullsFirst:false}); setRows(data||[]) }catch(_){ setRows([]) } }
   useEffect(()=>{ cargar() },[])
@@ -16937,6 +16938,16 @@ function PlazosModal({clients=[], onClose}){
   }
   const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ await supabase.from('plazos').update({estado:nv}).eq('id',p.id) }catch(_){}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
   const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ await supabase.from('plazos').delete().eq('id',p.id) }catch(_){}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
+  const agregarManual=async()=>{
+    if(!mF.titulo.trim()||mSaving) return
+    setMSaving(true); setExtErr(null)
+    try{
+      const {error}=await supabase.from('plazos').insert({client_id:cliObj?String(cliObj.id):null, titulo:mF.titulo.trim(), tipo:mF.tipo, fecha:/^\d{4}-\d{2}-\d{2}$/.test(mF.fecha)?mF.fecha:null, fuente:'manual'})
+      if(error) throw error
+      setMF({titulo:'',fecha:'',tipo:'plazo'}); setMManual(false); await cargar()
+    }catch(e){ setExtErr(/relation .*plazos.*does not exist|Could not find the table/i.test(e?.message||'')?'Falta crear la tabla: corre docs/sql_plazos.sql.':(e?.message||'No se pudo agregar.')) }
+    setMSaving(false)
+  }
   const buckets=useMemo(()=>{ if(!rows) return null
     const hoy=new Date().toISOString().slice(0,10), en30=new Date(Date.now()+30*864e5).toISOString().slice(0,10)
     const B={vencidos:[],prox:[],futuro:[],sinfecha:[],cumplidos:[]}
@@ -16967,6 +16978,20 @@ function PlazosModal({clients=[], onClose}){
         <div style={{fontSize:11,color:C.muted,marginBottom:7}}>Extrae los plazos y obligaciones de un contrato del cliente — la IA los lee y tú los agendas.</div>
         <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Cliente' style={{...inp,marginBottom:7}} list='plz-cli'/>
         <datalist id='plz-cli'>{(clients||[]).map(c=><option key={c.id} value={c.name}/>)}</datalist>
+        <div style={{marginBottom:2}}>
+          <button type='button' onClick={()=>setMManual(v=>!v)} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{mManual?'Ocultar':'+ Agregar un plazo a mano'}</button>
+          {mManual&&<div style={{marginTop:7,display:'flex',flexDirection:'column',gap:6}}>
+            <input value={mF.titulo} onChange={e=>setMF(f=>({...f,titulo:e.target.value}))} placeholder='Título (ej. Renovación de contrato)' style={{...inp,padding:'6px 9px',fontSize:12}}/>
+            <div style={{display:'flex',gap:6}}>
+              <input type='date' value={mF.fecha} onChange={e=>setMF(f=>({...f,fecha:e.target.value}))} style={{...inp,padding:'6px 9px',fontSize:12,flex:1}}/>
+              <select value={mF.tipo} onChange={e=>setMF(f=>({...f,tipo:e.target.value}))} style={{...inp,padding:'6px 9px',fontSize:12,flex:1}}>{['plazo','obligación','hito'].map(t=><option key={t} value={t}>{t}</option>)}</select>
+            </div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <button type='button' onClick={agregarManual} disabled={mSaving||!mF.titulo.trim()} style={{fontSize:12,fontWeight:600,color:'#fff',background:(mSaving||!mF.titulo.trim())?C.done:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{mSaving?'Agregando…':'Agregar'}</button>
+              <span style={{fontSize:10,color:C.muted}}>{cliObj?`para ${cliObj.name}`:'sin cliente asignado'}</span>
+            </div>
+          </div>}
+        </div>
         {cliObj&&!extracted&&<>
           <button type='button' onClick={()=>setMostrarPicker(v=>!v)} style={{fontSize:11.5,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{mostrarPicker?'Ocultar':`+ Elegir un contrato de ${cliObj.name}`}</button>
           {extBusy&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Leyendo y extrayendo plazos…</div>}
