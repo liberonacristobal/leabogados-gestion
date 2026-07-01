@@ -11,6 +11,8 @@ Reusa TODO lo existente: el parser `parseCartola` (mismo motor que la carga manu
 
 La tabla `cartola_movimientos` ya existe con `hash` (índice único, la carga manual usa `onConflict:'hash'`) y las columnas que escribimos (`cuenta, rol_cuenta, fecha, tipo, rut_contraparte, nombre_contraparte, monto, n_operacion, descripcion, es_interno, cliente_id, estado, monto_conciliado`). **No hay SQL que correr.**
 
+**Formato del adjunto:** el correo diario trae un `.xls` BINARIO (OLE2/BIFF, nombre tipo `BE20260701...dat.xls`), NO `.xlsx`. SheetJS lo lee igual; validado con un archivo real (dif 0 vs Total banco, 57 movs). El filtro `/\.xlsx?$/i` del Apps Script cubre `.xls`.
+
 ## Pieza B — Edge Function `procesar-cartola` (ya está en el repo)
 
 `supabase/functions/procesar-cartola/` — `index.ts` + `cartola.ts` (copia del parser). Registrada en `config.toml` con `verify_jwt=false`.
@@ -49,8 +51,8 @@ Nuevo proyecto → pega esto → completa los 4 valores de `CONFIG`:
 const CONFIG = {
   FUNCTION_URL: 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/procesar-cartola',
   SECRET: 'PEGAR_EL_MISMO_CARTOLA_SECRET',          // el mismo valor que en Supabase
-  // Ajustar a los datos REALES del correo de la cartola (remitente + asunto):
-  QUERY: 'from:(bice.cl) subject:(cartola) has:attachment newer_than:2d -label:cartola-procesada',
+  // Correo real de BICE: remitente banco@bice.cl, asunto "Cartola Cuenta Corriente", adjunto .xls binario.
+  QUERY: 'from:banco@bice.cl subject:"Cartola Cuenta Corriente" has:attachment newer_than:2d -label:cartola-procesada',
   LABEL: 'cartola-procesada',
 };
 
