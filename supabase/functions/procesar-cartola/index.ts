@@ -3,7 +3,8 @@
 // lo parsea con el MISMO parser que la app (cartola.ts), dedupe por hash e inserta en cartola_movimientos.
 // Auth: secreto compartido (CARTOLA_SECRET) en el header Authorization. verify_jwt=false (llamada máquina-a-máquina).
 
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs'
+// SheetJS desde npm (el bundler de Supabase bloquea cdn.sheetjs.com). 0.18.5 lee el .xls binario de BICE idéntico (validado, dif 0).
+import * as XLSX from 'npm:xlsx@0.18.5'
 import { parseCartola, normRut } from './cartola.ts'
 
 const SECRET = Deno.env.get('CARTOLA_SECRET') || ''
