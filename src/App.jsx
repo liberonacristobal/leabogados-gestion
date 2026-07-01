@@ -5128,11 +5128,17 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
     setDesc(true)
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const header=['Responsable','Cliente','Razón social','RUT','Concepto','Monto','Estado','Vencimiento']
+      const ufHoy = ufState.uf || null
+      const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}` : 'Monto hoy ($)'
+      const header=['Responsable','Cliente','Razón social','RUT','Concepto','UF','Monto guardado ($)',ufNota,'Estado','Vencimiento (pago)']
       const rows=items.map(b=>{
         const c=clients.find(x=>x.id===b.client_id)
         const venta=(sales||[]).find(v=>v.id===b.sale_id)
         const resp=venta?.responsible||c?.abogado_responsable||''
+        const esCLP=venta?.moneda==='CLP'
+        const ufVal=venta?.uf_value||null
+        const ufEq=(!esCLP&&ufVal)?(b.amount/ufVal):null
+        const montoHoy=esCLP?(b.amount||0):((ufEq&&ufHoy)?Math.round(ufEq*ufHoy):null)
         // Razón social + RUT desde client_entities (fuente única), igual que "↓ Programadas".
         const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
         let rs=null
@@ -5140,11 +5146,11 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         else if(ents.length===1) rs=ents[0]
         const rsName=rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||''))
         const rsRut=rs?(rs.rut||''):(b.entity_id?'':(ents.length>1?'':(b.receptor_rut||'')))
-        return [resp, c?.name||'Sin cliente', rsName, rsRut, b.concept||'', b.amount||0, esEmitida(b)?'Emitida':'Por facturar', b.due||'']
+        return [resp, c?.name||'Sin cliente', rsName, rsRut, b.concept||'', esCLP?'—':(ufEq?Number(ufEq.toFixed(2)):''), b.amount||0, montoHoy??'', esEmitida(b)?'Emitida':'Por facturar', b.due||'']
       })
       const ws=XLSX.utils.aoa_to_sheet([header,...rows])
-      ws['!cols']=[{wch:16},{wch:24},{wch:26},{wch:14},{wch:32},{wch:14},{wch:12},{wch:14}]
-      ws['!autofilter']={ref:`A1:H${rows.length+1}`}   // filtro de Excel: cada responsable filtra por su nombre
+      ws['!cols']=[{wch:16},{wch:24},{wch:26},{wch:14},{wch:30},{wch:10},{wch:16},{wch:18},{wch:12},{wch:16}]
+      ws['!autofilter']={ref:`A1:J${rows.length+1}`}   // filtro de Excel: cada responsable filtra por su nombre
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturar')
       XLSX.writeFile(wb,`Facturar_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
