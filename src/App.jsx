@@ -159,6 +159,17 @@ function facturaRespaldo(b, respaldoMap={}, cartolaHasta=null){
   if(cartolaHasta && fechaPago && fechaPago > cartolaHasta) return {key:'pendiente', label:'Pagada · pendiente cartola', short:'Pend. cartola', bg:C.greenBg, fg:C.greenText}
   return {key:'sin', label:'Cobrada sin conciliar', short:'Sin conciliar', bg:C.overdueBg, fg:C.overdueText}
 }
+// ¿Marcar esta factura como pagada quedaría SIN respaldo bancario? True SOLO en discrepancia real:
+// la cartola YA cubre esa fecha de pago pero ningún movimiento del banco la respalda. (Pago reciente = pendiente cartola → NO avisa; histórico → NO avisa; ya conciliada → NO avisa.)
+function sinRespaldoAlPagar(b, fechaPago, respaldoMap={}, cartolaHasta=null){
+  if(!b || (b.billing_type||'')==='reembolso') return false
+  const monto=b.amount||0, aplicado=respaldoMap[b.id]||0
+  const fp=String(fechaPago||'').slice(0,10)
+  if(!(monto>0) || aplicado>=monto) return false          // ya conciliada (total)
+  if(fp && fp<RESPALDO_CUTOFF) return false                // histórica (sin banco esperado)
+  if(!cartolaHasta || !fp || fp>cartolaHasta) return false // pago reciente / sin datos de cartola = pendiente cartola
+  return true                                              // cartola cubre la fecha y no hay respaldo → discrepancia real
+}
 // Estado unificado para mostrar (cualquier status, no solo Pagada) — fuente única del rótulo en Conciliación/Facturación/ficha.
 function estadoFacturaLabel(b, aplicado=0, cartolaHasta=null){
   if(!b) return null
@@ -20647,10 +20658,15 @@ export default function App() {
     const updates={status}
     if(paid_at!==undefined) updates.paid_at=paid_at
     if(extra&&typeof extra==='object') Object.assign(updates,extra)   // ej. {paid_amount} para abonos parciales
+    if(status==='Pagado'){   // aviso (NO bloqueo) si el pago quedaría sin respaldo bancario — nudge a conciliar contra la cartola
+      const b=(billing||[]).find(x=>String(x.id)===String(id))
+      const fp=paid_at||new Date().toISOString().slice(0,10)
+      if(b && sinRespaldoAlPagar(b,fp,respaldoMap,cartolaHasta) && !(await appConfirm('Sin respaldo bancario\n\nLa cartola ya cubre esa fecha, pero ningún movimiento del banco respalda este pago. Lo ideal es conciliarlo contra la cartola.\n\n¿Marcar la factura pagada igual?'))) return
+    }
     const {error}=await supabase.from('billing').update(updates).eq('id',id)
     if(error){ appAlert('No se pudo cambiar el estado: '+error.message); return }   // no actualizar UI si la DB no cambió
     setBilling(p=>p.map(x=>x.id===id?{...x,status,...(paid_at!==undefined?{paid_at}:{}),...(extra&&typeof extra==='object'?extra:{})}:x))
-  },[])
+  },[respaldoMap,cartolaHasta,billing])
 
   // Deshacer un pago marcado por error: la factura vuelve a Pendiente (sin fecha de pago) y
   // las cuentas por pagar a proveedores que se habían liberado (por_pagar, aún no transferidas) vuelven a pendiente.
