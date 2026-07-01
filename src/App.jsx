@@ -17702,6 +17702,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [importing,setImporting] = useState(false)
   const [prog,setProg] = useState(null)          // {done,total}
   const [reportes,setReportes] = useState(null)  // resultado por archivo del último lote
+  const [verifRes,setVerifRes] = useState(null)  // resultado de "Verificar contra cartola oficial" (read-only, no inserta)
+  const [verificando,setVerificando] = useState(false)
   const [aliases,setAliases] = useState([])
   const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
@@ -17911,6 +17913,48 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       await cargar()
     }catch(e){ appAlert('Error al leer: '+e.message) }
     setImporting(false); setProg(null)
+  }
+
+  // Verificar (SIN insertar) que la base tenga todos los movimientos de una cartola OFICIAL (mensual).
+  // La diaria automática y la mensual usan distinto N° de operación y glosa truncada → el hash NO calza entre ambas.
+  // Por eso NO se puede re-importar la mensual (duplicaría). Aquí se compara por identidad estable fecha|tipo|monto.
+  const onVerificar = async(fileList)=>{
+    const files=[...(fileList||[])].filter(f=>{ const n=(f.name||'').split(/[/\\]/).pop(); return /\.xlsx?$/i.test(n) && !n.startsWith('~$') && !n.startsWith('.') }); if(!files.length) return
+    setVerificando(true); setVerifRes(null); setReportes(null)
+    const reps=[]
+    try{
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      for(const file of files){
+        try{
+          const buf=await file.arrayBuffer()
+          const wb=XLSX.read(buf,{type:'array'})
+          const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:'',raw:true})
+          const res=parseCartola(aoa,{filename:file.name})
+          const fm=res.movimientos||[]
+          if(!fm.length){ reps.push({file:file.name,error:res.error||'Sin movimientos'}); continue }
+          const sumA=fm.filter(m=>m.tipo==='abono').reduce((a,m)=>a+m.monto,0)
+          const sumC=fm.filter(m=>m.tipo==='cargo').reduce((a,m)=>a+m.monto,0)
+          const verA=res.totalAbonos!=null?{diff:sumA-res.totalAbonos}:null
+          const verC=res.totalCargos!=null?{diff:sumC-res.totalCargos}:null
+          const fechas=fm.map(m=>m.fecha).sort(); const minF=fechas[0], maxF=fechas[fechas.length-1]
+          // Base: mismo rol de cuenta y dentro del rango del archivo.
+          const db=movs.filter(m=> m.rol_cuenta===res.rol_cuenta && m.fecha>=minF && m.fecha<=maxF)
+          const key=m=>`${m.fecha}|${m.tipo}|${m.monto}`
+          const cf={},cd={},sampleF={},sampleD={}
+          fm.forEach(m=>{ const k=key(m); cf[k]=(cf[k]||0)+1; if(!sampleF[k])sampleF[k]=m })
+          db.forEach(m=>{ const k=key(m); cd[k]=(cd[k]||0)+1; if(!sampleD[k])sampleD[k]=m })
+          const faltan=[],extra=[]
+          new Set([...Object.keys(cf),...Object.keys(cd)]).forEach(k=>{
+            const df=cf[k]||0, dd=cd[k]||0
+            for(let x=0;x<df-dd;x++) faltan.push(sampleF[k])
+            for(let x=0;x<dd-df;x++) extra.push(sampleD[k])
+          })
+          reps.push({file:file.name,cuenta:res.cuenta,nMovs:fm.length,nDB:db.length,verA,verC,rango:{minF,maxF},faltan,extra})
+        }catch(e){ reps.push({file:file.name,error:e.message}) }
+      }
+      setVerifRes(reps)
+    }catch(e){ appAlert('Error al leer: '+e.message) }
+    setVerificando(false)
   }
 
   // Identificar un movimiento: opcionalmente fija RUT/nombre editados, asigna el cliente y APRENDE el alias
@@ -18724,7 +18768,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 </div>
               )})}
             </div>
-          : <div style={{textAlign:'right',marginBottom:8}}><button onClick={()=>setVerCarga(true)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>+ Cargar cartolas</button></div>}
+          : <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:8}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 12px',cursor:'pointer'}} title='Sube la cartola mensual oficial: compara (no inserta) que la base tenga todos los movimientos'>
+                {verificando?'Verificando…':'Verificar contra oficial'}
+                <input type='file' accept='.xlsx,.xls' multiple onChange={e=>{onVerificar(e.target.files); e.target.value=''}} style={{display:'none'}}/>
+              </label>
+              <button onClick={()=>setVerCarga(true)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>+ Cargar cartolas</button>
+            </div>}
 
         {/* Caja de importación — se despliega con "+ Cargar" */}
         {(verCarga||importing)&&(
@@ -18763,6 +18813,42 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         Cargos {r.nCargos} · {fmtM(r.sumCargos)} {r.verC&&<span style={{color:okC?C.greenText:C.overdue,fontWeight:600}}>({okC?'✓ cuadra':`dif ${fmtM(r.verC.diff)}`})</span>}<br/>
                         Internos {r.internos} · Sin identificar {r.sinId} · <b>{r.nuevos} nuevos</b>{r.dup?` · ${r.dup} ya estaban`:''}
                       </div>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Verificación contra cartola oficial (read-only) */}
+        {(verifRes||verificando)&&(
+          <div style={{marginBottom:14,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,padding:'8px 12px',background:C.bgSoft,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span>Verificación contra cartola oficial</span>
+              {verifRes&&<button onClick={()=>setVerifRes(null)} style={{background:'none',border:'none',color:C.muted,fontSize:15,lineHeight:1,cursor:'pointer'}}>×</button>}
+            </div>
+            {verificando&&<div style={{padding:12,fontSize:12,color:C.muted}}>Verificando…</div>}
+            {verifRes&&verifRes.map((r,i)=>{
+              const okA=r.verA&&r.verA.diff===0, okC=r.verC&&r.verC.diff===0
+              const completo=!r.error&&r.faltan&&r.faltan.length===0
+              return (
+                <div key={i} style={{padding:'10px 12px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
+                  {r.error
+                    ? <div style={{color:C.overdue,marginTop:3}}>Error: {r.error}</div>
+                    : <>
+                        <div style={{color:C.muted,marginTop:3,lineHeight:1.6}}>
+                          Oficial: {r.nMovs} mov. {r.verA&&<span style={{color:okA?C.greenText:C.overdue,fontWeight:600}}>(abonos {okA?'✓':`dif ${fmtM(r.verA.diff)}`})</span>} {r.verC&&<span style={{color:okC?C.greenText:C.overdue,fontWeight:600}}>(cargos {okC?'✓':`dif ${fmtM(r.verC.diff)}`})</span>}<br/>
+                          En la base ({r.rango.minF} a {r.rango.maxF}): {r.nDB} mov.
+                        </div>
+                        {completo
+                          ? <div style={{marginTop:6,color:C.greenText,fontWeight:700}}>✓ Todos presentes — no falta ninguno</div>
+                          : <div style={{marginTop:6,color:C.overdue,fontWeight:700}}>Faltan {r.faltan.length} en la base:</div>}
+                        {r.faltan&&r.faltan.map((m,j)=>(<div key={j} style={{marginTop:2,fontSize:11,color:C.text}}>· {m.fecha} · {m.tipo} · {fmtM(m.monto)} — {(m.descripcion||'').slice(0,55)}</div>))}
+                        {r.extra&&r.extra.length>0&&<>
+                          <div style={{marginTop:8,color:C.soonText,fontWeight:700}}>{r.extra.length} en la base que la oficial no tiene (posible duplicado u otra carga):</div>
+                          {r.extra.map((m,j)=>(<div key={j} style={{marginTop:2,fontSize:11,color:C.muted}}>· {m.fecha} · {m.tipo} · {fmtM(m.monto)} — {(m.descripcion||'').slice(0,55)}</div>))}
+                        </>}
+                      </>}
                 </div>
               )
             })}
