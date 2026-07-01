@@ -19160,6 +19160,16 @@ const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
   limited:[['tasks','Tareas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
+// Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
+const PALETTE_ACTIONS = [
+  {id:'redaccion', label:'Redactar con IA'},
+  {id:'conciliar', label:'Conciliar facturas'},
+  {id:'conciliacion', label:'Conciliación bancaria'},
+  {id:'gmailContactos', label:'Contactos +Gmail'},
+  {id:'gmailTareas', label:'Tareas +Gmail'},
+  {id:'report', label:'Generar reporte'},
+  {id:'aprendizaje', label:'Lo que aprendí'},
+]
 function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=[],expenses=[],anticipos=[],recents=[],onSelect}){
   const [q,setQ]=useState('')
   const inputRef=useRef(null)
@@ -19169,13 +19179,14 @@ function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=
   const s=q.trim().toLowerCase(), nz=t=>String(t||'').toLowerCase()
   const cname=id=>clients.find(c=>String(c.id)===String(id))?.name||''
   const views=(VIEWS_PALETTE[role]||VIEWS_PALETTE.admin).filter(([id,l])=>!s||nz(l).includes(s))
+  const acts=role==='admin'?PALETTE_ACTIONS.filter(a=>!s||nz(a.label).includes(s)):[]
   const cli=s?clients.filter(c=>!c.is_internal&&nz(c.name).includes(s)).slice(0,6):[]
   const fac=s?billing.filter(b=>!b.deleted_at&&b.invoice_no&&(nz(folioN(b.invoice_no)).includes(s)||nz(b.concept).includes(s))).slice(0,6):[]
   const ven=s?sales.filter(v=>!v.deleted_at&&nz(v.title).includes(s)).slice(0,6):[]
   const tar=s?tasks.filter(t=>t.status!=='Terminado'&&nz(t.title).includes(s)).slice(0,6):[]
   const gas=s?expenses.filter(e=>nz(e.concept).includes(s)).slice(0,5):[]
   const ant=s?(anticipos||[]).filter(a=>nz(a.proyecto).includes(s)||nz(a.nota).includes(s)).slice(0,5):[]
-  const hay=views.length||cli.length||fac.length||ven.length||tar.length||gas.length||ant.length
+  const hay=views.length||acts.length||cli.length||fac.length||ven.length||tar.length||gas.length||ant.length
   const Hdr=t=><div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',margin:'11px 4px 3px'}}>{t}</div>
   const Row=({label,sub,right,onClick})=>(<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>{sub&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}</div>
@@ -19190,6 +19201,7 @@ function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=
         </div>
         <div style={{overflowY:'auto',padding:'4px 6px 10px'}}>
           {views.length>0&&<>{Hdr('IR A')}<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'2px 4px'}}>{views.map(([id,l])=><span key={id} onClick={()=>onSelect({type:'view',id,label:l})} style={{fontSize:12,color:C.accent,background:C.bgSoft,borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>{l}</span>)}</div></>}
+          {acts.length>0&&<>{Hdr('ACCIONES')}{acts.map(a=><Row key={a.id} label={a.label} onClick={()=>onSelect({type:'action',id:a.id,label:a.label})}/>)}</>}
           {!s&&recents.length>0&&<>{Hdr('RECIENTES')}{recents.map((r,i)=><Row key={i} label={r.label} onClick={()=>onSelect(r)}/>)}</>}
           {cli.length>0&&<>{Hdr('CLIENTES')}{cli.map(c=><Row key={c.id} label={c.name} onClick={()=>onSelect({type:'cliente',id:c.id,label:c.name})}/>)}</>}
           {fac.length>0&&<>{Hdr('FACTURAS')}{fac.map(b=><Row key={b.id} label={`Factura N°${folioN(b.invoice_no)}`} sub={cname(b.client_id)} right={fmt(b.amount)} onClick={()=>onSelect({type:'factura',id:b.id,label:`Factura N°${folioN(b.invoice_no)}`})}/>)}</>}
@@ -19251,6 +19263,7 @@ export default function App() {
   const handlePaletteSelect=(item)=>{
     setPaletteOpen(false); recordRecent(item)
     if(item.type==='view'){ setTab(item.id); return }
+    if(item.type==='action'){ if(item.id==='conciliacion') setTab('conciliacion'); else setModal({type:item.id}); return }
     if(item.type==='cliente'){ handleOpenClientFicha(item.id); return }
     if(item.type==='factura'){ const b=billing.find(x=>String(x.id)===String(item.id)); if(b) setModal({type:'billing',data:b}); else appAlert('Esa factura ya no está disponible.'); return }
     if(item.type==='venta'){ const v=sales.find(x=>String(x.id)===String(item.id)); if(v) setModal({type:'sale',data:v}); return }
@@ -20654,29 +20667,11 @@ export default function App() {
             {menuOpen&&(
               <div style={{position:'absolute',top:40,right:0,width:210,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'4px 0',zIndex:100,boxShadow:'0 8px 24px rgba(0,0,0,.1)'}}>
                 {userRole==='admin'&&<>
-                <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>FINANZAS</div>
-                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'conciliar'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M7 8l-4 4 4 4'/><path d='M17 8l4 4-4 4'/><path d='M14 4l-4 16'/></svg>
-                  Conciliar facturas
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setPaletteOpen(true)}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
+                  Buscar acciones…
                 </div>
-                <div style={ddItem} onClick={()=>{setMenuOpen(false);setTab('conciliacion')}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><path d='M3 10h18'/><path d='M7 15h4'/></svg>
-                  Conciliación bancaria
-                </div>
-                <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>GMAIL · IA</div>
-                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'gmailContactos'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='M22 7l-10 6L2 7'/></svg>
-                  Contactos +Gmail
-                </div>
-                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'gmailTareas'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></svg>
-                  Tareas +Gmail
-                </div>
-                <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>DATOS</div>
-                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'report'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><line x1='9' y1='13' x2='15' y2='13'/><line x1='9' y1='17' x2='13' y2='17'/></svg>
-                  Generar reporte
-                </div>
+                <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>SISTEMA</div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redProfesional'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='3.2'/><path d='M5.5 20a6.5 6.5 0 0 1 13 0'/><circle cx='19' cy='6' r='2'/><circle cx='5' cy='6' r='2'/></svg>
                   Red profesional
@@ -20685,18 +20680,10 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/><path d='M10 11v6M14 11v6'/><path d='M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>
                   Papelera
                 </div>
-                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redaccion'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>
-                  Redactar con IA
-                </div>
                 {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. ¿Continuar?')) connectDrivePermanente()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
                   Conectar Drive
                 </div>}
-                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'aprendizaje'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2z'/></svg>
-                  Lo que aprendí
-                </div>
                 <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>CUENTA</div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'users'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
