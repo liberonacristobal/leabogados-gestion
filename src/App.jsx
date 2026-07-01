@@ -5090,7 +5090,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], onEmitir, onStatusChange}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange}) {
   const now = new Date()
   const [year,setYear] = useState(String(now.getFullYear()))
   const [month,setMonth] = useState(String(now.getMonth()+1).padStart(2,'0'))
@@ -5128,9 +5128,11 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], onEmitir, on
     setDesc(true)
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const header=['Cliente','Razón social','RUT','Concepto','Monto','Estado','Vencimiento']
+      const header=['Responsable','Cliente','Razón social','RUT','Concepto','Monto','Estado','Vencimiento']
       const rows=items.map(b=>{
         const c=clients.find(x=>x.id===b.client_id)
+        const venta=(sales||[]).find(v=>v.id===b.sale_id)
+        const resp=venta?.responsible||c?.abogado_responsable||''
         // Razón social + RUT desde client_entities (fuente única), igual que "↓ Programadas".
         const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id)
         let rs=null
@@ -5138,10 +5140,11 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], onEmitir, on
         else if(ents.length===1) rs=ents[0]
         const rsName=rs?rs.name:(ents.length>1?'definir razón social':(b.receptor_name||''))
         const rsRut=rs?(rs.rut||''):(b.entity_id?'':(ents.length>1?'':(b.receptor_rut||'')))
-        return [c?.name||'Sin cliente', rsName, rsRut, b.concept||'', b.amount||0, esEmitida(b)?'Emitida':'Por facturar', b.due||'']
+        return [resp, c?.name||'Sin cliente', rsName, rsRut, b.concept||'', b.amount||0, esEmitida(b)?'Emitida':'Por facturar', b.due||'']
       })
       const ws=XLSX.utils.aoa_to_sheet([header,...rows])
-      ws['!cols']=[{wch:24},{wch:26},{wch:14},{wch:32},{wch:14},{wch:12},{wch:14}]
+      ws['!cols']=[{wch:16},{wch:24},{wch:26},{wch:14},{wch:32},{wch:14},{wch:12},{wch:14}]
+      ws['!autofilter']={ref:`A1:H${rows.length+1}`}   // filtro de Excel: cada responsable filtra por su nombre
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturar')
       XLSX.writeFile(wb,`Facturar_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
@@ -6519,7 +6522,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
