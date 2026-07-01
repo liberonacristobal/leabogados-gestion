@@ -17732,6 +17732,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const NF0 = { cliente_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
   const [nf,setNf] = useState(NF0)
   const [clientQ,setClientQ] = useState('')
+  const [alcanceFor,setAlcanceFor] = useState(null)   // Fase 2A: proyecto sobre el que leer la propuesta
 
   const rows = useMemo(()=>{
     let arr = (proyectos||[]).filter(p=>p.activo!==false)
@@ -17873,6 +17874,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
                           <span style={{ fontSize:11, color:C.muted, width:88, flexShrink:0 }}>Próximo hito</span>
                           <span style={{ fontSize:12, color:C.text }}>{p.plazo_label||etapa}{p.plazo?` · ${dP<0?`vencido hace ${-dP}d`:dP===0?'vence hoy':`vence ${fmtDia(p.plazo)}`}`:''}</span>
                         </div>
+                        {p.alcance&&<div style={{ fontSize:12, color:C.text, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{p.alcance}</div>}
                         <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:10 }}>
                           {ETAPAS_CARTERA.map((et,idx)=>{ const done=idx<(p.etapa_idx||0), cur=idx===(p.etapa_idx||0); return (
                             <span key={et} style={{ fontSize:10.5, color:cur?'#fff':done?'#0F6E56':C.muted, background:cur?C.accent:done?'#E1F5EE':'#EEF1F3', borderRadius:20, padding:'3px 9px', fontWeight:cur?600:400 }}>{done&&<span>✓ </span>}{et}</span>
@@ -17897,6 +17899,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
                           <button onClick={()=>avanzar(p)} disabled={(p.etapa_idx||0)>=5} style={{ fontSize:11.5, fontWeight:600, color:(p.etapa_idx||0)>=5?C.grisText:C.accent, background:'none', border:'none', cursor:(p.etapa_idx||0)>=5?'default':'pointer', padding:0 }}>→ Avanzar etapa</button>
                           <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
                           {p.sale_id&&onOpenSale&&(()=>{ const v=sales.find(s=>String(s.id)===String(p.sale_id)); return v?<button onClick={()=>onOpenSale(v)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver venta</button>:null })()}
+                          <button onClick={()=>setAlcanceFor(p)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>{p.alcance?'Actualizar alcance':'Leer alcance (IA)'}</button>
                           <button onClick={()=>archivar(p)} style={{ fontSize:11.5, fontWeight:600, color:C.muted, background:'none', border:'none', cursor:'pointer', padding:0, marginLeft:'auto' }}>Archivar</button>
                         </div>
                       </div>
@@ -17906,7 +17909,111 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
               )
             })}
           </div>}
+      {alcanceFor&&<CarteraAlcanceModal proyecto={alcanceFor} client={clients.find(c=>String(c.id)===String(alcanceFor.cliente_id))||null} onClose={()=>setAlcanceFor(null)} onApplied={(id,campos)=>{ setProyectos(prev=>prev.map(x=>x.id===id?{...x,...campos}:x)); if(openId===id) setDraft(d=>d) }}/>}
     </div>
+  )
+}
+
+// Fase 2A — lee la propuesta aceptada del Drive con IA y extrae el alcance (compuerta humana antes de aplicar).
+function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
+  const [step,setStep] = useState('picker')   // picker | busy | review
+  const [err,setErr] = useState(null)
+  const [file,setFile] = useState(null)
+  const [resumen,setResumen] = useState('')
+  const [servicios,setServicios] = useState([])   // [{t,on}]
+  const [hitos,setHitos] = useState([])           // [{titulo,fecha,descripcion,on}]
+  const [saving,setSaving] = useState(false)
+
+  const extraer = async (f) => {
+    setStep('busy'); setErr(null); setFile(f)
+    try{
+      const txt = (await leerDriveTextoSA(f)).slice(0,14000)
+      if(!txt||txt.length<100) throw new Error('El documento no tiene texto suficiente.')
+      const sys = `Eres abogado chileno. Del texto de esta PROPUESTA DE HONORARIOS/SERVICIOS extrae el ALCANCE del encargo. Devuelve SOLO un JSON (sin markdown) con la forma {"resumen":"2-3 frases del alcance","servicios":["...","..."],"hitos":[{"titulo":"...","fecha":"YYYY-MM-DD o vacío","descripcion":"..."}]}. En hitos pon entregables o etapas con fecha si la propuesta las menciona; fecha SOLO si es cierta, si no deja "". NO inventes fechas ni servicios.`
+      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:2500,system:sys,messages:[{role:'user',content:txt}]})
+      const out = data?.content?.[0]?.text||''; const m = out.match(/\{[\s\S]*\}/); let obj={}
+      try{ obj = m?JSON.parse(m[0]):{} }catch(_){ obj={} }
+      setResumen(String(obj.resumen||''))
+      setServicios((Array.isArray(obj.servicios)?obj.servicios:[]).filter(Boolean).map(s=>({t:String(s).slice(0,240),on:true})))
+      setHitos((Array.isArray(obj.hitos)?obj.hitos:[]).filter(x=>x&&x.titulo).map(x=>({titulo:String(x.titulo).slice(0,200), fecha:/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')?x.fecha:'', descripcion:String(x.descripcion||''), on:true})))
+      if(!obj.resumen && !(obj.hitos||[]).length && !(obj.servicios||[]).length) throw new Error('No pude leer un alcance claro en ese documento.')
+      setStep('review')
+    }catch(e){ setErr(/No hay conexión|Failed to fetch|No autorizado|GOOGLE_OAUTH/i.test(e?.message||'')?'Conecta Drive desde el menú para leer el documento.':(e?.message||'No se pudo leer.')); setStep('picker') }
+  }
+  const aplicar = async () => {
+    if(saving) return; setSaving(true); setErr(null)
+    try{
+      const servSel = servicios.filter(s=>s.on).map(s=>s.t)
+      const alcance = (resumen.trim() + (servSel.length?`\n\nServicios: ${servSel.join(' · ')}`:'')).trim() || null
+      const hitSel = hitos.filter(h=>h.on)
+      const conFecha = hitSel.filter(h=>h.fecha).sort((a,b)=>a.fecha.localeCompare(b.fecha))
+      const prox = conFecha.find(h=>h.fecha>=new Date().toISOString().slice(0,10)) || conFecha[0] || null
+      const campos = { alcance, ultima_actividad:new Date().toISOString().slice(0,10), updated_at:new Date().toISOString() }
+      if(prox){ campos.plazo_label = prox.titulo; campos.plazo = prox.fecha }
+      const { error } = await supabase.from('proyectos_cartera').update(campos).eq('id',proyecto.id)
+      if(error) throw error
+      // Agenda los hitos marcados como plazos del cliente (misma tabla que el calendario de plazos)
+      if(hitSel.length && client?.id){
+        const ins = hitSel.map(h=>({ client_id:String(client.id), titulo:h.titulo, descripcion:h.descripcion||null, tipo:'hito', fecha:h.fecha||null, fuente:file?.name||'propuesta', file_id:file?.id||null }))
+        await supabase.from('plazos').insert(ins).then(()=>{},()=>{})   // tolera tabla ausente
+      }
+      onApplied&&onApplied(proyecto.id, campos)
+      onClose()
+    }catch(e){ setErr(/relation .*proyectos_cartera|Could not find the table|column .*alcance/i.test(e?.message||'')?'Falta la columna: corre el ALTER de docs/sql_proyectos_cartera.sql.':(e?.message||'No se pudo aplicar.')); setSaving(false) }
+  }
+
+  const box = { fontSize:12.5, color:C.text, lineHeight:1.5, background:C.bgSoft||'#F5F7F9', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 10px', width:'100%', boxSizing:'border-box' }
+  const lbl = { fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, margin:'0 0 6px' }
+  return (
+    <Modal title={<><span style={{color:C.accent}}>Alcance del proyecto</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
+      <div style={{ padding:'4px 2px' }}>
+        {err&&<div style={{ fontSize:12, color:C.overdue, background:C.overdueBg||'#FCEBEB', borderRadius:8, padding:'8px 10px', marginBottom:10 }}>{err}</div>}
+        {step==='picker'&&(
+          <>
+            <div style={{ fontSize:12.5, color:C.muted, marginBottom:10 }}>Elige la propuesta aceptada del Drive del cliente. La IA leerá el alcance y lo dejará para tu revisión.</div>
+            {client ? <DocumentosDrive client={client} onPick={extraer}/> : <div style={{ fontSize:12, color:C.overdue }}>Este proyecto no tiene cliente asignado.</div>}
+          </>
+        )}
+        {step==='busy'&&<div style={{ fontSize:13, color:C.muted, textAlign:'center', padding:'26px 0' }}>Leyendo la propuesta y extrayendo el alcance…</div>}
+        {step==='review'&&(
+          <>
+            <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:C.azulBg||'#E6F1FB', borderRadius:20, padding:'4px 10px', marginBottom:12 }}>
+              <span style={{ fontSize:11, color:C.azulInfo||'#185FA5' }}>Leído por IA · {file?.name||'propuesta'}</span>
+            </div>
+            <div style={lbl}>Resumen del alcance</div>
+            <textarea value={resumen} onChange={e=>setResumen(e.target.value)} rows={3} style={{ ...box, resize:'vertical', marginBottom:14 }}/>
+            {servicios.length>0&&<>
+              <div style={lbl}>Servicios comprometidos</div>
+              <div style={{ marginBottom:14 }}>
+                {servicios.map((s,i)=>(
+                  <div key={i} onClick={()=>setServicios(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', cursor:'pointer' }}>
+                    <span style={{ width:16, height:16, borderRadius:4, flexShrink:0, background:s.on?C.done:'transparent', border:s.on?'none':`1.5px solid ${C.azul3||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{s.on?'✓':''}</span>
+                    <span style={{ fontSize:13, color:s.on?C.text:C.muted }}>{s.t}</span>
+                  </div>
+                ))}
+              </div>
+            </>}
+            {hitos.length>0&&<>
+              <div style={lbl}>Hitos y plazos detectados</div>
+              <div style={{ border:`1px solid ${C.border}`, borderRadius:8, overflow:'hidden', marginBottom:4 }}>
+                {hitos.map((h,i)=>(
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none' }}>
+                    <span style={{ fontSize:13, color:C.text, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h.titulo}</span>
+                    <input type='date' value={h.fecha} onChange={e=>setHitos(a=>a.map((x,j)=>j===i?{...x,fecha:e.target.value}:x))} style={{ fontSize:11, padding:'2px 5px', borderRadius:6, border:`1px solid ${C.border}`, color:C.text }}/>
+                    <span onClick={()=>setHitos(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ width:16, height:16, borderRadius:4, flexShrink:0, cursor:'pointer', background:h.on?C.done:'transparent', border:h.on?'none':`1.5px solid ${C.azul3||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{h.on?'✓':''}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize:11, color:C.grisText, marginBottom:14 }}>Los marcados se agendan como plazos del proyecto.</div>
+            </>}
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={aplicar} disabled={saving} style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:10, cursor:saving?'default':'pointer' }}>{saving?'Aplicando…':'Aplicar al proyecto'}</button>
+              <button onClick={onClose} style={{ fontSize:13, fontWeight:600, color:C.muted, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 14px', cursor:'pointer' }}>Descartar</button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   )
 }
 
