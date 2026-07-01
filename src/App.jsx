@@ -20691,7 +20691,7 @@ export default function App() {
                 </div>
                 {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. ¿Continuar?')) connectDrivePermanente()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
-                  Conectar Drive (permanente)
+                  Conectar Drive
                 </div>}
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'aprendizaje'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2z'/></svg>
