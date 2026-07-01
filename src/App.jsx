@@ -16888,6 +16888,109 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     </div>
   )
 }
+// Calendario de plazos y obligaciones: extrae de un contrato del Drive (IA) y los agenda por urgencia.
+const PLAZO_TIPO_COL = { 'plazo':C.azulInfo, 'obligación':C.soonText||C.soon, 'hito':C.normal }
+function PlazosModal({clients=[], onClose}){
+  const [rows,setRows]=useState(null)
+  const [cliente,setCliente]=useState('')
+  const cliObj=(clients||[]).find(c=>c.name&&c.name.trim()===cliente.trim())||(cliente.trim().length>=3?(clients||[]).find(c=>c.name&&c.name.toLowerCase().includes(cliente.trim().toLowerCase())):null)
+  const [mostrarPicker,setMostrarPicker]=useState(false)
+  const [extBusy,setExtBusy]=useState(false); const [extErr,setExtErr]=useState(null)
+  const [extracted,setExtracted]=useState(null); const [saving,setSaving]=useState(false)
+  const [openB,setOpenB]=useState(()=>new Set(['vencidos','prox']))
+  const togB=k=>setOpenB(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
+  const cargar=async()=>{ try{ const {data}=await supabase.from('plazos').select('*').order('fecha',{ascending:true,nullsFirst:false}); setRows(data||[]) }catch(_){ setRows([]) } }
+  useEffect(()=>{ cargar() },[])
+  const cn=id=>clients.find(c=>String(c.id)===String(id))?.name||''
+  const fmtF=f=>{ try{ return new Date(f+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'}) }catch(_){ return f||'' } }
+  const extraerPlazos=async(file)=>{
+    setExtBusy(true); setExtErr(null); setMostrarPicker(false)
+    try{
+      const txt=(await leerDriveTextoSA(file)).slice(0,14000)
+      if(!txt||txt.length<100) throw new Error('El documento no tiene texto suficiente.')
+      const sys=`Eres abogado chileno. Del documento extrae los PLAZOS, VENCIMIENTOS y OBLIGACIONES con relevancia de agenda (renovaciones, hitos, obligaciones periódicas, vencimientos, prescripciones). Devuelve SOLO un JSON array, sin markdown, de {titulo, fecha, descripcion, tipo}. fecha en formato YYYY-MM-DD SOLO si es una fecha cierta; si es relativa ("30 días desde la firma") o no hay fecha, deja fecha="" y explícalo en descripcion. tipo = una de: plazo | obligación | hito. NO inventes fechas.`
+      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,system:sys,messages:[{role:'user',content:txt}]})
+      const out=data?.content?.[0]?.text||''; const m=out.match(/\[[\s\S]*\]/); let arr=[]; try{ arr=m?JSON.parse(m[0]):[] }catch(_){ arr=[] }
+      const items=(Array.isArray(arr)?arr:[]).filter(x=>x&&x.titulo).map(x=>({titulo:String(x.titulo).slice(0,200), fecha:/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')?x.fecha:null, descripcion:String(x.descripcion||''), tipo:['plazo','obligación','hito'].includes(x.tipo)?x.tipo:'plazo'}))
+      if(!items.length) throw new Error('No encontré plazos u obligaciones en ese documento.')
+      setExtracted({file,items})
+    }catch(e){ setExtErr(/No hay conexión|Failed to fetch|No autorizado|GOOGLE_OAUTH/i.test(e?.message||'')?'Conecta Drive desde el menú ☰ para leer el documento.':(e?.message||'No se pudo extraer.')) }
+    setExtBusy(false)
+  }
+  const guardarExtraidos=async()=>{
+    if(!extracted||!cliObj||saving) return
+    setSaving(true); setExtErr(null)
+    try{
+      const ins=extracted.items.map(x=>({client_id:String(cliObj.id),titulo:x.titulo,descripcion:x.descripcion||null,tipo:x.tipo,fecha:x.fecha,fuente:extracted.file.name,file_id:extracted.file.id}))
+      const {error}=await supabase.from('plazos').insert(ins); if(error) throw error
+      setExtracted(null); await cargar()
+    }catch(e){ setExtErr(/relation .*plazos.*does not exist|Could not find the table/i.test(e?.message||'')?'Falta crear la tabla: corre docs/sql_plazos.sql en Supabase.':(e?.message||'No se pudo guardar.')) }
+    setSaving(false)
+  }
+  const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ await supabase.from('plazos').update({estado:nv}).eq('id',p.id) }catch(_){}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
+  const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ await supabase.from('plazos').delete().eq('id',p.id) }catch(_){}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
+  const buckets=useMemo(()=>{ if(!rows) return null
+    const hoy=new Date().toISOString().slice(0,10), en30=new Date(Date.now()+30*864e5).toISOString().slice(0,10)
+    const B={vencidos:[],prox:[],futuro:[],sinfecha:[],cumplidos:[]}
+    rows.forEach(p=>{ if(p.estado==='cumplido') B.cumplidos.push(p); else if(!p.fecha) B.sinfecha.push(p); else if(p.fecha<hoy) B.vencidos.push(p); else if(p.fecha<=en30) B.prox.push(p); else B.futuro.push(p) })
+    return B
+  },[rows])
+  const BUCK=[['vencidos','Vencidos',C.overdue],['prox','Próximos 30 días',C.soonText||C.soon],['futuro','Más adelante',C.text],['sinfecha','Sin fecha cierta',C.muted],['cumplidos','Cumplidos',C.normal]]
+  const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box'}
+  const Fila=({p})=>(
+    <div style={{display:'flex',alignItems:'flex-start',gap:8,padding:'8px 4px',borderTop:`0.5px solid ${C.border}`}}>
+      <button type='button' onClick={()=>marcar(p)} title={p.estado==='cumplido'?'Marcar pendiente':'Marcar cumplido'} style={{flexShrink:0,width:16,height:16,marginTop:1,borderRadius:4,border:`1.5px solid ${p.estado==='cumplido'?C.normal:C.border}`,background:p.estado==='cumplido'?C.normal:'#fff',cursor:'pointer',color:'#fff',fontSize:11,lineHeight:'13px'}}>{p.estado==='cumplido'?'✓':''}</button>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12.5,color:C.text,textDecoration:p.estado==='cumplido'?'line-through':'none'}}>{p.titulo}</div>
+        <div style={{fontSize:10.5,color:C.muted,marginTop:1,display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
+          {p.fecha&&<span style={{fontWeight:600,color:C.text}}>{fmtF(p.fecha)}</span>}
+          <span style={{color:PLAZO_TIPO_COL[p.tipo]||C.muted,fontWeight:600}}>{p.tipo}</span>
+          {p.client_id&&<span>· {cn(p.client_id)}</span>}
+          {p.fuente&&<span>· {p.fuente}</span>}
+        </div>
+        {p.descripcion&&<div style={{fontSize:10.5,color:C.muted,marginTop:2,lineHeight:1.35}}>{p.descripcion}</div>}
+      </div>
+      <button type='button' onClick={()=>borrar(p)} title='Borrar' style={{flexShrink:0,fontSize:14,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'0 2px'}}>×</button>
+    </div>
+  )
+  return (
+    <div style={{padding:'2px 2px 6px'}}>
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 10px',marginBottom:12}}>
+        <div style={{fontSize:11,color:C.muted,marginBottom:7}}>Extrae los plazos y obligaciones de un contrato del cliente — la IA los lee y tú los agendas.</div>
+        <input value={cliente} onChange={e=>setCliente(e.target.value)} placeholder='Cliente' style={{...inp,marginBottom:7}} list='plz-cli'/>
+        <datalist id='plz-cli'>{(clients||[]).map(c=><option key={c.id} value={c.name}/>)}</datalist>
+        {cliObj&&!extracted&&<>
+          <button type='button' onClick={()=>setMostrarPicker(v=>!v)} style={{fontSize:11.5,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{mostrarPicker?'Ocultar':`+ Elegir un contrato de ${cliObj.name}`}</button>
+          {extBusy&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Leyendo y extrayendo plazos…</div>}
+          {extErr&&<div style={{fontSize:10.5,color:C.overdueText,marginTop:6}}>{extErr}</div>}
+          {mostrarPicker&&!extBusy&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 9px',marginTop:6}}><DocumentosDrive client={cliObj} onPick={extraerPlazos}/></div>}
+        </>}
+        {extracted&&<div style={{marginTop:8}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.text,marginBottom:5}}>{extracted.items.length} encontrados en "{extracted.file.name}":</div>
+          <div style={{display:'flex',flexDirection:'column',maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,padding:'2px 8px'}}>{extracted.items.map((x,i)=><div key={i} style={{fontSize:11.5,color:C.text,padding:'5px 0',borderTop:i?`0.5px solid ${C.border}`:'none'}}><b>{x.fecha?fmtF(x.fecha):'sin fecha'}</b> · <span style={{color:PLAZO_TIPO_COL[x.tipo]||C.muted}}>{x.tipo}</span> — {x.titulo}</div>)}</div>
+          <div style={{display:'flex',gap:8,marginTop:8}}>
+            <button type='button' onClick={guardarExtraidos} disabled={saving} style={{fontSize:12,fontWeight:600,color:'#fff',background:saving?C.done:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>{saving?'Guardando…':`Agendar los ${extracted.items.length}`}</button>
+            <button type='button' onClick={()=>setExtracted(null)} style={{fontSize:12,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Descartar</button>
+          </div>
+          {extErr&&<div style={{fontSize:10.5,color:C.overdueText,marginTop:6}}>{extErr}</div>}
+        </div>}
+      </div>
+      {buckets===null?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:16}}>Cargando…</div>
+       :BUCK.every(([k])=>!buckets[k].length)?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:16}}>No hay plazos agendados. Extrae de un contrato arriba.</div>
+       :BUCK.filter(([k])=>buckets[k].length).map(([k,lbl,col])=>{ const op=openB.has(k); return (
+        <div key={k} style={{marginBottom:8,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+          <div onClick={()=>togB(k)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',cursor:'pointer',background:op?C.bgPanel:'transparent'}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
+            <span style={{flex:1,fontSize:11.5,fontWeight:700,color:C.text}}>{lbl}</span>
+            <span style={{fontSize:11,color:C.muted,fontWeight:600}}>{buckets[k].length}</span>
+            <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{transform:op?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
+          </div>
+          {op&&<div style={{padding:'0 11px 6px'}}>{buckets[k].map(p=><Fila key={p.id} p={p}/>)}</div>}
+        </div>
+      )})}
+    </div>
+  )
+}
 function LearningCenter({clients=[], onClose}){
   const [rows,setRows] = useState(null)
   const [edId,setEdId] = useState(null), [edVal,setEdVal] = useState(''), [edSub,setEdSub] = useState('')
@@ -19246,6 +19349,7 @@ const PALETTE_ACTIONS = [
   {id:'gmailContactos', label:'Contactos +Gmail'},
   {id:'gmailTareas', label:'Tareas +Gmail'},
   {id:'report', label:'Generar reporte'},
+  {id:'plazos', label:'Plazos y obligaciones'},
   {id:'aprendizaje', label:'Lo que aprendí'},
 ]
 function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=[],expenses=[],anticipos=[],recents=[],onSelect}){
@@ -20865,6 +20969,7 @@ export default function App() {
         {modal?.type==='users'&&<Modal title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='aprendizaje'&&<Modal title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redaccion'&&<Modal title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='plazos'&&<Modal title='Plazos y obligaciones' onClose={()=>setModal(null)}><PlazosModal clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
