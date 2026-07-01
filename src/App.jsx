@@ -11563,7 +11563,7 @@ function FichaTabs({tab,setTab,role}){
 // Tab "Contacto" de la ficha (reutilizado admin/limited): identificación + datos de
 // contacto (edición inline en clients) + personas de contacto (CRUD en tabla contacts)
 // Documentos del cliente en Drive (piezas 2+3): vincula la carpeta (auto por nombre, 1:1) y lista/abre sus archivos vía la edge function `drive`.
-function DocumentosDrive({client, onCount}){
+function DocumentosDrive({client, onCount, onPick}){
   const [folder,setFolder] = useState(undefined)   // undefined=cargando · null=sin vincular · {id,name}=vinculada (raíz)
   const [path,setPath] = useState([])              // navegación: [{id,name}] desde la raíz
   const [items,setItems] = useState(null)          // contenido del nivel actual (subcarpetas + archivos)
@@ -11638,7 +11638,7 @@ function DocumentosDrive({client, onCount}){
       {err&&<div style={{fontSize:11,color:C.overdueText,marginBottom:6}}>{err}</div>}
       {folder&&items&&items.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:280,overflowY:'auto'}}>
         {items.map(f=>{ const esCarpeta=f.mimeType===FOLDER; return (
-          <button key={f.id} type='button' onClick={()=>esCarpeta?entrarSub(f):abrir(f)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:esCarpeta?C.bgSoft:'#fff',cursor:'pointer',textAlign:'left'}}>
+          <button key={f.id} type='button' onClick={()=>esCarpeta?entrarSub(f):(onPick?onPick(f):abrir(f))} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:esCarpeta?C.bgSoft:'#fff',cursor:'pointer',textAlign:'left'}}>
             <SIcon n={esCarpeta?'building':'file'} s={14} c={esCarpeta?C.muted:C.accent}/>
             <span style={{flex:1,minWidth:0,fontSize:11.5,color:esCarpeta?C.text:C.accent,fontWeight:esCarpeta?600:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
             <span style={{fontSize:9.5,color:C.muted,flexShrink:0}}>{esCarpeta?'›':(f.modifiedTime?new Date(f.modifiedTime).toLocaleDateString('es-CL',{day:'numeric',month:'short'}):'')}</span>
@@ -16505,6 +16505,17 @@ async function driveFetchBufAuth(url){   // como driveGetAuth pero devuelve el A
   if(!res.ok) throw new Error('No se pudo leer el archivo ('+res.status+')')
   return res.arrayBuffer()
 }
+async function leerDriveTextoSA(file){   // lee un archivo de Drive a texto vía la conexión PERMANENTE (edge function `drive`); base64 → mammoth/pdfjs
+  const d = await driveCall({action:'download', fileId:file.id, mimeType:file.mimeType})
+  const bin = atob(d.base64||''); const buf = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i)
+  const isGDoc = file.mimeType==='application/vnd.google-apps.document'
+  if(!isGDoc && (file.mimeType==='application/pdf'||(file.name||'').toLowerCase().endsWith('.pdf'))){
+    const pdf = await pdfjsLib.getDocument({data:buf}).promise
+    let text=''; for(let i=1;i<=pdf.numPages;i++){ const p=await pdf.getPage(i); const c=await p.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
+    return text
+  }
+  const r = await mammoth.extractRawText({arrayBuffer:buf.buffer}); return r.value||''
+}
 async function leerDriveTexto(file){   // lee un archivo de Drive a texto plano (gdoc/docx vía mammoth, pdf vía pdfjs) — mismo patrón que extractFromFile
   const id=file.id, mt=file.mimeType||'', nm=(file.name||'').toLowerCase()
   const isGDoc = mt==='application/vnd.google-apps.document'
@@ -16552,11 +16563,19 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     if(porCobrar>0) parts.push(`Saldo por cobrar actual: ${fmt(porCobrar)}.`)
     return parts.join(' ')
   }
+  const [cliDocSel,setCliDocSel]=useState(null); const [cliDocTxt,setCliDocTxt]=useState(''); const [cliDocBusy,setCliDocBusy]=useState(false); const [cliDocErr,setCliDocErr]=useState(null); const [mostrarDocCli,setMostrarDocCli]=useState(false)
+  const usarDocCliente = async(file)=>{   // lee un documento de la carpeta del cliente y lo deja como contexto de la redacción
+    setCliDocBusy(true); setCliDocErr(null)
+    try{ const txt=(await leerDriveTextoSA(file)).slice(0,8000); setCliDocSel(file); setCliDocTxt(txt); setMostrarDocCli(false) }
+    catch(e){ setCliDocErr(/No hay conexión|No autorizado|Failed to fetch|GOOGLE_OAUTH/i.test(e?.message||'')?'Conecta Drive desde el menú ☰ para leer el documento.':(e?.message||'No se pudo leer el documento.')) }
+    setCliDocBusy(false)
+  }
   const [precKw,setPrecKw]=useState(''); const [precBusy,setPrecBusy]=useState(false); const [precErr,setPrecErr]=useState(null)
   const [precFiles,setPrecFiles]=useState(null); const [precSel,setPrecSel]=useState(null); const [precTxt,setPrecTxt]=useState(''); const [precReading,setPrecReading]=useState(false)
   const [precFromIndex,setPrecFromIndex]=useState(false); const [idxBusy,setIdxBusy]=useState(false); const [idxMsg,setIdxMsg]=useState(null); const [precNeedAuth,setPrecNeedAuth]=useState(false)
   const [clauMode,setClauMode]=useState('usar'); const [clauLib,setClauLib]=useState(null); const [clauCat,setClauCat]=useState(''); const [clauKw,setClauKw]=useState(''); const [clauBusy,setClauBusy]=useState(false); const [clauDocs,setClauDocs]=useState(null); const [extrBusy,setExtrBusy]=useState(null); const [extrMsg,setExtrMsg]=useState(null)
   useEffect(()=>{ setPrecFiles(null); setPrecSel(null); setPrecTxt(''); setPrecErr(null) },[tipo])   // no arrastrar un precedente de otro tipo
+  useEffect(()=>{ setCliDocSel(null); setCliDocTxt(''); setMostrarDocCli(false); setCliDocErr(null) },[cliObj&&cliObj.id])   // reset del documento al cambiar de cliente
   useEffect(()=>{ try{ const d=JSON.parse(localStorage.getItem('redaccion_draft')||'null'); if(d&&(Date.now()-(d.ts||0))<10*60*1000){ if(d.tipo)setTipo(d.tipo); if(d.cliente!=null)setCliente(d.cliente); if(d.datos!=null)setDatos(d.datos) } localStorage.removeItem('redaccion_draft') }catch(_){} },[])   // volver de Reconectar Drive sin perder lo escrito
   const MIMES_PREC="(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/vnd.google-apps.document')"
   const manejarDriveErr = (e)=>{ if(e&&(e.code===401||/drive_auth/.test(e.message||''))){ setPrecNeedAuth(true); setPrecErr(null) } else { setPrecErr(e?.message||'No se pudo conectar con Drive.') } }
@@ -16672,6 +16691,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
         content+=`\n\nRADAR SII VIGENTE DEL ESTUDIO (contexto normativo actual, del módulo BI). Incorpora y CITA (tipo N° número) SOLO las novedades realmente pertinentes a este documento; ignora las que no apliquen. No inventes citas fuera de esta lista ni de la ley aplicable:\n${digest}`
       }
       if(precTxt&&precSel){ content+=`\n\nPRECEDENTE DEL ESTUDIO (documento real "${precSel.name}"): sigue su ESTRUCTURA, tono y cláusulas como modelo, pero ADAPTA todo al caso actual — NO copies datos, montos ni nombres del precedente.\n---\n${precTxt}\n---` }
+      if(cliDocTxt&&cliDocSel){ content+=`\n\nDOCUMENTO DEL CLIENTE ("${cliDocSel.name}", de su carpeta en Drive): úsalo como fuente de datos y contexto REAL de este caso (partes, RUT, montos, fechas, cláusulas). Extrae lo pertinente; no lo copies textual.\n---\n${cliDocTxt}\n---` }
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:t.max,system:t.sys,messages:[{role:'user',content}]})
       setDraft(data?.content?.[0]?.text||'(sin respuesta)')
     }catch(e){ setErr(e?.message||'No se pudo generar.') }
@@ -16720,6 +16740,15 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
           <input type='checkbox' checked={cruzarCliente} onChange={e=>setCruzarCliente(e.target.checked)} style={{accentColor:C.accent,width:15,height:15}}/>
           Cruzar con la ficha de <span style={{color:C.azulInfo,fontWeight:600,margin:'0 3px'}}>{cliObj.name}</span> (ventas, áreas, por cobrar)
         </label>
+      )}
+      {cliObj&&(cliDocSel&&cliDocTxt
+        ? <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:10.5,color:C.normal,margin:'0 2px 10px'}}><span>Con documento del cliente: <b>{cliDocSel.name}</b></span><button type='button' onClick={()=>{setCliDocSel(null);setCliDocTxt('')}} style={{fontSize:10,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>quitar</button></div>
+        : <div style={{margin:'0 2px 10px'}}>
+            <button type='button' onClick={()=>setMostrarDocCli(v=>!v)} style={{fontSize:11.5,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>{mostrarDocCli?'Ocultar documentos':`+ Traer un documento de ${cliObj.name}`}</button>
+            {cliDocBusy&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Leyendo el documento…</div>}
+            {cliDocErr&&<div style={{fontSize:10.5,color:C.overdueText,marginTop:6}}>{cliDocErr}</div>}
+            {mostrarDocCli&&!cliDocBusy&&<div style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',marginTop:6}}><DocumentosDrive client={cliObj} onPick={usarDocCliente}/></div>}
+          </div>
       )}
       {SII_TIPOS.includes(tipo)&&siiNov.length>0&&(
         <label style={{display:'flex',alignItems:'center',gap:7,fontSize:11.5,color:C.muted,margin:'0 2px 10px',cursor:'pointer'}}>
