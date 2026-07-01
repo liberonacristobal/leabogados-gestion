@@ -18690,7 +18690,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   }
   // Descalce = abono no interno, no conciliado, sin clasificar como no-honorario, y que NO tiene factura candidata
   // (sin cliente asociado, o con cliente pero sin factura que calce → fondo/anticipo/monto partido).
-  const esDescalce = m => m.tipo==='abono' && !m.es_interno && !(concByMov[m.id]?.length) && !tieneCand(m) && (!m.categoria||m.categoria==='Cliente')
+  // Descalce = abono IDENTIFICADO (con cliente) pero SIN factura que calce (anticipo o monto que no cuadra). Los sin cliente van a "Sin identificar", no acá (antes se solapaban).
+  const esDescalce = m => m.tipo==='abono' && !m.es_interno && m.cliente_id && !(concByMov[m.id]?.length) && !tieneCand(m) && (!m.categoria||m.categoria==='Cliente')
 
   // Escribe el pago en billing (fuente de verdad única para "Pagado"). Cubierta → Pagado; si no, queda Pendiente con paid_amount.
   // reconciled_at (timestamp) marca "ya enlazada"; la distinción enlace-vs-marcó-pago va en conciliacion.marco_pago.
@@ -19270,7 +19271,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
     if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
     if(sub==='abonos'){
-      if(concView==='sinid') l=l.filter(m=>!m.es_interno&&!m.cliente_id&&!RESUELTAS_ABO.includes(m.categoria))
+      if(concView==='sinid') l=l.filter(m=>!m.es_interno&&!m.cliente_id&&!tieneCand(m)&&!RESUELTAS_ABO.includes(m.categoria))
       else if(concView==='porconciliar') l=l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length))
       else if(concView==='conciliados') l=l.filter(m=>concByMov[m.id]?.length)
       else if(concView==='descalces') l=l.filter(esDescalce)
@@ -19290,7 +19291,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(anioF!=='todos') l=l.filter(m=>(m.fecha||'').slice(0,4)===anioF)
     if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
     if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
-    return { porconciliar:l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length)).length, descalces:l.filter(esDescalce).length, sinid:l.filter(m=>!m.es_interno&&!m.cliente_id&&!RESUELTAS_ABO.includes(m.categoria)).length }
+    return { porconciliar:l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length)).length, descalces:l.filter(esDescalce).length, sinid:l.filter(m=>!m.es_interno&&!m.cliente_id&&!tieneCand(m)&&!RESUELTAS_ABO.includes(m.categoria)).length }
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concByMov,billing])
 
   const rolChip = rol => rol==='honorarios'?{bg:C.azulBg,color:C.accent,t:'Cta. Honorarios'}:rol==='gastos'?{bg:C.ambarBg,color:C.soonText,t:'Cta. Gastos'}:{bg:C.bgWarm,color:C.grisText,t:'—'}
