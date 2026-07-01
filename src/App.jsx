@@ -17691,6 +17691,189 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
   )
 }
 
+// ─── PANEL DE CARTERA (Fase 1: vista limpia de proyectos activos, orden por "sin mover") ────
+const ETAPAS_CARTERA = ['Diagnóstico','Análisis','Borrador','Revisión cliente','Ejecución','Cierre']
+const CART_DOT = { rojo:'#E24B4A', ambar:'#EF9F27', verde:'#1D9E75' }   // semáforo (eje nuevo: salud del proyecto)
+const CART_AV  = { CL:'#003C50', EE:'#185FA5', MC:'#3B6D11', MP:'#993556', RD:'#854F0B' }  // color por persona (canon)
+const cartDias = iso => iso ? Math.floor((Date.now()-new Date(iso+'T00:00').getTime())/86400000) : null
+const cartDiasPlazo = iso => iso ? Math.ceil((new Date(iso+'T00:00').getTime()-Date.now())/86400000) : null
+// Prioridad viva (NO se guarda): estado*3 + plazo*2 + inactividad. Casos borde → 0, nunca NaN.
+function carteraScore(p){
+  const pe = p.estado==='rojo'?3:p.estado==='ambar'?2:1
+  const d = cartDiasPlazo(p.plazo); const pp = d==null?0:d<0?5:d<=7?4:d<=14?3:d<=30?2:1
+  const inact = cartDias(p.ultima_actividad); const pi = inact==null?0:Math.min(6,Math.floor(inact/7))
+  return pe*3 + pp*2 + pi
+}
+// Semáforo SUGERIDO (editable): rojo si plazo vencido o +21d sin mover; ámbar si ≤7d o +14d sin mover; verde resto.
+function carteraEstadoAuto(p){
+  const inact = cartDias(p.ultima_actividad), dP = cartDiasPlazo(p.plazo)
+  if((dP!=null&&dP<0)||(inact!=null&&inact>=21)) return 'rojo'
+  if((dP!=null&&dP<=7)||(inact!=null&&inact>=14)) return 'ambar'
+  return 'verde'
+}
+
+function CarteraView({ proyectos=[], setProyectos, clients=[], currentUserName, userRole, onClose, onOpenClientFicha }){
+  const HOY = new Date().toISOString().slice(0,10)
+  const esAdmin = userRole==='admin'
+  const miInicial = INICIALES_RESP[currentUserName] || null
+  const cnm = id => { const c=clients.find(x=>String(x.id)===String(id)); return c?.name || '' }
+  const fmtDia = iso => iso ? new Date(iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : ''
+  const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${d} días` }
+  const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
+
+  const [q,setQ] = useState('')
+  const [sortBy,setSortBy] = useState('sinmover')   // sinmover | plazo | prioridad | cliente
+  const [estadoF,setEstadoF] = useState('todos')    // todos | rojo | ambar | verde
+  const [openId,setOpenId] = useState(null)
+  const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
+  const [nuevo,setNuevo] = useState(false)
+  const NF0 = { cliente_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
+  const [nf,setNf] = useState(NF0)
+  const [clientQ,setClientQ] = useState('')
+
+  const rows = useMemo(()=>{
+    let arr = (proyectos||[]).filter(p=>p.activo!==false)
+    if(!esAdmin) arr = arr.filter(p=>(p.responsable||'')===miInicial)
+    if(estadoF!=='todos') arr = arr.filter(p=>(p.estado||'verde')===estadoF)
+    if(q){ const s=q.toLowerCase(); arr = arr.filter(p=>(cnm(p.cliente_id)+' '+(p.nombre_proyecto||'')+' '+(p.nota||'')).toLowerCase().includes(s)) }
+    const key = p => { const d=cartDias(p.ultima_actividad); return d==null?Infinity:d }
+    return [...arr].sort((a,b)=>{
+      if(sortBy==='sinmover') return key(b)-key(a)   // más olvidado (más días sin mover, o nunca) primero
+      if(sortBy==='plazo'){ const pa=a.plazo?new Date(a.plazo).getTime():Infinity, pb=b.plazo?new Date(b.plazo).getTime():Infinity; return pa-pb }
+      if(sortBy==='prioridad') return carteraScore(b)-carteraScore(a)
+      if(sortBy==='cliente') return cnm(a.cliente_id).localeCompare(cnm(b.cliente_id),'es')
+      return 0
+    })
+  },[proyectos,esAdmin,miInicial,estadoF,q,sortBy,clients])
+
+  const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
+  const patch = async (p,campos) => {
+    const upd = { ...campos, ultima_actividad:HOY, updated_at:new Date().toISOString() }
+    setProyectos(prev=>prev.map(x=>x.id===p.id?{...x,...upd}:x))
+    const { error } = await supabase.from('proyectos_cartera').update(upd).eq('id',p.id)
+    if(error) appAlert('No se pudo guardar: '+error.message)
+  }
+  const avanzar = p => patch(p,{ etapa_idx:Math.min(5,(p.etapa_idx||0)+1) })
+  const setEstado = (p,e) => patch(p,{ estado:e })
+  const guardarNota = p => { if((draft||'')!==(p.nota||'')) patch(p,{ nota:draft||null }) }
+  const crear = async () => {
+    if(!nf.cliente_id||!nf.nombre.trim()){ appAlert('Elige un cliente y escribe el nombre del proyecto.'); return }
+    const row = { cliente_id:nf.cliente_id, nombre_proyecto:nf.nombre.trim(), responsable:nf.responsable||null, nota:nf.nota.trim()||null, plazo:nf.plazo||null, estado:'verde', etapa_idx:0, origen:'manual', activo:true, ultima_actividad:HOY }
+    const { data,error } = await supabase.from('proyectos_cartera').insert(row).select().single()
+    if(error){ appAlert('No se pudo crear: '+error.message); return }
+    setProyectos(prev=>[data,...prev]); setNuevo(false); setNf(NF0); setClientQ('')
+  }
+
+  const nCrit = rows.filter(p=>(p.estado||'verde')==='rojo').length
+  const chipSty = (on,col,bg) => ({ fontSize:12, fontWeight:500, color:on?'#fff':col, background:on?C.accent:bg, borderRadius:20, padding:'4px 12px', border:'none', cursor:'pointer' })
+
+  return (
+    <div style={{ maxWidth:720, margin:'0 auto', padding:'0 14px 40px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 0 12px' }}>
+        <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer', padding:0 }}>←</button>
+        <span style={{ fontSize:17, fontWeight:600, color:C.accent, flex:1 }}>Proyectos · {rows.length}{nCrit?` · ${nCrit} crítico${nCrit!==1?'s':''}`:''}</span>
+        <button onClick={()=>setNuevo(v=>!v)} style={{ fontSize:12, fontWeight:600, color:C.accent, background:'none', border:`1px solid ${C.azul3||'#99ABB4'}`, borderRadius:20, padding:'4px 12px', cursor:'pointer' }}>+ Nuevo</button>
+      </div>
+
+      {nuevo&&(
+        <div style={{ background:C.bgSoft||'#F5F7F9', border:`1px solid ${C.border}`, borderRadius:12, padding:12, marginBottom:12 }}>
+          <div style={{ position:'relative', marginBottom:8 }}>
+            <input value={clientQ} onChange={e=>{ setClientQ(e.target.value); setNf(f=>({...f,cliente_id:''})) }} placeholder='Buscar cliente…' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff' }}/>
+            {clientQ&&!nf.cliente_id&&(
+              <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, marginTop:2, maxHeight:180, overflowY:'auto' }}>
+                {clients.filter(c=>(c.name||'').toLowerCase().includes(clientQ.toLowerCase())).slice(0,7).map(c=>(
+                  <div key={c.id} onClick={()=>{ setNf(f=>({...f,cliente_id:c.id})); setClientQ(c.name) }} style={{ padding:'8px 10px', fontSize:13, color:C.text, cursor:'pointer', borderBottom:`1px solid ${C.bgSoft||'#F5F7F9'}` }}>{c.name}</div>
+                ))}
+              </div>
+            )}
+          </div>
+          <input value={nf.nombre} onChange={e=>setNf(f=>({...f,nombre:e.target.value}))} placeholder='Nombre del proyecto' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
+          <input value={nf.nota} onChange={e=>setNf(f=>({...f,nota:e.target.value}))} placeholder='¿En qué está? (tema abierto)' style={{ width:'100%', boxSizing:'border-box', fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', marginBottom:8 }}/>
+          <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+            <select value={nf.responsable} onChange={e=>setNf(f=>({...f,responsable:e.target.value}))} disabled={!esAdmin} style={{ fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}>
+              {['CL','EE','MC','MP','RD'].map(i=><option key={i} value={i}>{i}</option>)}
+            </select>
+            <input type='date' value={nf.plazo} onChange={e=>setNf(f=>({...f,plazo:e.target.value}))} style={{ flex:1, fontSize:13, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}/>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={crear} style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:9, cursor:'pointer' }}>Crear proyecto</button>
+            <button onClick={()=>{ setNuevo(false); setNf(NF0); setClientQ('') }} style={{ fontSize:13, fontWeight:600, color:C.muted, background:'none', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 14px', cursor:'pointer' }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
+        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ fontSize:12, color:C.muted, background:'#EEF1F3', border:'none', borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
+          <option value='sinmover'>Sin mover</option>
+          <option value='plazo'>Plazo</option>
+          <option value='prioridad'>Prioridad</option>
+          <option value='cliente'>Cliente</option>
+        </select>
+        {[['todos','Todos',C.muted,'#EEF1F3'],['rojo','Rojo','#A32D2D','#FCEBEB'],['ambar','Ámbar','#854F0B','#FAEEDA'],['verde','Verde','#0F6E56','#E1F5EE']].map(([v,l,col,bg])=>(
+          <button key={v} onClick={()=>setEstadoF(v)} style={chipSty(estadoF===v,col,bg)}>{l}</button>
+        ))}
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{ marginLeft:'auto', fontSize:12, padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', width:110 }}/>
+      </div>
+
+      {rows.length===0
+        ? <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'40px 0', border:`1px dashed ${C.border}`, borderRadius:12 }}>{proyectos.length?'Nada con este filtro.':'Aún no hay proyectos. Toca “+ Nuevo” o se irán creando desde tus ventas activas.'}</div>
+        : <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
+            {rows.map((p,i)=>{
+              const abierto = openId===p.id
+              const dP = cartDiasPlazo(p.plazo)
+              const etapa = ETAPAS_CARTERA[p.etapa_idx||0]
+              return (
+                <div key={p.id} style={{ borderTop:i?`1px solid ${C.border}`:'none' }}>
+                  <div onClick={()=>abrir(p)} style={{ padding:'12px 13px', cursor:'pointer' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                          <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
+                          <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:170 }}>{cnm(p.cliente_id)||'—'}</span>
+                          <span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>· {p.nombre_proyecto||etapa}</span>
+                        </div>
+                        {p.nota&&<div style={{ fontSize:13, color:C.text, marginTop:5, paddingLeft:15 }}>{p.nota}</div>}
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4, flexShrink:0 }}>
+                        <span style={{ width:24, height:24, borderRadius:'50%', background:CART_AV[p.responsable]||C.muted, color:'#fff', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' }}>{p.responsable||'—'}</span>
+                        <span style={{ fontSize:11, fontWeight:600, color:haceCol(p.ultima_actividad) }}>{haceTxt(p.ultima_actividad)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {abierto&&(
+                    <div style={{ padding:'0 13px 13px 28px', background:C.bgSoft||'#FAFBFC' }}>
+                      <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
+                        <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+                          <span style={{ fontSize:11, color:C.muted, width:88, flexShrink:0 }}>Próximo hito</span>
+                          <span style={{ fontSize:12, color:C.text }}>{p.plazo_label||etapa}{p.plazo?` · ${dP<0?`vencido hace ${-dP}d`:dP===0?'vence hoy':`vence ${fmtDia(p.plazo)}`}`:''}</span>
+                        </div>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:10 }}>
+                          {ETAPAS_CARTERA.map((et,idx)=>{ const done=idx<(p.etapa_idx||0), cur=idx===(p.etapa_idx||0); return (
+                            <span key={et} style={{ fontSize:10.5, color:cur?'#fff':done?'#0F6E56':C.muted, background:cur?C.accent:done?'#E1F5EE':'#EEF1F3', borderRadius:20, padding:'3px 9px', fontWeight:cur?600:400 }}>{done&&<span>✓ </span>}{et}</span>
+                          )})}
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
+                          <span style={{ fontSize:11, color:C.muted }}>Estado</span>
+                          {[['rojo','#A32D2D','#FCEBEB'],['ambar','#854F0B','#FAEEDA'],['verde','#0F6E56','#E1F5EE']].map(([e,col,bg])=>(
+                            <button key={e} onClick={()=>setEstado(p,e)} style={{ fontSize:10.5, fontWeight:600, color:(p.estado||'verde')===e?'#fff':col, background:(p.estado||'verde')===e?CART_DOT[e]:bg, border:'none', borderRadius:20, padding:'3px 10px', cursor:'pointer' }}>{e==='rojo'?'Rojo':e==='ambar'?'Ámbar':'Verde'}</button>
+                          ))}
+                        </div>
+                        <textarea value={draft} onChange={e=>setDraft(e.target.value)} onBlur={()=>guardarNota(p)} placeholder='¿En qué está? / última acción' rows={2} style={{ width:'100%', boxSizing:'border-box', fontSize:12, padding:'7px 9px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', resize:'vertical', marginBottom:8 }}/>
+                        <div style={{ display:'flex', gap:12 }}>
+                          <button onClick={()=>avanzar(p)} disabled={(p.etapa_idx||0)>=5} style={{ fontSize:11.5, fontWeight:600, color:(p.etapa_idx||0)>=5?C.grisText:C.accent, background:'none', border:'none', cursor:(p.etapa_idx||0)>=5?'default':'pointer', padding:0 }}>→ Avanzar etapa</button>
+                          <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.cliente_id)} style={{ fontSize:11.5, fontWeight:600, color:C.accent, background:'none', border:'none', cursor:'pointer', padding:0 }}>Ver ficha</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>}
+    </div>
+  )
+}
+
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
 function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha}){
   // Capa 2 — RUT conocidos para el tag "quién es"
@@ -19468,7 +19651,7 @@ function AjusteModal({client, user, onSave, onClose, saving}){
 const TAB_LABELS = {dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Conciliación',inteligencia:'Inteligencia',cajachica:'Caja chica'}
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['clients','Clientes'],['tasks','Tareas'],['cartera','Panel de Cartera'],['conciliacion','Conciliación'],['inteligencia','Inteligencia']],
   limited:[['tasks','Tareas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
@@ -19535,6 +19718,7 @@ export default function App() {
   const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
   const [clients,setClients]=useState([])
   const [sales,setSales]=useState([])
+  const [proyectosCartera,setProyectosCartera]=useState([])
   const [billing,setBilling]=useState([])
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
@@ -19656,7 +19840,7 @@ export default function App() {
   useEffect(()=>{
     if(DEMO){
       const d=demoData
-      setPettyCash(d.petty_cash||[]); setRendiciones(d.rendiciones||[]); setClients(d.clients||[]); setSales(d.sales||[]); setBilling(d.billing||[]); setExpenses(d.expenses||[]); setTasks(d.tasks||[]); setClientEntities(d.client_entities||[]); setExpenseAttachments([]); setBillingAttachments([]); setAnticipos(d.anticipos||[]); setConciliacion(d.conciliacion||[]); setCartolaHasta(null); setProveedores(d.proveedores||[]); setTerceros(d.terceros_pagos||[]); setBulkImports([]); setImportAliases([]); setLoading(false); setBooted(true)
+      setPettyCash(d.petty_cash||[]); setRendiciones(d.rendiciones||[]); setClients(d.clients||[]); setSales(d.sales||[]); setProyectosCartera(d.proyectos_cartera||[]); setBilling(d.billing||[]); setExpenses(d.expenses||[]); setTasks(d.tasks||[]); setClientEntities(d.client_entities||[]); setExpenseAttachments([]); setBillingAttachments([]); setAnticipos(d.anticipos||[]); setConciliacion(d.conciliacion||[]); setCartolaHasta(null); setProveedores(d.proveedores||[]); setTerceros(d.terceros_pagos||[]); setBulkImports([]); setImportAliases([]); setLoading(false); setBooted(true)
       return
     }
     if(!session) return
@@ -19687,6 +19871,8 @@ export default function App() {
       .catch(err=>{ console.error(err); appAlert('Error al cargar datos: '+(err?.message||err)+'\nRecarga la página.') }).finally(()=>{setLoading(false);setBooted(true)})
     // Auditoría de reasignaciones: carga aparte y silenciosa (si la tabla no existe aún, no molesta).
     supabase.from('expense_audit').select('*').order('created_at',{ascending:false}).limit(200).then(({data})=>{ if(data) setExpenseAudit(data) },()=>{})
+    // Panel de Cartera: carga silenciosa (tolera tabla ausente hasta que se corra el SQL).
+    supabase.from('proyectos_cartera').select('*').eq('activo',true).order('ultima_actividad',{ascending:true,nullsFirst:true}).then(({data})=>{ if(data) setProyectosCartera(data) },()=>{})
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
   },[session?.user?.id])
 
@@ -21040,6 +21226,7 @@ export default function App() {
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='cartera'&&userRole==='admin'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
