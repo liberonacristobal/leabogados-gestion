@@ -5735,8 +5735,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [calcesOpen,setCalcesOpen] = useState(true)
   // Calces sugeridos: para cada factura pendiente/vencida, los abonos que calzan exacto. 1:1 inequívoco → "limpio" (se concilia de un toque); ambiguo (un abono ↔ 2+ facturas o una factura ↔ 2+ abonos) → "revisar" (eliges).
   const calcesSugeridos = useMemo(()=>{
-    const pend = bb.filter(b=>!b.deleted_at && esEmitida(b) && (b.status==='Pendiente'||b.status==='Vencido') && saldoBill(b)>0)
-    const pairs=[]; pend.forEach(b=>{ pagosDe(b).forEach(({m,rut})=> pairs.push({factura:b, abono:m, rut})) })
+    // Pool: TODA factura emitida con saldo>0 (= cualquier estado MENOS pagada-conciliada, que tiene saldo 0), excepto anuladas.
+    const pend = bb.filter(b=>!b.deleted_at && esEmitida(b) && b.status!=='Anulada' && saldoBill(b)>0)
+    const pairs0=[]; pend.forEach(b=>{ pagosDe(b).forEach(({m,rut})=> pairs0.push({factura:b, abono:m, rut})) })
+    // Prioridad MISMA RS: si un abono tiene algún cruce con el mismo RUT del receptor, descarta los de otra RS del mismo cliente.
+    const abonoConRut={}; pairs0.forEach(p=>{ if(p.rut) abonoConRut[p.abono.id]=true })
+    const pairs = pairs0.filter(p=> !abonoConRut[p.abono.id] || p.rut)
     const facPorAbono={}, aboPorFac={}
     pairs.forEach(p=>{ (facPorAbono[p.abono.id]=facPorAbono[p.abono.id]||new Set()).add(String(p.factura.id)); (aboPorFac[p.factura.id]=aboPorFac[p.factura.id]||new Set()).add(String(p.abono.id)) })
     const clean=[], revMap={}
@@ -6086,34 +6090,41 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               )})}
               {calcesSugeridos.revisar.length>0&&<div style={{marginTop:4}}>
                 <div style={{fontSize:10,fontWeight:700,color:C.soonText,marginBottom:6,display:'flex',alignItems:'center',gap:5}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.soon} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12' y2='17'/></svg>Revisar · no se aplican solos</div>
-                {calcesSugeridos.revisar.map(({abono:m,facturas})=>(
-                  <div key={m.id} style={{background:C.ambarBg,borderRadius:9,padding:'8px 10px',marginBottom:6}}>
-                    <div style={{fontSize:8.5,fontWeight:700,color:C.azulInfo}}>ABONO · BANCO</div>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmt(m.monto)}</span><span style={{fontSize:9,color:C.muted}}>{fmtDate(m.fecha)}{m.n_operacion?` · Op ${m.n_operacion}`:''}</span></div>
-                    <div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div>
-                    <div style={{fontSize:9,color:C.coralText,fontWeight:600,margin:'6px 0 4px'}}>↓ calza con {facturas.length} facturas del mismo monto — elige cuál:</div>
+                {calcesSugeridos.revisar.map(({abono:m,facturas})=>{
+                  const cliName=clients.find(c=>String(c.id)===String(m.cliente_id))?.name||m.nombre_contraparte||'—'
+                  const rol=(m.rol_cuenta==='gastos'?'GASTOS':'HONORARIOS')
+                  return (
+                  <div key={m.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:8}}>
+                    <div style={{fontSize:14,fontWeight:600,color:C.accent,marginBottom:9}}>{cliName}</div>
                     {facturas.map(f=>{
                       const rRut=f.receptor_rut||''
-                      const fClient=efClientIdG(f)
-                      const cliName=clients.find(c=>String(c.id)===String(fClient))?.name||''
                       const rN=f.receptor_name||(rRut?clientEntities.find(e=>nrG(e.rut)===nrG(rRut))?.name:'')||''
-                      const sameClient=!!fClient&&String(fClient)===String(m.cliente_id)
                       const sameRut=!!rRut&&!!m.rut_contraparte&&nrG(rRut)===nrG(m.rut_contraparte)
-                      const ok=sameClient||sameRut
                       const contested=calcesSugeridos.contested.has(String(f.id))
-                      const rsDistinta=rN&&cliName&&_normTxt(rN)!==_normTxt(cliName)
-                      return (<div key={f.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',borderRadius:7,padding:'6px 8px',marginBottom:4,border:`1px solid ${contested?C.coralText:ok?C.greenText:'transparent'}`}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:10.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(f.invoice_no)} · {f.concept||'—'}</div>
-                        <div style={{fontSize:9,color:C.muted}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)} · {fmt(saldoBill(f))}</div>
-                        <div style={{fontSize:9,fontWeight:ok?700:400,color:ok?C.greenText:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{ok?'✓ ':'→ '}{cliName||rN||'sin cliente'}{sameClient?' · mismo cliente':sameRut?' · mismo RUT':''}</div>
-                        {rsDistinta&&<div style={{fontSize:8.5,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>emitida a {rN}{rRut?` · ${rRut}`:''}</div>}
-                        {contested&&<div style={{fontSize:8.5,fontWeight:600,color:C.coralText,marginTop:1}}>⚠ otro abono del mismo monto también la reclama — solo uno la paga</div>}
-                      </div>
-                      <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:9.5,color:ok?'#fff':C.tealText,border:`0.5px solid ${C.tealText}`,background:ok?C.tealText:'#fff',borderRadius:20,padding:'4px 10px',fontWeight:600,cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar con esta</button>
-                    </div>)})}
+                      return (<div key={f.id} style={{marginBottom:9}}>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                          <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px'}}>
+                            <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginBottom:4,letterSpacing:'.2px'}}>ABONO · {rol}</div>
+                            <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(m.monto)}</div>
+                            <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(m.fecha)}</div>
+                            <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}</div>
+                            <div style={{fontSize:10,color:C.muted}}>{m.rut_contraparte||''}</div>
+                          </div>
+                          <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px',border:(rRut&&!sameRut)?`1px solid ${C.soon}`:'1px solid transparent'}}>
+                            <div style={{fontSize:9,fontWeight:700,color:C.muted,marginBottom:4,letterSpacing:'.2px'}}>FACTURA N° {folioN(f.invoice_no)}</div>
+                            <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(saldoBill(f))}</div>
+                            <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(f.issued_at)}</div>
+                            <div style={{fontSize:10,fontWeight:sameRut?600:400,color:sameRut?C.greenText:(rRut?C.soonText:C.muted),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rN||'sin RS'}</div>
+                            <div style={{fontSize:10,fontWeight:sameRut?600:400,color:sameRut?C.greenText:C.muted}}>{rRut||''}</div>
+                          </div>
+                        </div>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,gap:8}}>
+                          <span style={{fontSize:9,fontWeight:600,color:sameRut?C.greenText:C.soonText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{sameRut?'✓ mismo RUT · mismo monto':'RS distinta del pagador'}{contested?' · otro abono también la reclama':''}</span>
+                          <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 14px',cursor:pagoBusy?'default':'pointer',flexShrink:0}}>Conciliar</button>
+                        </div>
+                      </div>)})}
                     {otraFor!==m.id
-                      ? <button onClick={()=>{setOtraFor(m.id);setOtraQ('')}} style={{fontSize:9,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:'2px 0'}}>+ Conciliar con otra factura…</button>
+                      ? <div style={{borderTop:`1px solid ${C.border}`,paddingTop:7}}><button onClick={()=>{setOtraFor(m.id);setOtraQ('')}} style={{fontSize:10,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0}}>Otra factura ▾</button></div>
                       : <div style={{marginTop:4,borderTop:`1px solid ${C.border}`,paddingTop:6}}>
                           <input value={otraQ} onChange={e=>setOtraQ(e.target.value)} placeholder='Buscar factura del cliente…' style={{width:'100%',boxSizing:'border-box',fontSize:9.5,padding:'4px 7px',borderRadius:6,border:`1px solid ${C.border}`,marginBottom:5}}/>
                           {(()=>{ const lst=otrasFacturas(m); if(!lst.length) return <div style={{fontSize:9,color:C.muted,padding:'2px 0'}}>Sin otras facturas con saldo de este cliente.</div>
@@ -6129,7 +6140,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                           <button onClick={()=>setOtraFor(null)} style={{fontSize:9,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'3px 0'}}>Cerrar</button>
                         </div>}
                   </div>
-                ))}
+                )})}
               </div>}
             </div>}
           </div>
