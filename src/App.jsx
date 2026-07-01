@@ -17799,9 +17799,9 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
 
   const [q,setQ] = useState('')
-  const [sortBy,setSortBy] = useState('sinmover')   // sinmover | plazo | prioridad | cliente
-  const [estadoF,setEstadoF] = useState('todos')    // todos | rojo | ambar | verde
-  const [openId,setOpenId] = useState(null)
+  const [sortBy,setSortBy] = usePersistedState('cartera_sort','sinmover')   // sinmover | plazo | prioridad | cliente (recuerda al volver)
+  const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
+  const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const NF0 = { cliente_id:'', nombre:'', responsable:esAdmin?'CL':(miInicial||'CL'), nota:'', plazo:'' }
@@ -17828,6 +17828,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   },[proyectos,esAdmin,miInicial,estadoF,q,sortBy,clients])
 
   const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
+  useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
   const patch = async (p,campos) => {
     const upd = { ...campos, ultima_actividad:HOY, updated_at:new Date().toISOString() }
     setProyectos(prev=>prev.map(x=>x.id===p.id?{...x,...upd}:x))
