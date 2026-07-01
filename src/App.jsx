@@ -19740,16 +19740,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       )})()}
                       {showPick&&<>
                         {sug&&<div style={{background:C.azulBg,borderRadius:8,padding:'6px 9px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
-                          <span style={{fontSize:11,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Sugerida: <b>Factura N°{folioN(sug.invoice_no)||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}{sug.receptor_name&&sug.receptor_name!==cmap[m.cliente_id]?` · ${String(sug.receptor_name).slice(0,16)}`:''}</span>
-                          <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
+                          <div style={{minWidth:0,flex:1}}>
+                            <div style={{fontSize:11,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(sug.invoice_no)||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}</div>
+                            {sug.receptor_name&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sug.receptor_name}{sug.receptor_rut?` · ${sug.receptor_rut}`:''}</div>}
+                          </div>
+                          <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar</button>
                         </div>}
                         {(()=>{ const grp=grupoPago(m); if(!grp) return null; return (
                           <div style={{background:'#fff',border:`1px solid #BFE3D5`,borderRadius:8,padding:'8px 10px',marginBottom:6}} onClick={e=>e.stopPropagation()}>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:5}}>
-                              <span style={{fontSize:11,fontWeight:700,color:C.greenText,minWidth:0}}>✦ Pago en grupo · {grp.transfers.length} transferencias pagan {grp.facturas.length} facturas</span>
-                              <button disabled={busy===m.id} onClick={()=>reconciliarGrupo(grp.transfers,grp.facturas)} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 12px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar grupo</button>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:4}}>
+                              <span style={{fontSize:11,fontWeight:700,color:C.greenText,minWidth:0}}>✦ Pago en grupo</span>
+                              <button disabled={busy===m.id} onClick={()=>reconciliarGrupo(grp.transfers,grp.facturas)} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 12px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar grupo</button>
                             </div>
-                            <div style={{fontSize:10,color:C.muted,lineHeight:1.55}}>{grp.facturas.map(f=>`N°${folioN(f.invoice_no)||'—'} · ${fmtM(saldoFactura(f))}`).join('  +  ')}<span style={{color:C.greenText,fontWeight:600}}>{`  =  ${fmtM(grp.total)} (exacto)`}</span></div>
+                            <div style={{fontSize:10,color:C.muted,marginBottom:5}}>Los {grp.transfers.length} pagos de {cmap[m.cliente_id]||'este cliente'} calzan exacto con estas {grp.facturas.length} facturas juntas:</div>
+                            {grp.facturas.map(f=>(<div key={f.id} style={{fontSize:10,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(f.invoice_no)||'—'} · {fmtM(saldoFactura(f))}{f.receptor_name?` · ${f.receptor_name}`:''}</div>))}
+                            <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:3}}>= {fmtM(grp.total)} (exacto)</div>
                           </div>
                         ) })()}
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
