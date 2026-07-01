@@ -6051,7 +6051,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             {cobranzaOpen&&<div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
               {lista.map(({b,dias,venc})=>{ const cl=clients.find(x=>x.id===b.client_id); return (
                 <div key={b.id} onClick={()=>onOpenClientFicha&&b.client_id&&onOpenClientFicha(b.client_id)} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:`0.5px solid ${C.border}`,cursor:onOpenClientFicha?'pointer':'default'}}>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{b.invoice_no?` · F° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>{dias===0?'Enviada hoy':`Enviada hace ${dias}d`}{venc?' · vencida':''} · {fmt(saldoBill(b))}{recordadoMap[String(b.id)]&&<span style={{color:C.grisText}}> · {diasDesde(recordadoMap[String(b.id)])===0?'recordado hoy':`recordado hace ${diasDesde(recordadoMap[String(b.id)])}d`}</span>}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{b.invoice_no?` · Factura N° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>{dias===0?'Enviada hoy':`Enviada hace ${dias}d`}{venc?' · vencida':''} · {fmt(saldoBill(b))}{recordadoMap[String(b.id)]&&<span style={{color:C.grisText}}> · {diasDesde(recordadoMap[String(b.id)])===0?'recordado hoy':`recordado hace ${diasDesde(recordadoMap[String(b.id)])}d`}</span>}</div></div>
                   {(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const reciente=rd!=null&&rd<=2; return <button onClick={(e)=>{e.stopPropagation();recordarCobro(b)}} style={{fontSize:10,fontWeight:600,color:reciente?C.grisText:'#fff',background:reciente?C.bgWarm:C.accent,border:'none',borderRadius:20,padding:'4px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{reciente?'Recordar otra vez':'Recordar'}</button> })()}
                 </div>
               )})}
@@ -6066,30 +6066,36 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <span style={{fontSize:10,color:C.muted}}>{calcesOpen?'▲':'▼'}</span>
             </div>
             {calcesOpen&&<div style={{marginTop:8}}>
-              {calcesSugeridos.clean.map(({factura:f,abono:m,rut})=>{ const cl=clients.find(c=>String(c.id)===String(m.cliente_id))||clients.find(c=>String(c.id)===String(efClientIdG(f))); const cliName=cl?.name||f.receptor_name||m.nombre_contraparte||'—'; return (
-                <div key={`${f.id}-${m.id}`} style={{background:'#fff',border:`1px solid ${C.normal}`,borderRadius:11,overflow:'hidden',marginBottom:8}}>
-                  <div style={{background:C.greenBg,padding:'6px 11px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                    <span style={{fontSize:9,fontWeight:700,color:C.greenText}}>1:1 · MONTO EXACTO{rut?' · RUT ✓':' · MISMO CLIENTE'}</span>
-                    <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.normal,border:'none',borderRadius:20,padding:'4px 13px',cursor:pagoBusy?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar pago</button>
+              {calcesSugeridos.clean.map(({factura:f,abono:m,rut})=>{
+                const cl=clients.find(c=>String(c.id)===String(m.cliente_id))||clients.find(c=>String(c.id)===String(efClientIdG(f))); const cliName=cl?.name||f.receptor_name||m.nombre_contraparte||'—'
+                const rol=(m.rol_cuenta==='gastos'?'GASTOS':'HONORARIOS')
+                const rRut=f.receptor_rut||''; const rN=f.receptor_name||(rRut?clientEntities.find(e=>nrG(e.rut)===nrG(rRut))?.name:'')||''
+                const sameRut=!!rRut&&!!m.rut_contraparte&&nrG(rRut)===nrG(m.rut_contraparte)
+                return (
+                <div key={`${f.id}-${m.id}`} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:9}}>
+                    <span style={{fontSize:14,fontWeight:600,color:C.accent,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName}</span>
+                    <span style={{fontSize:8.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>1:1{rut?' · RUT ✓':''}</span>
                   </div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.accent,padding:'7px 11px 0'}}>{cliName}</div>
-                  <div style={{display:'flex'}}>
-                    <div style={{flex:1,minWidth:0,padding:'9px 11px',borderRight:`1px dashed ${C.border}`}}>
-                      <div style={{fontSize:8.5,fontWeight:700,color:C.muted,letterSpacing:.4}}>FACTURA</div>
-                      <div style={{fontSize:14,fontWeight:700,color:C.accent,margin:'3px 0'}}>{fmt(saldoBill(f))}</div>
-                      <div style={{fontSize:11,fontWeight:600,color:C.text}}>Factura N° {folioN(f.invoice_no)}</div>
-                      <div style={{fontSize:10,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.receptor_name||cl?.name||'—'}</div>
-                      <div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.concept||'—'}</div>
-                      <div style={{fontSize:9,color:C.muted,marginTop:2}}>Emitida {fmtDate(f.issued_at)} · Vence {fmtDate(f.due)}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px'}}>
+                      <div style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginBottom:4,letterSpacing:'.2px'}}>ABONO · {rol}</div>
+                      <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(m.monto)}</div>
+                      <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(m.fecha)}</div>
+                      <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{m.rut_contraparte||''}</div>
                     </div>
-                    <div style={{flex:1,minWidth:0,padding:'9px 11px',background:C.bgPanel}}>
-                      <div style={{fontSize:8.5,fontWeight:700,color:C.azulInfo,letterSpacing:.4}}>ABONO · BANCO</div>
-                      <div style={{fontSize:14,fontWeight:700,color:C.accent,margin:'3px 0'}}>{fmt(m.monto)}</div>
-                      <div style={{fontSize:11,fontWeight:600,color:C.text}}>{fmtDate(m.fecha)}</div>
-                      <div style={{fontSize:10,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}</div>
-                      <div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.rut_contraparte||'—'}{m.n_operacion?` · Op ${m.n_operacion}`:''}</div>
-                      <div style={{fontSize:9,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.glosa||m.descripcion||''}</div>
+                    <div style={{background:C.bgSoft,borderRadius:9,padding:'8px 9px'}}>
+                      <div style={{fontSize:9,fontWeight:700,color:C.muted,marginBottom:4,letterSpacing:'.2px'}}>FACTURA N° {folioN(f.invoice_no)}</div>
+                      <div style={{fontSize:14,fontWeight:600,color:C.accent}}>{fmt(saldoBill(f))}</div>
+                      <div style={{fontSize:11,color:C.text,margin:'1px 0 3px'}}>{fmtDate(f.issued_at)}</div>
+                      <div style={{fontSize:10,fontWeight:sameRut?600:400,color:sameRut?C.greenText:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rN||'sin RS'}</div>
+                      <div style={{fontSize:10,fontWeight:sameRut?600:400,color:sameRut?C.greenText:C.muted}}>{rRut||''}</div>
+                      {f.concept&&<div style={{fontSize:9,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:3}}>{f.concept}</div>}
                     </div>
+                  </div>
+                  <div style={{display:'flex',justifyContent:'flex-end',marginTop:7}}>
+                    <button disabled={pagoBusy} onClick={()=>conciliarPago(m,f)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 15px',cursor:pagoBusy?'default':'pointer'}}>Conciliar</button>
                   </div>
                 </div>
               )})}
@@ -6363,7 +6369,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                         <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:6}}>Últimas emitidas</div>
                         {emitidas.slice(0,3).map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const ok=/acept/i.test(b.dte_estado||''); return (
                           <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
-                            <div style={{minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}><span style={{fontSize:12,fontWeight:600}}>F° {b.folio||'—'}</span> <span style={{fontSize:11,color:C.muted}}>· {cli?.name||'—'}</span></div>
+                            <div style={{minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}><span style={{fontSize:12,fontWeight:600}}>Factura N° {b.folio||'—'}</span> <span style={{fontSize:11,color:C.muted}}>· {cli?.name||'—'}</span></div>
                             <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:12,fontWeight:600}}>{fmt(b.amount)}</span><span style={{fontSize:10,color:ok?C.greenText:C.soonText,background:ok?C.greenBg:C.ambarBg,borderRadius:4,padding:'1px 6px'}}>{ok?'Aceptada':'Enviada'}</span></div>
                           </div>) })}
                       </div>
@@ -6741,7 +6747,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 const recRow=(b,ind)=>{ const r=recordatorioCobro(b); return (
                   <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:ind?'8px 12px 8px 22px':'9px 12px'}}>
                     <div style={{minWidth:0,flex:1}}>
-                      <div style={{fontSize:ind?11.5:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ind?'':(clients.find(c=>String(c.id)===String(b.client_id))?.name||'—')}{b.invoice_no?`${ind?'':' · '}F° ${folioN(b.invoice_no)}`:''}</div>
+                      <div style={{fontSize:ind?11.5:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ind?'':(clients.find(c=>String(c.id)===String(b.client_id))?.name||'—')}{b.invoice_no?`${ind?'':' · '}Factura N° ${folioN(b.invoice_no)}`:''}</div>
                       <div style={{fontSize:10,color:nivCol(r.nivel)}}>{r.nivel} · {fmt(saldoBill(b))}</div>
                     </div>
                     <button onClick={()=>recordarCobro(b)} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:'pointer'}}>Recordar</button>
@@ -6786,7 +6792,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {porEnviar.map((b,i)=>{ const cli=clients.find(c=>String(c.id)===String(b.client_id)); const dest=contactoDe(b); return (
                   <div key={b.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
                     <div style={{minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`F° ${b.invoice_no} · `:''}{cli?.name||'—'}</div>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${b.invoice_no} · `:''}{cli?.name||'—'}</div>
                       <div style={{fontSize:10,color:dest?C.done:C.overdueText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest||'sin correo — lo eliges al enviar'}</div>
                     </div>
                     <button onClick={()=>{ setBandejaEnvio(false); setFacturaEmail(b) }} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Enviar</button>
@@ -6815,7 +6821,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {siiLog.map((l,i)=>{ const err=l.estado==='error'||l.error; const acep=/acep/i.test(l.estado||''); return (
                   <div key={l.id||i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`0.5px solid #F2F4F6`:'none'}}>
                     <div style={{minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:C.text}}>DTE {l.tipo_dte} · F° {l.folio||'—'}</div>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text}}>DTE {l.tipo_dte} · Factura N° {l.folio||'—'}</div>
                       <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{String(l.created_at||'').slice(0,16).replace('T',' ')}{l.created_by?` · ${l.created_by}`:''}{l.error?` · ${l.error}`:''}</div>
                     </div>
                     <span style={{fontSize:10,fontWeight:600,flexShrink:0,color:err?C.overdueText:acep?C.greenText:C.soonText,background:err?C.overdueBg:acep?C.greenBg:C.ambarBg,borderRadius:4,padding:'2px 7px'}}>{err?'error':acep?'aceptada':(l.estado||'enviado')}</span>
@@ -19851,9 +19857,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const facturas = p.fg ? p.facturas : (single ? [fShown] : (hasAuto?p.facturas:[]))
           const tieneTarget = !!p.fg || facturas.length>0
           const resumen = !tieneTarget ? 'sin calce · ¿adelanto, fondo o factura?'
-            : p.fg ? `F°${folioN(p.facturas[0].invoice_no)} + reembolso de fondos`
+            : p.fg ? `Factura N° ${folioN(p.facturas[0].invoice_no)} + reembolso de fondos`
             : facturas.length>1 ? `${facturas.length} facturas suman el pago`
-            : `F°${folioN(fShown.invoice_no)}${overridden?' · elegida por ti':(p.reasons?` · ${p.reasons[0]}`:'')}`
+            : `Factura N° ${folioN(fShown.invoice_no)}${overridden?' · elegida por ti':(p.reasons?` · ${p.reasons[0]}`:'')}`
           const dotCol = !tieneTarget?C.soon : p.conf==='alta'?C.normal:C.azulInfo
           const buscando = propBuscar===m.id
           const q=propBuscaQ.trim().toLowerCase()
@@ -19891,7 +19897,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               </div>}
               {single&&!overridden&&p.alt&&p.alt.length>0&&<div style={{background:C.soonBg,borderRadius:8,padding:'8px 10px',marginBottom:8}}>
                 <span style={{fontSize:10,color:C.soonText}}><b>¿Por qué esta?</b> {cli?.name||'El cliente'} también tiene {p.alt.length===1?'otra factura':`${p.alt.length} facturas`} del mismo monto. </span>
-                <span onClick={()=>setPropPick(pp=>({...pp,[m.id]:p.alt[0].id}))} style={{fontSize:10,color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>Cambiar a F°{folioN(p.alt[0].invoice_no)}</span>
+                <span onClick={()=>setPropPick(pp=>({...pp,[m.id]:p.alt[0].id}))} style={{fontSize:10,color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>Cambiar a Factura N° {folioN(p.alt[0].invoice_no)}</span>
               </div>}
               {overridden&&<div style={{fontSize:10,color:C.soonText,marginBottom:8}}>Elegida por ti · <span onClick={()=>setPropPick(pp=>{const n={...pp};delete n[m.id];return n})} style={{color:C.accent,fontWeight:600,textDecoration:'underline',cursor:'pointer'}}>volver a la sugerida</span></div>}
               {m.cliente_id&&<div style={{marginBottom:8}}>
@@ -19904,7 +19910,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   <div style={{maxHeight:170,overflowY:'auto'}}>
                     {lista.length===0?<div style={{fontSize:11,color:C.done,padding:'6px 0'}}>Sin facturas con saldo.</div>:lista.map(b=>(
                       <div key={b.id} onClick={()=>{ setPropPick(pp=>({...pp,[m.id]:b.id})); setPropBuscar(null) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0',borderTop:`0.5px solid #F2F4F6`,cursor:'pointer'}}>
-                        <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>F°{folioN(b.invoice_no)}{b.concept?` · ${b.concept}`:''}</div><div style={{fontSize:10,color:C.muted}}>{fdate(b.issued_at)} · saldo {fmtM(saldoFactura(b))}</div></div>
+                        <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)}{b.concept?` · ${b.concept}`:''}</div><div style={{fontSize:10,color:C.muted}}>{fdate(b.issued_at)} · saldo {fmtM(saldoFactura(b))}</div></div>
                         <span style={{flexShrink:0,fontSize:10,fontWeight:600,color:C.accent}}>Imputar →</span>
                       </div>
                     ))}
@@ -21471,7 +21477,7 @@ export default function App() {
           receptor:{ rut:recRut, rs:recRs },
           items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }],
           referencias:[{ tpoDocRef:34, folioRef:bill.folio, fchRef:(bill.issued_at||'').slice(0,10)||new Date().toISOString().slice(0,10), codRef:1, razonRef:(razon||'Anula factura').slice(0,90) }] })
-        ncRef=` · Nota de crédito F° ${r.folio} (SII ${r.estado||'enviado'})`
+        ncRef=` · Nota de crédito N° ${r.folio} (SII ${r.estado||'enviado'})`
       }
       const patch={status:'Anulada', motivo_baja:razon+ncRef, anulada_por:user?.name||user?.email||null, anulada_at:new Date().toISOString(), updated_at:new Date().toISOString()}
       const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
