@@ -17888,11 +17888,12 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const escanear = async (forzar) => {
     if(escaneando) return
     setEscaneando(true)
-    let res=[], noToken=false
-    try{ res = res.concat(await escanearCarteraGmail(clients, proyectos)) }catch(e){ if(e?.code===401) noToken=true }
-    try{ res = res.concat(await escanearCarteraCalendario(clients, proyectos)) }catch(e){ if(e?.code===401) noToken=true }
+    let res=[], sinPermiso=false
+    // 401 = sin token; 403 = permiso/scope no concedido (típico si entraste antes de sumar el scope de Calendar → hay que reentrar).
+    try{ res = res.concat(await escanearCarteraGmail(clients, proyectos)) }catch(e){ if(e?.code===401||e?.code===403) sinPermiso=true }
+    try{ res = res.concat(await escanearCarteraCalendario(clients, proyectos)) }catch(e){ if(e?.code===401||e?.code===403) sinPermiso=true }
     setNovedades(res); try{ localStorage.setItem(NOV_KEY, JSON.stringify(res)); localStorage.setItem('cartera_nov_dia', HOY) }catch(_){}
-    if(forzar){ if(noToken) appAlert('Entra con tu correo de la oficina (Google) para leer correo y calendario.'); else if(!res.length) appAlert('Sin novedades por ahora.') }
+    if(forzar){ if(sinPermiso) appAlert('No pude leer correo/calendario. Cierra sesión y vuelve a entrar con tu correo de la oficina (Google) para conceder el permiso, y prueba de nuevo.'); else if(!res.length) appAlert('Sin novedades por ahora.') }
     setEscaneando(false)
   }
   useEffect(()=>{
