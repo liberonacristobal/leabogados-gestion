@@ -315,7 +315,8 @@
       "mcp__09aa9f4b-8883-492c-89e6-128e23255e22__read_file_content",
       "Bash(npm init *)",
       "Bash(npm install *)",
-      "Bash(ls node_modules/xlsx)"
+      "Bash(ls node_modules/xlsx)",
+      "Bash(perl -i -pe 's/titleCaseRS\\\\\\(rs\\\\\\)/titleCase\\(rs\\)/g' src/App.jsx)"
     ]
   }
 }
