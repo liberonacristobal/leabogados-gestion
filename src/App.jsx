@@ -4332,7 +4332,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     const mesISO=(inicio,i)=>{ const [yy,mm]=inicio.split('-').map(Number); let cy=yy, cm=mm+i; while(cm>12){cm-=12;cy++} return `${cy}-${String(cm).padStart(2,'0')}-01` }
     if(cobroType==='mensual' && mensualInicio) {
       const [y,m] = mensualInicio.split('-').map(Number); let cy=y, cm=m
-      for(let i=0;i<12;i++){ cobros.push({monto:Math.round(totalCLP), fecha:`${cy}-${String(cm).padStart(2,'0')}-01`, label:`Mensual ${MONTHS[cm-1]} ${cy}`}); cm++; if(cm>12){cm=1;cy++} }
+      // Mes vencido: la cuota se DEVENGA/emite en un mes pero corresponde al servicio del mes ANTERIOR (la que emites en julio es junio). La fecha (devengo) no cambia, solo la etiqueta del mes.
+      for(let i=0;i<12;i++){ const lm=cm===1?12:cm-1, ly=cm===1?cy-1:cy; cobros.push({monto:Math.round(totalCLP), fecha:`${cy}-${String(cm).padStart(2,'0')}-01`, label:`Mensual ${MONTHS[lm-1]} ${ly}`}); cm++; if(cm>12){cm=1;cy++} }
     } else if(cobroType==='cuotas' && cobroInicio && cuotaDist) {
       const arr = calcCuotasDist()
       if(arr.length){
@@ -4431,7 +4432,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         for(let i=0;i<newNCuotas;i++){const [yy,mm]=newCobroInicio.split('-').map(Number);let cy=yy,cm=mm+i;while(cm>12){cm-=12;cy++}nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:i===newNCuotas-1?(totR-mc*(newNCuotas-1)):mc,concept:`${sale.title} — Cuota ${i+1}/${newNCuotas}`})}
       } else if(newFmt==='mensual'&&newVig&&totalC>0){
         const [y,m]=newVig.split('-').map(Number);let cy=y,cm=m
-        for(let i=0;i<12;i++){nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:Math.round(totalC),concept:`${sale.title} — Mensual ${MONTHS[cm-1]} ${cy}`});cm++;if(cm>12){cm=1;cy++}}
+        for(let i=0;i<12;i++){const lm=cm===1?12:cm-1,ly=cm===1?cy-1:cy;nuevasCuotas.push({due:`${cy}-${String(cm).padStart(2,'0')}-01`,amount:Math.round(totalC),concept:`${sale.title} — Mensual ${MONTHS[lm-1]} ${ly}`});cm++;if(cm>12){cm=1;cy++}}
       } else if(newFmt==='personalizada'){
         newCuotasCustom.forEach((c,i)=>{if(c.monto&&c.fecha){const mm=moneda==='CLP'?Math.round(parseFloat(c.monto)||0):Math.round((parseFloat(c.monto)||0)*ufVal);nuevasCuotas.push({due:c.fecha,amount:mm,concept:`${sale.title} — Cobro ${i+1}`})}})
       } else if(newFmt==='unico'&&newVig&&totalC>0){
