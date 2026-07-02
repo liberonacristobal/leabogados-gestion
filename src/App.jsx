@@ -11744,7 +11744,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
         <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>
           {task?'Editar tarea':'Nueva tarea'}
-          {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{selectedClient.name}</span></>}
+          {selectedClient&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>{setSelectedClient(null);setQ('')}} title='Cambiar cliente' style={{color:C.muted,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{selectedClient.name}</span></>}
         </span>
         <button onClick={onClose} aria-label='Cerrar' style={{background:'none',border:'none',color:C.muted,fontSize:24,cursor:'pointer',lineHeight:1,width:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',marginRight:-8}}>x</button>
       </div>
