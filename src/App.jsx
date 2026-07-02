@@ -2566,8 +2566,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.border}`,marginTop:11,paddingTop:10}}>
                   <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?C.accent:C.greenText}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Vendido':'Neto'}</div></div>
                   <div style={{minWidth:0}}><div style={{...lblBig,color:C.muted}}>{vMon(m.costoUF,m.costo)}</div><div style={lblSm}>Terceros</div></div>
-                  <div onClick={()=>setTab('billing')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.accent}}>{fmtMon(porCobrarSel)}</div><div style={lblSm}>Por cobrar ›</div></div>
-                  <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.accent}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
+                  <div onClick={()=>setTab('billing')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.tealText}}>{fmtMon(porCobrarSel)}</div><div style={lblSm}>Por cobrar ›</div></div>
+                  <div onClick={()=>setRevOpen(o=>!o)} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:C.azulInfo}}>{ventasDelAnio.length}</div><div style={lblSm}>Ventas ›</div></div>
                 </div>
               </>)
             })()}
