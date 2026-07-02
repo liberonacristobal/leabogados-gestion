@@ -255,11 +255,13 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
     .sort((a,b)=>(a.p.due||a.p.issued_at||'').localeCompare(b.p.due||b.p.issued_at||''))
   const usados=new Set(); const out=[]
   progs.forEach(({p,cu,per,ruts,pt})=>{ const a=p.amount||0; if(!a) return; let best=null,bestRank=null
-    // CHEQUEO PREVIO (clientes recurrentes): ¿hay MÁS DE UNA factura emitida de monto similar para este cliente/RUT? Entonces
-    // las facturas se repiten mes a mes (iguales o muy parecidas) y el match POR MONTO es ambiguo → prohibido adivinar por
-    // RUT/monto (habría ligado una programada de julio con la factura de mayo/junio). Solo período/cuota, que sí identifican el mes.
+    // CHEQUEO PREVIO (clientes recurrentes): una programada recurrente (mensual/permanente o con período en el concepto) se
+    // factura IGUAL o MUY PARECIDA mes a mes → el match POR MONTO no puede distinguir el mes (ligaba una programada de julio con
+    // la factura de mayo/junio). Para ellas se PROHÍBE la rama por RUT/monto: solo período (YYYY-MM) o cuota N/M identifican el mes.
+    // Doble red: además si hay más de una emitida de monto similar, también es ambiguo.
+    const esRecurrente = !!per || /\bmensual\b|\bpermanente\b/i.test(String(p.concept||''))
     const similar = emisAll.filter(e => (String(e.x.client_id)===String(p.client_id)||[...e.ruts].some(r=>ruts.has(r))) && a>0 && Math.abs((e.x.amount||0)-a)/a<=0.05)
-    const recurrenteAmbiguo = similar.length > 1
+    const recurrenteAmbiguo = esRecurrente || similar.length > 1
     for(const e of emisAll){ if(usados.has(e.x.id)||noSet.has(`${p.id}|${e.x.id}`)) continue
       const sameCli=String(e.x.client_id)===String(p.client_id); const rutMatch=[...e.ruts].some(r=>ruts.has(r)); if(!sameCli&&!rutMatch) continue
       const dMonto=Math.abs((e.x.amount||0)-a)/a; const sameCu=!!(cu&&e.cu&&cu.n===e.cu.n), samePer=!!(per&&e.per&&per===e.per); const dias=(pt&&e.t)?Math.abs(e.t-pt)/86400000:999
