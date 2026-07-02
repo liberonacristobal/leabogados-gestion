@@ -5712,7 +5712,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 {/* 3. Elige la factura — varias candidatas: comparación con lo del SII */}
                 {result.ambiguas?.length>0&&<>
                   <Hdr label='Elige la factura correcta' color='#537281' bg='#EEF1F4'/>
-                  {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; const cands=(it.candidatos||[]).filter(c=>!c.folio); return (   /* una factura con folio ya es emitida: NUNCA candidata */
+                  {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; const cands=(()=>{ const raw=(it.candidatos||[]).filter(c=>!c.folio); const seen=new Map(); raw.forEach(c=>{ const k=`${c.cliente}|${c.concepto}|${c.monto}|${c.estado}`; if(seen.has(k)) seen.get(k)._dups++; else seen.set(k,{...c,_dups:1}) }); return [...seen.values()] })(); return (   /* sin folio (ya emitida NUNCA candidata) + dedupe de programadas iguales (no ofrecer dos idénticas) */
                     <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
                       <div onClick={()=>!done&&setAmbExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:done?'default':'pointer'}}>
                         {bigDate(isoFecha(it.fechaEmision),C.muted)}
@@ -5737,7 +5737,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
-                              <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado}{cand.folio?` · N°${cand.folio}`:''}</div>
+                              <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado}{cand.folio?` · N°${cand.folio}`:''}{cand._dups>1?` · ${cand._dups} programadas iguales`:''}</div>
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
