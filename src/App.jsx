@@ -20162,8 +20162,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           const grupos={}; facsShow.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
                           return (<div style={{borderLeft:`2px solid ${C.border}`,paddingLeft:8}}>
                             {facsAll.length>=8&&<input value={facBuscaQ} onChange={e=>setFacBuscaQ(e.target.value)} onClick={e=>e.stopPropagation()} placeholder='Buscar factura: N°, concepto, monto…' style={{width:'100%',boxSizing:'border-box',fontSize:11,padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,marginBottom:5,outline:'none'}}/>}
-                            <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Facturas del cliente{facsAll.length?` · ${facsAll.length}`:''} <span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>· nueva→antigua</span></div>
-                            {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>Este cliente no tiene facturas emitidas — clasifícalo arriba como <b>Saldo a Favor</b> o <b>Fondo por Rendir</b>.</span>}
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:3}}>
+                              <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>Facturas del cliente{facsAll.length?` · ${facsAll.length}`:''} <span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>· nueva→antigua</span></div>
+                              {onCotejarSII&&(()=>{ const mesPago=String(m.fecha||'').slice(0,7); return <button onClick={e=>{e.stopPropagation();onCotejarSII(mesPago)}} title={`Buscar facturas en el SII (${mesPago||'mes del pago'})`} style={{fontSize:10,fontWeight:600,color:C.azulInfo,background:'#fff',border:`1px solid ${C.azulInfo}`,borderRadius:8,padding:'3px 10px',cursor:'pointer',flexShrink:0}}>Buscar en SII</button> })()}
+                            </div>
+                            {facsAll.length===0&&<span style={{fontSize:10,color:C.muted}}>No encontramos la factura de este pago — <b>Buscar en SII</b> la trae del portal, o clasifícalo arriba como <b>Saldo a Favor</b> o <b>Fondo por Rendir</b>.</span>}
                             {Object.entries(grupos).map(([rs,fs])=>{
                               const esConc=f=>{ const ap=aplicadoByFactura[f.id]||0; return (f.amount||0)>0 && ap>=(f.amount||0) }
                               const activas=fs.filter(f=>!esConc(f)), conciliadas=fs.filter(f=>esConc(f)); const concShown=rsConcOpen.has(rs)
