@@ -5413,6 +5413,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const [ingresadas,setIngresadas] = useState(()=>({}))    // folio -> {cliente|null}
   const [yaOpen,setYaOpen] = useState(false)
   const [autoOpen,setAutoOpen] = useState(false)   // "se cargaron solas" colapsado por defecto
+  const [recoExp,setRecoExp] = useState(()=>new Set())   // folios con la comparación En el SII ↔ Tu cliente abierta
   const [yy,mm] = mes.split('-').map(Number)
   const mesLabel = `${MESES_ABR[mm-1]} ${yy}`
   const mesLargo = `${MESES_LG[mm-1]} ${yy}`
@@ -5599,20 +5600,37 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 return <>
                 {/* 1. Confirma el cliente — reconocidas por RUT: ves a quién va antes de asignar */}
                 {reco.length>0&&<>
-                  <Hdr label='Confirma el cliente' color={C.greenText} bg='#E1F5EE' border='#9FE1CB' right={nReco>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Cargar las {nReco}</button>}/>
-                  <div style={{fontSize:10.5,color:C.muted,padding:'7px 20px 1px',lineHeight:1.45}}>Están en el SII pero aún no en tu facturación. Reconocí el cliente por el RUT — al <b>cargar</b> se crea la factura bajo ese cliente.</div>
-                  {reco.map((it,i)=>{ const ya=ingresadas[it.folio]; const cli=ya?null:resolverCliente(it.rut,it.receptor); return <Fila key={i}>
-                    {bigDate(isoFecha(it.fechaEmision),C.muted)}
-                    <div style={{minWidth:0,marginLeft:4,flex:1}}>
-                      <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
-                      <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
-                      {ya
-                        ? <div style={{fontSize:11,fontWeight:600,color:ya.cliente?C.greenText:C.soonText,marginTop:2}}>{ya.cliente?`✓ Cargada a ${ya.cliente}`:'Cargada · falta cliente'}</div>
-                        : <div style={{fontSize:11,color:C.done,marginTop:2}}>Cliente: {cli&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(cli.id);onClose&&onClose()}} style={{color:C.accent,fontWeight:700,cursor:'pointer',textDecoration:'underline'}}>{cli.name} ›</span>:<b style={{color:C.greenText}}>{cli?.name}</b>}</div>}
+                  <Hdr label='Confirma el cliente' color={C.greenText} bg='#E1F5EE' border='#9FE1CB' right={nReco>1&&<button onClick={async()=>{ if(await appConfirm(`Cargar ${nReco} facturas del SII a tu facturación (cliente reconocido por RUT). ¿Seguir?`)) ingresarTodas() }} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Cargar las {nReco}</button>}/>
+                  {reco.map((it,i)=>{ const ya=ingresadas[it.folio]; const cli=ya?null:resolverCliente(it.rut,it.receptor); const exp=recoExp.has(it.folio); return (
+                    <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
+                      <div onClick={()=>!ya&&setRecoExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:ya?'default':'pointer'}}>
+                        {bigDate(isoFecha(it.fechaEmision),C.muted)}
+                        <div style={{minWidth:0,flex:1,marginLeft:4}}>
+                          <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
+                          <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio} · {fmt(it.monto)}</div>
+                        </div>
+                        {ya
+                          ? <span style={{fontSize:11,fontWeight:600,color:ya.cliente?C.greenText:C.soonText,whiteSpace:'nowrap'}}>{ya.cliente?`✓ ${ya.cliente}`:'Cargada'}</span>
+                          : <span style={{fontSize:11,color:C.greenText,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>{cli?.name} {exp?'▾':'▸'}</span>}
+                      </div>
+                      {exp&&!ya&&<div style={{padding:'2px 20px 11px',background:C.bgSoft}}>
+                        <div style={{display:'flex',gap:12,padding:'4px 0 8px'}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>En el SII</div>
+                            <div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
+                            <div style={{fontSize:10.5,color:C.muted}}>{fmtRut(it.rut)}</div>
+                            <div style={{fontSize:10.5,color:C.muted}}>N°{it.folio} · {fmt(it.monto)}</div>
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Se carga a</div>
+                            <div style={{fontSize:11,fontWeight:600,color:onOpenClientFicha?C.accent:C.text,cursor:onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={onOpenClientFicha?()=>{onOpenClientFicha(cli.id);onClose&&onClose()}:undefined}>{cli?.name}{onOpenClientFicha?' ›':''}</div>
+                            <div style={{fontSize:10.5,color:C.greenText}}>✓ mismo RUT</div>
+                          </div>
+                        </div>
+                        <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'Cargando…':`Cargar a ${cli?.name}`}</button>
+                      </div>}
                     </div>
-                    {!ya&&<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} title='Crea esta factura del SII en tu facturación, bajo el cliente reconocido' style={{height:26,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1,marginLeft:8}}>{ingresando===it.folio?'…':'Cargar'}</button>}
-                    {ya&&<span style={{fontSize:14,color:C.greenText,marginLeft:8,flexShrink:0}}>✓</span>}
-                  </Fila> })}
+                  )})}
                 </>}
                 {/* 2. Dime el cliente — no reconocidas: buscador inline */}
                 {noReco.length>0&&<>
