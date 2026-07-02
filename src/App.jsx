@@ -20323,22 +20323,65 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         </div>
                       )})()}
                       {showPick&&<>
-                        {sug&&<div style={{background:C.azulBg,borderRadius:8,padding:'6px 9px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
-                          <div style={{minWidth:0,flex:1}}>
-                            <div style={{fontSize:11,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(sug.invoice_no)||'—'}</b>{sug.issued_at?` · ${mesAbbr(sug.issued_at)}`:''} · {fmtM(saldoFactura(sug))}</div>
-                            {sug.receptor_name&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sug.receptor_name}{sug.receptor_rut?` · ${sug.receptor_rut}`:''}</div>}
-                          </div>
-                          <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar</button>
-                        </div>}
-                        {(()=>{ const grp=grupoPago(m); if(!grp) return null; return (
-                          <div style={{background:'#fff',border:`1px solid #BFE3D5`,borderRadius:8,padding:'8px 10px',marginBottom:6}} onClick={e=>e.stopPropagation()}>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:4}}>
-                              <span style={{fontSize:11,fontWeight:700,color:C.greenText,minWidth:0}}>✦ Pago en grupo</span>
-                              <button disabled={busy===m.id} onClick={()=>reconciliarGrupo(grp.transfers,grp.facturas)} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 12px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar grupo</button>
+                        {sug&&(()=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const sld=saldoFactura(sug); const exacto=sld===resto; const est=estadoFacturaLabel(sug,aplicadoByFactura[sug.id]||0,cartolaHasta); const esReemb=(sug.billing_type||'')==='reembolso'; const rutMatch=[...rutsFac(sug)].some(r=>rutsMov.has(r)); const rsF=sug.receptor_name||cmap[sug.client_id]||cmap[m.cliente_id]||'—'; const cta=m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'; return (
+                          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',marginBottom:6}}>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>El depósito</div>
+                                <div style={{fontSize:14,fontWeight:700,color:C.greenText}}>+{fmtM(m.monto)}</div>
+                                <div style={{fontSize:10,color:C.muted}}>{fmtFechaDMY(m.fecha)} · {cta}</div>
+                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomBanco}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div>
+                                {m.n_operacion&&<div style={{fontSize:10,color:C.muted}}>N° op. {m.n_operacion}</div>}
+                                {m.descripcion&&<div style={{fontSize:9.5,color:C.done,marginTop:2,lineHeight:1.35}}>{(m.descripcion||'').slice(0,80)}{(m.descripcion||'').length>80?'…':''}</div>}
+                              </div>
+                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>La factura</div>
+                                <div style={{fontSize:13,fontWeight:700,color:C.accent}}>N°{folioN(sug.invoice_no)||'—'} · {fmtM(sld)}</div>
+                                <div style={{fontSize:10,color:C.muted}}>emitida {fmtFechaDMY(sug.issued_at)}</div>
+                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsF}{sug.receptor_rut?` · ${sug.receptor_rut}`:''}</div>
+                                <div style={{marginTop:3,display:'flex',gap:4,flexWrap:'wrap'}}>
+                                  {est&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:est.bg,color:est.fg}}>{est.label}</span>}
+                                  {esReemb&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:'#FAECE7',color:C.coralText}}>Reembolso de gastos</span>}
+                                </div>
+                                {sug.concept&&<div style={{fontSize:9.5,color:C.done,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sug.concept}</div>}
+                              </div>
                             </div>
-                            <div style={{fontSize:10,color:C.muted,marginBottom:5}}>Los {grp.transfers.length} pagos de {cmap[m.cliente_id]||'este cliente'} calzan exacto con estas {grp.facturas.length} facturas juntas:</div>
-                            {grp.facturas.map(f=>(<div key={f.id} style={{fontSize:10,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N°{folioN(f.invoice_no)||'—'} · {fmtM(saldoFactura(f))}{f.receptor_name?` · ${f.receptor_name}`:''}</div>))}
-                            <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:3}}>= {fmtM(grp.total)} (exacto)</div>
+                            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginTop:7,paddingTop:6,borderTop:`1px solid ${C.bgSoft}`}}>
+                              {rutMatch&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px'}}>✓ mismo RUT</span>}
+                              <span style={{fontSize:9.5,fontWeight:700,color:exacto?C.greenText:C.soonText,background:exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px'}}>{exacto?'✓ monto exacto':`dif ${fmtM(Math.abs(sld-resto))}`}</span>
+                              <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{marginLeft:'auto',background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 14px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{esReemb?'Conciliar (reembolso)':'Conciliar'}</button>
+                            </div>
+                          </div>) })()}
+                        {(()=>{ const grp=grupoPago(m); if(!grp) return null
+                          const depSum=grp.transfers.reduce((a,t)=>a+(t.monto||0),0); const facSum=grp.facturas.reduce((a,f)=>a+saldoFactura(f),0)
+                          const nomDep=t=>(t.rut_contraparte&&nameByRut[crNormRut(t.rut_contraparte)])||t.nombre_contraparte||cmap[m.cliente_id]||'—'
+                          return (
+                          <div style={{background:'#fff',border:`1px solid #BFE3D5`,borderRadius:9,padding:'9px 10px',marginBottom:6}} onClick={e=>e.stopPropagation()}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
+                              <span style={{fontSize:11,fontWeight:700,color:C.greenText,minWidth:0}}>✦ Pago en grupo · {cmap[m.cliente_id]||'cliente'}</span>
+                              <button disabled={busy===m.id} onClick={()=>reconciliarGrupo(grp.transfers,grp.facturas)} style={{background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar grupo</button>
+                            </div>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Los depósitos · {grp.transfers.length}</div>
+                                {grp.transfers.map(t=>(<div key={t.id} style={{padding:'3px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+                                  <div style={{display:'flex',justifyContent:'space-between',gap:6}}><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>+{fmtM(t.monto)}</span><span style={{fontSize:10,color:C.done}}>{fmtFechaDMY(t.fecha)}</span></div>
+                                  <div style={{fontSize:9.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomDep(t)}{t.rut_contraparte?` · ${t.rut_contraparte}`:''}</div>
+                                  {t.n_operacion&&<div style={{fontSize:9,color:C.done}}>N° op. {t.n_operacion}</div>}
+                                </div>))}
+                                <div style={{display:'flex',justifyContent:'space-between',borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:4,fontSize:10.5,fontWeight:700,color:C.text}}><span>Suma</span><span>{fmtM(depSum)}</span></div>
+                              </div>
+                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                                <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Las facturas · {grp.facturas.length}</div>
+                                {grp.facturas.map(f=>(<div key={f.id} style={{padding:'3px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+                                  <div style={{display:'flex',justifyContent:'space-between',gap:6}}><span style={{fontSize:11,fontWeight:700,color:C.accent}}>N°{folioN(f.invoice_no)||'—'}</span><span style={{fontSize:11,fontWeight:700,color:C.text}}>{fmtM(saldoFactura(f))}</span></div>
+                                  <div style={{fontSize:9.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.receptor_name||cmap[m.cliente_id]||'—'}{f.receptor_rut?` · ${f.receptor_rut}`:''}</div>
+                                  <div style={{fontSize:9,color:C.done,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.issued_at?fmtFechaDMY(f.issued_at):''}{f.concept?` · ${f.concept}`:''}</div>
+                                </div>))}
+                                <div style={{display:'flex',justifyContent:'space-between',borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:4,fontSize:10.5,fontWeight:700,color:C.text}}><span>Suma</span><span>{fmtM(facSum)}</span></div>
+                              </div>
+                            </div>
+                            <div style={{fontSize:10,fontWeight:700,color:depSum===facSum?C.greenText:C.soonText,background:depSum===facSum?C.greenBg:C.soonBg,borderRadius:6,padding:'3px 9px',marginTop:6,display:'inline-block'}}>{depSum===facSum?`✓ cuadra exacto · ${fmtM(grp.total)}`:`dif ${fmtM(Math.abs(depSum-facSum))}`}</div>
                           </div>
                         ) })()}
                         {factResto.length>0&&(
