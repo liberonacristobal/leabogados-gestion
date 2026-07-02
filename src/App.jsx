@@ -5404,6 +5404,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const [ingresando,setIngresando] = useState(null)        // folio en curso
   const [ingresadas,setIngresadas] = useState(()=>({}))    // folio -> {cliente|null}
   const [yaOpen,setYaOpen] = useState(false)
+  const [autoOpen,setAutoOpen] = useState(false)   // "se cargaron solas" colapsado por defecto
   const [yy,mm] = mes.split('-').map(Number)
   const mesLabel = `${MESES_ABR[mm-1]} ${yy}`
   const mesLargo = `${MESES_LG[mm-1]} ${yy}`
@@ -5558,12 +5559,17 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
           </div>
         )})()}
         {error&&<div style={{padding:'10px 20px',fontSize:12,color:C.overdue,background:C.overdueBg}}>{error}</div>}
-        {result&&!loading&&(()=>{ const calz=(result.actualizadas?.length||0)+(result.yaRegistradas?.length||0); const rev=(result.corregirFolio?.length||0)+(result.ambiguas?.length||0); const noc=result.sinMatch?.length||0; const cel=(n,l,col)=>(<div style={{flex:1,textAlign:'center'}}><div style={{fontSize:16,fontWeight:700,color:n>0?col:C.done,lineHeight:1}}>{n}</div><div style={{fontSize:9,color:C.muted,marginTop:2,textTransform:'uppercase',letterSpacing:'.03em'}}>{l}</div></div>); return (
-          <div style={{display:'flex',alignItems:'center',padding:'12px 16px',borderBottom:'0.5px solid #E4E8EB'}}>
-            <div style={{textAlign:'center',paddingRight:14,marginRight:6,borderRight:'0.5px solid #E4E8EB'}}><div style={{fontSize:18,fontWeight:700,color:C.accent,lineHeight:1}}>{result.totalSII||0}</div><div style={{fontSize:9,color:C.muted,marginTop:2,textTransform:'uppercase',letterSpacing:'.03em'}}>en el SII</div></div>
-            {cel(calz,'calzaron',C.normal)}
-            {cel(rev,'por revisar',C.accent)}
-            {cel(noc,'no cargadas','#C77F18')}
+        {result&&!loading&&(()=>{ const auto=(result.actualizadas?.length||0); const porResolver=(result.corregirFolio?.length||0)+(result.ambiguas?.length||0)+(result.sinMatch?.length||0); return (
+          <div style={{padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB'}}>
+            <div style={{display:'flex',alignItems:'baseline',gap:8}}>
+              <span style={{fontSize:28,fontWeight:700,color:porResolver>0?'#C77F18':C.normal,lineHeight:1}}>{porResolver}</span>
+              <span style={{fontSize:13,color:C.muted}}>{porResolver===1?'factura por resolver':'facturas por resolver'}</span>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:7,marginTop:9,paddingTop:9,borderTop:'0.5px solid #E4E8EB'}}>
+              {auto>0&&<><CheckVerde/><span style={{fontSize:12,color:C.muted}}>{auto} se cargaron solas</span></>}
+              {auto===0&&<span style={{fontSize:12,color:C.done}}>Nada se cargó solo este mes</span>}
+              <span style={{fontSize:11,color:C.done,marginLeft:'auto',whiteSpace:'nowrap'}}>{result.totalSII||0} en el SII</span>
+            </div>
           </div>
         )})()}
         {loading&&<SiiDots/>}
@@ -5576,76 +5582,99 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                   <div style={{fontSize:11,color:C.done,marginTop:1}}>{reg.length} factura{reg.length!==1?'s':''} ya registrada{reg.length!==1?'s':''}</div>
                 </div>
               </div>
-            : <>
-                {result.actualizadas?.length>0&&<>
-                  <Hdr label='Conciliadas' color={C.greenText} bg='#E1F5EE'/>
-                  {result.actualizadas.map((it,i)=><Fila key={i}>{bigDate(isoFecha(it.fechaEmision),C.normal)}<div style={{minWidth:0,flex:1,marginLeft:4}}><div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente}</div><div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}</div></div><span style={{fontSize:13,fontWeight:500,color:C.text,marginLeft:'auto',marginRight:8,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span><CheckVerde/></Fila>)}
-                </>}
-                {result.corregirFolio?.length>0&&<>
-                  <Hdr label='Corregir folio' color={C.accent} bg='#EEF4F7'/>
-                  {result.corregirFolio.map((it,i)=>{ const ya=corregidas[it.billingId]; return <Fila key={i}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||it.cliente||'—'}</div>
-                      <div style={{fontSize:11,color:C.done,marginTop:1}}>{it.folioActual?`Factura N°${it.folioActual} → ${it.folio}`:`Asignar Factura N°${it.folio}`}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
-                    </div>
-                    <span style={{fontSize:13,fontWeight:500,color:C.text,marginLeft:'auto',marginRight:12,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>
-                    {ya?<span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>Corregido</span>:<button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:corrigiendo===it.billingId?.5:1}}>{corrigiendo===it.billingId?'…':'Corregir'}</button>}
-                  </Fila> })}
-                </>}
-                {result.sinMatch?.length>0&&<>
-                  {(()=>{ const reconocidas=result.sinMatch.filter(it=>!ingresadas[it.folio]&&resolverCliente(it.rut,it.receptor)).length; return (
-                    <Hdr label='Ventas no cargadas' color='#C77F18' bg='#FFFBF0' border='#F0E4B8' right={reconocidas>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Asignar {reconocidas} reconocidas</button>}/>
-                  ) })()}
-                  {result.sinMatch.map((it,i)=>{ const ya=ingresadas[it.folio]; const cli=ya?null:resolverCliente(it.rut,it.receptor); return <Fila key={i}>
+            : (()=>{
+                const orphans=result.sinMatch||[]
+                const reco=orphans.filter(it=>resolverCliente(it.rut,it.receptor)||ingresadas[it.folio])   // reconocidas por RUT o ya asignadas a mano
+                const noReco=orphans.filter(it=>!resolverCliente(it.rut,it.receptor)&&!ingresadas[it.folio])
+                const nReco=reco.filter(it=>!ingresadas[it.folio]).length
+                const dmy=s=>{ const x=isoFecha(s); return x?x.split('-').reverse().join('/'):'' }
+                return <>
+                {/* 1. Confirma el cliente — reconocidas por RUT: ves a quién va antes de asignar */}
+                {reco.length>0&&<>
+                  <Hdr label='Confirma el cliente' color={C.greenText} bg='#E1F5EE' border='#9FE1CB' right={nReco>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Asignar las {nReco}</button>}/>
+                  {reco.map((it,i)=>{ const ya=ingresadas[it.folio]; const cli=ya?null:resolverCliente(it.rut,it.receptor); return <Fila key={i}>
                     {bigDate(isoFecha(it.fechaEmision),C.muted)}
                     <div style={{minWidth:0,marginLeft:4,flex:1}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
                       <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
                       {ya
-                        ? <div style={{fontSize:11,fontWeight:600,color:ya.cliente?C.greenText:C.soonText,marginTop:2}}>{ya.cliente?`✓ Asignada a ${ya.cliente}`:'Ingresada · falta elegir cliente en Facturación'}</div>
-                        : cli
-                          ? <div style={{fontSize:11,color:C.greenText,marginTop:2}}>→ se asigna a <b>{cli.name}</b></div>
-                          : <div style={{marginTop:4,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}><span style={{fontSize:11,color:C.soonText}}>No reconozco el cliente · </span><AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={(_,cid)=>ingresarHuerfana(it,cid)} label='Elegir cliente' placeholder='Buscar cliente…'/></div>
-                      }
+                        ? <div style={{fontSize:11,fontWeight:600,color:ya.cliente?C.greenText:C.soonText,marginTop:2}}>{ya.cliente?`✓ Asignada a ${ya.cliente}`:'Ingresada · falta cliente'}</div>
+                        : <div style={{fontSize:11,color:C.greenText,marginTop:2}}>→ se asigna a <b>{cli?.name}</b></div>}
                     </div>
-                    {!ya&&cli&&<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1,marginLeft:8}}>{ingresando===it.folio?'…':'+ Asignar'}</button>}
+                    {!ya&&<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1,marginLeft:8}}>{ingresando===it.folio?'…':'Asignar'}</button>}
                     {ya&&<span style={{fontSize:14,color:C.greenText,marginLeft:8,flexShrink:0}}>✓</span>}
                   </Fila> })}
                 </>}
+                {/* 2. Dime el cliente — no reconocidas: buscador inline */}
+                {noReco.length>0&&<>
+                  <Hdr label='Dime el cliente' color='#C77F18' bg='#FFFBF0' border='#F0E4B8'/>
+                  {noReco.map((it,i)=><Fila key={i}>
+                    {bigDate(isoFecha(it.fechaEmision),C.muted)}
+                    <div style={{minWidth:0,marginLeft:4,flex:1}}>
+                      <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
+                      <div style={{fontSize:11,color:C.done,marginTop:1,marginBottom:6}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
+                      <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={(_,cid)=>ingresarHuerfana(it,cid)} label='Elegir cliente' placeholder='Buscar cliente…'/>
+                    </div>
+                  </Fila>)}
+                </>}
+                {/* 3. Elige la factura — varias candidatas: comparación con lo del SII */}
                 {result.ambiguas?.length>0&&<>
-                  <Hdr label='Revisión manual · elige el candidato' color='#537281' bg='#EEF1F4'/>
+                  <Hdr label='Elige la factura correcta' color='#537281' bg='#EEF1F4'/>
                   {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; return (
                     <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
                       <div onClick={()=>!done&&setAmbExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:done?'default':'pointer'}}>
                         {bigDate(isoFecha(it.fechaEmision),C.muted)}
                         <div style={{minWidth:0,flex:1,marginLeft:4}}>
-                          <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||`Factura N°${it.folio}`}</div>
-                          <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                          <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||`Factura N°${it.folio}`}</div>
+                          <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
                         </div>
-                        <span style={{fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap',marginRight:8}}>{fmt(it.monto)}</span>
                         {done ? <span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>Asignada</span>
-                          : <span style={{fontSize:11,color:C.accent,fontWeight:600,whiteSpace:'nowrap'}}>{it.candidatos?.length} candidatos {exp?'▾':'▸'}</span>}
+                          : <span style={{fontSize:11,color:C.accent,fontWeight:600,whiteSpace:'nowrap'}}>{it.candidatos?.length} candidatas {exp?'▾':'▸'}</span>}
                       </div>
-                      {exp&&!done&&<div style={{padding:'0 20px 8px 20px',background:C.bgSoft}}>
-                        {(it.candidatos||[]).map((cand,j)=>(
+                      {exp&&!done&&<div style={{padding:'2px 20px 10px',background:C.bgSoft}}>
+                        <div style={{fontSize:10.5,color:C.muted,padding:'7px 0',lineHeight:1.5}}><span style={{fontWeight:700,color:C.accent}}>Del SII:</span> {fmt(it.monto)} · {dmy(it.fechaEmision)}{it.rut?` · ${fmtRut(it.rut)}`:''}{it.receptor?` · ${it.receptor}`:''}</div>
+                        {(it.candidatos||[]).map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); return (
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
                               <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado}{cand.folio?` · N°${cand.folio}`:''}</div>
                             </div>
-                            <span style={{fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</span>
+                            <div style={{textAlign:'right',flexShrink:0}}>
+                              <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
+                              {exacto&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>monto exacto</div>}
+                            </div>
                             <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
                           </div>
-                        ))}
+                        )})}
                       </div>}
                     </div>
                   )})}
+                </>}
+                {/* 4. Corregir folio */}
+                {result.corregirFolio?.length>0&&<>
+                  <Hdr label='Corregir folio' color={C.accent} bg='#EEF4F7'/>
+                  {result.corregirFolio.map((it,i)=>{ const ya=corregidas[it.billingId]; return <Fila key={i}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||it.cliente||'—'}</div>
+                      <div style={{fontSize:11,color:C.done,marginTop:1}}>{it.folioActual?`Factura N°${it.folioActual} → ${it.folio}`:`Asignar Factura N°${it.folio}`}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
+                    </div>
+                    {ya?<span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap',marginLeft:8}}>Corregido</span>:<button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:corrigiendo===it.billingId?.5:1,marginLeft:8}}>{corrigiendo===it.billingId?'…':'Corregir'}</button>}
+                  </Fila> })}
+                </>}
+                {/* 5. Se cargaron solas (automático) — colapsado */}
+                {result.actualizadas?.length>0&&<>
+                  <div onClick={()=>setAutoOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 20px',cursor:'pointer',borderBottom:autoOpen?'0.5px solid #E4E8EB':'none'}}>
+                    <span style={{fontSize:11,fontWeight:600,color:C.greenText,textTransform:'uppercase',letterSpacing:'0.05em'}}>Se cargaron solas · {result.actualizadas.length}</span>
+                    <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:autoOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+                  </div>
+                  {autoOpen&&result.actualizadas.map((it,i)=><Fila key={i}>{bigDate(isoFecha(it.fechaEmision),C.normal)}<div style={{minWidth:0,flex:1,marginLeft:4}}><div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente}</div><div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}</div></div><span style={{fontSize:13,fontWeight:500,color:C.text,marginLeft:'auto',marginRight:8,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span><CheckVerde/></Fila>)}
                 </>}
                 {result.errores?.length>0&&<>
                   <Hdr label='Errores' color={C.overdue} bg='#FCEBEB'/>
                   {result.errores.map((it,i)=><Fila key={i}><span style={{fontSize:12,color:C.text}}>Factura N°{it.folio}</span><span style={{fontSize:11,color:C.overdue,marginLeft:'auto'}}>{it.error}</span></Fila>)}
                 </>}
-              </>}
+                </>
+              })()}
           {reg.length>0&&<>
             <div onClick={()=>setYaOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 20px',cursor:'pointer'}}>
               <span style={{fontSize:11,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:'0.05em'}}>Ya registradas</span>
