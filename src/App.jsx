@@ -3962,7 +3962,7 @@ function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,sal
   )
 }
 
-function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onUpdateCuotas,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive}) {
+function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onUpdateCuotas,onSave,onClose,onDelete,saving,user,onExposeUpload,onExposeDrive,onExposeReasign}) {
   const [cubrirAnt,setCubrirAnt] = useState(null)
   const [facturarAntS,setFacturarAntS] = useState(null)
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -4043,6 +4043,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
   const {uf: ufHoy} = useUF()
   const [openCondicion,setOpenCondicion] = useState(null)
   useEffect(()=>{ if(onExposeUpload) onExposeUpload(()=>setPropuestaStep('upload')) },[])
+  useEffect(()=>{ if(onExposeReasign) onExposeReasign(()=>{ setReasignCli(true); setClientQ('') }) },[])   // el nombre del encabezado (App) dispara el cambio de cliente
   useEffect(()=>{
     if(!onExposeDrive) return
     onExposeDrive(async()=>{
@@ -4287,11 +4288,25 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
   const propBorr = !!(sale?.id && (sale?.status==='Propuesta'||sale?.status==='Borrador'))
   const formNuevo = !sale?.id || propBorr
 
-  const handleSave = () => {
+  // Persiste las ediciones inline de cuotas (fecha/monto) pendientes, para que el "Guardar" principal
+  // NO las pierda si el usuario no tocó el botón "Guardar cambios" del acordeón. No aplica en propuesta/borrador
+  // (ahí las cuotas se regeneran). Recompone prog/toCLP igual que el acordeón (viven en su render, fuera de scope).
+  const flushCuotaEdits = async () => {
+    if(propBorr || !sale?.id || !onUpdateCuotas) return
+    const prog=(billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.status==='Programada'&&!b.deleted_at)
+    const ufc = parseFloat(f.uf_value)||ufVal||0
+    const esUFc = cuotaUnit==='UF' && ufc>0
+    const toCLPc = v => esUFc ? Math.round((parseFloat(v)||0)*ufc) : Math.round(parseFloat(v)||0)
+    const ups=Object.entries(cuotaEdits).map(([id,e])=>{ const b=prog.find(x=>String(x.id)===String(id)); if(!b) return null; const due=e.due!==undefined?e.due:b.due; const amount=e.amount!==undefined?toCLPc(e.amount):b.amount; if(due===b.due&&amount===Math.round(b.amount||0)) return null; return {id:b.id,due,amount} }).filter(Boolean)
+    if(ups.length){ await onUpdateCuotas(ups); setCuotaEdits({}) }
+  }
+
+  const handleSave = async () => {
     // Reparto: solo filas con proveedor elegido y monto. Si hay filas con monto pero SIN proveedor y ninguna completa, avisar.
     const repartoLimpio = (reparto||[]).filter(r=>r.proveedor_id && (parseFloat(r.valor)||0)>0)
     const hayIncompleto = (reparto||[]).some(r=>(parseFloat(r.valor)||0)>0 && !r.proveedor_id)
     if(repartoLimpio.length===0 && hayIncompleto){ appAlert('Elige el proveedor en el reparto de costos antes de guardar (o quita la fila con la ×).'); return }
+    await flushCuotaEdits()
     const saveF = {...f}
     if(!hasCost) { saveF.cost_uf = null; saveF.cost_clp = null }
     else if(costMode==='pct') {
@@ -4574,15 +4589,15 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
           {reasignCli&&sale?.id&&<div style={{fontSize:11,color:C.coralText,marginTop:6}}>Mueve esta {f.status==='Propuesta'?'propuesta':'venta'} a otro cliente. Las facturas ya emitidas mantienen su receptor; revisa la razón social a facturar tras cambiar.</div>}
         </Fld>
-      ) : (
-        <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Reasignar a otro cliente' style={{marginBottom:10,padding:'9px 12px',borderRadius:8,background:C.azulBg,border:`1px solid ${C.accent}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+      ) : (sale?.id ? null : (
+        <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Cambiar cliente' style={{marginBottom:10,padding:'9px 12px',borderRadius:8,background:C.azulBg,border:`1px solid ${C.accent}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:13,fontWeight:600,color:C.accent}}>{selectedClient.name}</div>
             {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{selectedClient.rut}</div>}
           </div>
           <span style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:6,padding:'5px 11px',flexShrink:0}}>Cambiar</span>
         </div>
-      )}
+      ))}
       {showNewClient&&<MiniClientForm defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false)}} onCancel={()=>setShowNewClient(false)}/>}
       {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
 
@@ -20273,6 +20288,7 @@ export default function App() {
   const fechaInline = `${_hoyHdr.getDate()} ${MESES_ABR[_hoyHdr.getMonth()].toLowerCase()}`   // fecha corta sin año, para el saludo
   const saleUploadRef = useRef(null)
   const saleDriveRef = useRef(null)
+  const saleReasignRef = useRef(null)
 
   const loadUserRole = async(email) => {
     const {data} = await supabase.from('user_roles').select('*').eq('email',email).maybeSingle()
@@ -20472,6 +20488,13 @@ export default function App() {
             return Math.round(v*frac)   // clp fijo, repartido proporcional
           }
           const previas = (terceros||[]).filter(t=>String(t.sale_id)===String(data.id))
+          // GUARDA anti-pérdida: si el reparto entrante viene VACÍO pero YA hay proveedores no pagados en la venta,
+          // NO tocar nada. Un reparto vacío casi siempre es que el formulario no alcanzó a cargar los terceros
+          // (el estado inicial corre una vez), no un borrado intencional. Evita que un guardado cualquiera borre
+          // proveedores (bug real: "Aurelio desapareció"). Para quitar un proveedor, edita el reparto con ese proveedor presente.
+          if(f.repartoTerceros.length===0 && previas.some(t=>t.estado!=='pagado')){
+            throw new Error('__skip_reparto__')
+          }
           const pagadas = new Set(previas.filter(t=>t.estado==='pagado').map(t=>`${t.proveedor_id}|${t.billing_id}`))
           const borrar = previas.filter(t=>t.estado!=='pagado')   // recrea todo lo no pagado
           if(borrar.length) await supabase.from('terceros_pagos').delete().in('id', borrar.map(t=>t.id))
@@ -20491,7 +20514,7 @@ export default function App() {
           if(nuevos.length) await supabase.from('terceros_pagos').insert(nuevos)
           const {data:nt} = await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
           if(nt) setTerceros(nt)
-        }catch(te){ appAlert('La venta se guardó, pero hubo un problema al guardar el reparto de terceros: '+te.message) }
+        }catch(te){ if(te.message!=='__skip_reparto__') appAlert('La venta se guardó, pero hubo un problema al guardar el reparto de terceros: '+te.message) }
       }
       // Al activar una propuesta: si el cliente era Prospecto, pasa a Activo automáticamente
       if(_activandoPropuesta && data.client_id) {
@@ -21737,7 +21760,7 @@ export default function App() {
         )}
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
-        {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }}/></Modal>}
+        {modal?.type==='sale'&&<Modal title={(()=>{ const base=modal.data?._activandoPropuesta?'Activar propuesta':modal.data?.id?(modal.data?.status==='Propuesta'?'Editar propuesta':'Editar venta'):modal.data?.status==='Propuesta'?'Nueva propuesta':'Nueva venta'; const cn=modal.data?.id?clients.find(c=>String(c.id)===String(modal.data.client_id))?.name:null; return <><span style={{color:C.accent}}>{base}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>saleReasignRef.current?.()} title='Cambiar cliente' style={{color:C.muted,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false} titleRight={!modal.data?.id&&!modal.data?._activandoPropuesta?<div style={{display:'flex',gap:6}}><button type='button' onClick={()=>saleUploadRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Subir archivo</button><button type='button' onClick={()=>saleDriveRef.current?.()} style={{fontSize:11,fontWeight:600,color:C.muted,background:'transparent',border:`1px solid ${C.border}`,borderRadius:6,padding:'4px 8px',cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><DriveIcon size={16}/></button></div>:null}><SaleForm sale={modal.data?.id?modal.data:{...modal.data}} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onFacturarBloque={handleFacturarBloqueAnticipo} onSaveTariff={handleSaveTariff} onCambiarFormato={handleCambiarFormato} onUpdateCuotas={handleUpdateCuotas} onSave={handleSaveSale} onClose={()=>setModal(null)} onDelete={handleDeleteSale} saving={saving} user={user} onExposeUpload={fn=>{ saleUploadRef.current=fn }} onExposeDrive={fn=>{ saleDriveRef.current=fn }} onExposeReasign={fn=>{ saleReasignRef.current=fn }}/></Modal>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
