@@ -18042,7 +18042,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
   const [q,setQ] = useState('')
   const [sortBy,setSortBy] = usePersistedState('cartera_sort','sinmover')   // sinmover | plazo | prioridad | cliente (recuerda al volver)
   const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
-  const [soloMios,setSoloMios] = usePersistedState('cartera_solomios',false) // admin: ver solo donde soy responsable
+  const [soloMios,setSoloMios] = usePersistedState('cartera_solomios2',true) // admin: por defecto ver solo donde soy responsable
   const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
@@ -18243,12 +18243,10 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
           <option value='prioridad'>Prioridad</option>
           <option value='cliente'>Cliente</option>
         </select>
-        {esAdmin && miInicial && (
-          <button onClick={()=>setSoloMios(v=>!v)} style={chipSty(soloMios,C.accent,C.azulBg)}>Míos</button>
-        )}
-        {[['todos','Todos',C.muted,'#EEF1F3'],['rojo','Rojo','#A32D2D','#FCEBEB'],['ambar','Ámbar','#854F0B','#FAEEDA'],['verde','Verde','#0F6E56','#E1F5EE']].map(([v,l,col,bg])=>(
-          <button key={v} onClick={()=>setEstadoF(v)} style={chipSty(estadoF===v,col,bg)}>{l}</button>
-        ))}
+        {esAdmin && miInicial && (<>
+          <button onClick={()=>setSoloMios(true)} style={chipSty(soloMios,C.accent,C.azulBg)}>Míos</button>
+          <button onClick={()=>setSoloMios(false)} style={chipSty(!soloMios,C.muted,'#EEF1F3')}>Todos</button>
+        </>)}
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar' style={{ marginLeft:'auto', fontSize:12, padding:'6px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:'#fff', width:110 }}/>
       </div>
 
