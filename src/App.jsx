@@ -5492,6 +5492,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const [yaOpen,setYaOpen] = useState(false)
   const [autoOpen,setAutoOpen] = useState(false)   // "se cargaron solas" colapsado por defecto
   const [recoExp,setRecoExp] = useState(()=>new Set())   // folios con la comparación En el SII ↔ Tu cliente abierta
+  const [corrExp,setCorrExp] = useState(()=>new Set())   // billingIds con la comparación En el SII ↔ Tu factura (folio) abierta
   const [yy,mm] = mes.split('-').map(Number)
   const mesLabel = `${MESES_ABR[mm-1]} ${yy}`
   const mesLargo = `${MESES_LG[mm-1]} ${yy}`
@@ -5771,18 +5772,38 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                     </div>
                   )})}
                 </>}
-                {/* 4. Ponerle el folio del SII a una factura que está en tu sistema SIN número */}
+                {/* 4. Ponerle el folio del SII a una factura que está en tu sistema SIN número — comparación En el SII ↔ Tu factura */}
                 {result.corregirFolio?.length>0&&<>
                   <Hdr label='Ponerle el folio del SII' color={C.accent} bg='#EEF4F7'/>
-                  {result.corregirFolio.map((it,i)=>{ const ya=corregidas[it.billingId]; return <Fila key={i}>
-                    {bigDate(isoFecha(it.fechaEmision),C.muted)}
-                    <div style={{minWidth:0,flex:1,marginLeft:4}}>
-                      <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||it.cliente||'—'}</div>
-                      <div style={{fontSize:11,color:C.done,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Tu factura {it.folioActual?`N°${it.folioActual}`:'sin folio'} · {fmt(it.montoApp||it.monto)}{it.concepto?` · ${it.concepto}`:''}</div>
-                      <div style={{fontSize:10.5,color:C.greenText,marginTop:2}}>En el SII salió con <b>N°{it.folio}</b> · {dmy(it.fechaEmision)}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                  {result.corregirFolio.map((it,i)=>{ const ya=corregidas[it.billingId]; const exp=corrExp.has(it.billingId); return (
+                    <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
+                      <div onClick={()=>!ya&&setCorrExp(s=>{ const n=new Set(s); n.has(it.billingId)?n.delete(it.billingId):n.add(it.billingId); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:ya?'default':'pointer'}}>
+                        {bigDate(isoFecha(it.fechaEmision),C.muted)}
+                        <div style={{minWidth:0,flex:1,marginLeft:4}}>
+                          <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||it.cliente||'—'}</div>
+                          <div style={{fontSize:11,color:C.done,marginTop:1}}>Tu factura {it.folioActual?`N°${it.folioActual}`:'sin folio'} · {fmt(it.montoApp||it.monto)}</div>
+                        </div>
+                        {ya?<span style={{fontSize:11,fontWeight:600,color:C.greenText,whiteSpace:'nowrap'}}>✓ N°{it.folio}</span>:<span style={{fontSize:11,color:C.accent,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>N°{it.folio} {exp?'▾':'▸'}</span>}
+                      </div>
+                      {exp&&!ya&&<div style={{padding:'2px 20px 11px',background:C.bgSoft}}>
+                        <div style={{display:'flex',gap:12,padding:'4px 0 8px'}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>En el SII</div>
+                            <div style={{fontSize:12,fontWeight:600,color:C.text}}>N°{it.folio} · {fmt(it.monto)}</div>
+                            <div style={{fontSize:10.5,color:C.muted}}>{dmy(it.fechaEmision)}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                            {it.receptor&&<div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor}</div>}
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:9,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Tu factura</div>
+                            <div style={{fontSize:12,fontWeight:600,color:C.text}}>{it.folioActual?`N°${it.folioActual}`:'sin folio'} · {fmt(it.montoApp||it.monto)}</div>
+                            <div style={{fontSize:10.5,color:C.muted}}>{it.estado||'—'}</div>
+                            {it.concepto&&<div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.concepto}</div>}
+                          </div>
+                        </div>
+                        <button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:corrigiendo===it.billingId?.5:1}}>{corrigiendo===it.billingId?'…':(it.folioActual?`Cambiar el folio a N°${it.folio}`:`Poner el folio N°${it.folio} a tu factura`)}</button>
+                      </div>}
                     </div>
-                    {ya?<span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap',marginLeft:8}}>Listo ✓</span>:<button onClick={()=>aplicarCorreccion(it)} disabled={corrigiendo===it.billingId} title='Le pone a tu factura el folio real que le dio el SII' style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:corrigiendo===it.billingId?.5:1,marginLeft:8}}>{corrigiendo===it.billingId?'…':(it.folioActual?`Cambiar a N°${it.folio}`:`Poner N°${it.folio}`)}</button>}
-                  </Fila> })}
+                  ) })}
                 </>}
                 {/* 5. Se cargaron solas (automático) — colapsado */}
                 {result.actualizadas?.length>0&&<>
