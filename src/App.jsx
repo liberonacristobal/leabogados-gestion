@@ -5264,12 +5264,15 @@ function SiiDots(){
 const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const MESES_LG = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
+function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]}) {
   const hoy = new Date()
   const [mes,setMes] = useState(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`)
   const [loading,setLoading] = useState(false)
   const [result,setResult] = useState(null)
   const [error,setError] = useState('')
+  const [lastSync,setLastSync] = useState(()=>{ try{ return localStorage.getItem('sii_lastsync') }catch(_){ return null } })
+  // "hace X" desde el último cotejo exitoso (cualquier mes)
+  const desdeTxt = ts => { if(!ts) return null; const min=Math.round((Date.now()-new Date(ts).getTime())/60000); if(min<1) return 'recién'; if(min<60) return `hace ${min} min`; const h=Math.round(min/60); if(h<24) return `hace ${h} h`; const d=Math.round(h/24); return `hace ${d} día${d!==1?'s':''}` }
   const [ingresando,setIngresando] = useState(null)        // folio en curso
   const [ingresadas,setIngresadas] = useState(()=>({}))    // folio -> {cliente|null}
   const [yaOpen,setYaOpen] = useState(false)
@@ -5363,10 +5366,14 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
     try{
       const data = await llamar({periodo:mes})
       setResult(data)
+      const ts=new Date().toISOString(); setLastSync(ts); try{ localStorage.setItem('sii_lastsync',ts); localStorage.setItem('sii_lastsync_'+mes,ts) }catch(_){}
       if(data.actualizadas?.length&&onRefresh) await onRefresh()
     }catch(e){ setError(msgErr(e)) }
     setLoading(false)
   }
+  // Auto-cotejo al abrir: si el mes en curso no se ha cotejado HOY, corre una vez (mismo camino que el botón; el
+  // motor solo aplica calces únicos de alta confianza). Delibera la apertura del modal = intención de cotejar.
+  useEffect(()=>{ try{ const k='sii_lastsync_'+mes; const prev=localStorage.getItem(k); const hoyISO=new Date().toISOString().slice(0,10); if(!prev||prev.slice(0,10)!==hoyISO){ sincronizar() } }catch(_){} },[])   // eslint-disable-line
   const vacio = result&&!result.actualizadas?.length&&!result.corregirFolio?.length&&!result.ambiguas?.length&&!result.sinMatch?.length&&!result.errores?.length
   const reg = result?.yaRegistradas||[]
   const Hdr = ({label,color,bg,border,right}) => (
@@ -5381,7 +5388,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
     <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
       <div style={{background:'#fff',borderRadius:14,maxWidth:480,width:'100%',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.18)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'16px 20px',borderBottom:'0.5px solid #E4E8EB',position:'sticky',top:0,background:'#fff',zIndex:1}}>
-          <span style={{fontSize:15,fontWeight:500,color:C.text}}>Sincronizar SII</span>
+          <span style={{fontSize:15,fontWeight:500,color:C.text}}>Cotejar con el SII</span>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:'0.5px solid #E4E8EB',background:'none',color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round'><line x1='6' y1='6' x2='18' y2='18'/><line x1='18' y1='6' x2='6' y2='18'/></svg>
           </button>
@@ -5394,7 +5401,23 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[]}) {
           </div>
           <button onClick={sincronizar} disabled={loading} style={{height:36,padding:'0 18px',background:loading?C.done:C.accent,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:500,cursor:loading?'default':'pointer',whiteSpace:'nowrap'}}>{loading?'Consultando…':'Sincronizar'}</button>
         </div>
+        {/* Sello: cuándo fue el último cotejo + cuántas programadas hay por emitir este mes en la app (foto del cotejo) */}
+        {(()=>{ const porEmitir=(billing||[]).filter(b=>b.status==='Programada'&&!b.deleted_at&&String(b.due||'').startsWith(mes)); const ds=desdeTxt(lastSync); return (
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 20px',borderBottom:'0.5px solid #E4E8EB',background:C.bgSoft}}>
+            <span style={{width:7,height:7,borderRadius:'50%',background:ds?C.normal:C.done,flexShrink:0}}/>
+            <span style={{fontSize:11,color:C.muted}}>{ds?`Cotejado con el SII · ${ds}`:'Sin cotejar aún'}</span>
+            {porEmitir.length>0&&<span style={{fontSize:11,color:C.soonText,marginLeft:'auto',whiteSpace:'nowrap'}}>{porEmitir.length} por emitir este mes</span>}
+          </div>
+        )})()}
         {error&&<div style={{padding:'10px 20px',fontSize:12,color:C.overdue,background:C.overdueBg}}>{error}</div>}
+        {result&&!loading&&(()=>{ const calz=(result.actualizadas?.length||0)+(result.yaRegistradas?.length||0); const rev=(result.corregirFolio?.length||0)+(result.ambiguas?.length||0); const noc=result.sinMatch?.length||0; const cel=(n,l,col)=>(<div style={{flex:1,textAlign:'center'}}><div style={{fontSize:16,fontWeight:700,color:n>0?col:C.done,lineHeight:1}}>{n}</div><div style={{fontSize:9,color:C.muted,marginTop:2,textTransform:'uppercase',letterSpacing:'.03em'}}>{l}</div></div>); return (
+          <div style={{display:'flex',alignItems:'center',padding:'12px 16px',borderBottom:'0.5px solid #E4E8EB'}}>
+            <div style={{textAlign:'center',paddingRight:14,marginRight:6,borderRight:'0.5px solid #E4E8EB'}}><div style={{fontSize:18,fontWeight:700,color:C.accent,lineHeight:1}}>{result.totalSII||0}</div><div style={{fontSize:9,color:C.muted,marginTop:2,textTransform:'uppercase',letterSpacing:'.03em'}}>en el SII</div></div>
+            {cel(calz,'calzaron',C.normal)}
+            {cel(rev,'por revisar',C.accent)}
+            {cel(noc,'no cargadas','#C77F18')}
+          </div>
+        )})()}
         {loading&&<SiiDots/>}
         {result&&!loading&&<>
           {vacio
@@ -6056,7 +6079,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {impOpen&&<>
                 <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
                 <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
-                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['SII',()=>setSiiOpen(true)],[procResp?'Generando…':'Respaldo PDF',()=>respaldoRef.current&&respaldoRef.current.click()]].map(([l,fn])=>(
+                  {[['Excel',onImportExcel],['PDF',onUpload],['Drive',onImport],['Cotejar SII',()=>setSiiOpen(true)],[procResp?'Generando…':'Respaldo PDF',()=>respaldoRef.current&&respaldoRef.current.click()]].map(([l,fn])=>(
                     <div key={l} onClick={()=>{setImpOpen(false);fn()}} style={{padding:'10px 14px',fontSize:13,color:C.text,cursor:'pointer',borderBottom:`0.5px solid ${C.border}`}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>{l}</div>
                   ))}
                 </div>
@@ -6064,7 +6087,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </div>
           </div>
         </div>
-        {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities}/>}
+        {siiOpen&&<SiiSyncModal onClose={()=>setSiiOpen(false)} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing}/>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
