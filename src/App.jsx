@@ -255,12 +255,17 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
     .sort((a,b)=>(a.p.due||a.p.issued_at||'').localeCompare(b.p.due||b.p.issued_at||''))
   const usados=new Set(); const out=[]
   progs.forEach(({p,cu,per,ruts,pt})=>{ const a=p.amount||0; if(!a) return; let best=null,bestRank=null
+    // CHEQUEO PREVIO (clientes recurrentes): ¿hay MÁS DE UNA factura emitida de monto similar para este cliente/RUT? Entonces
+    // las facturas se repiten mes a mes (iguales o muy parecidas) y el match POR MONTO es ambiguo → prohibido adivinar por
+    // RUT/monto (habría ligado una programada de julio con la factura de mayo/junio). Solo período/cuota, que sí identifican el mes.
+    const similar = emisAll.filter(e => (String(e.x.client_id)===String(p.client_id)||[...e.ruts].some(r=>ruts.has(r))) && a>0 && Math.abs((e.x.amount||0)-a)/a<=0.05)
+    const recurrenteAmbiguo = similar.length > 1
     for(const e of emisAll){ if(usados.has(e.x.id)||noSet.has(`${p.id}|${e.x.id}`)) continue
       const sameCli=String(e.x.client_id)===String(p.client_id); const rutMatch=[...e.ruts].some(r=>ruts.has(r)); if(!sameCli&&!rutMatch) continue
       const dMonto=Math.abs((e.x.amount||0)-a)/a; const sameCu=!!(cu&&e.cu&&cu.n===e.cu.n), samePer=!!(per&&e.per&&per===e.per); const dias=(pt&&e.t)?Math.abs(e.t-pt)/86400000:999
-      // GUARDA DE FECHA: la cuota N/M sola (sin período) NO puede calzar a través del tiempo (era el bug "factura emitida ahora
-      // asignada a una programada de meses atrás"). Exige mismo período O emisión cercana (≤75d) a la fecha de la programada.
-      const okCu=sameCu&&dMonto<=0.25&&(samePer||dias<=75), okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=60
+      // Período (YYYY-MM del concepto) identifica el mes con seguridad. Cuota N/M sola exige mismo período o emisión ≤75d.
+      // RUT/monto solo se permite si NO es un recurrente ambiguo (una sola factura similar) y con ventana estrecha (≤45d).
+      const okCu=sameCu&&dMonto<=0.25&&(samePer||dias<=75), okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=45&&!recurrenteAmbiguo
       if(!okCu&&!okPer&&!okRut) continue
       const rank=[okCu?0:1, okPer?0:1, dMonto, dias]
       if(!best||rank[0]<bestRank[0]||(rank[0]===bestRank[0]&&(rank[1]<bestRank[1]||(rank[1]===bestRank[1]&&(rank[2]<bestRank[2]||(rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank } }
