@@ -20090,8 +20090,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                     <button onClick={()=>conciliarLote(exactos)} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',opacity:loteBusy?.6:1}}>{loteBusy?`Conciliando ${loteProg}/${exactos.length}…`:`Conciliar los ${exactos.length}`}</button>
                   </div>
                   {exactos.slice(0,25).map(({m,f})=>(
-                    <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
-                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||'—'}</b> <span style={{color:C.muted}}>→ Factura N°{folioN(f.invoice_no)||'—'}</span></span>
+                    <div key={m.id} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b><span style={{color:C.done}}> · {fmtFechaDMY(m.fecha)}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</span></div>
+                        <div style={{color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:10,marginTop:1}}>→ Factura N°{folioN(f.invoice_no)||'—'}{f.issued_at?` · emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.concept?` · ${f.concept}`:''}</div>
+                      </div>
                       <span style={{color:C.greenText,fontWeight:600,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(m.monto)}</span>
                     </div>
                   ))}
@@ -20102,7 +20105,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   <div style={{fontSize:9.5,color:C.muted,marginBottom:4}}>monto no calza exacto o hay varios candidatos — eliges tú</div>
                   {revisar.slice(0,15).map(m=>{ const cs=candidatos(m); return (
                     <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
-                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b> <span style={{color:C.muted}}>· {fmtM(m.monto)}{cs.length?` · ${cs.length} candidatas`:''}</span></span>
+                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b> <span style={{color:C.muted}}>· {fmtFechaDMY(m.fecha)} · {fmtM(m.monto)}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}{cs.length?` · ${cs.length} candidatas`:''}</span></span>
                       <button onClick={()=>{setLoteOpen(false);setModalMov(m.id)}} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'4px 11px',cursor:'pointer',flexShrink:0}}>Elegir ›</button>
                     </div>
                   )})}
