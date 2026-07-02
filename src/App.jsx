@@ -5214,7 +5214,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
     .filter(b=> b.due && b.due.startsWith(mesKey) && (b.status==='Programada'||EMIT.includes(b.status)))
     .sort((a,b)=>(a.due||'')>(b.due||'')?1:-1)
   ,[billing,mesKey])
-  const porEmitir = items.filter(b=>!esEmitida(b))   // las Programadas de este mes = las que debo emitir
+  const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso')   // las Programadas de este mes = las que debo emitir (los reembolsos NUNCA se facturan)
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
   // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
   const emitidasPorAnio = (()=>{
@@ -20781,14 +20781,14 @@ export default function App() {
           await insertarCuotas()
         }
       }
-      // Propagar razón social a las cuotas Programadas de esta venta (crea o edita)
-      if(entIdRaw){
-        const ent = (clientEntities||[]).find(e=>e.id===entIdRaw)
-        await supabase.from('billing').update({
-          entity_id:entIdRaw,
-          receptor_name:ent?.name||null,
-          receptor_rut:ent?.rut||null,
-        }).eq('sale_id',data.id).eq('status','Programada')
+      // Propagar CLIENTE + razón social a las cuotas Programadas de esta venta.
+      // Al reasignar la venta a otro cliente (click en el nombre), sus programadas deben SEGUIR al nuevo cliente:
+      // antes solo se propagaba la razón social y el client_id quedaba en el cliente anterior (bug "no se actualizó").
+      // Las emitidas/pagadas (con folio) conservan su receptor y NO se tocan (solo status='Programada').
+      {
+        const patch = { client_id:data.client_id }
+        if(entIdRaw){ const ent=(clientEntities||[]).find(e=>e.id===entIdRaw); patch.entity_id=entIdRaw; patch.receptor_name=ent?.name||null; patch.receptor_rut=ent?.rut||null }
+        await supabase.from('billing').update(patch).eq('sale_id',data.id).eq('status','Programada')
       }
       const {data:newBilling} = await getBilling()
       if(newBilling) setBilling(newBilling)
