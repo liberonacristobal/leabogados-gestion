@@ -12493,7 +12493,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
-        <span style={{fontSize:15,fontWeight:500,color:C.text}}>Conciliar facturas{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>todos los clientes</span>}</span>
+        <span style={{fontSize:15,fontWeight:500,color:C.text}}>Limpiar duplicados{clientId&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span></>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>todos los clientes</span>}</span>
         <button onClick={onClose} style={{width:28,height:28,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
         </button>
@@ -12517,10 +12517,38 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
         </div>}
         {ghosts.length+dupGroups.length+serieGroups.length+progMatches.length===0&&Object.keys(done).length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>{periodo==='mes'?'Nada que conciliar este mes.':'Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.'}</div>}
 
-        {catBlock('copias',C.overdue,'Posibles copias',ghosts,x=>x.g.client_id,x=>x.g.issued_at||x.g.due,(it)=>renderCopia(it))}
-        {catBlock('dup',C.overdue,'Facturas duplicadas',dupGroups,g=>g.rows[0].client_id,g=>{const keep=g.rows.find(r=>r.id===g.keepId);return keep?(keep.issued_at||keep.due):''},(it)=>renderDup(it))}
+        {/* UNA sola lista "Limpiar duplicados" = copias + duplicadas + programadas ya emitidas (todas con conserva↔retira) */}
+        {(()=>{
+          const dupAll=[
+            ...ghosts.map(x=>({cid:x.g.client_id, date:x.g.issued_at||x.g.due, k:'copia|'+x.g.id, node:renderCopia(x), retire:()=>onReplaceProgramada&&onReplaceProgramada(x.g.id,{silent:true})})),
+            ...dupGroups.map(g=>{ const keep=g.rows.find(r=>r.id===g.keepId); return {cid:g.rows[0].client_id, date:keep?(keep.issued_at||keep.due):'', k:'dup|'+g.keepId, node:renderDup(g), retire:()=>onResolveDup&&onResolveDup(g.keepId,g.rows.filter(r=>r.id!==g.keepId).map(r=>r.id),{silent:true})} }),
+            ...progMatches.map(m=>({cid:m.prog.client_id, date:m.prog.due||m.prog.issued_at, k:'prog|'+m.prog.id, node:renderProg(m), retire:()=>onReplaceMatch&&onReplaceMatch(m.prog.id,m.real.id,{silent:true})})),
+          ]
+          if(!dupAll.length) return null
+          const grupos=byCli(dupAll,x=>x.cid,x=>x.date)
+          const retirarTodas=async()=>{ if(!(await appConfirm(`Retirar ${dupAll.length} duplicado${dupAll.length!==1?'s':''}. En cada uno se CONSERVA la factura real y se retira la copia/programada (reversible). ¿Seguir?`))) return; for(const x of dupAll){ try{ const u=await x.retire(); if(u) marcarHecho(x.k,u) }catch(_){} } }
+          return <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',background:C.bgSoft}}>
+              <span style={{width:7,height:7,borderRadius:'50%',background:C.overdue,flexShrink:0}}/>
+              <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>Limpiar duplicados · {dupAll.length}</span>
+              <button onClick={retirarTodas} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer',flexShrink:0}}>Retirar todas</button>
+            </div>
+            <div style={{padding:'4px 8px 8px'}}>
+              {grupos.map(grp=>{ const ck='dupall|'+grp.cid; const co=openCli.has(ck); return (
+                <div key={grp.cid} style={{marginBottom:5}}>
+                  <div onClick={()=>toggle(setOpenCli,ck)} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 8px',background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:7,cursor:'pointer'}}>
+                    <span style={{color:C.muted,fontSize:11,width:9}}>{co?'▾':'▸'}</span>
+                    <span style={{flex:1,fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.name}</span>
+                    <span style={{fontSize:10,color:C.muted}}>{grp.items.length}</span>
+                    {onOpenClientFicha&&grp.cid&&grp.cid!=='null'&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(grp.cid)}} title='Ver ficha' style={{fontSize:11,color:C.accent,fontWeight:700,cursor:'pointer'}}>↗</span>}
+                  </div>
+                  {co&&<div style={{marginTop:4,paddingLeft:2}}>{grp.items.map(({it})=>it.node)}</div>}
+                </div>
+              )})}
+            </div>
+          </div>
+        })()}
         {catBlock('serie',C.soon,'Sin proyecto asignado',serieGroups,g=>g.cid,g=>g.rows[0].due||g.rows[0].issued_at,(it,i)=>renderSerie(it,i))}
-        {catBlock('prog',C.azulInfo,'Programadas ya emitidas',progMatches,m=>m.prog.client_id,m=>m.prog.due||m.prog.issued_at,(it)=>renderProg(it))}
       </div>
     </>
   )
