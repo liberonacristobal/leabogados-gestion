@@ -18893,6 +18893,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')
   // Pool de calce del cliente (un pago en 2+ transferencias se imputa a la MISMA factura; una factura ya cubierta SALE del pool).
   const facturasCliente = cid => facturasPorCliente[cid] || []
+  // RUTs de un cliente (el suyo + todas sus razones sociales) y de una factura (receptor/entidad/cliente), normalizados.
+  const _rutsCliente = cid => { const s=new Set(); const add=r=>{ const n=crNormRut(r); if(n)s.add(n) }; const c=clients.find(x=>String(x.id)===String(cid)); if(c)add(c.rut); (clientEntities||[]).filter(e=>String(e.client_id)===String(cid)).forEach(e=>add(e.rut)); return s }
+  const _rutsFactura = b => { const s=new Set(); const add=r=>{ const n=crNormRut(r); if(n)s.add(n) }; add(b.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
+  // Pool para calzar un ABONO: las facturas del cliente + las de CUALQUIER cliente cuyo RUT calce con el del abono
+  // (pagador) o con el del cliente identificado/sus RS. Así se sugiere la factura emitida a la empresa aunque el
+  // pago venga con el RUT personal. El calce sigue exigiendo monto EXACTO, así que no genera falsos positivos.
+  const facturasParaMov = mov => { const cid=mov.cliente_id; const base=facturasCliente(cid); const ruts=_rutsCliente(cid); const pr=crNormRut(mov.rut_contraparte); if(pr)ruts.add(pr); if(!ruts.size) return base; const seen=new Set(base.map(b=>String(b.id))); const extra=facturasConSaldo.filter(b=>String(b.client_id)!==String(cid)&&!seen.has(String(b.id))&&[...(_rutsFactura(b))].some(r=>ruts.has(r))); return extra.length?[...base,...extra]:base }
   // Diferencia en meses entre el mes de la factura (emisión) y el del pago (factura − pago). null si falta dato.
   const mesDiff = (fm,pm) => { if(!fm||!pm) return null; const [ya,ma]=fm.split('-').map(Number),[yb,mb]=pm.split('-').map(Number); return (ya*12+ma)-(yb*12+mb) }
   // Candidatas dentro de ±TOL del monto. Refuerzo para asesorías recurrentes (mismo monto cada mes): se EXCLUYE
@@ -18904,7 +18911,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
     // delta = días entre la EMISIÓN de la factura y el pago (positivo = pago DESPUÉS de emitir).
     const deltaDias = iso => (payT&&iso) ? (payT - new Date(iso.slice(0,10)+'T12:00').getTime())/86400000 : null
-    let xs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
+    let xs = facturasParaMov(mov).filter(b=> !(exclude&&exclude.has(b.id)))
       .map(b=>({b,saldo:saldoFactura(b),delta:deltaDias(b.issued_at)}))
       // El pago cae hasta ~60 días DESPUÉS de emitir la factura (capta pagos tardíos; excluye facturas futuras y las muy lejanas).
       .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-3 && x.delta<=90)))
@@ -20054,9 +20061,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   const cands=resto>TOL?candidatos(m,null,resto):[]
                   // Facturas candidatas: del mismo cliente O del mismo RUT (aunque estén bajo otro cliente/RS) — así aparecen las
                   // emitidas a la empresa aunque el abono quede pegado al cliente-persona. Cruce por RUT (receptor/entidad/cliente).
-                  const nrMov=crNormRut(m.rut_contraparte)
+                  // RUT a cruzar: el del pagador (m.rut_contraparte, a veces el personal de la glosa) MÁS los del cliente
+                  // identificado y TODAS sus razones sociales (así aparecen las facturas emitidas a la empresa aunque el
+                  // abono venga con el RUT personal). Cruza contra el RUT de cada factura (receptor/entidad/cliente).
+                  const rutsMov=(()=>{ const s=new Set(); const add=r=>{ const n=crNormRut(r); if(n)s.add(n) }; add(m.rut_contraparte); const cli=clients.find(c=>String(c.id)===String(m.cliente_id)); if(cli)add(cli.rut); (clientEntities||[]).filter(e=>String(e.client_id)===String(m.cliente_id)).forEach(e=>add(e.rut)); return s })()
                   const rutsFac=b=>{ const s=new Set(); const add=r=>{ const n=crNormRut(r); if(n)s.add(n) }; add(b.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
-                  const facsAll=(billing||[]).filter(b=>!b.deleted_at&&b.invoice_no&&(b.billing_type||'')!=='reembolso'&&(String(b.client_id)===String(m.cliente_id)||(nrMov&&rutsFac(b).has(nrMov))))
+                  const facsAll=(billing||[]).filter(b=>!b.deleted_at&&b.invoice_no&&(b.billing_type||'')!=='reembolso'&&(String(b.client_id)===String(m.cliente_id)||[...rutsFac(b)].some(r=>rutsMov.has(r))))
                   const combo=(myConc.length===0&&cands.length===0)?combos(m):null
                   const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
