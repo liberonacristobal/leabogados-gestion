@@ -19958,7 +19958,12 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {/* Conciliación (Fase 2): calce de abono de cliente contra factura pendiente / saldo a favor */}
                 {sub==='abonos'&&esConciliable(m)&&(()=>{
                   const myConc=concByMov[m.id]||[]; const resto=(m.monto||0)-(m.monto_conciliado||0)
-                  const cands=resto>TOL?candidatos(m,null,resto):[]; const facsAll=(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(m.cliente_id)&&b.invoice_no&&(b.billing_type||'')!=='reembolso')
+                  const cands=resto>TOL?candidatos(m,null,resto):[]
+                  // Facturas candidatas: del mismo cliente O del mismo RUT (aunque estén bajo otro cliente/RS) — así aparecen las
+                  // emitidas a la empresa aunque el abono quede pegado al cliente-persona. Cruce por RUT (receptor/entidad/cliente).
+                  const nrMov=crNormRut(m.rut_contraparte)
+                  const rutsFac=b=>{ const s=new Set(); const add=r=>{ const n=crNormRut(r); if(n)s.add(n) }; add(b.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
+                  const facsAll=(billing||[]).filter(b=>!b.deleted_at&&b.invoice_no&&(b.billing_type||'')!=='reembolso'&&(String(b.client_id)===String(m.cliente_id)||(nrMov&&rutsFac(b).has(nrMov))))
                   const combo=(myConc.length===0&&cands.length===0)?combos(m):null
                   const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
