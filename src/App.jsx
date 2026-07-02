@@ -5194,7 +5194,16 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
 function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onCotejar, onCargarXML}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
-  const rsDe = b => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); let rs=null; if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null; else if(ents.length===1) rs=ents[0]; return rs?rs.name:(ents.length>1?null:(b.receptor_name||null)) }
+  const rsDe = b => {
+    const nrm=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
+    const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(b.client_id))
+    if(b.entity_id){ const e=ents.find(e=>String(e.id)===String(b.entity_id)); if(e) return e.name }
+    // Cruce por RUT del receptor (canon factura-rs-cruce-rut): la factura del SII trae receptor_rut; matchea la RS aunque haya varias.
+    if(b.receptor_rut){ const k=nrm(b.receptor_rut); if(k){ const e=(clientEntities||[]).find(x=>nrm(x.rut)===k); if(e) return e.name } }
+    if(b.receptor_name) return b.receptor_name
+    if(ents.length===1) return ents[0].name
+    return null
+  }
   const abrirCli = (e,b) => { if(!onOpenClientFicha||!b.client_id) return; e.stopPropagation(); onOpenClientFicha(b.client_id) }
   const now = new Date()
   const [year,setYear] = useState(String(now.getFullYear()))
@@ -5415,10 +5424,10 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   }
   // Crea el cobro en billing desde la factura del SII. Si reconoce el cliente, vincula
   // y aprende el RUT para siempre; si no, lo deja sin cliente para asignarlo en Facturacion.
-  const ingresarHuerfana = async(it) => {
+  const ingresarHuerfana = async(it, clienteIdForzado) => {
     setIngresando(it.folio); setError('')
     try{
-      const cli = resolverCliente(it.rut,it.receptor)
+      const cli = clienteIdForzado ? (clients.find(c=>String(c.id)===String(clienteIdForzado))||null) : resolverCliente(it.rut,it.receptor)
       await upsertBilling({
         client_id: cli?.id||null,
         concept: 'Honorarios',
@@ -5445,7 +5454,8 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
     }
     setIngresando(null)
   }
-  const ingresarTodas = async() => { for(const it of (result?.sinMatch||[])){ if(!ingresadas[it.folio]) await ingresarHuerfana(it) } }
+  // "Asignar todas" ingresa SOLO las que reconoce el cliente por RUT (las que no, se eligen a mano fila por fila — no se crean sin cliente en bulk).
+  const ingresarTodas = async() => { for(const it of (result?.sinMatch||[])){ if(!ingresadas[it.folio] && resolverCliente(it.rut,it.receptor)) await ingresarHuerfana(it) } }
 
   const [corrigiendo,setCorrigiendo] = useState(null)        // billingId en curso
   const [corregidas,setCorregidas] = useState(()=>({}))      // billingId -> true
@@ -5583,15 +5593,23 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                   </Fila> })}
                 </>}
                 {result.sinMatch?.length>0&&<>
-                  <Hdr label='Ventas no cargadas' color='#C77F18' bg='#FFFBF0' border='#F0E4B8' right={result.sinMatch.length>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Asignar todas</button>}/>
-                  {result.sinMatch.map((it,i)=>{ const ya=ingresadas[it.folio]; return <Fila key={i}>
+                  {(()=>{ const reconocidas=result.sinMatch.filter(it=>!ingresadas[it.folio]&&resolverCliente(it.rut,it.receptor)).length; return (
+                    <Hdr label='Ventas no cargadas' color='#C77F18' bg='#FFFBF0' border='#F0E4B8' right={reconocidas>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Asignar {reconocidas} reconocidas</button>}/>
+                  ) })()}
+                  {result.sinMatch.map((it,i)=>{ const ya=ingresadas[it.folio]; const cli=ya?null:resolverCliente(it.rut,it.receptor); return <Fila key={i}>
                     {bigDate(isoFecha(it.fechaEmision),C.muted)}
-                    <div style={{minWidth:0,marginLeft:4}}>
+                    <div style={{minWidth:0,marginLeft:4,flex:1}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
-                      <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                      <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
+                      {ya
+                        ? <div style={{fontSize:11,fontWeight:600,color:ya.cliente?C.greenText:C.soonText,marginTop:2}}>{ya.cliente?`✓ Asignada a ${ya.cliente}`:'Ingresada · falta elegir cliente en Facturación'}</div>
+                        : cli
+                          ? <div style={{fontSize:11,color:C.greenText,marginTop:2}}>→ se asigna a <b>{cli.name}</b></div>
+                          : <div style={{marginTop:4,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}><span style={{fontSize:11,color:C.soonText}}>No reconozco el cliente · </span><AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={(_,cid)=>ingresarHuerfana(it,cid)} label='Elegir cliente' placeholder='Buscar cliente…'/></div>
+                      }
                     </div>
-                    <span style={{fontSize:13,fontWeight:500,color:C.text,marginLeft:'auto',marginRight:12,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>
-                    {ya?<span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>{ya.cliente?'Asignada':'Asigna cliente'}</span>:<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:26,padding:'0 12px',borderRadius:8,background:C.muted,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'…':'+ Asignar'}</button>}
+                    {!ya&&cli&&<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1,marginLeft:8}}>{ingresando===it.folio?'…':'+ Asignar'}</button>}
+                    {ya&&<span style={{fontSize:14,color:C.greenText,marginLeft:8,flexShrink:0}}>✓</span>}
                   </Fila> })}
                 </>}
                 {result.ambiguas?.length>0&&<>
