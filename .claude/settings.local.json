@@ -317,7 +317,8 @@
       "Bash(npm install *)",
       "Bash(ls node_modules/xlsx)",
       "Bash(perl -i -pe 's/titleCaseRS\\\\\\(rs\\\\\\)/titleCase\\(rs\\)/g' src/App.jsx)",
-      "Bash(perl -0pi -e \"s/kMini\\\\\\('ventas','Ventas por mes'\\\\\\)/kMini\\('ventas','Ventas por mes',null,null,'chart'\\)/; s/kMini\\\\\\('cobrado','Cobrado del año',fmtShort\\\\\\(ingresosPorAnioVenta\\\\.total\\\\\\),C\\\\.accent\\\\\\)/kMini\\('cobrado','Cobrado del año',fmtShort\\(ingresosPorAnioVenta.total\\),C.accent,'check'\\)/; s/kMini\\\\\\('cobranza','Cobranza',fmtShort\\\\\\(totalPorCobrar\\\\\\),C\\\\.accent\\\\\\)/kMini\\('cobranza','Cobranza',fmtShort\\(totalPorCobrar\\),C.accent,'receipt'\\)/; s/kMini\\\\\\('cxp','Cuentas por pagar'\\\\\\)/kMini\\('cxp','Cuentas por pagar',null,null,'wallet'\\)/; s/kMini\\\\\\('equipo','Equipo · trazabilidad'\\\\\\)/kMini\\('equipo','Equipo · trazabilidad',null,null,'users'\\)/\" src/App.jsx)"
+      "Bash(perl -0pi -e \"s/kMini\\\\\\('ventas','Ventas por mes'\\\\\\)/kMini\\('ventas','Ventas por mes',null,null,'chart'\\)/; s/kMini\\\\\\('cobrado','Cobrado del año',fmtShort\\\\\\(ingresosPorAnioVenta\\\\.total\\\\\\),C\\\\.accent\\\\\\)/kMini\\('cobrado','Cobrado del año',fmtShort\\(ingresosPorAnioVenta.total\\),C.accent,'check'\\)/; s/kMini\\\\\\('cobranza','Cobranza',fmtShort\\\\\\(totalPorCobrar\\\\\\),C\\\\.accent\\\\\\)/kMini\\('cobranza','Cobranza',fmtShort\\(totalPorCobrar\\),C.accent,'receipt'\\)/; s/kMini\\\\\\('cxp','Cuentas por pagar'\\\\\\)/kMini\\('cxp','Cuentas por pagar',null,null,'wallet'\\)/; s/kMini\\\\\\('equipo','Equipo · trazabilidad'\\\\\\)/kMini\\('equipo','Equipo · trazabilidad',null,null,'users'\\)/\" src/App.jsx)",
+      "Bash(perl -0pi -e ' *)"
     ]
   }
 }

@@ -2232,16 +2232,16 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
   const kToggle = id => setKpiOpen(p=>{ const a=Array.isArray(p)?p:[]; return a.includes(id)?a.filter(x=>x!==id):[...a,id] })
-  const kMini = (id,title,value,valCol,icon) => (
+  const kMini = (id,title,value,valCol,icon,tint) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg; return (
     <div style={{padding:'14px 20px 0'}}>
-      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
-        {icon&&<span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={17} c={C.accent}/></span>}
+      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${fg}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
+        {icon&&<span style={{width:30,height:30,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={17} c={fg}/></span>}
         <span style={{flex:1,fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{title}</span>
-        {value&&!kOpen(id)&&<b style={{fontSize:14,fontWeight:700,color:valCol||C.accent,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{value}</b>}
+        {value&&!kOpen(id)&&<b style={{fontSize:14,fontWeight:700,color:valCol||fg,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{value}</b>}
         <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
       </div>
     </div>
-  )
+  ) }
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   const yr = currentYear
@@ -2460,14 +2460,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
       {/* Accesos directos + Mis proyectos */}
       {onAcceso&&(()=>{
-        const ic = d => <svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+        const ic = (d,col) => <svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={col||C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
         const accesos = [
-          ['tasks','Tareas', ic(<><rect x='5' y='4' width='14' height='17' rx='2'/><path d='M8.5 11.5l1.5 1.5 3-3'/><line x1='8.5' y1='16' x2='15.5' y2='16'/></>)],
-          ['inteligencia','Power BI', ic(<><path d='M3 3v18h18'/><rect x='7' y='12' width='3' height='6'/><rect x='12' y='8' width='3' height='10'/><rect x='17' y='4' width='3' height='14'/></>)],
-          ['banco','Banco', ic(<><line x1='3' y1='21' x2='21' y2='21'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></>)],
-          ['cotejarSII','Cotejar SII', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>)],
-          ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>)],
-          ['mas','Más', ic(<><circle cx='5' cy='12' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='19' cy='12' r='1'/></>)],
+          ['tasks','Tareas', ic(<><rect x='5' y='4' width='14' height='17' rx='2'/><path d='M8.5 11.5l1.5 1.5 3-3'/><line x1='8.5' y1='16' x2='15.5' y2='16'/></>,C.azulInfo), C.azulBg],
+          ['inteligencia','Power BI', ic(<><path d='M3 3v18h18'/><rect x='7' y='12' width='3' height='6'/><rect x='12' y='8' width='3' height='10'/><rect x='17' y='4' width='3' height='14'/></>,C.tealText), C.tealBg],
+          ['banco','Banco', ic(<><line x1='3' y1='21' x2='21' y2='21'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></>,C.greenText), C.greenBg],
+          ['cotejarSII','Cotejar SII', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>,C.soonText), C.ambarBg],
+          ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>,C.accent), C.azulBg],
+          ['mas','Más', ic(<><circle cx='5' cy='12' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='19' cy='12' r='1'/></>,C.muted), C.bgSoft||'#F5F7F9'],
         ]
         const miIni = INICIALES_RESP[user?.name]||null
         const mine = (proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni || (p.responsable||'')===miIni))
@@ -2478,9 +2478,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div style={{padding:'0 20px 0'}}>
             <div style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:8}}>Accesos directos</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:14}}>
-              {accesos.map(([id,label,icon])=>(
-                <button key={id} onClick={()=>onAcceso(id)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-                  {icon}<span style={{fontSize:9.5,color:C.text}}>{label}</span>
+              {accesos.map(([id,label,icon,bg])=>(
+                <button key={id} onClick={()=>onAcceso(id)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
+                  <span style={{width:34,height:34,borderRadius:'50%',background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{icon}</span>
+                  <span style={{fontSize:9.5,color:C.text}}>{label}</span>
                 </button>
               ))}
             </div>
@@ -2719,10 +2720,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {kMini('ventas','Ventas por mes',null,null,'chart')}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
+      {kMini('ventas','Ventas por mes',null,null,'chart',{fg:C.azulInfo,bg:C.azulBg})}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
 
       {/* Cobrado del año por AÑO DE VENTA — controla ingresos de este año que vienen de ventas anteriores */}
-      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año',fmtShort(ingresosPorAnioVenta.total),C.accent,'check')}
+      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año',fmtShort(ingresosPorAnioVenta.total),null,'check',{fg:C.greenText,bg:C.greenBg})}
       {ingresosPorAnioVenta.total>0&&kOpen('cobrado')&&(()=>{
         const iv=ingresosPorAnioVenta
         const prioColors=['#537281','#99ABB4','#537281','#99ABB4']
@@ -2752,7 +2753,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
       {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
-      {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),C.accent,'receipt')}
+      {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),null,'receipt',{fg:C.tealText,bg:C.tealBg})}
       {kOpen('cobranza')&&(
       <div style={{padding:'16px 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -2827,7 +2828,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       </div>)}
 
       {/* Cuentas por pagar a proveedores (costos de terceros) */}
-      {(terceros||[]).length>0&&kMini('cxp','Cuentas por pagar',null,null,'wallet')}
+      {(terceros||[]).length>0&&kMini('cxp','Cuentas por pagar',null,null,'wallet',{fg:C.soonText,bg:C.ambarBg})}
       {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
@@ -3079,7 +3080,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       })()}
 
       {/* Equipo (admin) — trazabilidad del equipo limited: caja chica + actividad reciente (Eje 4, 2026-06-28) */}
-      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad',null,null,'users')}
+      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad',null,null,'users',{fg:C.accent,bg:C.azulBg})}
       {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kOpen('equipo')&&(()=>{
         const ADMIN_NAMES=['Cristóbal','Erasmo']
         const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
