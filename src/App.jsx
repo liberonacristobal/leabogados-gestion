@@ -12525,7 +12525,7 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
             </div>
           ))}
         </div>}
-        {ghosts.length+dupGroups.length+serieGroups.length+progMatches.length===0&&Object.keys(done).length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>{periodo==='mes'?'Nada que conciliar este mes.':'Todo conciliado: sin duplicados, sin facturas sin proyecto y sin programadas pendientes de reemplazo.'}</div>}
+        {ghosts.length+dupGroups.length+progMatches.length===0&&Object.keys(done).length===0&&<div style={{fontSize:13,color:C.muted,padding:'10px 2px'}}>{periodo==='mes'?'Sin duplicados este mes.':'Sin duplicados: ninguna copia sin folio, ningún folio repetido ni programada ya emitida por retirar.'}</div>}
 
         {/* UNA sola lista "Limpiar duplicados" = copias + duplicadas + programadas ya emitidas (todas con conserva↔retira) */}
         {(()=>{
@@ -12558,7 +12558,6 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
             </div>
           </div>
         })()}
-        {catBlock('serie',C.soon,'Sin proyecto asignado',serieGroups,g=>g.cid,g=>g.rows[0].due||g.rows[0].issued_at,(it,i)=>renderSerie(it,i))}
       </div>
     </>
   )
