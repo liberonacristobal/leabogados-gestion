@@ -5099,7 +5099,10 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha}) {
+  // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
+  const rsDe = b => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); let rs=null; if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null; else if(ents.length===1) rs=ents[0]; return rs?rs.name:(ents.length>1?null:(b.receptor_name||null)) }
+  const abrirCli = (e,b) => { if(!onOpenClientFicha||!b.client_id) return; e.stopPropagation(); onOpenClientFicha(b.client_id) }
   const now = new Date()
   const [year,setYear] = useState(String(now.getFullYear()))
   const [month,setMonth] = useState(String(now.getMonth()+1).padStart(2,'0'))
@@ -5213,10 +5216,10 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
       </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
         {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todo emitido este mes ✓</div>}
-        {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); return (
+        {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
           <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'}</div>
+              <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {titleCase(rs)}</span>:''}</div>
               <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}</div>
               <div style={{fontSize:10,color:C.grisText,marginTop:1}}>vence pago {b.due?fmtDate(b.due):'—'}</div>
             </div>
@@ -5235,11 +5238,11 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                 <span style={{fontSize:11,fontWeight:700,color:C.greenText,flex:1}}>{MESES[parseInt(mm,10)-1]||mm} {yy} · {fs.length} · {fmt(total)}</span>
                 <span style={{fontSize:12,color:C.greenText}}>{open?'▾':'▸'}</span>
               </div>
-              {open&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b); return (
+              {open&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b,respaldoMap[b.id]||0,cartolaHasta); const rs=rsDe(b); return (
                 <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:'#fff'}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
-                    <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>
+                    <div onClick={e=>abrirCli(e,b)} style={{fontSize:12,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
+                    <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{titleCase(rs)}</span>:'sin razón social'} · {b.concept||'—'}</div>
                   </div>
                   {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
                   <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
@@ -6574,7 +6577,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
