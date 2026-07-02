@@ -5546,6 +5546,14 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   // Asigna el folio real del SII a una venta ya emitida que tenia folio manual o sin folio.
   const aplicarCorreccion = async(it) => {
     if(corrigiendo||corregidas[it.billingId]) return                 // guard anti doble-click
+    // El folio del SII ya está en OTRA factura tuya (constraint unique) -> es un duplicado, no un folio faltante.
+    // Avisar claro y derivar a "Limpiar duplicados" en vez del error crudo de base de datos.
+    const dueno = (billing||[]).find(b=> String(b.id)!==String(it.billingId) && !b.deleted_at && folioN(b.invoice_no) && String(folioN(b.invoice_no))===String(folioN(it.folio)))
+    if(dueno){
+      const cli = clients.find(c=>String(c.id)===String(dueno.client_id))
+      setError(`El folio N°${it.folio} ya está en otra factura tuya${cli?` (${cli.name})`:''}. Es un duplicado: revísalo en "Limpiar duplicados" y deja una sola.`)
+      return
+    }
     setCorrigiendo(it.billingId); setError('')
     try{
       const {error} = await supabase.from('billing').update({
@@ -5558,7 +5566,12 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
       if(error) throw error
       setCorregidas(p=>({...p,[it.billingId]:true}))
       if(onRefresh) await onRefresh()
-    }catch(e){ setError(`No se pudo corregir Factura N°${it.folio}: ${e.message}`) }
+    }catch(e){
+      const dup = e.code==='23505' || /duplicate key|invoice_no_unique/i.test(String(e.message||''))
+      setError(dup
+        ? `El folio N°${it.folio} ya existe en otra factura tuya (puede estar retirada). Es un duplicado: revísalo en "Limpiar duplicados" o repón la factura correcta.`
+        : `No se pudo corregir Factura N°${it.folio}: ${e.message}`)
+    }
     setCorrigiendo(null)
   }
 
