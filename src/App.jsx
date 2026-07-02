@@ -5161,7 +5161,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
       const ufHoy = ufState.uf || null
       const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}` : 'Monto hoy ($)'
-      const header=['Responsable','Cliente','Razón social','RUT','Concepto','UF','Monto guardado ($)',ufNota,'Vencimiento (pago)']
+      const header=['Responsable','Cliente','Razón social','RUT','Concepto','UF','Monto guardado ($)',ufNota,'Devengo de la cuota']
       const rows=porEmitir.map(b=>{
         const c=clients.find(x=>x.id===b.client_id)
         const venta=(sales||[]).find(v=>v.id===b.sale_id)
@@ -5236,7 +5236,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
             <div style={{flex:1,minWidth:0}}>
               <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {titleCase(rs)}</span>:''}</div>
               <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}</div>
-              <div style={{fontSize:10,color:C.grisText,marginTop:1}}>vence pago {b.due?fmtDate(b.due):'—'}</div>
+              <div style={{fontSize:10,color:C.grisText,marginTop:1}}>devengo {b.due?fmtDate(b.due):'—'}</div>
             </div>
             <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,textAlign:'right'}}>{fmt(b.amount)}</div>
           </div>
@@ -6408,10 +6408,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <span style={{color:C.onNavyLabel,fontSize:18,fontWeight:700}}>›</span>
               </div>
             ) })()}
-            {yaFactTot>0&&<div onClick={()=>onConciliar&&onConciliar()} title='Abre Conciliar → "Programadas ya emitidas" para reemplazarlas por su factura real' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:10,cursor:'pointer'}}>
-              <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.soonText}}>⚠ Ya facturadas — vincular a su factura emitida</div><div style={{fontSize:9,color:C.coralText,marginTop:1}}>su factura real ya existe; inflan el "por facturar" · <b>{yaFacturadasIds.size}</b> por vincular</div></div>
-              <span style={{fontSize:14,fontWeight:700,color:C.soonText,whiteSpace:'nowrap'}}>{fmt(yaFactTot)}</span>
-            </div>}
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               <span onClick={()=>go('anticipos')} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:antDisp>0?C.accent:C.muted,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
                 <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={antDisp>0?C.accent:C.done} strokeWidth='2'><rect x='3' y='6' width='18' height='13' rx='2'/><path d='M16 6V4H8v2M3 11h18'/></svg>
@@ -6427,6 +6423,11 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </span>
               {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{fontSize:11,fontWeight:600,color:C.soonText,border:'1px solid #FAC775',background:'#FFF8E1',borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>Sin año · {sinAnio.length}</span>}
             </div>
+            {yaFactTot>0&&<div onClick={()=>onConciliar&&onConciliar()} title='Estas cuotas ya tienen su factura real emitida — reemplázalas para no dejarlas en "por facturar"' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginTop:10,cursor:'pointer'}}>
+              <span style={{width:26,height:26,borderRadius:7,background:C.ambarBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/><path d='m9 12 2 2 4-4'/></svg></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Revisar {yaFacturadasIds.size} posible{yaFacturadasIds.size!==1?'s':''} duplicado{yaFacturadasIds.size!==1?'s':''}</div><div style={{fontSize:10,color:C.muted,marginTop:1}}>ya tienen su factura real · reemplázalas ({fmt(yaFactTot)})</div></div>
+              <span style={{color:C.muted,fontSize:16}}>›</span>
+            </div>}
             {(()=>{
               const emitidas=(billing||[]).filter(b=>b.dte_track_id&&!b.deleted_at).sort((a,b)=>(b.dte_emitido_at||'')>(a.dte_emitido_at||'')?1:-1)
               const enProd=emitidas.some(b=>b.dte_ambiente==='prod')
