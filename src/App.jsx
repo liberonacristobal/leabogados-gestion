@@ -179,7 +179,11 @@ function estadoFacturaLabel(b, aplicado=0, cartolaHasta=null){
   if(b.status==='Anulada') return {key:'anulada', label:'Anulada', short:'Anulada', bg:C.border, fg:C.grisText}
   if(b.status==='Anticipada') return {key:'anticipada', label:'Anticipada', short:'Anticipada', bg:C.greenBg, fg:C.greenText}
   if(b.status==='Programada') return {key:'programada', label:'Programada', short:'Programada', bg:C.border, fg:C.muted}
-  if(['Pendiente','Vencido'].includes(b.status)) return {key:'sinpago', label:'Sin pago', short:'Sin pago', bg:C.soonBg, fg:C.soonText}
+  if(['Pendiente','Vencido'].includes(b.status)){
+    // Parcial: hay abono/conciliación (aplicado) pero no cubre el total → mostrar el saldo pendiente, no "Sin pago".
+    if(aplicado>0 && aplicado<(b.amount||0)) return {key:'parcial', label:`Abonada · falta ${fmt((b.amount||0)-aplicado)}`, short:'Parcial', bg:C.ambarBg, fg:C.soonText}
+    return {key:'sinpago', label:'Sin pago', short:'Sin pago', bg:C.soonBg, fg:C.soonText}
+  }
   return {key:'otro', label:b.status||'', short:b.status||'', bg:C.border, fg:C.muted}
 }
 function RespaldoBadge({b, respaldoMap, cartolaHasta}){
@@ -5354,7 +5358,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                     <span style={{fontSize:11,fontWeight:600,color:C.text,flex:1}}>{MESES[parseInt(mm,10)-1]||mm} · {fs.length} · {fmt(mtot)}</span>
                     <span style={{fontSize:11,color:C.muted}}>{mOpen?'▾':'▸'}</span>
                   </div>
-                  {mOpen&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b,respaldoMap[b.id]||0,cartolaHasta); const rs=rsDe(b); const fo=factOpen.has(b.id); const needConc=est&&(est.key==='sin'||est.key==='sinpago'); return (
+                  {mOpen&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const abonado=Math.max(b.paid_amount||0,respaldoMap[b.id]||0); const est=estadoFacturaLabel(b,abonado,cartolaHasta); const rs=rsDe(b); const fo=factOpen.has(b.id); const needConc=est&&['sin','sinpago','parcial'].includes(est.key); const parcial=est&&est.key==='parcial'; const saldoB=parcial?Math.max(0,(b.amount||0)-abonado):(b.amount||0); return (
                     <div key={b.id} style={{borderTop:`1px solid ${C.border}`,background:'#fff'}}>
                       <div onClick={()=>setFactOpen(s=>{ const nn=new Set(s); nn.has(b.id)?nn.delete(b.id):nn.add(b.id); return nn })} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 9px 14px',cursor:'pointer'}}>
                         {bigDate(fecEmis(b),C.greenText)}
@@ -5363,7 +5367,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                           <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{rsDisplay(rs)}</span>:<span style={{color:C.soonText}}>sin razón social</span>} · {b.concept||'—'}</div>
                         </div>
                         {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
-                        <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
+                        <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,color:parcial?C.soonText:C.muted,fontWeight:parcial?600:400}}>{fmt(saldoB)}</div>{parcial&&<div style={{fontSize:9,color:C.done,whiteSpace:'nowrap'}}>saldo · de {fmt(b.amount)}</div>}</div>
                       </div>
                       {fo&&(
                         <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'0 12px 10px 20px'}}>
