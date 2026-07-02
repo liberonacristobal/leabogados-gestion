@@ -80,6 +80,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   const emitUsadas = new Set<string>()
 
   for (const v of ventas) {
+    if (!(v.montoTotal > 0)) continue   // B4: monto 0/negativo (anulada o borde) — no cotejar; con tol=1 podría calzar cualquier cosa
     if (foliosExistentes.has(String(v.folio))) {
       resultado.yaRegistradas.push({ folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal })
       continue

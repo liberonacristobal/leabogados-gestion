@@ -5399,6 +5399,17 @@ function SiiDots(){
 }
 const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const MESES_LG = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+// FUENTE ÚNICA: resuelve el cliente de una factura del SII por RUT→nombre (vínculos aprendidos primero, luego clientes).
+// La usan tanto SiiSyncModal como handleIngresarSII (antes divergían en normalización y prioridad → podían asignar clientes distintos).
+function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
+  const nr = r => (r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
+  const k = nr(rut)
+  if(k){ const ce=clientEntities.find(e=>nr(e.rut)===k); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
+  if(nombre){ const ce=clientEntities.find(e=>e.name&&e.name.toLowerCase()===String(nombre).toLowerCase()); const c=ce&&clients.find(c=>String(c.id)===String(ce.client_id)); if(c) return c }
+  if(k){ const c=clients.find(c=>nr(c.rut)===k); if(c) return c }
+  if(nombre){ const c=clients.find(c=>c.name&&c.name.toLowerCase()===String(nombre).toLowerCase()); if(c) return c }
+  return null
+}
 
 function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes,onOpenClientFicha}) {
   const hoy = new Date()
@@ -5419,22 +5430,16 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const mesLargo = `${MESES_LG[mm-1]} ${yy}`
   const cambiarMes = d => { const dt=new Date(yy,mm-1+d,1); setMes(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`) }
 
-  // Resuelve el cliente de una factura huerfana igual que la carga de PDFs:
-  // RUT en vinculos aprendidos -> nombre en vinculos -> RUT en clientes -> nombre en clientes.
-  const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
   // "96713940-8" -> "96.713.940-8" (solo formato visual)
   const fmtRut = r => { if(!r) return ''; const [n,dv]=String(r).replace(/\./g,'').split('-'); return n? n.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(dv!==undefined?'-'+dv:'') : String(r) }
-  const resolverCliente = (rut,nombre) => {
-    const nr = normRut(rut)
-    if(nr){ const ce=clientEntities.find(e=>normRut(e.rut)===nr); const c=ce&&clients.find(c=>c.id===ce.client_id); if(c) return c }
-    if(nombre){ const ce=clientEntities.find(e=>e.name?.toLowerCase()===nombre.toLowerCase()); const c=ce&&clients.find(c=>c.id===ce.client_id); if(c) return c }
-    if(nr){ const c=clients.find(c=>normRut(c.rut)===nr); if(c) return c }
-    if(nombre){ const c=clients.find(c=>c.name?.toLowerCase()===nombre.toLowerCase()); if(c) return c }
-    return null
-  }
+  // Fuente única compartida con handleIngresarSII (RUT→nombre en vínculos, luego clientes).
+  const resolverCliente = (rut,nombre) => resolverClienteSII(rut,nombre,clients,clientEntities)
   // Crea el cobro en billing desde la factura del SII. Si reconoce el cliente, vincula
   // y aprende el RUT para siempre; si no, lo deja sin cliente para asignarlo en Facturacion.
   const ingresarHuerfana = async(it, clienteIdForzado) => {
+    if(ingresando||ingresadas[it.folio]) return                       // A2: anti doble-click / re-entrada (guard síncrono)
+    const dup=(billing||[]).find(b=>String(b.invoice_no)===String(it.folio)&&!b.deleted_at)   // A1: dedupe cliente-side (no depende de una constraint UNIQUE en la DB)
+    if(dup){ setIngresadas(p=>({...p,[it.folio]:{cliente:(clients.find(c=>String(c.id)===String(dup.client_id))||{}).name||null}})); return }
     setIngresando(it.folio); setError('')
     try{
       const cli = clienteIdForzado ? (clients.find(c=>String(c.id)===String(clienteIdForzado))||null) : resolverCliente(it.rut,it.receptor)
@@ -5454,8 +5459,9 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
         notes: null,
       })
       if(cli){
-        await reconcileProgramada(cli.id, it.monto, it.fechaEmision)
-        if(it.rut) await supabase.from('client_entities').upsert({client_id:cli.id,rut:it.rut,name:it.receptor||null},{onConflict:'rut'})
+        await reconcileProgramada(cli.id, it.monto, isoFecha(it.fechaEmision)||it.fechaEmision)   // A3: fecha ISO (no cruda) para la ventana ±45d
+        // M5: no pisar el nombre bueno de una RS ya existente con el crudo del SII (ignoreDuplicates: solo crea el vínculo si el RUT es nuevo)
+        if(it.rut) await supabase.from('client_entities').upsert({client_id:cli.id,rut:it.rut,name:it.receptor||null},{onConflict:'rut',ignoreDuplicates:true})
       }
       setIngresadas(p=>({...p,[it.folio]:{cliente:cli?.name||null}}))
       if(onRefresh) await onRefresh()
@@ -5471,11 +5477,12 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const [corregidas,setCorregidas] = useState(()=>({}))      // billingId -> true
   // Asigna el folio real del SII a una venta ya emitida que tenia folio manual o sin folio.
   const aplicarCorreccion = async(it) => {
+    if(corrigiendo||corregidas[it.billingId]) return                 // guard anti doble-click
     setCorrigiendo(it.billingId); setError('')
     try{
       const {error} = await supabase.from('billing').update({
         invoice_no: String(it.folio),
-        issued_at: it.fechaEmision,
+        issued_at: isoFecha(it.fechaEmision)||it.fechaEmision,        // A4: fecha ISO (no cruda), igual que las otras rutas
         sii_tipo_dte: it.tipoDte||null,
         sii_synced_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -5494,6 +5501,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   const [ambBusy,setAmbBusy] = useState(null)                 // folio en curso
   const isoFecha = d => { if(!d) return ''; const s=String(d); if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10); const m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:'' }
   const elegirAmbigua = async(it,cand) => {
+    if(ambBusy||ambDone[it.folio]) return                             // guard anti doble-click
     setAmbBusy(it.folio); setError('')
     try{
       const patch = { invoice_no:String(it.folio), issued_at:isoFecha(it.fechaEmision)||it.fechaEmision, sii_tipo_dte:it.tipoDte||null, sii_synced_at:new Date().toISOString(), updated_at:new Date().toISOString() }
@@ -5568,7 +5576,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
           </div>
         )})()}
         {error&&<div style={{padding:'10px 20px',fontSize:12,color:C.overdue,background:C.overdueBg}}>{error}</div>}
-        {result&&!loading&&(()=>{ const auto=(result.actualizadas?.length||0); const porResolver=(result.corregirFolio?.length||0)+(result.ambiguas?.length||0)+(result.sinMatch?.length||0); return (
+        {result&&!loading&&(()=>{ const auto=(result.actualizadas?.length||0); const porResolver=(result.corregirFolio||[]).filter(it=>!corregidas[it.billingId]).length+(result.ambiguas||[]).filter(it=>!ambDone[it.folio]).length+(result.sinMatch||[]).filter(it=>!ingresadas[it.folio]).length; return (   /* baja a medida que resuelves en la sesión (M2) */
           <div style={{padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB'}}>
             <div style={{display:'flex',alignItems:'baseline',gap:8}}>
               <span style={{fontSize:28,fontWeight:700,color:porResolver>0?'#C77F18':C.normal,lineHeight:1}}>{porResolver}</span>
@@ -5660,7 +5668,14 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                       </div>
                       {exp&&!done&&<div style={{padding:'2px 20px 10px',background:C.bgSoft}}>
                         <div style={{fontSize:10.5,color:C.muted,padding:'7px 0',lineHeight:1.5}}><span style={{fontWeight:700,color:C.accent}}>Del SII:</span> {fmt(it.monto)} · {dmy(it.fechaEmision)}{it.rut?` · ${fmtRut(it.rut)}`:''}{it.receptor?` · ${it.receptor}`:''}</div>
-                        {cands.length===0&&<div style={{fontSize:11,color:C.soonText,padding:'6px 0 2px',borderTop:'0.5px solid #E4E8EB'}}>Las coincidencias ya están emitidas con su folio. Vuelve a sincronizar o ingrésala como nueva en "Dime el cliente".</div>}
+                        {cands.length===0&&(()=>{ const c=resolverCliente(it.rut,it.receptor); return (   /* M1: salida real (no mandar a una sección donde el ítem no existe) */
+                          <div style={{padding:'7px 0 2px',borderTop:'0.5px solid #E4E8EB'}}>
+                            <div style={{fontSize:10.5,color:C.soonText,marginBottom:6}}>Las coincidencias ya están emitidas con su folio. Cárgala como factura nueva:</div>
+                            {c
+                              ? <button onClick={async()=>{ await ingresarHuerfana(it); setAmbDone(p=>({...p,[it.folio]:c.name})) }} disabled={ambBusy===it.folio||ingresando===it.folio} style={{height:28,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',opacity:(ingresando===it.folio)?.5:1}}>Cargar a {c.name}</button>
+                              : <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={async(_,cid)=>{ await ingresarHuerfana(it,cid); const cc=clients.find(x=>String(x.id)===String(cid)); setAmbDone(p=>({...p,[it.folio]:cc?.name||'—'})) }} label='Elegir cliente' placeholder='Buscar cliente…'/>}
+                          </div>
+                        ) })()}
                         {cands.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); return (
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
@@ -5682,7 +5697,8 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 {result.corregirFolio?.length>0&&<>
                   <Hdr label='Corregir folio' color={C.accent} bg='#EEF4F7'/>
                   {result.corregirFolio.map((it,i)=>{ const ya=corregidas[it.billingId]; return <Fila key={i}>
-                    <div style={{minWidth:0,flex:1}}>
+                    {bigDate(isoFecha(it.fechaEmision),C.muted)}
+                    <div style={{minWidth:0,flex:1,marginLeft:4}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||it.cliente||'—'}</div>
                       <div style={{fontSize:11,color:C.done,marginTop:1}}>{it.folioActual?`Factura N°${it.folioActual} → ${it.folio}`:`Asignar Factura N°${it.folio}`}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
                     </div>
@@ -21924,13 +21940,14 @@ export default function App() {
   // del movimiento cuando se conoce, y devuelve la factura ya en billing para conciliarla en el acto. Idempotente ante folio dup.
   const handleIngresarSII = useCallback(async(row, clienteId)=>{
     const nr=s=>(s||'').toString().replace(/[.\s-]/g,'').toUpperCase()
-    let cli = clienteId ? (clients.find(c=>String(c.id)===String(clienteId))||null) : null
-    if(!cli && row.rut){ const ce=clientEntities.find(e=>nr(e.rut)===nr(row.rut)); cli=(ce&&clients.find(c=>c.id===ce.client_id))||clients.find(c=>nr(c.rut)===nr(row.rut))||null }
+    const existente=(billing||[]).find(b=>String(b.invoice_no)===String(row.folio)&&!b.deleted_at)   // A1: ya existe en billing → NO duplicar, conciliar con ella
+    if(existente) return existente
+    const cli = clienteId ? (clients.find(c=>String(c.id)===String(clienteId))||null) : resolverClienteSII(row.rut,row.receptor,clients,clientEntities)   // M4: resolvedor único (mismo que el modal)
     let created=null
     try{
       const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(row.fechaEmision)   // DD/MM/YYYY→ISO
       created=await upsertBilling({ client_id:cli?.id||null, concept:'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:row.monto, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, sii_synced_at:new Date().toISOString(), notes:null })
-      if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut'}) }catch(_){}}
+      if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut',ignoreDuplicates:true}) }catch(_){}}   // M5: no pisar el nombre bueno de la RS
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
     const pool=nb||billing||[]
