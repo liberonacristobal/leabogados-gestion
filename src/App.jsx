@@ -18787,6 +18787,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [revSugSel,setRevSugSel] = useState(()=>new Set())
   const [revSugBusy,setRevSugBusy] = useState(false)
   const [comboFor,setComboFor] = useState(null)  // id del abono con la previsualización del combo (2 facturas) abierta
+  const [reembFor,setReembFor] = useState(null)  // id del abono con las opciones de reembolso (saldar / +fondo) abiertas
   const [detFor,setDetFor] = useState(null)
   const [facBuscaQ,setFacBuscaQ] = useState('')  // buscador del estado de cuenta del cliente en el panel del pago      // id de la factura con el detalle expandido en el selector "Otra factura"
   const [rsConcOpen,setRsConcOpen] = useState(()=>new Set())   // por RS: mostrar las cobradas-conciliadas (colapsadas por defecto)
@@ -19419,6 +19420,30 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       setConc(p=>[...p,crF,...(crG?[crG]:[])]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
     }catch(e){ if(crG) await supabase.from('conciliacion').delete().eq('id',crG.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); if(crF) await supabase.from('conciliacion').delete().eq('id',crF.id); appAlert('Error al conciliar factura + gastos: '+e.message) }
     setBusy(null)
+  }
+  // Conciliar una factura de GASTOS/REEMBOLSO: la marca como reembolso (billing_type='reembolso' → FUERA de ingresos,
+  // única palanca que excluye del por-cobrar/cobrado) y la concilia (pagada con respaldo bancario). Opcionalmente abona
+  // el monto al FONDO POR RENDIR del cliente (prepago para gastos futuros). El usuario elige si SOLO salda o además funde
+  // (regla conciliacion-paralelo-y-reembolso). Cifra: no doble-cuenta — la factura reembolso no suma a saldo; el fondo sí.
+  const reconciliarReembolso = async(mov, factura, conFondo)=>{
+    if(busy) return
+    let fReemb=factura
+    if((factura.billing_type||'')!=='reembolso'){
+      try{
+        const { error } = await supabase.from('billing').update({ billing_type:'reembolso', updated_at:new Date().toISOString() }).eq('id',factura.id)
+        if(error) throw error
+        fReemb={...factura,billing_type:'reembolso'}
+        setBilling&&setBilling(p=>p.map(b=>String(b.id)===String(factura.id)?{...b,billing_type:'reembolso'}:b))
+      }catch(e){ appAlert('No se pudo marcar la factura como reembolso: '+e.message); return }
+    }
+    await reconciliar(mov, fReemb, 'manual')
+    if(conFondo){
+      try{
+        const insFon = await supabase.from('expenses').insert({ client_id:fReemb.client_id||mov.cliente_id, type:'fondo', amount:(fReemb.amount||0), date:mov.fecha, concept:`Fondo por rendir · Factura N°${folioN(fReemb.invoice_no)||'—'} (conciliación)`, category:'Fondo', created_by:user?.email||null }).select().single()
+        if(insFon.error) throw insFon.error
+        setExpenses&&setExpenses(p=>[insFon.data,...p])
+      }catch(e){ appAlert('Factura conciliada, pero no se pudo crear el fondo por rendir: '+e.message) }
+    }
   }
   // Devolución de gastos (abono que es 100% reembolso de un gasto que el estudio adelantó): crea un fondo por el
   // resto no aplicado (corrige el saldo del cliente). Mismo motor que la provisión, con concepto "Devolución".
@@ -20349,8 +20374,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginTop:7,paddingTop:6,borderTop:`1px solid ${C.bgSoft}`}}>
                               {rutMatch&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px'}}>✓ mismo RUT</span>}
                               <span style={{fontSize:9.5,fontWeight:700,color:exacto?C.greenText:C.soonText,background:exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px'}}>{exacto?'✓ monto exacto':`dif ${fmtM(Math.abs(sld-resto))}`}</span>
-                              <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{marginLeft:'auto',background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 14px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{esReemb?'Conciliar (reembolso)':'Conciliar'}</button>
+                              <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
+                                <button disabled={busy===m.id} onClick={()=>setReembFor(reembFor===m.id?null:m.id)} title='La factura es de gastos/reembolso: se marca pagada pero no cuenta como ingreso' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'4px 10px',border:'none',cursor:busy===m.id?'default':'pointer',background:reembFor===m.id?'#FAECE7':C.bgSoft,color:reembFor===m.id?C.coralText:C.muted}}>Es reembolso{reembFor===m.id?' ▴':' ▾'}</button>
+                                <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 14px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
+                              </div>
                             </div>
+                            {reembFor===m.id&&<div style={{marginTop:7,background:'#FAECE7',borderRadius:8,padding:'8px 10px'}}>
+                              <div style={{fontSize:10,color:C.coralText,marginBottom:6,lineHeight:1.4}}>Factura de gastos: se marca <b>pagada</b> con respaldo, pero <b>no cuenta como ingreso</b>. Elige:</div>
+                              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                                <button disabled={busy===m.id} onClick={()=>{setReembFor(null);reconciliarReembolso(m,sug,false)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'5px 12px',border:`1px solid ${C.coralText}`,background:'#fff',color:C.coralText,cursor:busy===m.id?'default':'pointer'}}>Solo saldar (no ingreso)</button>
+                                <button disabled={busy===m.id} onClick={()=>{setReembFor(null);reconciliarReembolso(m,sug,true)}} style={{fontSize:10,fontWeight:700,borderRadius:7,padding:'5px 12px',border:'none',background:C.tealText,color:'#fff',cursor:busy===m.id?'default':'pointer'}}>Saldar + fondo por rendir</button>
+                              </div>
+                            </div>}
                           </div>) })()}
                         {(()=>{ const grp=grupoPago(m); if(!grp) return null
                           const depSum=grp.transfers.reduce((a,t)=>a+(t.monto||0),0); const facSum=grp.facturas.reduce((a,f)=>a+saldoFactura(f),0)
