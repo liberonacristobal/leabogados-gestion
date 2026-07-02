@@ -6393,8 +6393,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <span style={{color:C.onNavyLabel,fontSize:18,fontWeight:700}}>›</span>
               </div>
             ) })()}
-            {yaFactTot>0&&<div onClick={()=>irAEstado('programadas')} title='Programadas cuya factura emitida ya existe — vincular' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:10,cursor:'pointer'}}>
-              <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.soonText}}>⚠ Ya facturadas — vincular a su factura emitida</div><div style={{fontSize:9,color:C.coralText,marginTop:1}}>su factura real ya existe; inflan el "por facturar"</div></div>
+            {yaFactTot>0&&<div onClick={()=>onConciliar&&onConciliar()} title='Abre Conciliar → "Programadas ya emitidas" para reemplazarlas por su factura real' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.ambarBg,border:`1px solid #EFD9A8`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginBottom:10,cursor:'pointer'}}>
+              <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.soonText}}>⚠ Ya facturadas — vincular a su factura emitida</div><div style={{fontSize:9,color:C.coralText,marginTop:1}}>su factura real ya existe; inflan el "por facturar" · <b>{yaFacturadasIds.size}</b> por vincular</div></div>
               <span style={{fontSize:14,fontWeight:700,color:C.soonText,whiteSpace:'nowrap'}}>{fmt(yaFactTot)}</span>
             </div>}
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
