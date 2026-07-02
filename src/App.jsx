@@ -5459,6 +5459,25 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
     setCorrigiendo(null)
   }
 
+  // Revisión manual (ambiguas): mostrar los candidatos y dejar ELEGIR cuál es. Al elegir, asigna el folio del SII
+  // a esa cuota (Programada → Pendiente; o corrige el folio si ya estaba emitida).
+  const [ambExp,setAmbExp] = useState(()=>new Set())          // folios de ambiguas expandidas
+  const [ambDone,setAmbDone] = useState(()=>({}))             // folio -> cliente elegido
+  const [ambBusy,setAmbBusy] = useState(null)                 // folio en curso
+  const isoFecha = d => { if(!d) return ''; const s=String(d); if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10); const m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:'' }
+  const elegirAmbigua = async(it,cand) => {
+    setAmbBusy(it.folio); setError('')
+    try{
+      const patch = { invoice_no:String(it.folio), issued_at:isoFecha(it.fechaEmision)||it.fechaEmision, sii_tipo_dte:it.tipoDte||null, sii_synced_at:new Date().toISOString(), updated_at:new Date().toISOString() }
+      if(cand.estado==='Programada') patch.status='Pendiente'
+      const {error} = await supabase.from('billing').update(patch).eq('id', cand.id)
+      if(error) throw error
+      setAmbDone(p=>({...p,[it.folio]:cand.cliente||'—'}))
+      if(onRefresh) await onRefresh()
+    }catch(e){ setError(`No se pudo asignar Factura N°${it.folio}: ${e.message}`) }
+    setAmbBusy(null)
+  }
+
   const llamar = async(body) => {
     const {data:{session}} = await supabase.auth.getSession()
     if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
@@ -5542,7 +5561,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
             : <>
                 {result.actualizadas?.length>0&&<>
                   <Hdr label='Conciliadas' color={C.greenText} bg='#E1F5EE'/>
-                  {result.actualizadas.map((it,i)=><Fila key={i}><div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente}</div><div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}</div></div><span style={{fontSize:13,fontWeight:500,color:C.text,marginLeft:'auto',marginRight:8,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span><CheckVerde/></Fila>)}
+                  {result.actualizadas.map((it,i)=><Fila key={i}>{bigDate(isoFecha(it.fechaEmision),C.normal)}<div style={{minWidth:0,flex:1,marginLeft:4}}><div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente}</div><div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}</div></div><span style={{fontSize:13,fontWeight:500,color:C.text,marginLeft:'auto',marginRight:8,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span><CheckVerde/></Fila>)}
                 </>}
                 {result.corregirFolio?.length>0&&<>
                   <Hdr label='Corregir folio' color={C.accent} bg='#EEF4F7'/>
@@ -5558,7 +5577,8 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 {result.sinMatch?.length>0&&<>
                   <Hdr label='Ventas no cargadas' color='#C77F18' bg='#FFFBF0' border='#F0E4B8' right={result.sinMatch.length>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>+ Asignar todas</button>}/>
                   {result.sinMatch.map((it,i)=>{ const ya=ingresadas[it.folio]; return <Fila key={i}>
-                    <div style={{minWidth:0}}>
+                    {bigDate(isoFecha(it.fechaEmision),C.muted)}
+                    <div style={{minWidth:0,marginLeft:4}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
                       <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
                     </div>
@@ -5567,8 +5587,33 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                   </Fila> })}
                 </>}
                 {result.ambiguas?.length>0&&<>
-                  <Hdr label='Revisión manual' color='#537281' bg='#EEF1F4'/>
-                  {result.ambiguas.map((it,i)=><Fila key={i}><div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>Factura N°{it.folio} · {it.candidatos?.length} candidatos</div><div style={{fontSize:11,color:C.done,marginTop:1}}>{fmtRut(it.rut)}</div></div><span style={{fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span></Fila>)}
+                  <Hdr label='Revisión manual · elige el candidato' color='#537281' bg='#EEF1F4'/>
+                  {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; return (
+                    <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
+                      <div onClick={()=>!done&&setAmbExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:done?'default':'pointer'}}>
+                        {bigDate(isoFecha(it.fechaEmision),C.muted)}
+                        <div style={{minWidth:0,flex:1,marginLeft:4}}>
+                          <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||`Factura N°${it.folio}`}</div>
+                          <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
+                        </div>
+                        <span style={{fontSize:13,fontWeight:500,color:C.text,whiteSpace:'nowrap',marginRight:8}}>{fmt(it.monto)}</span>
+                        {done ? <span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>Asignada</span>
+                          : <span style={{fontSize:11,color:C.accent,fontWeight:600,whiteSpace:'nowrap'}}>{it.candidatos?.length} candidatos {exp?'▾':'▸'}</span>}
+                      </div>
+                      {exp&&!done&&<div style={{padding:'0 20px 8px 20px',background:C.bgSoft}}>
+                        {(it.candidatos||[]).map((cand,j)=>(
+                          <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
+                              <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado}{cand.folio?` · N°${cand.folio}`:''}</div>
+                            </div>
+                            <span style={{fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</span>
+                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:26,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
+                          </div>
+                        ))}
+                      </div>}
+                    </div>
+                  )})}
                 </>}
                 {result.errores?.length>0&&<>
                   <Hdr label='Errores' color={C.overdue} bg='#FCEBEB'/>
