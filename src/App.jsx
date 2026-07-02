@@ -5722,7 +5722,18 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 {/* 3. Elige la factura — varias candidatas: comparación con lo del SII */}
                 {result.ambiguas?.length>0&&<>
                   <Hdr label='Elige la factura correcta' color='#537281' bg='#EEF1F4'/>
-                  {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; const cands=(()=>{ const raw=(it.candidatos||[]).filter(c=>!c.folio); const seen=new Map(); raw.forEach(c=>{ const k=`${c.cliente}|${c.concepto}|${c.monto}`; if(seen.has(k)){ const s=seen.get(k); s._dups++; if(c.estado==='Programada'&&s.estado!=='Programada'){ s.id=c.id; s.estado=c.estado } } else seen.set(k,{...c,_dups:1}) }); return [...seen.values()] })(); return (   /* sin folio + dedupe por cliente|concepto|monto (mismo cuota/mes aunque una sea Programada y otra Vencida) → una sola opción; prefiere la Programada para el Elegir */
+                  {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; const cands=(()=>{
+                        const raw=(it.candidatos||[]).filter(c=>!c.folio)
+                        // EXPANDIR por venta: incluir TODAS las cuotas SIN emitir de la venta de cada candidata → para no saltar la 2/3
+                        // (los candidatos del motor mezclan período+vencidas y pueden omitir la del medio). Ordenadas por N° de cuota.
+                        const saleIds=new Set(raw.map(c=>{ const b=(billing||[]).find(x=>String(x.id)===String(c.id)); return b&&b.sale_id }).filter(Boolean))
+                        let pool=raw
+                        if(saleIds.size){ const extra=(billing||[]).filter(b=>!b.deleted_at&&saleIds.has(b.sale_id)&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).map(b=>({id:b.id,cliente:(clients.find(c=>String(c.id)===String(b.client_id))||{}).name||'—',concepto:b.concept,monto:b.amount,estado:b.status})); pool=[...raw,...extra] }
+                        const byId=new Map(); pool.forEach(c=>{ if(!byId.has(String(c.id))) byId.set(String(c.id),c) })
+                        const cuN=c=>{ const m=String(c.concepto||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?+m[1]:99 }
+                        const uniq=[...byId.values()].sort((a,b)=>cuN(a)-cuN(b))
+                        const seen=new Map(); uniq.forEach(c=>{ const k=`${c.cliente}|${c.concepto}|${c.monto}`; if(seen.has(k)){ const s=seen.get(k); s._dups++; if(c.estado==='Programada'&&s.estado!=='Programada'){ s.id=c.id; s.estado=c.estado } } else seen.set(k,{...c,_dups:1}) }); return [...seen.values()]
+                      })(); return (   /* candidatos = todas las cuotas sin emitir de la venta, en orden; dedupe cliente|concepto|monto */
                     <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
                       <div onClick={()=>!done&&setAmbExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:done?'default':'pointer'}}>
                         {bigDate(isoFecha(it.fechaEmision),C.muted)}
