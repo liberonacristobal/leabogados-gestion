@@ -237,6 +237,37 @@ async function reconcileProgramada(clientId, amount, issuedAt){
   }catch(_){}
 }
 const urgencyColor = (due,status) => ({overdue:C.overdue,urgent:C.urgent,soon:C.soon,normal:C.normal,done:C.done})[urgency(due,status)]||C.muted
+// ── DETECCIÓN ÚNICA de "programada ya emitida" (fantasma/duplicada). Fuente única para: el conteo de duplicados
+//    (Facturación), el inline "Ya emitida" (Facturas del mes) y el panel de resolución (Conciliar). Así los 3 nunca divergen.
+//    Une DOS criterios: (a) por cuota/período del concepto (recurrentes de la app, tolera corrida de UF) y
+//    (b) por RUT/RS + monto ±5% + fecha ±60d (facturas traídas del SII con concepto genérico "Honorarios"). FIFO 1:1.
+const _MESMAP_G = {enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
+const cuotaNMof = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
+const concPeriodoOf = c => { const s=(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_MESMAP_G)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_MESMAP_G[k]).padStart(2,'0')}` } return null }
+function rutsDeFactura(b, clients=[], clientEntities=[]){ const nr=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase(); const s=new Set(); const add=r=>{const n=nr(r);if(n)s.add(n)}; add(b.receptor_rut); const e=clientEntities.find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); clientEntities.filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
+function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
+  const noSet = opts.noSet||new Set()
+  const act = (billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada')
+  const emisAll = act.filter(b=> b.issued_at && b.status!=='Programada' && (b.billing_type||'')!=='reembolso' && /\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,'')))
+    .map(x=>({x,cu:cuotaNMof(x.concept),per:concPeriodoOf(x.concept),ruts:rutsDeFactura(x,clients,clientEntities),t:new Date((x.issued_at||x.due||'')+'T12:00').getTime()}))
+  const progs = act.filter(b=>b.status==='Programada'&&b.amount&&(b.billing_type||'')!=='reembolso')
+    .map(p=>({p,cu:cuotaNMof(p.concept),per:concPeriodoOf(p.concept),ruts:rutsDeFactura(p,clients,clientEntities),pt:p.due?new Date(p.due+'T12:00').getTime():null}))
+    .sort((a,b)=>(a.p.due||a.p.issued_at||'').localeCompare(b.p.due||b.p.issued_at||''))
+  const usados=new Set(); const out=[]
+  progs.forEach(({p,cu,per,ruts,pt})=>{ const a=p.amount||0; if(!a) return; let best=null,bestRank=null
+    for(const e of emisAll){ if(usados.has(e.x.id)||noSet.has(`${p.id}|${e.x.id}`)) continue
+      const sameCli=String(e.x.client_id)===String(p.client_id); const rutMatch=[...e.ruts].some(r=>ruts.has(r)); if(!sameCli&&!rutMatch) continue
+      const dMonto=Math.abs((e.x.amount||0)-a)/a; const sameCu=!!(cu&&e.cu&&cu.n===e.cu.n), samePer=!!(per&&e.per&&per===e.per); const dias=(pt&&e.t)?Math.abs(e.t-pt)/86400000:999
+      const okCu=sameCu&&dMonto<=0.25, okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=60
+      if(!okCu&&!okPer&&!okRut) continue
+      const rank=[okCu?0:1, okPer?0:1, dMonto, dias]
+      if(!best||rank[0]<bestRank[0]||(rank[0]===bestRank[0]&&(rank[1]<bestRank[1]||(rank[1]===bestRank[1]&&(rank[2]<bestRank[2]||(rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank } }
+    if(best){ usados.add(best.x.id); const dM=Math.abs((best.x.amount||0)-a)/a; const raz=[]
+      if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`); else if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`); else raz.push('mismo RUT/RS')
+      raz.push(dM<0.01?'mismo monto':`dif ${(dM*100).toFixed(1).replace(/\.0$/,'')}% (UF)`)
+      out.push({prog:p, real:best.x, razones:raz}) } })
+  return out
+}
 // Fuente única de "Facturado": cuota emitida (con issued_at), que no sea reembolso ni esté anulada o solo programada.
 const esFacturada = b => !!b?.issued_at && b.billing_type!=='reembolso' && b.status!=='Anulada' && b.status!=='Programada'
 
@@ -5241,15 +5272,10 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
     return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1).map(([y,months])=>{ const flat=Object.values(months).flat(); return { y, months:Object.entries(months).sort((a,z)=>a[0]>z[0]?-1:1).map(([mk,fs])=>[mk, fs.slice().sort((a,b)=>(fecEmis(b)||'').localeCompare(fecEmis(a)||''))]), total:flat.reduce((a,b)=>a+(b.amount||0),0), n:flat.length } })
   })()
 
-  // "Ya emitida": una PROGRAMADA cuyo gemelo EMITIDO (mismo RUT/RS, monto dentro de la deriva de UF, fecha cercana) YA existe
-  // en la facturación (típicamente traído del SII). Conservador: exactamente 1 candidata. Tolerancia = la de reconcileProgramada
-  // (±5%, piso $1.000) que absorbe la variación de UF entre la fecha programada y la de emisión.
-  const _nrmR = r => (r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
-  const _rutsFac = b => { const s=new Set(); const add=r=>{const n=_nrmR(r);if(n)s.add(n)}; add(b.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
-  const _emitidasReales = useMemo(()=> billing.filter(b=>!b.deleted_at&&esEmitida(b)&&(b.billing_type||'')!=='reembolso'&&b.status!=='Anulada').map(e=>({e,ruts:_rutsFac(e),t:new Date(((e.issued_at||e.due||''))+'T12:00').getTime()})), [billing,clientEntities,clients])   // eslint-disable-line
-  const emitidaTwin = p => { const a=p.amount||0; if(!a) return null; const rp=_rutsFac(p); if(!rp.size) return null; const tol=Math.max(a*0.05,1000); const dueP=p.due?new Date(p.due+'T12:00').getTime():null
-    const cands=_emitidasReales.filter(({e,ruts,t})=> String(e.id)!==String(p.id) && Math.abs((e.amount||0)-a)<=tol && [...ruts].some(r=>rp.has(r)) && (!dueP||!t||Math.abs(t-dueP)/86400000<=60))
-    return cands.length===1?cands[0].e:null }
+  // "Ya emitida" (programada cuyo gemelo emitido ya existe) — FUENTE ÚNICA compartida (matchProgEmitidas), misma que el
+  // conteo de duplicados de Facturación y el panel Conciliar → los tres siempre coinciden.
+  const _twins = useMemo(()=>{ const m=new Map(); matchProgEmitidas(billing,clients,clientEntities).forEach(x=>m.set(String(x.prog.id),x.real)); return m }, [billing,clients,clientEntities])
+  const emitidaTwin = p => _twins.get(String(p.id))||null
   const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+(b.amount||0),0)
   const emitidasCLP = items.filter(esEmitida).reduce((a,b)=>a+(b.amount||0),0)
   const totalCLP = porFacturarCLP + emitidasCLP
@@ -5983,10 +6009,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     return { uf, clpHoy: Math.round(uf*ufHoy) }
   }
   // "Ya facturadas" (duplicados): facturas SIN folio cuya factura emitida REAL ya existe (mismo cliente, cuota N/M o período, monto ±tolerancia). Inflan el "por facturar"; se vinculan a su factura emitida.
-  const _cuotaNMg = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
-  const _mesMapG = {enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
-  const _concPeriodoG = c => { const s=String(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_mesMapG)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_mesMapG[k]).padStart(2,'0')}` } return null }
-  const yaFacturadasIds = useMemo(()=>{ const noFolio=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)); const reales=bb.filter(b=>!b.deleted_at&&b.invoice_no&&/\d/.test(folioN(b.invoice_no||''))&&b.status!=='Anulada'); const rByC={}; reales.forEach(r=>{(rByC[r.client_id]=rByC[r.client_id]||[]).push(r)}); const ids=new Set(); noFolio.forEach(p=>{ const a=p.amount||0; if(!a) return; const rs=rByC[p.client_id]||[]; const pcu=_cuotaNMg(p.concept), pper=_concPeriodoG(p.concept); const hit=rs.some(r=>{ const rcu=_cuotaNMg(r.concept), rper=_concPeriodoG(r.concept); const sameCu=!!(pcu&&rcu&&pcu.n===rcu.n); const samePer=!!(pper&&rper&&pper===rper); if(!sameCu&&!samePer) return false; const dM=Math.abs((r.amount||0)-a)/a; return dM<=(sameCu?0.25:0.06) }); if(hit) ids.add(p.id) }); return ids },[bb])
+  const yaFacturadasIds = useMemo(()=> new Set(matchProgEmitidas(bb,clients,clientEntities).map(m=>String(m.prog.id))), [bb,clients,clientEntities])   // fuente única (detector compartido)
   // KPIs — MISMA fuente que el landing: Por cobrar = total cuentas por cobrar (emitidas con saldo, NO depende del año); Por facturar = sin folio real (excluye las ya facturadas).
   const pending=bb.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
   const overdue=bb.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((s,b)=>s+saldoBill(b),0)
@@ -12343,9 +12366,6 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
   const cName = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
   // Período que dice la GLOSA (ej. "Asesoría — July 2026" → 2026-07). Eje del calce: dos facturas del mismo servicio comparten período.
-  const _MESMAP={enero:1,ene:1,january:1,jan:1,febrero:2,feb:2,february:2,marzo:3,mar:3,march:3,abril:4,abr:4,april:4,apr:4,mayo:5,may:5,junio:6,jun:6,june:6,julio:7,jul:7,july:7,agosto:8,ago:8,august:8,aug:8,septiembre:9,sept:9,sep:9,september:9,octubre:10,oct:10,october:10,noviembre:11,nov:11,november:11,diciembre:12,dic:12,december:12,dec:12}
-  const concPeriodo = c => { const s=norm(c); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); if(!ym) return null; for(const k of Object.keys(_MESMAP)){ if(new RegExp('\\b'+k+'\\b').test(s)) return `${ym[1]}-${String(_MESMAP[k]).padStart(2,'0')}` } return null }
-  const cuotaNM = c => { const m=String(c||'').match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m?{n:+m[1],tot:+m[2]}:null }
 
   // (1) Duplicados: mismo cliente + mismo monto + mismo vencimiento, o mismo folio normalizado.
   const dupGroups = useMemo(()=>{
@@ -12393,47 +12413,8 @@ function ConciliarFacturasModal({scope=[], sales=[], clients=[], clientEntities=
   },[scope,sales,periodo])
 
   // (3) Programada ↔ real: programada con venta, busca real del mismo cliente, mismo mes (±1) y monto con tolerancia ±15%.
-  const progMatches = useMemo(()=>{
-    // REGLA de asignación. (1) Emitida REAL = FOLIO con dígitos (nunca sin folio ni placeholder). (2) Identifica la CUOTA por
-    // número (N/M) o por PERÍODO de la glosa — NUNCA por monto+mes suelto (eso ofrecía períodos aún no facturados). (3) FIFO por
-    // cliente: la programada más antigua toma la emitida más antigua que calza; 1:1. Monto/fecha similares = apoyo y desempate.
-    const noSet=matchNo||new Set()
-    const emisAll = act.filter(b=> b.issued_at && b.status!=='Programada' && /\d/.test(folioN(b.invoice_no||'')))
-    const out=[]; const usados=new Set()
-    const cids=[...new Set(act.filter(b=>b.status==='Programada'&&b.amount).map(b=>String(b.client_id)))]
-    cids.forEach(cid=>{
-      const progs = act.filter(b=>b.status==='Programada'&&b.amount&&String(b.client_id)===cid)
-        .map(p=>({p,cu:cuotaNM(p.concept),per:concPeriodo(p.concept)}))
-        .sort((a,b)=>(a.p.due||a.p.issued_at||'').localeCompare(b.p.due||b.p.issued_at||''))     // FIFO: programada más antigua primero
-      const emis = emisAll.filter(b=>String(b.client_id)===cid)
-        .map(x=>({x,cu:cuotaNM(x.concept),per:concPeriodo(x.concept)}))
-        .sort((a,b)=>(a.x.issued_at||a.x.due||'').localeCompare(b.x.issued_at||b.x.due||''))      // emitida más antigua primero
-      progs.forEach(({p,cu,per})=>{
-        const a=p.amount||0; const pd=p.due||p.issued_at||''
-        let best=null,bestRank=null
-        for(const e of emis){
-          if(usados.has(e.x.id) || noSet.has(`${p.id}|${e.x.id}`)) continue
-          const sameCu = !!(cu&&e.cu&&cu.n===e.cu.n)
-          const samePer = !!(per&&e.per&&per===e.per)
-          if(!sameCu&&!samePer) continue                                   // sin clave de cuota/período → NO calza
-          const dMonto=a?Math.abs((e.x.amount||0)-a)/a:1
-          if(dMonto > (sameCu?0.25:0.06)) continue                          // cuota exacta tolera la corrida de UF; período solo, monto estricto
-          const ed=e.x.issued_at||e.x.due||''
-          const rank=[sameCu?0:1, samePer?0:1, dMonto, Math.abs(new Date(ed||0)-new Date(pd||0))]   // cuota › período › monto › fecha (emis ya FIFO)
-          if(!best || rank[0]<bestRank[0] || (rank[0]===bestRank[0]&&(rank[1]<bestRank[1] || (rank[1]===bestRank[1]&&(rank[2]<bestRank[2] || (rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank }
-        }
-        if(best){
-          usados.add(best.x.id)
-          const dM=a?Math.abs((best.x.amount||0)-a)/a:0; const raz=[]
-          if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`)
-          if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`)
-          raz.push(dM<0.01?'mismo monto':`monto a ${(dM*100).toFixed(1).replace(/\.0$/,'')}%`)
-          out.push({prog:p, real:best.x, razones:raz})
-        }
-      })
-    })
-    return out
-  },[scope,periodo,matchNo])
+  // Fuente ÚNICA: mismo detector que el conteo de duplicados y el inline "Ya emitida" — así el card, esta lista y Facturas del mes coinciden.
+  const progMatches = useMemo(()=> matchProgEmitidas(act, clients, clientEntities, {noSet:matchNo||new Set()}), [act,clients,clientEntities,matchNo])
 
   // (0) Fantasmas: Pagado SIN folio que es copia de una real CON folio (absorbe el tool de conciliación viejo). Respeta "no es duplicado" (learnings conciliacion_ok).
   const [okIds,setOkIds] = useState(null)
