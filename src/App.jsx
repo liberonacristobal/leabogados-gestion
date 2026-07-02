@@ -2227,6 +2227,18 @@ function computeAgingCartera(billingRows, clientesMap){
 
 function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,user,onPagarTercero,onPagarTercerosBulk,onAddTask,onEditTask,onCompleteTask,onPreviewTask,tareasOpen=false,onTareasClose,onOpenOficina,onOpenClientFicha,onOpenPlazos,onAcceso}) {
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
+  // KPIs colapsables: "Cómo va el año" queda fijo (hero); el resto arranca en mini y se abre al tocar (recuerda por usuario).
+  const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
+  const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
+  const kToggle = id => setKpiOpen(p=>{ const a=Array.isArray(p)?p:[]; return a.includes(id)?a.filter(x=>x!==id):[...a,id] })
+  const kMini = (id,title) => (
+    <div style={{padding:'14px 20px 0'}}>
+      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'12px',cursor:'pointer'}}>
+        <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{title}</span>
+        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+      </div>
+    </div>
+  )
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   const yr = currentYear
@@ -2704,10 +2716,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      <VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>
+      {kMini('ventas','Ventas por mes')}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
 
       {/* Cobrado del año por AÑO DE VENTA — controla ingresos de este año que vienen de ventas anteriores */}
-      {ingresosPorAnioVenta.total>0&&(()=>{
+      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año')}
+      {ingresosPorAnioVenta.total>0&&kOpen('cobrado')&&(()=>{
         const iv=ingresosPorAnioVenta
         const prioColors=['#537281','#99ABB4','#537281','#99ABB4']
         const segs=[{lbl:`Ventas ${selYear}`,val:iv.delAnio,col:C.accent},
@@ -2736,6 +2749,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
       {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
+      {kMini('cobranza','Cobranza')}
+      {kOpen('cobranza')&&(
       <div style={{padding:'16px 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.04em'}}>Cobranza</span>
@@ -2806,10 +2821,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           </div>}
         </div>
         )}
-      </div>
+      </div>)}
 
       {/* Cuentas por pagar a proveedores (costos de terceros) */}
-      {(()=>{
+      {(terceros||[]).length>0&&kMini('cxp','Cuentas por pagar')}
+      {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
         const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
@@ -3060,7 +3076,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       })()}
 
       {/* Equipo (admin) — trazabilidad del equipo limited: caja chica + actividad reciente (Eje 4, 2026-06-28) */}
-      {(()=>{
+      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad')}
+      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kOpen('equipo')&&(()=>{
         const ADMIN_NAMES=['Cristóbal','Erasmo']
         const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
         if(!cajaUsers.length) return null
