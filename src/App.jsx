@@ -18305,12 +18305,6 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], current
                             <span key={et} style={{ fontSize:10.5, color:cur?'#fff':done?'#0F6E56':C.muted, background:cur?C.accent:done?'#E1F5EE':'#EEF1F3', borderRadius:20, padding:'3px 9px', fontWeight:cur?600:400 }}>{done&&<span>✓ </span>}{et}</span>
                           )})}
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10 }}>
-                          <span style={{ fontSize:11, color:C.muted }}>Estado</span>
-                          {[['rojo','#A32D2D','#FCEBEB'],['ambar','#854F0B','#FAEEDA'],['verde','#0F6E56','#E1F5EE']].map(([e,col,bg])=>(
-                            <button key={e} onClick={()=>setEstado(p,e)} style={{ fontSize:10.5, fontWeight:600, color:(p.estado||'verde')===e?'#fff':col, background:(p.estado||'verde')===e?CART_DOT[e]:bg, border:'none', borderRadius:20, padding:'3px 10px', cursor:'pointer' }}>{e==='rojo'?'Rojo':e==='ambar'?'Ámbar':'Verde'}</button>
-                          ))}
-                        </div>
                         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8, flexWrap:'wrap' }}>
                           <span style={{ fontSize:11, color:C.muted }}>Responsable</span>
                           <select value={p.responsable||''} onChange={e=>patch(p,{responsable:e.target.value})} disabled={!esAdmin} style={{ fontSize:11.5, padding:'3px 6px', borderRadius:7, border:`1px solid ${C.border}`, background:'#fff', color:C.text }}>
