@@ -5196,7 +5196,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onCotejar, onCargarXML}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onCotejar, onCargarXML, onReplaceProgramada}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
   const rsDe = b => {
     const nrm=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
@@ -5215,6 +5215,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const [mesesEmitOpen,setMesesEmitOpen] = useState(()=>new Set())   // meses de "Emitidas" abiertos (colapsadas por defecto)
   const [aniosEmitOpen,setAniosEmitOpen] = useState(()=>new Set())   // años de "Emitidas" abiertos (colapsados por defecto)
   const [factOpen,setFactOpen] = useState(()=>new Set())             // facturas emitidas con acciones desplegadas
+  const [emitExp,setEmitExp] = useState(()=>new Set())               // programadas con la comparación "ya emitida" desplegada
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const ufState = useUF()
@@ -5240,6 +5241,15 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
     return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1).map(([y,months])=>{ const flat=Object.values(months).flat(); return { y, months:Object.entries(months).sort((a,z)=>a[0]>z[0]?-1:1).map(([mk,fs])=>[mk, fs.slice().sort((a,b)=>(fecEmis(b)||'').localeCompare(fecEmis(a)||''))]), total:flat.reduce((a,b)=>a+(b.amount||0),0), n:flat.length } })
   })()
 
+  // "Ya emitida": una PROGRAMADA cuyo gemelo EMITIDO (mismo RUT/RS, monto dentro de la deriva de UF, fecha cercana) YA existe
+  // en la facturación (típicamente traído del SII). Conservador: exactamente 1 candidata. Tolerancia = la de reconcileProgramada
+  // (±5%, piso $1.000) que absorbe la variación de UF entre la fecha programada y la de emisión.
+  const _nrmR = r => (r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
+  const _rutsFac = b => { const s=new Set(); const add=r=>{const n=_nrmR(r);if(n)s.add(n)}; add(b.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
+  const _emitidasReales = useMemo(()=> billing.filter(b=>!b.deleted_at&&esEmitida(b)&&(b.billing_type||'')!=='reembolso'&&b.status!=='Anulada').map(e=>({e,ruts:_rutsFac(e),t:new Date(((e.issued_at||e.due||''))+'T12:00').getTime()})), [billing,clientEntities,clients])   // eslint-disable-line
+  const emitidaTwin = p => { const a=p.amount||0; if(!a) return null; const rp=_rutsFac(p); if(!rp.size) return null; const tol=Math.max(a*0.05,1000); const dueP=p.due?new Date(p.due+'T12:00').getTime():null
+    const cands=_emitidasReales.filter(({e,ruts,t})=> String(e.id)!==String(p.id) && Math.abs((e.amount||0)-a)<=tol && [...ruts].some(r=>rp.has(r)) && (!dueP||!t||Math.abs(t-dueP)/86400000<=60))
+    return cands.length===1?cands[0].e:null }
   const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+(b.amount||0),0)
   const emitidasCLP = items.filter(esEmitida).reduce((a,b)=>a+(b.amount||0),0)
   const totalCLP = porFacturarCLP + emitidasCLP
@@ -5330,14 +5340,35 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
       </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
         {porEmitir.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todo emitido este mes ✓</div>}
-        {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
-          <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
-              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}</div>
-              <div style={{fontSize:10,color:C.grisText,marginTop:1}}>devengo {b.due?fmtDate(b.due):'—'}</div>
+        {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); return (
+          <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
+            <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:tw?'pointer':'default'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
+                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}</div>
+                <div style={{fontSize:10,color:C.grisText,marginTop:1}}>devengo {b.due?fmtDate(b.due):'—'}</div>
+              </div>
+              {tw&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:7,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>Ya emitida · N°{folioN(tw.invoice_no)||tw.invoice_no} {exp?'▾':'▸'}</span>}
+              <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,textAlign:'right'}}>{fmt(b.amount)}</div>
             </div>
-            <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,textAlign:'right'}}>{fmt(b.amount)}</div>
+            {tw&&exp&&(()=>{ const dif=Math.abs((tw.amount||0)-(b.amount||0)); return (
+              <div style={{padding:'2px 12px 11px',background:C.bgSoft}}>
+                <div style={{display:'flex',gap:12,padding:'4px 0 6px'}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Programada</div>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                    <div style={{fontSize:10.5,color:C.muted}}>devengo {b.due?fmtDate(b.due):'—'}</div>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>Emitida (en el SII)</div>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text}}>N°{folioN(tw.invoice_no)||tw.invoice_no} · {fmt(tw.amount)}</div>
+                    <div style={{fontSize:10.5,color:C.muted}}>{fmtDate(tw.issued_at||tw.due)} · mismo RUT/RS</div>
+                  </div>
+                </div>
+                <div style={{fontSize:10.5,color:dif>0?C.soonText:C.done,marginBottom:8}}>{dif>0?`Diferencia ${fmt(dif)} — variación de UF entre programación y emisión`:'Mismo monto'}</div>
+                <button onClick={()=>{ setEmitExp(s=>{const n=new Set(s);n.delete(b.id);return n}); onReplaceProgramada(b.id,tw.id) }} style={{height:30,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Conciliar · retirar la programada</button>
+              </div>
+            )})()}
           </div>
         )})}
       </div>
@@ -5744,7 +5775,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha,intent,onIntentDone}) {
+function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,intent,onIntentDone}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
@@ -6843,7 +6874,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
@@ -22205,7 +22236,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='banco'){setOpenConcProp(true);setTab('conciliacion')} else if(id==='cotejarSII'){setBillingIntent('cotejo');setTab('billing')} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
