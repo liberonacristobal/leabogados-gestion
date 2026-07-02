@@ -5184,7 +5184,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onCotejar}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
   const rsDe = b => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); let rs=null; if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null; else if(ents.length===1) rs=ents[0]; return rs?rs.name:(ents.length>1?null:(b.receptor_name||null)) }
   const abrirCli = (e,b) => { if(!onOpenClientFicha||!b.client_id) return; e.stopPropagation(); onOpenClientFicha(b.client_id) }
@@ -5192,6 +5192,8 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const [year,setYear] = useState(String(now.getFullYear()))
   const [month,setMonth] = useState(String(now.getMonth()+1).padStart(2,'0'))
   const [mesesEmitOpen,setMesesEmitOpen] = useState(()=>new Set())   // meses de "Emitidas" abiertos (colapsadas por defecto)
+  const [aniosEmitOpen,setAniosEmitOpen] = useState(()=>new Set())   // años de "Emitidas" abiertos (colapsados por defecto)
+  const [factOpen,setFactOpen] = useState(()=>new Set())             // facturas emitidas con acciones desplegadas
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const ufState = useUF()
@@ -5207,8 +5209,12 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   ,[billing,mesKey])
   const porEmitir = items.filter(b=>!esEmitida(b))   // las Programadas de este mes = las que debo emitir
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
-  // Emitidas (con folio): archivo AGRUPADO POR MES, todas, colapsadas por defecto — no solo el mes seleccionado.
-  const emitidasPorMes = (()=>{ const g={}; billing.filter(b=>!b.deleted_at&&esEmitida(b)&&b.due).forEach(b=>{ const k=(b.due||'').slice(0,7); (g[k]=g[k]||[]).push(b) }); return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1) })()
+  // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
+  const emitidasPorAnio = (()=>{
+    const g={}
+    billing.filter(b=>!b.deleted_at&&esEmitida(b)&&b.due).forEach(b=>{ const y=(b.due||'').slice(0,4), mk=(b.due||'').slice(0,7); (g[y]=g[y]||{}); (g[y][mk]=g[y][mk]||[]).push(b) })
+    return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1).map(([y,months])=>{ const flat=Object.values(months).flat(); return { y, months:Object.entries(months).sort((a,z)=>a[0]>z[0]?-1:1), total:flat.reduce((a,b)=>a+(b.amount||0),0), n:flat.length } })
+  })()
 
   const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+(b.amount||0),0)
   const emitidasCLP = items.filter(esEmitida).reduce((a,b)=>a+(b.amount||0),0)
@@ -5277,22 +5283,14 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         </select>
       </div>
 
-      {/* KPIs */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
-        <div style={{background:'#FEF6EE',borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Por facturar</div>
-          <div style={{fontSize:13,fontWeight:600,color:C.soon}}>{fmt(porFacturarCLP)}</div>
-        </div>
-        <div style={{background:C.greenBg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Emitidas</div>
-          <div style={{fontSize:13,fontWeight:600,color:C.greenText}}>{fmt(emitidasCLP)}</div>
-        </div>
-        <div style={{background:C.azulBg,borderRadius:10,padding:'10px 12px',border:`1px solid ${C.border}`}}>
-          <div style={{fontSize:10,color:C.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:.4}}>Total mes (UF)</div>
-          <div style={{fontSize:13,fontWeight:700,color:C.accent}}>{totalUF!=null?fmtUF(totalUF):'—'}</div>
-          <div style={{marginTop:4}}><UFStamp {...ufState}/></div>
-        </div>
-      </div>
+      {/* Cotejar con el SII: trae del RCV lo emitido y calza con las programadas (reusa el motor de cotejo) */}
+      {onCotejar&&(
+        <button onClick={onCotejar} style={{display:'flex',alignItems:'center',gap:9,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:12,cursor:'pointer',textAlign:'left'}}>
+          <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></svg>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Cotejar con el SII</div><div style={{fontSize:10,color:C.muted}}>trae lo emitido del SII y lo calza con las programadas</div></div>
+          <span style={{color:C.muted,fontSize:16}}>›</span>
+        </button>
+      )}
 
       {/* Por emitir — las Programadas del mes (lo que debo emitir) */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,margin:'0 2px 6px'}}>
@@ -5313,24 +5311,42 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         )})}
       </div>
 
-      {/* Emitidas — con folio (aparecen en el SII), AGRUPADAS Y COLAPSADAS POR MES. Cada una con su estado definido. */}
-      {emitidasPorMes.length>0&&(
+      {/* Emitidas — con folio (aparecen en el SII), COLAPSADAS POR AÑO → MES. Al abrir una factura: conciliar, asignar RS, enviar. */}
+      {emitidasPorAnio.length>0&&(
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Emitidas · por mes</div>
-          {emitidasPorMes.map(([mk,fs])=>{ const open=mesesEmitOpen.has(mk); const yy=mk.slice(0,4), mm=mk.slice(5,7); const total=fs.reduce((a,b)=>a+(b.amount||0),0); return (
-            <div key={mk} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:6}}>
-              <div onClick={()=>setMesesEmitOpen(s=>{ const n=new Set(s); n.has(mk)?n.delete(mk):n.add(mk); return n })} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer',background:C.greenBg}}>
-                <span style={{fontSize:11,fontWeight:700,color:C.greenText,flex:1}}>{MESES[parseInt(mm,10)-1]||mm} {yy} · {fs.length} · {fmt(total)}</span>
-                <span style={{fontSize:12,color:C.greenText}}>{open?'▾':'▸'}</span>
+          <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Emitidas · por año</div>
+          {emitidasPorAnio.map(({y,months,total,n})=>{ const yOpen=aniosEmitOpen.has(y); return (
+            <div key={y} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:6}}>
+              <div onClick={()=>setAniosEmitOpen(s=>{ const nn=new Set(s); nn.has(y)?nn.delete(y):nn.add(y); return nn })} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer',background:C.greenBg}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.greenText,flex:1}}>{y} · {n} · {fmt(total)}</span>
+                <span style={{fontSize:12,color:C.greenText}}>{yOpen?'▾':'▸'}</span>
               </div>
-              {open&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b,respaldoMap[b.id]||0,cartolaHasta); const rs=rsDe(b); return (
-                <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:'#fff'}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div onClick={e=>abrirCli(e,b)} style={{fontSize:12,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
-                    <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{titleCase(rs)}</span>:'sin razón social'} · {b.concept||'—'}</div>
+              {yOpen&&months.map(([mk,fs])=>{ const mOpen=mesesEmitOpen.has(mk); const mm=mk.slice(5,7); const mtot=fs.reduce((a,b)=>a+(b.amount||0),0); return (
+                <div key={mk} style={{borderTop:`1px solid ${C.border}`}}>
+                  <div onClick={()=>setMesesEmitOpen(s=>{ const nn=new Set(s); nn.has(mk)?nn.delete(mk):nn.add(mk); return nn })} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px 8px 20px',cursor:'pointer',background:C.bgSoft}}>
+                    <span style={{fontSize:11,fontWeight:600,color:C.text,flex:1}}>{MESES[parseInt(mm,10)-1]||mm} · {fs.length} · {fmt(mtot)}</span>
+                    <span style={{fontSize:11,color:C.muted}}>{mOpen?'▾':'▸'}</span>
                   </div>
-                  {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
-                  <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
+                  {mOpen&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b,respaldoMap[b.id]||0,cartolaHasta); const rs=rsDe(b); const fo=factOpen.has(b.id); const needConc=est&&(est.key==='sin'||est.key==='sinpago'); return (
+                    <div key={b.id} style={{borderTop:`1px solid ${C.border}`,background:'#fff'}}>
+                      <div onClick={()=>setFactOpen(s=>{ const nn=new Set(s); nn.has(b.id)?nn.delete(b.id):nn.add(b.id); return nn })} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px 9px 20px',cursor:'pointer'}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
+                          <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{titleCase(rs)}</span>:<span style={{color:C.soonText}}>sin razón social</span>} · {b.concept||'—'}</div>
+                        </div>
+                        {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
+                        <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
+                      </div>
+                      {fo&&(
+                        <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'0 12px 10px 20px'}}>
+                          {onEnviar&&<button onClick={()=>onEnviar(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Enviar al cliente</button>}
+                          {onConciliar&&needConc&&<button onClick={()=>onConciliar(clients.find(x=>String(x.id)===String(b.client_id))||null)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Buscar conciliación</button>}
+                          {!rs&&onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Asignar razón social</button>}
+                          {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Ver ficha</button>}
+                        </div>
+                      )}
+                    </div>
+                  )})}
                 </div>
               )})}
             </div>
@@ -6665,7 +6681,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onCotejar={()=>setSiiOpen(true)}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
