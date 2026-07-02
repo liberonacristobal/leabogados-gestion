@@ -2231,11 +2231,14 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
   const kToggle = id => setKpiOpen(p=>{ const a=Array.isArray(p)?p:[]; return a.includes(id)?a.filter(x=>x!==id):[...a,id] })
-  const kMini = (id,title) => (
+  const kMini = (id,title,value,valCol) => (
     <div style={{padding:'14px 20px 0'}}>
-      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'12px',cursor:'pointer'}}>
+      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'12px',cursor:'pointer'}}>
         <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{title}</span>
-        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+        <span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          {value&&!kOpen(id)&&<b style={{fontSize:14,fontWeight:700,color:valCol||C.accent,fontVariantNumeric:'tabular-nums'}}>{value}</b>}
+          <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+        </span>
       </div>
     </div>
   )
@@ -2719,7 +2722,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       {kMini('ventas','Ventas por mes')}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
 
       {/* Cobrado del año por AÑO DE VENTA — controla ingresos de este año que vienen de ventas anteriores */}
-      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año')}
+      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año',fmtShort(ingresosPorAnioVenta.total),C.accent)}
       {ingresosPorAnioVenta.total>0&&kOpen('cobrado')&&(()=>{
         const iv=ingresosPorAnioVenta
         const prioColors=['#537281','#99ABB4','#537281','#99ABB4']
@@ -2749,7 +2752,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
       {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
-      {kMini('cobranza','Cobranza')}
+      {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),C.accent)}
       {kOpen('cobranza')&&(
       <div style={{padding:'16px 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
