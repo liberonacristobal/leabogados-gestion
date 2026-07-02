@@ -129,6 +129,7 @@ const _ICON_PATHS = {
   grid:'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   receipt:'M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1-2-1zM8 9h8M8 13h6',
   user:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  chart:'M3 3v18h18M18 9l-5 5-3-3-3 3',
 }
 const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
 // Sección colapsable con icono — patrón único de la ficha (colapsada por defecto, una línea con resumen; se despliega el detalle).
@@ -2231,14 +2232,13 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const [kpiOpen,setKpiOpen] = usePersistedState('dash_kpi_open',[])
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
   const kToggle = id => setKpiOpen(p=>{ const a=Array.isArray(p)?p:[]; return a.includes(id)?a.filter(x=>x!==id):[...a,id] })
-  const kMini = (id,title,value,valCol) => (
+  const kMini = (id,title,value,valCol,icon) => (
     <div style={{padding:'14px 20px 0'}}>
-      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'12px',cursor:'pointer'}}>
-        <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{title}</span>
-        <span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-          {value&&!kOpen(id)&&<b style={{fontSize:14,fontWeight:700,color:valCol||C.accent,fontVariantNumeric:'tabular-nums'}}>{value}</b>}
-          <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
-        </span>
+      <div onClick={()=>kToggle(id)} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
+        {icon&&<span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={17} c={C.accent}/></span>}
+        <span style={{flex:1,fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>{title}</span>
+        {value&&!kOpen(id)&&<b style={{fontSize:14,fontWeight:700,color:valCol||C.accent,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{value}</b>}
+        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:kOpen(id)?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
       </div>
     </div>
   )
@@ -2719,10 +2719,10 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
         )
       })()}
 
-      {kMini('ventas','Ventas por mes')}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
+      {kMini('ventas','Ventas por mes',null,null,'chart')}{kOpen('ventas')&&<VentasPorMes sales={salesYr.length?sales:sales} ufHoy={ufHoy} moneda={dashMoneda} clients={clients} onOpenClientFicha={onOpenClientFicha}/>}
 
       {/* Cobrado del año por AÑO DE VENTA — controla ingresos de este año que vienen de ventas anteriores */}
-      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año',fmtShort(ingresosPorAnioVenta.total),C.accent)}
+      {ingresosPorAnioVenta.total>0&&kMini('cobrado','Cobrado del año',fmtShort(ingresosPorAnioVenta.total),C.accent,'check')}
       {ingresosPorAnioVenta.total>0&&kOpen('cobrado')&&(()=>{
         const iv=ingresosPorAnioVenta
         const prioColors=['#537281','#99ABB4','#537281','#99ABB4']
@@ -2752,7 +2752,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 
 
       {/* Cobranza — un Por cobrar, dos lentes: Antigüedad (aging) ⇄ Proyección (flujo). Antes eran 2 secciones que repetían "Por cobrar". */}
-      {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),C.accent)}
+      {kMini('cobranza','Cobranza',fmtShort(totalPorCobrar),C.accent,'receipt')}
       {kOpen('cobranza')&&(
       <div style={{padding:'16px 20px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -2827,7 +2827,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       </div>)}
 
       {/* Cuentas por pagar a proveedores (costos de terceros) */}
-      {(terceros||[]).length>0&&kMini('cxp','Cuentas por pagar')}
+      {(terceros||[]).length>0&&kMini('cxp','Cuentas por pagar',null,null,'wallet')}
       {(terceros||[]).length>0&&kOpen('cxp')&&(()=>{
         if((terceros||[]).length===0) return null
         const provById = id => (proveedores||[]).find(p=>String(p.id)===String(id))
@@ -3079,7 +3079,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
       })()}
 
       {/* Equipo (admin) — trazabilidad del equipo limited: caja chica + actividad reciente (Eje 4, 2026-06-28) */}
-      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad')}
+      {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kMini('equipo','Equipo · trazabilidad',null,null,'users')}
       {[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].some(u=>!['Cristóbal','Erasmo'].includes(u))&&kOpen('equipo')&&(()=>{
         const ADMIN_NAMES=['Cristóbal','Erasmo']
         const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))].filter(u=>!ADMIN_NAMES.includes(u)).sort((a,b)=>a.localeCompare(b,'es'))
