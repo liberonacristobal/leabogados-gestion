@@ -6176,7 +6176,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <button onClick={()=>{setFilter(filter==='checklist'?'resumen':'checklist');clearSel&&clearSel()}} title='Facturas a emitir este mes + Excel' style={chipBtn(filter==='checklist'?'primary':'soft')}>{filter==='checklist'?'← Volver':'Facturas del mes'}</button>
+            {filter==='checklist'&&<button onClick={()=>{setFilter('resumen');clearSel&&clearSel()}} title='Volver al resumen' style={chipBtn('primary')}>← Volver</button>}
             {filter==='resumen'&&<button onClick={()=>{setFilter('clientes');clearSel&&clearSel()}} title='Detalle por cliente' style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:'0.5px solid '+C.accent,background:'#fff',color:C.accent}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>Por cliente</button>}
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
@@ -6482,6 +6482,21 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 </div>
               </div>
             </div>
+            {/* 2 tarjetas mini: Facturas del mes (por emitir del mes) + Revisar duplicados */}
+            {(()=>{ const mesAct=new Date().toISOString().slice(0,7); const pemMes=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&String(b.due||'').startsWith(mesAct)); const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0); const dupN=yaFacturadasIds.size; return (
+              <div style={{display:'grid',gridTemplateColumns:dupN>0?'1fr 1fr':'1fr',gap:8,marginBottom:10}}>
+                <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'11px 12px',cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></svg><span style={{fontSize:11,fontWeight:600,color:C.accent}}>Facturas del mes</span></div>
+                  <div style={{fontSize:17,fontWeight:700,color:C.accent,marginTop:4}}>{pemN}</div>
+                  <div style={{fontSize:9.5,color:C.muted}}>por emitir{pemTot?` · ${fmtShort(pemTot)}`:''}</div>
+                </div>
+                {dupN>0&&<div onClick={()=>onConciliar&&onConciliar()} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'11px 12px',cursor:'pointer'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></svg><span style={{fontSize:11,fontWeight:600,color:C.soonText}}>Revisar duplicados</span></div>
+                  <div style={{fontSize:17,fontWeight:700,color:C.soonText,marginTop:4}}>{dupN}</div>
+                  <div style={{fontSize:9.5,color:C.muted}}>ya tienen factura real</div>
+                </div>}
+              </div>
+            )})()}
             {(()=>{ const rech=(billing||[]).filter(b=>!b.deleted_at&&/rech/i.test(b.dte_estado||'')); if(!rech.length) return null; return (
               <div onClick={()=>go('clientes')} title='El SII rechazó estas facturas electrónicas — revísalas y vuelve a emitir' style={{display:'flex',alignItems:'center',gap:11,background:C.overdueBg,borderLeft:`3px solid ${C.overdue}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.overdue} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg></span>
@@ -6511,11 +6526,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </span>
               {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{fontSize:11,fontWeight:600,color:C.soonText,border:'1px solid #FAC775',background:'#FFF8E1',borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>Sin año · {sinAnio.length}</span>}
             </div>
-            {yaFactTot>0&&<div onClick={()=>onConciliar&&onConciliar()} title='Estas cuotas ya tienen su factura real emitida — reemplázalas para no dejarlas en "por facturar"' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'9px 12px',marginTop:10,cursor:'pointer'}}>
-              <span style={{width:26,height:26,borderRadius:7,background:C.ambarBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/><path d='m9 12 2 2 4-4'/></svg></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Revisar {yaFacturadasIds.size} posible{yaFacturadasIds.size!==1?'s':''} duplicado{yaFacturadasIds.size!==1?'s':''}</div><div style={{fontSize:10,color:C.muted,marginTop:1}}>ya tienen su factura real · reemplázalas ({fmt(yaFactTot)})</div></div>
-              <span style={{color:C.muted,fontSize:16}}>›</span>
-            </div>}
             {(()=>{
               const emitidas=(billing||[]).filter(b=>b.dte_track_id&&!b.deleted_at).sort((a,b)=>(b.dte_emitido_at||'')>(a.dte_emitido_at||'')?1:-1)
               const enProd=emitidas.some(b=>b.dte_ambiente==='prod')
