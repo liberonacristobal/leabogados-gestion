@@ -18913,8 +18913,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const deltaDias = iso => (payT&&iso) ? (payT - new Date(iso.slice(0,10)+'T12:00').getTime())/86400000 : null
     let xs = facturasParaMov(mov).filter(b=> !(exclude&&exclude.has(b.id)))
       .map(b=>({b,saldo:saldoFactura(b),delta:deltaDias(b.issued_at)}))
-      // El pago cae hasta ~60 días DESPUÉS de emitir la factura (capta pagos tardíos; excluye facturas futuras y las muy lejanas).
-      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-3 && x.delta<=90)))
+      // Ventana AMPLIA porque hay pagos MUY tardíos (clientes que pagan facturas de meses/años atrás): la factura se emite
+      // ANTES del pago. El candado real es monto EXACTO + RUT; la fecha solo acota (evita calzar con una factura del mismo
+      // monto de una época totalmente distinta) y luego desempata. -60 días = anticipo; +760 días ≈ hasta ~25 meses tarde.
+      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-60 && x.delta<=760)))
     // Calce EXACTO en pesos (no hay comisiones bancarias → TOL=0): solo facturas con el monto idéntico.
     const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
     return xs.sort((a,b)=>   // 1) RS del pagador, 2) cercanía por DÍA emisión→pago, 3) monto
@@ -21765,13 +21767,21 @@ export default function App() {
   const _siiFetch = async(body)=>{ const {data:{session}}=await supabase.auth.getSession(); if(!session) throw new Error('Sesión expirada. Vuelve a entrar.'); const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)}); const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d }
   // Buscar en el SII los meses de un set de pagos (descalces): sincroniza cada período con el RCV (reusa el sync sancionado,
   // que auto-aplica los calces únicos Programada→Pendiente y reporta las huérfanas). Devuelve un resumen. onProgress(hechos,total).
-  const handleBuscarSII = useCallback(async(meses, onProgress)=>{
-    const uniq=[...new Set((meses||[]).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort()
-    if(!uniq.length) return {error:'Sin meses para buscar.'}
+  // Busca en el SII (RCV) para calzar pagos: como los pagos son ANTIGUOS y la factura suele ser de ANTES del pago,
+  // no basta el mes del pago — hay que barrer la ÉPOCA del pago y meses hacia atrás. Genera el rango
+  // [ (mes más antiguo de los pagos − backMonths) … mes más nuevo de los pagos ] y sincroniza cada período.
+  const handleBuscarSII = useCallback(async(meses, onProgress, backMonths=18)=>{
+    const base=[...new Set((meses||[]).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort()
+    if(!base.length) return {error:'Sin meses para buscar.'}
+    const toIdx=m=>{ const [y,mm]=m.split('-').map(Number); return y*12+(mm-1) }
+    const fromIdx=i=>`${Math.floor(i/12)}-${String((i%12)+1).padStart(2,'0')}`
+    let lo=toIdx(base[0])-backMonths, hi=toIdx(base[base.length-1])
+    if(hi-lo>36) lo=hi-36   // tope de seguridad: no más de ~37 meses de barrido
+    const periodos=[]; for(let i=lo;i<=hi;i++) periodos.push(fromIdx(i))
     let aplicadas=0, huerfanas=0, err=null, i=0
-    for(const mes of uniq){ try{ const d=await _siiFetch({periodo:mes}); aplicadas+=(d.actualizadas?.length||0); huerfanas+=(d.sinMatch?.length||0) }catch(e){ err=e.message } i++; onProgress&&onProgress(i,uniq.length,mes) }
+    for(const mes of periodos){ try{ const d=await _siiFetch({periodo:mes}); aplicadas+=(d.actualizadas?.length||0); huerfanas+=(d.sinMatch?.length||0) }catch(e){ err=e.message } i++; onProgress&&onProgress(i,periodos.length,mes) }
     try{ const {data:nb}=await getBilling(); if(nb)setBilling(nb) }catch(_){}
-    return {meses:uniq.length, aplicadas, huerfanas, err}
+    return {meses:periodos.length, aplicadas, huerfanas, err}
   },[])
   // Paso 1: arma la vista previa (dryRun, no envía) y abre el modal con folio/receptor/total + Ver PDF.
   const handleEmitirDTE=useCallback(async(bill, entity)=>{
