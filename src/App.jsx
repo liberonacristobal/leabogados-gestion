@@ -5184,7 +5184,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onCotejar}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onCotejar, onCargarXML}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
   const rsDe = b => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); let rs=null; if(b.entity_id) rs=ents.find(e=>e.id===b.entity_id)||null; else if(ents.length===1) rs=ents[0]; return rs?rs.name:(ents.length>1?null:(b.receptor_name||null)) }
   const abrirCli = (e,b) => { if(!onOpenClientFicha||!b.client_id) return; e.stopPropagation(); onOpenClientFicha(b.client_id) }
@@ -5283,11 +5283,18 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         </select>
       </div>
 
-      {/* Cotejar con el SII: trae del RCV lo emitido y calza con las programadas (reusa el motor de cotejo) */}
+      {/* SII: cotejar (RCV online) + cargar el XML del respaldo (MIPYME) para generar el PDF y adjuntarlo */}
       {onCotejar&&(
-        <button onClick={onCotejar} style={{display:'flex',alignItems:'center',gap:9,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:12,cursor:'pointer',textAlign:'left'}}>
+        <button onClick={onCotejar} style={{display:'flex',alignItems:'center',gap:9,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:8,cursor:'pointer',textAlign:'left'}}>
           <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></svg>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Cotejar con el SII</div><div style={{fontSize:10,color:C.muted}}>trae lo emitido del SII y lo calza con las programadas</div></div>
+          <span style={{color:C.muted,fontSize:16}}>›</span>
+        </button>
+      )}
+      {onCargarXML&&(
+        <button onClick={onCargarXML} style={{display:'flex',alignItems:'center',gap:9,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:12,cursor:'pointer',textAlign:'left'}}>
+          <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></svg>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Cargar XML del SII</div><div style={{fontSize:10,color:C.muted}}>sube el archivo respaldo de MIPYME → genera el PDF y lo adjunta</div></div>
           <span style={{color:C.muted,fontSize:16}}>›</span>
         </button>
       )}
@@ -6691,7 +6698,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onCotejar={()=>setSiiOpen(true)}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
