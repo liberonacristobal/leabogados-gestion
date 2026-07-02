@@ -5400,7 +5400,7 @@ function SiiDots(){
 const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const MESES_LG = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes}) {
+function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes,onOpenClientFicha}) {
   const hoy = new Date()
   const [mes,setMes] = useState((/^\d{4}-\d{2}$/.test(initialMes||'')?initialMes:`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`))
   const [loading,setLoading] = useState(false)
@@ -5599,17 +5599,18 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 return <>
                 {/* 1. Confirma el cliente — reconocidas por RUT: ves a quién va antes de asignar */}
                 {reco.length>0&&<>
-                  <Hdr label='Confirma el cliente' color={C.greenText} bg='#E1F5EE' border='#9FE1CB' right={nReco>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Asignar las {nReco}</button>}/>
+                  <Hdr label='Confirma el cliente' color={C.greenText} bg='#E1F5EE' border='#9FE1CB' right={nReco>1&&<button onClick={ingresarTodas} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Cargar las {nReco}</button>}/>
+                  <div style={{fontSize:10.5,color:C.muted,padding:'7px 20px 1px',lineHeight:1.45}}>Están en el SII pero aún no en tu facturación. Reconocí el cliente por el RUT — al <b>cargar</b> se crea la factura bajo ese cliente.</div>
                   {reco.map((it,i)=>{ const ya=ingresadas[it.folio]; const cli=ya?null:resolverCliente(it.rut,it.receptor); return <Fila key={i}>
                     {bigDate(isoFecha(it.fechaEmision),C.muted)}
                     <div style={{minWidth:0,marginLeft:4,flex:1}}>
                       <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||'—'}</div>
                       <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
                       {ya
-                        ? <div style={{fontSize:11,fontWeight:600,color:ya.cliente?C.greenText:C.soonText,marginTop:2}}>{ya.cliente?`✓ Asignada a ${ya.cliente}`:'Ingresada · falta cliente'}</div>
-                        : <div style={{fontSize:11,color:C.greenText,marginTop:2}}>→ se asigna a <b>{cli?.name}</b></div>}
+                        ? <div style={{fontSize:11,fontWeight:600,color:ya.cliente?C.greenText:C.soonText,marginTop:2}}>{ya.cliente?`✓ Cargada a ${ya.cliente}`:'Cargada · falta cliente'}</div>
+                        : <div style={{fontSize:11,color:C.done,marginTop:2}}>Cliente: {cli&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(cli.id);onClose&&onClose()}} style={{color:C.accent,fontWeight:700,cursor:'pointer',textDecoration:'underline'}}>{cli.name} ›</span>:<b style={{color:C.greenText}}>{cli?.name}</b>}</div>}
                     </div>
-                    {!ya&&<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:26,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1,marginLeft:8}}>{ingresando===it.folio?'…':'Asignar'}</button>}
+                    {!ya&&<button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} title='Crea esta factura del SII en tu facturación, bajo el cliente reconocido' style={{height:26,padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',flexShrink:0,opacity:ingresando===it.folio?.5:1,marginLeft:8}}>{ingresando===it.folio?'…':'Cargar'}</button>}
                     {ya&&<span style={{fontSize:14,color:C.greenText,marginLeft:8,flexShrink:0}}>✓</span>}
                   </Fila> })}
                 </>}
@@ -6310,7 +6311,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </div>
           </div>
         </div>
-        {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes}/>}
+        {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
