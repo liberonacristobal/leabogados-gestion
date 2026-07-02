@@ -10674,6 +10674,43 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               <button onClick={()=>{setVerTodos(v=>!v);setSaldoFilter('todos');setQ('');setVerArchivadosG(false);setRespFilter(null)}} style={{fontSize:12,fontWeight:600,color:verTodos?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Todos</button>
               {archivadosG>0&&<><span style={{color:C.border,fontSize:12}}>·</span><button onClick={()=>setVerArchivadosG(v=>!v)} style={{fontSize:12,fontWeight:600,color:verArchivadosG?C.accent:C.muted,background:'none',border:'none',cursor:'pointer',flexShrink:0,padding:'0 4px'}}>Archivados · {archivadosG}</button></>}
             </div>
+            {respCobranza.length>1&&(
+              <div style={{marginBottom:8}}>
+                {respFilter&&<div style={{display:'flex',marginBottom:6}}><button onClick={()=>setRespFilter(null)} style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button></div>}
+                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                  {respCobranza.map(([k,o],i)=>{ const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=amt<0?C.overdueText:C.greenText; const a=Math.abs(amt),sg=amt<0?'-':''; const amtK = a>=1e6?`$${sg}${(a/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}M`:(a>=1e3?`$${sg}${Math.round(a/1e3)}K`:fmt(amt)); return (
+                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 13px',cursor:'pointer',background:on?pc.bg:'#fff',borderTop:i?`0.5px solid ${C.bgWarm}`:'none'}}>
+                      {sin?<span style={{fontSize:13,fontWeight:600,color:C.text}}>Oficina</span>:<span style={{fontSize:11,fontWeight:600,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{k}</span>}
+                      <span style={{fontSize:10,color:C.done}}>· {n}</span>
+                      <span style={{flex:1}}></span>
+                      <span style={{fontSize:14,fontWeight:700,color:col}}>{amtK}</span>
+                    </div>
+                  )})}
+                </div>
+              </div>
+            )}
+            {(()=>{
+              const reemb=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&!r.anulada_at)
+              const reembTot=reemb.reduce((a,r)=>a+(r.total||0),0)
+              const nota=notaLiquidaciones.filter(r=>!r.anulada_at)
+              const notaTot=nota.reduce((a,r)=>a+(r.total||0),0)
+              if(reemb.length===0&&nota.length===0) return null
+              return (<div style={{marginBottom:10}}>
+                <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 7px'}}>Historial</div>
+                <div style={{display:'flex',gap:8}}>
+                  <div onClick={()=>{setHistTab('clientes');setShowHistorial(true)}} className='lf-kpi' style={{flex:1,minWidth:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',cursor:'pointer'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='receipt' s={16} c={C.accent}/></span><span style={{fontSize:12,fontWeight:700,color:C.text}}>Reembolsos</span></div>
+                    <div style={{fontSize:17,fontWeight:700,color:C.accent,lineHeight:1.1}}>{fmtShort(reembTot)}</div>
+                    <div style={{fontSize:9,color:C.done,marginTop:1}}>{reemb.length} rendició{reemb.length===1?'n':'nes'} a clientes</div>
+                  </div>
+                  <div onClick={()=>{setHistTab('notaria');setShowHistorial(true)}} className='lf-kpi' style={{flex:1,minWidth:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',cursor:'pointer'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{width:30,height:30,borderRadius:8,background:C.tealBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={16} c={C.tealText}/></span><span style={{fontSize:12,fontWeight:700,color:C.text}}>Notaría</span></div>
+                    <div style={{fontSize:17,fontWeight:700,color:C.tealText,lineHeight:1.1}}>{fmtShort(notaTot)}</div>
+                    <div style={{fontSize:9,color:C.done,marginTop:1}}>{nota.length} liquidació{nota.length===1?'n':'nes'}</div>
+                  </div>
+                </div>
+              </div>)
+            })()}
             {(()=>{
               const nRev = orphans.length+revN(revNoActivo)+revN(revOcasional)
               const notaTot = notariaPend.reduce((a,e)=>a+(e.amount||0),0)
@@ -10709,21 +10746,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   </div>
                 ))}
                 {rendirPend.length>4&&<div style={{fontSize:10,color:C.coralText,marginTop:7,textAlign:'center'}}>+{rendirPend.length-4} cliente{rendirPend.length-4!==1?'s':''} más</div>}
-              </div>
-            )}
-            {respCobranza.length>1&&(
-              <div style={{marginBottom:8}}>
-                {respFilter&&<div style={{display:'flex',marginBottom:6}}><button onClick={()=>setRespFilter(null)} style={{marginLeft:'auto',fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>ver todos</button></div>}
-                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-                  {respCobranza.map(([k,o],i)=>{ const sin=k==='__sin__'; const pc=sin?{bg:C.bgWarm,color:C.grisText}:personChip(k); const on=respFilter===k; const amt=verPos?o.posAmt:o.negAmt; const n=verPos?o.posN:o.negN; const col=amt<0?C.overdueText:C.greenText; const a=Math.abs(amt),sg=amt<0?'-':''; const amtK = a>=1e6?`$${sg}${(a/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}M`:(a>=1e3?`$${sg}${Math.round(a/1e3)}K`:fmt(amt)); return (
-                    <div key={k} onClick={()=>{setRespFilter(on?null:k);setVerTodos(false)}} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 13px',cursor:'pointer',background:on?pc.bg:'#fff',borderTop:i?`0.5px solid ${C.bgWarm}`:'none'}}>
-                      {sin?<span style={{fontSize:13,fontWeight:600,color:C.text}}>Oficina</span>:<span style={{fontSize:11,fontWeight:600,background:pc.bg,color:pc.color,borderRadius:10,padding:'2px 10px'}}>{k}</span>}
-                      <span style={{fontSize:10,color:C.done}}>· {n}</span>
-                      <span style={{flex:1}}></span>
-                      <span style={{fontSize:14,fontWeight:700,color:col}}>{amtK}</span>
-                    </div>
-                  )})}
-                </div>
               </div>
             )}
             {(()=>{
@@ -10765,28 +10787,6 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                   )}
                 </div>
               )
-            })()}
-            {(()=>{
-              const reemb=(rendiciones||[]).filter(r=>r.tipo==='cliente'&&!r.anulada_at)
-              const reembTot=reemb.reduce((a,r)=>a+(r.total||0),0)
-              const nota=notaLiquidaciones.filter(r=>!r.anulada_at)
-              const notaTot=nota.reduce((a,r)=>a+(r.total||0),0)
-              if(reemb.length===0&&nota.length===0) return null
-              return (<div style={{marginTop:12}}>
-                <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 7px'}}>Historial</div>
-                <div style={{display:'flex',gap:8}}>
-                  <div onClick={()=>{setHistTab('clientes');setShowHistorial(true)}} className='lf-kpi' style={{flex:1,minWidth:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',cursor:'pointer'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='receipt' s={16} c={C.accent}/></span><span style={{fontSize:12,fontWeight:700,color:C.text}}>Reembolsos</span></div>
-                    <div style={{fontSize:17,fontWeight:700,color:C.accent,lineHeight:1.1}}>{fmtShort(reembTot)}</div>
-                    <div style={{fontSize:9,color:C.done,marginTop:1}}>{reemb.length} rendició{reemb.length===1?'n':'nes'} a clientes</div>
-                  </div>
-                  <div onClick={()=>{setHistTab('notaria');setShowHistorial(true)}} className='lf-kpi' style={{flex:1,minWidth:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',cursor:'pointer'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{width:30,height:30,borderRadius:8,background:C.tealBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={16} c={C.tealText}/></span><span style={{fontSize:12,fontWeight:700,color:C.text}}>Notaría</span></div>
-                    <div style={{fontSize:17,fontWeight:700,color:C.tealText,lineHeight:1.1}}>{fmtShort(notaTot)}</div>
-                    <div style={{fontSize:9,color:C.done,marginTop:1}}>{nota.length} liquidació{nota.length===1?'n':'nes'}</div>
-                  </div>
-                </div>
-              </div>)
             })()}
             {isAdmin&&!q.trim()&&!respFilter&&(()=>{ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(!ofi) return null
               const gOfi=(expenses||[]).filter(e=>String(e.client_id)===String(ofi.id)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&!e.personal_de)
