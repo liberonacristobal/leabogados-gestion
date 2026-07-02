@@ -18545,7 +18545,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
 }
 
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
-function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII}){
+function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII}){
   // Capa 2 — RUT conocidos para el tag "quién es"
   const EQUIPO_RUT = { '198897337':'Martín', '211389281':'Martina' }   // Rodrigo (rd@): falta su RUT real; 9.619.443-9 era del CLIENTE Rodrigo Macho
   const SOCIO_RUT  = { '156213209':'Cristóbal', '153717338':'Erasmo' }
@@ -19074,6 +19074,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [loteOpen,setLoteOpen] = useState(false)
   const [loteBusy,setLoteBusy] = useState(false)
   const [loteProg,setLoteProg] = useState(0)
+  const [siiBuscando,setSiiBuscando] = useState(null)   // {hechos,total,mes} mientras busca en el SII
+  const [siiResumen,setSiiResumen] = useState(null)     // resultado del último "Buscar todo en el SII"
+  const buscarTodoSII = async(movsSinFac)=>{
+    if(!onBuscarSII||siiBuscando) return
+    const meses=[...new Set((movsSinFac||[]).map(m=>String(m.fecha||'').slice(0,7)).filter(mm=>/^\d{4}-\d{2}$/.test(mm)))]
+    if(!meses.length) return
+    if(!(await appConfirm(`Buscar en el SII los ${meses.length} mes${meses.length!==1?'es':''} de estos pagos. Trae/actualiza las facturas emitidas y sugiere el calce. ¿Seguir?`))) return
+    setSiiResumen(null); setSiiBuscando({hechos:0,total:meses.length,mes:meses[0]})
+    const r=await onBuscarSII(meses,(hechos,total,mes)=>setSiiBuscando({hechos,total,mes}))
+    setSiiBuscando(null); setSiiResumen(r||null)
+  }
   const conciliarLote = async(exactos)=>{
     if(loteBusy||!exactos.length) return
     if(!(await appConfirm(`Conciliar ${exactos.length} abono${exactos.length!==1?'s':''} con su factura (calce exacto en pesos, mismo RUT). Es reversible. ¿Seguir?`))) return
@@ -19841,9 +19852,11 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 {sinFac.length>0&&<div style={{marginTop:9,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
                     <span style={{fontSize:10,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.3}}>Sin factura · {sinFac.length}</span>
-                    {onCotejarSII&&<button onClick={onCotejarSII} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Traer del SII</button>}
+                    {onBuscarSII&&<button onClick={()=>buscarTodoSII(sinFac)} disabled={!!siiBuscando} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.azulInfo,border:'none',borderRadius:8,padding:'5px 12px',cursor:siiBuscando?'default':'pointer',opacity:siiBuscando?.6:1}}>{siiBuscando?`Buscando ${siiBuscando.hechos}/${siiBuscando.total}…`:'Buscar todo en el SII'}</button>}
                   </div>
-                  <div style={{fontSize:9.5,color:C.muted,marginBottom:4}}>no están en la app — busca la factura en el SII del mes del pago (incluye antiguas) y luego se concilian</div>
+                  <div style={{fontSize:9.5,color:C.muted,marginBottom:4}}>no están en la app — busca en el SII los meses de estos pagos y sugiere el calce (incluye antiguas)</div>
+                  {siiBuscando&&<div style={{margin:'2px 0 6px'}}><div style={{height:5,background:C.border,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.round(siiBuscando.hechos/Math.max(1,siiBuscando.total)*100)}%`,background:C.azulInfo,transition:'width .3s'}}/></div><div style={{fontSize:9,color:C.muted,marginTop:3}}>sincronizando {siiBuscando.mes}…</div></div>}
+                  {siiResumen&&!siiBuscando&&<div style={{fontSize:9.5,color:siiResumen.err?C.overdue:C.greenText,background:siiResumen.err?C.overdueBg:C.greenBg,borderRadius:7,padding:'5px 9px',marginBottom:6}}>{siiResumen.err?`No se pudo: ${siiResumen.err}`:`Listo · ${siiResumen.meses} mes(es) · ${siiResumen.aplicadas} calzada(s)${siiResumen.huerfanas?` · ${siiResumen.huerfanas} sin cargar (revisar en Cotejar SII)`:''}. Las que calzan ya aparecen como sugerencia abajo.`}</div>}
                   {sinFac.slice(0,12).map(m=>{ const mesPago=String(m.fecha||'').slice(0,7); return (
                     <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
                       <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b>{m.rut_contraparte?<span style={{color:C.muted}}> · {m.rut_contraparte}</span>:''} <span style={{color:C.muted}}>· {fmtM(m.monto)}</span></span>
@@ -21740,6 +21753,16 @@ export default function App() {
   const [emitirPreview,setEmitirPreview] = useState(null)   // vista previa de emisión DTE (folio/receptor/total + Ver PDF) antes de enviar
   const [emitirBusy,setEmitirBusy] = useState(false)
   const _siiFetch = async(body)=>{ const {data:{session}}=await supabase.auth.getSession(); if(!session) throw new Error('Sesión expirada. Vuelve a entrar.'); const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)}); const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d }
+  // Buscar en el SII los meses de un set de pagos (descalces): sincroniza cada período con el RCV (reusa el sync sancionado,
+  // que auto-aplica los calces únicos Programada→Pendiente y reporta las huérfanas). Devuelve un resumen. onProgress(hechos,total).
+  const handleBuscarSII = useCallback(async(meses, onProgress)=>{
+    const uniq=[...new Set((meses||[]).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort()
+    if(!uniq.length) return {error:'Sin meses para buscar.'}
+    let aplicadas=0, huerfanas=0, err=null, i=0
+    for(const mes of uniq){ try{ const d=await _siiFetch({periodo:mes}); aplicadas+=(d.actualizadas?.length||0); huerfanas+=(d.sinMatch?.length||0) }catch(e){ err=e.message } i++; onProgress&&onProgress(i,uniq.length,mes) }
+    try{ const {data:nb}=await getBilling(); if(nb)setBilling(nb) }catch(_){}
+    return {meses:uniq.length, aplicadas, huerfanas, err}
+  },[])
   // Paso 1: arma la vista previa (dryRun, no envía) y abre el modal con folio/receptor/total + Ver PDF.
   const handleEmitirDTE=useCallback(async(bill, entity)=>{
     try{
@@ -21994,7 +22017,7 @@ export default function App() {
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}}/>}
+            {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
