@@ -5227,10 +5227,13 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso')   // las Programadas de este mes = las que debo emitir (los reembolsos NUNCA se facturan)
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
   // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
+  // Emitidas: agrupar y ordenar por FECHA DE EMISIÓN (issued_at), no por vencimiento — así una factura emitida en julio
+  // con vencimiento en agosto NO aparece bajo agosto. Orden nuevo→antiguo dentro de cada mes (regla de listas).
+  const fecEmis = b => b.issued_at || b.due || ''
   const emitidasPorAnio = (()=>{
     const g={}
-    billing.filter(b=>!b.deleted_at&&esEmitida(b)&&b.due).forEach(b=>{ const y=(b.due||'').slice(0,4), mk=(b.due||'').slice(0,7); (g[y]=g[y]||{}); (g[y][mk]=g[y][mk]||[]).push(b) })
-    return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1).map(([y,months])=>{ const flat=Object.values(months).flat(); return { y, months:Object.entries(months).sort((a,z)=>a[0]>z[0]?-1:1), total:flat.reduce((a,b)=>a+(b.amount||0),0), n:flat.length } })
+    billing.filter(b=>!b.deleted_at&&esEmitida(b)&&fecEmis(b)).forEach(b=>{ const d=fecEmis(b); const y=d.slice(0,4), mk=d.slice(0,7); (g[y]=g[y]||{}); (g[y][mk]=g[y][mk]||[]).push(b) })
+    return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1).map(([y,months])=>{ const flat=Object.values(months).flat(); return { y, months:Object.entries(months).sort((a,z)=>a[0]>z[0]?-1:1).map(([mk,fs])=>[mk, fs.slice().sort((a,b)=>(fecEmis(b)||'').localeCompare(fecEmis(a)||''))]), total:flat.reduce((a,b)=>a+(b.amount||0),0), n:flat.length } })
   })()
 
   const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+(b.amount||0),0)
@@ -5353,7 +5356,8 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                   </div>
                   {mOpen&&fs.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const est=estadoFacturaLabel(b,respaldoMap[b.id]||0,cartolaHasta); const rs=rsDe(b); const fo=factOpen.has(b.id); const needConc=est&&(est.key==='sin'||est.key==='sinpago'); return (
                     <div key={b.id} style={{borderTop:`1px solid ${C.border}`,background:'#fff'}}>
-                      <div onClick={()=>setFactOpen(s=>{ const nn=new Set(s); nn.has(b.id)?nn.delete(b.id):nn.add(b.id); return nn })} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px 9px 20px',cursor:'pointer'}}>
+                      <div onClick={()=>setFactOpen(s=>{ const nn=new Set(s); nn.has(b.id)?nn.delete(b.id):nn.add(b.id); return nn })} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 9px 14px',cursor:'pointer'}}>
+                        {bigDate(fecEmis(b),C.greenText)}
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
                           <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{rsDisplay(rs)}</span>:<span style={{color:C.soonText}}>sin razón social</span>} · {b.concept||'—'}</div>
@@ -5437,8 +5441,8 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
         amount: it.monto,
         status: 'Pendiente',
         invoice_no: String(it.folio),
-        issued_at: it.fechaEmision,
-        due: dueFromIssued(it.fechaEmision),
+        issued_at: isoFecha(it.fechaEmision)||it.fechaEmision,   // normaliza DD/MM/YYYY→ISO: sin esto Postgres (datestyle MDY) puede leer 08/07 como 7-ago
+        due: dueFromIssued(isoFecha(it.fechaEmision)||it.fechaEmision),
         billing_type: 'honorarios',
         sii_tipo_dte: it.tipoDte||null,
         sii_synced_at: new Date().toISOString(),
@@ -21901,7 +21905,8 @@ export default function App() {
     if(!cli && row.rut){ const ce=clientEntities.find(e=>nr(e.rut)===nr(row.rut)); cli=(ce&&clients.find(c=>c.id===ce.client_id))||clients.find(c=>nr(c.rut)===nr(row.rut))||null }
     let created=null
     try{
-      created=await upsertBilling({ client_id:cli?.id||null, concept:'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:row.monto, status:'Pendiente', invoice_no:String(row.folio), issued_at:row.fechaEmision, due:dueFromIssued(row.fechaEmision), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, sii_synced_at:new Date().toISOString(), notes:null })
+      const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(row.fechaEmision)   // DD/MM/YYYY→ISO
+      created=await upsertBilling({ client_id:cli?.id||null, concept:'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:row.monto, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, sii_synced_at:new Date().toISOString(), notes:null })
       if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut'}) }catch(_){}}
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
