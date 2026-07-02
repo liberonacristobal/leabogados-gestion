@@ -6543,16 +6543,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             </div>
             {/* 2 tarjetas mini: Facturas del mes (por emitir del mes) + Revisar duplicados */}
             {(()=>{ const mesAct=new Date().toISOString().slice(0,7); const pemMes=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&String(b.due||'').startsWith(mesAct)); const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0); const dupN=yaFacturadasIds.size; return (
-              <div style={{display:'grid',gridTemplateColumns:dupN>0?'1fr 1fr':'1fr',gap:8,marginBottom:10}}>
-                <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'11px 12px',cursor:'pointer'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></svg><span style={{fontSize:11,fontWeight:600,color:C.accent}}>Facturas del mes</span></div>
-                  <div style={{fontSize:17,fontWeight:700,color:C.accent,marginTop:4}}>{pemN}</div>
-                  <div style={{fontSize:9.5,color:C.muted}}>por emitir{pemTot?` · ${fmtShort(pemTot)}`:''}</div>
+              <div style={{display:'grid',gridTemplateColumns:dupN>0?'1fr 1fr':'1fr',gap:8,marginBottom:8}}>
+                <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}>
+                  <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></svg></span>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>Facturas del mes</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>por emitir{pemTot?` · ${fmtShort(pemTot)}`:''}</div></div>
+                  <div style={{fontSize:18,fontWeight:700,color:C.accent,flexShrink:0}}>{pemN}</div>
                 </div>
-                {dupN>0&&<div onClick={()=>onConciliar&&onConciliar()} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.soon}`,borderRadius:10,padding:'11px 12px',cursor:'pointer'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></svg><span style={{fontSize:11,fontWeight:600,color:C.soonText}}>Revisar duplicados</span></div>
-                  <div style={{fontSize:17,fontWeight:700,color:C.soonText,marginTop:4}}>{dupN}</div>
-                  <div style={{fontSize:9.5,color:C.muted}}>ya tienen factura real</div>
+                {dupN>0&&<div onClick={()=>onConciliar&&onConciliar()} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}>
+                  <span style={{width:30,height:30,borderRadius:8,background:C.ambarBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></svg></span>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.soonText,whiteSpace:'nowrap'}}>Revisar duplicados</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>ya tienen factura real</div></div>
+                  <div style={{fontSize:18,fontWeight:700,color:C.soonText,flexShrink:0}}>{dupN}</div>
                 </div>}
               </div>
             )})()}
