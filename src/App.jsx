@@ -19068,6 +19068,19 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     setBusy(null)
   }
 
+  // ── Conciliación en LOTE: concilia de una todos los abonos con calce EXACTO y ÚNICO (mejorCandidato), deduplicados por
+  // factura (una misma factura no se aplica a dos abonos → esos van a "por revisar"). Reusa reconciliar (reversible).
+  const [loteOpen,setLoteOpen] = useState(false)
+  const [loteBusy,setLoteBusy] = useState(false)
+  const [loteProg,setLoteProg] = useState(0)
+  const conciliarLote = async(exactos)=>{
+    if(loteBusy||!exactos.length) return
+    if(!(await appConfirm(`Conciliar ${exactos.length} abono${exactos.length!==1?'s':''} con su factura (calce exacto en pesos, mismo RUT). Es reversible. ¿Seguir?`))) return
+    setLoteBusy(true); setLoteProg(0)
+    for(let i=0;i<exactos.length;i++){ try{ await reconciliar(exactos[i].m, exactos[i].f, 'lote') }catch(_){}; setLoteProg(i+1) }
+    setLoteBusy(false); setLoteOpen(false)
+  }
+
   // ── Pago en GRUPO: N transferencias del mismo cliente (cercanas en fecha) que juntas pagan M facturas (suma exacta) ──
   // Devuelve {transfers,facturas,total} o null. Subset-sum acotado; prefiere menos transferencias y facturas más cercanas/contiguas.
   const grupoPago = (mov)=>{
@@ -19783,6 +19796,42 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         ):null })()}
 
+        {/* Conciliar en lote: calces exactos y únicos de una; el resto (varios candidatos / sin factura) se cuenta y se resuelve abajo. */}
+        {sub==='abonos'&&(()=>{
+          const pend=(movs||[]).filter(m=>esConciliable(m)&&((m.monto||0)-(m.monto_conciliado||0))>TOL)
+          if(!pend.length) return null
+          const cand=[], revisar=[], sinFac=[]
+          pend.forEach(m=>{ const mej=mejorCandidato(m); if(mej){ cand.push({m,f:mej}) } else { const cs=candidatos(m); if(cs.length>1) revisar.push(m); else sinFac.push(m) } })
+          const byFac={}; cand.forEach(x=>{ (byFac[String(x.f.id)]=byFac[String(x.f.id)]||[]).push(x) })
+          const exactos=[]; cand.forEach(x=>{ if(byFac[String(x.f.id)].length===1) exactos.push(x); else revisar.push(x.m) })
+          if(!exactos.length&&!revisar.length&&!sinFac.length) return null
+          return (
+            <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+              <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',background:C.bgSoft,cursor:'pointer'}}>
+                <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={15} c={C.accent}/></span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Conciliar en lote</div><div style={{fontSize:10,color:C.muted}}>{exactos.length} calzan exacto · {revisar.length} por revisar{sinFac.length?` · ${sinFac.length} sin factura`:''}</div></div>
+                {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();conciliarLote(exactos)}} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
+                <span style={{fontSize:12,color:C.muted,marginLeft:4}}>{loteOpen?'▾':'▸'}</span>
+              </div>
+              {loteOpen&&<div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
+                {exactos.length>0?<>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                    <span style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Calzan exacto · {exactos.length}</span>
+                    <button onClick={()=>conciliarLote(exactos)} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',opacity:loteBusy?.6:1}}>{loteBusy?`Conciliando ${loteProg}/${exactos.length}…`:`Conciliar los ${exactos.length}`}</button>
+                  </div>
+                  {exactos.slice(0,25).map(({m,f})=>(
+                    <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
+                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||'—'}</b> <span style={{color:C.muted}}>→ Factura N°{folioN(f.invoice_no)||'—'}</span></span>
+                      <span style={{color:C.greenText,fontWeight:600,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(m.monto)}</span>
+                    </div>
+                  ))}
+                  {exactos.length>25&&<div style={{fontSize:10,color:C.muted,marginTop:4}}>y {exactos.length-25} más…</div>}
+                </>:<div style={{fontSize:11,color:C.muted}}>No hay calces exactos automáticos ahora.</div>}
+                {(revisar.length>0||sinFac.length>0)&&<div style={{fontSize:10,color:C.muted,marginTop:9,paddingTop:8,borderTop:`1px solid ${C.border}`,lineHeight:1.5}}>{revisar.length>0?`${revisar.length} por revisar (varios candidatos) — ábrelas abajo y elige. `:''}{sinFac.length>0?`${sinFac.length} sin factura en la app — tráelas con "Cotejar SII" en Facturación y vuelve.`:''}</div>}
+              </div>}
+            </div>
+          )
+        })()}
         {/* El "pago en grupo" ya NO se sugiere en la vista principal: vive dentro del detalle de cada transferencia, y solo cuando es un grupo real (no descomponible en 1:1). */}
         {/* Lista */}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
