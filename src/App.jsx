@@ -258,7 +258,9 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
     for(const e of emisAll){ if(usados.has(e.x.id)||noSet.has(`${p.id}|${e.x.id}`)) continue
       const sameCli=String(e.x.client_id)===String(p.client_id); const rutMatch=[...e.ruts].some(r=>ruts.has(r)); if(!sameCli&&!rutMatch) continue
       const dMonto=Math.abs((e.x.amount||0)-a)/a; const sameCu=!!(cu&&e.cu&&cu.n===e.cu.n), samePer=!!(per&&e.per&&per===e.per); const dias=(pt&&e.t)?Math.abs(e.t-pt)/86400000:999
-      const okCu=sameCu&&dMonto<=0.25, okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=60
+      // GUARDA DE FECHA: la cuota N/M sola (sin período) NO puede calzar a través del tiempo (era el bug "factura emitida ahora
+      // asignada a una programada de meses atrás"). Exige mismo período O emisión cercana (≤75d) a la fecha de la programada.
+      const okCu=sameCu&&dMonto<=0.25&&(samePer||dias<=75), okPer=samePer&&dMonto<=0.06, okRut=(rutMatch||sameCli)&&dMonto<=0.05&&dias<=60
       if(!okCu&&!okPer&&!okRut) continue
       const rank=[okCu?0:1, okPer?0:1, dMonto, dias]
       if(!best||rank[0]<bestRank[0]||(rank[0]===bestRank[0]&&(rank[1]<bestRank[1]||(rank[1]===bestRank[1]&&(rank[2]<bestRank[2]||(rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank } }
