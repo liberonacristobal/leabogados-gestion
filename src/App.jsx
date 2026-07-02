@@ -5316,7 +5316,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         {porEmitir.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
           <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
             <div style={{flex:1,minWidth:0}}>
-              <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {titleCase(rs)}</span>:''}</div>
+              <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
               <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'(sin concepto)'}</div>
               <div style={{fontSize:10,color:C.grisText,marginTop:1}}>devengo {b.due?fmtDate(b.due):'—'}</div>
             </div>
@@ -5346,7 +5346,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                       <div onClick={()=>setFactOpen(s=>{ const nn=new Set(s); nn.has(b.id)?nn.delete(b.id):nn.add(b.id); return nn })} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px 9px 20px',cursor:'pointer'}}>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
-                          <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{titleCase(rs)}</span>:<span style={{color:C.soonText}}>sin razón social</span>} · {b.concept||'—'}</div>
+                          <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{rsDisplay(rs)}</span>:<span style={{color:C.soonText}}>sin razón social</span>} · {b.concept||'—'}</div>
                         </div>
                         {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
                         <div style={{fontSize:12,color:C.muted,flexShrink:0}}>{fmt(b.amount)}</div>
