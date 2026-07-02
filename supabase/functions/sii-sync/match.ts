@@ -59,7 +59,6 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   const entidades = entRes.data || []
   const emitidas = emitRes.data || []
   const foliosExistentes = new Set((folioRes.data || []).map((b: any) => String(b.invoice_no)))
-  const foliosSII = new Set(ventas.map((v) => String(v.folio)))
 
   // Conjunto de RUTs validos de una cuota: su receptor, su entidad, su cliente y
   // TODAS las razones sociales del cliente (asi una factura emitida a cualquier RS
@@ -88,10 +87,11 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
     const rutV = normalizarRut(v.rutReceptor)
     if (rutV === '') { resultado.sinMatch.push(itemSinMatch(v)); continue }
 
-    // Una emitida es "corregible" si su folio falta o no corresponde a ninguna venta
-    // del periodo (folio manual): no tocamos folios que ya son correctos del SII.
-    const folioCorregible = (b: any) =>
-      !b.invoice_no || (!foliosSII.has(String(b.invoice_no)) && String(b.invoice_no) !== String(v.folio))
+    // Una emitida es "corregible" (candidata a recibir el folio del SII) SOLO si NO tiene folio.
+    // REGLA: una factura que YA tiene folio es una emisión real y NUNCA se ofrece como candidata
+    // (antes se colaban facturas válidas de OTRO período: se marcaban "corregibles" solo porque su
+    //  folio no estaba en el correlativo del período cotejado).
+    const folioCorregible = (b: any) => !b.invoice_no
 
     let resuelto = false
     for (const tol of [1, Math.max(1, v.montoTotal * 0.02)]) {
