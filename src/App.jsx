@@ -5620,7 +5620,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                 {/* 3. Elige la factura — varias candidatas: comparación con lo del SII */}
                 {result.ambiguas?.length>0&&<>
                   <Hdr label='Elige la factura correcta' color='#537281' bg='#EEF1F4'/>
-                  {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; return (
+                  {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; const cands=(it.candidatos||[]).filter(c=>!c.folio); return (   /* una factura con folio ya es emitida: NUNCA candidata */
                     <div key={i} style={{borderBottom:'0.5px solid #E4E8EB'}}>
                       <div onClick={()=>!done&&setAmbExp(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:done?'default':'pointer'}}>
                         {bigDate(isoFecha(it.fechaEmision),C.muted)}
@@ -5629,11 +5629,12 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
                           <div style={{fontSize:11,color:C.done,marginTop:1}}>Factura N°{it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
                         </div>
                         {done ? <span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>Asignada</span>
-                          : <span style={{fontSize:11,color:C.accent,fontWeight:600,whiteSpace:'nowrap'}}>{it.candidatos?.length} candidatas {exp?'▾':'▸'}</span>}
+                          : <span style={{fontSize:11,color:cands.length?C.accent:C.soonText,fontWeight:600,whiteSpace:'nowrap'}}>{cands.length?`${cands.length} candidata${cands.length!==1?'s':''}`:'sin candidatas'} {exp?'▾':'▸'}</span>}
                       </div>
                       {exp&&!done&&<div style={{padding:'2px 20px 10px',background:C.bgSoft}}>
                         <div style={{fontSize:10.5,color:C.muted,padding:'7px 0',lineHeight:1.5}}><span style={{fontWeight:700,color:C.accent}}>Del SII:</span> {fmt(it.monto)} · {dmy(it.fechaEmision)}{it.rut?` · ${fmtRut(it.rut)}`:''}{it.receptor?` · ${it.receptor}`:''}</div>
-                        {(it.candidatos||[]).map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); return (
+                        {cands.length===0&&<div style={{fontSize:11,color:C.soonText,padding:'6px 0 2px',borderTop:'0.5px solid #E4E8EB'}}>Las coincidencias ya están emitidas con su folio. Vuelve a sincronizar o ingrésala como nueva en "Dime el cliente".</div>}
+                        {cands.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); return (
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
