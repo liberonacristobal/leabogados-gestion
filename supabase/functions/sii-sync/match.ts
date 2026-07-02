@@ -97,19 +97,27 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
     let resuelto = false
     for (const tol of [1, Math.max(1, v.montoTotal * 0.02)]) {
       const calza = (b: any) => rutsDe(b).has(rutV) && Math.abs((b.amount || 0) - v.montoTotal) <= tol
-      const progC = programadas.filter((b: any) => !progUsadas.has(b.id) && calza(b) && String(b.due || '').startsWith(periodo))
+      // Candidatos en TODOS los periodos, no solo el del cotejo. CLAVE para recurrentes: repiten
+      // monto mes a mes; si narraramos por periodo el motor "encontraria" 1 (el mes del cotejo) y le
+      // pegaria el folio al MES equivocado (mes vencido: la factura de julio es servicio de junio).
+      const progC = programadas.filter((b: any) => !progUsadas.has(b.id) && calza(b))
       const emitC = emitidas.filter((b: any) => !emitUsadas.has(b.id) && calza(b) && folioCorregible(b))
-      const total = progC.length + emitC.length
+      const cand = [...progC, ...emitC]
+      const total = cand.length
       if (total === 0) continue
-      if (total > 1) {
+      // Chequeo previo: los recurrentes (mensual/permanente) NUNCA se automatizan — mes vencido +
+      // montos iguales hacen imposible saber el mes a ciegas. Se resuelven a mano en "Elige la
+      // factura correcta", donde el humano ve el mes. Igual si hay mas de un candidato.
+      const esRec = (b: any) => /\bmensual\b|\bpermanente\b/i.test(String(b.concept || ''))
+      if (total > 1 || cand.some(esRec)) {
         resultado.ambiguas.push({
           folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal, fechaEmision: v.fechaEmision,
-          candidatos: [...progC, ...emitC].map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: b.invoice_no || null })),
+          candidatos: cand.map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: b.invoice_no || null, vence: b.due || null })),
         })
         resuelto = true
         break
       }
-      // Exactamente un candidato en esta pasada
+      // Exactamente un candidato NO recurrente -> automatico
       if (progC.length === 1) {
         const b = progC[0]
         const { error } = await supabase.from('billing').update({
