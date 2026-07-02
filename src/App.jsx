@@ -20100,6 +20100,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   const facsAll=(billing||[]).filter(b=>!b.deleted_at&&b.invoice_no&&(b.billing_type||'')!=='reembolso'&&(String(b.client_id)===String(m.cliente_id)||[...rutsFac(b)].some(r=>rutsMov.has(r))))
                   const combo=(myConc.length===0&&cands.length===0)?combos(m):null
                   const fmg=(myConc.length===0&&cands.length===0&&!combo)?facturaMasGastos(m):null
+                  // Un pago suele pagar 1 factura + dejar un saldo para gastos/anticipo (o pagar 2 facturas). Cuando NADA calza
+                  // solo, ofrecemos las facturas con saldo MENOR al pago: conciliar esa factura deja el resto para colocarlo abajo
+                  // (Fondo/Saldo a favor/Devolución). Ordenadas por resto más chico = la que más explica el pago. Reversible.
+                  const factResto=(myConc.length===0&&cands.length===0&&!combo&&!fmg)?(()=>{ const t=Math.abs(m.monto||0); return facsAll.map(f=>({f,saldo:saldoFactura(f)})).filter(x=>x.saldo>0&&x.saldo<t).map(x=>({...x,resto:t-x.saldo})).sort((a,b)=>a.resto-b.resto).slice(0,4) })():[]
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
                   // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
                   const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
@@ -20140,6 +20144,18 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{fontSize:10,fontWeight:600,color:C.greenText,marginTop:3}}>= {fmtM(grp.total)} (exacto)</div>
                           </div>
                         ) })()}
+                        {factResto.length>0&&(
+                          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',marginBottom:6}} onClick={e=>e.stopPropagation()}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:C.accent,marginBottom:5}}>Ninguna factura calza sola con {fmtM(m.monto)}. Opciones:</div>
+                            {factResto.map(({f,saldo,resto})=>(
+                              <div key={f.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+                                <span style={{minWidth:0,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N°{folioN(f.invoice_no)||'—'}</b> · {fmtM(saldo)}{f.issued_at?<span style={{color:C.done}}> · {mesAbbr(f.issued_at)}</span>:''}<br/><span style={{fontSize:10,color:C.tealText}}>+ {fmtM(resto)} queda para gastos / anticipo</span></span>
+                                <button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:6,padding:'4px 11px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar esta</button>
+                              </div>
+                            ))}
+                            <div style={{fontSize:9.5,color:C.muted,marginTop:5}}>Concilias la factura y el resto lo colocas con los botones de abajo (Fondo por Rendir · Saldo a Favor · Devolución). O usa "Buscar en SII" si la factura del resto no está.</div>
+                          </div>
+                        )}
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
                           {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
                           {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga varias facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?C.accent:C.azulBg,color:comboFor===m.id?'#fff':C.accent,border:'none'}}>Paga {combo.length} facturas{comboFor===m.id?' ▴':' ▾'}</button>}
