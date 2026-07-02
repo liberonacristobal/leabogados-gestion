@@ -18915,8 +18915,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       .map(b=>({b,saldo:saldoFactura(b),delta:deltaDias(b.issued_at)}))
       // Ventana AMPLIA porque hay pagos MUY tardíos (clientes que pagan facturas de meses/años atrás): la factura se emite
       // ANTES del pago. El candado real es monto EXACTO + RUT; la fecha solo acota (evita calzar con una factura del mismo
-      // monto de una época totalmente distinta) y luego desempata. -60 días = anticipo; +760 días ≈ hasta ~25 meses tarde.
-      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-60 && x.delta<=760)))
+      // monto de una época totalmente distinta) y luego desempata. -60 días = anticipo; +1095 días = hasta 36 meses tarde.
+      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-60 && x.delta<=1095)))
     // Calce EXACTO en pesos (no hay comisiones bancarias → TOL=0): solo facturas con el monto idéntico.
     const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
     return xs.sort((a,b)=>   // 1) RS del pagador, 2) cercanía por DÍA emisión→pago, 3) monto
@@ -21770,13 +21770,13 @@ export default function App() {
   // Busca en el SII (RCV) para calzar pagos: como los pagos son ANTIGUOS y la factura suele ser de ANTES del pago,
   // no basta el mes del pago — hay que barrer la ÉPOCA del pago y meses hacia atrás. Genera el rango
   // [ (mes más antiguo de los pagos − backMonths) … mes más nuevo de los pagos ] y sincroniza cada período.
-  const handleBuscarSII = useCallback(async(meses, onProgress, backMonths=18)=>{
+  const handleBuscarSII = useCallback(async(meses, onProgress, backMonths=36)=>{
     const base=[...new Set((meses||[]).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort()
     if(!base.length) return {error:'Sin meses para buscar.'}
     const toIdx=m=>{ const [y,mm]=m.split('-').map(Number); return y*12+(mm-1) }
     const fromIdx=i=>`${Math.floor(i/12)}-${String((i%12)+1).padStart(2,'0')}`
     let lo=toIdx(base[0])-backMonths, hi=toIdx(base[base.length-1])
-    if(hi-lo>36) lo=hi-36   // tope de seguridad: no más de ~37 meses de barrido
+    if(hi-lo>47) lo=hi-47   // tope de seguridad: no más de ~48 meses de barrido
     const periodos=[]; for(let i=lo;i<=hi;i++) periodos.push(fromIdx(i))
     let aplicadas=0, huerfanas=0, err=null, i=0
     for(const mes of periodos){ try{ const d=await _siiFetch({periodo:mes}); aplicadas+=(d.actualizadas?.length||0); huerfanas+=(d.sinMatch?.length||0) }catch(e){ err=e.message } i++; onProgress&&onProgress(i,periodos.length,mes) }
