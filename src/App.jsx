@@ -4079,6 +4079,7 @@ function SaleForm({sale,clients:initialClients,clientEntities,billing,sales=[],p
     return Object.values(g)
   })
   const [tariffs,setTariffs] = useState([])
+  const [histAbierto,setHistAbierto] = useState(false)   // Historial de honorarios colapsado por defecto (form más corto al reabrir)
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
   const fmtMesAno = d => d ? d.slice(5,7)+'/'+d.slice(0,4) : '—'
   const [modCobro,setModCobro] = useState(false)
@@ -5116,7 +5117,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           )}
           {/* 10. Historial de honorarios */}
           <div style={{marginTop:modCobro?14:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-            <Lbl>Historial de honorarios</Lbl>
+            <div onClick={()=>setHistAbierto(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+              <Lbl>Historial de honorarios</Lbl>{tariffs.length>0&&<span style={{fontSize:11,color:C.muted}}>· {tariffs.length}</span>}
+              <span style={{marginLeft:'auto',fontSize:12,color:C.muted}}>{histAbierto?'▾':'▸'}</span>
+            </div>
+            {histAbierto&&<>
             {tariffs.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 0'}}>Sin historial registrado.</div>}
             {tariffs.map((t,i)=>{
               const vigente=i===tariffs.length-1
@@ -5137,6 +5142,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 </div>
               )
             })}
+            </>}
           </div>
         </div>
       )}
