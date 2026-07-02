@@ -5478,6 +5478,70 @@ function resolverClienteSII(rut, nombre, clients=[], clientEntities=[]){
   return null
 }
 
+// Chequeo de cobertura del año: facturas EMITIDAS (con folio real) que quedaron SIN CLIENTE = fantasmas por asignar.
+// Read-only salvo asignar (compuerta humana). Para las del SII que NO están en el sistema, deriva al cotejo mes a mes.
+function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onCotejar,onClose}){
+  const realFolio = b => /\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,''))
+  const emit = b => b && !b.deleted_at && b.status!=='Programada' && b.status!=='Anulada' && realFolio(b)
+  const yrOf = b => String(b.issued_at||b.sii_synced_at||'').slice(0,4)
+  const years = [...new Set((billing||[]).filter(emit).map(yrOf).filter(Boolean))].sort().reverse()
+  const [yr,setYr] = useState(years[0]||String(new Date().getFullYear()))
+  const [q,setQ] = useState('')
+  const emitYr = (billing||[]).filter(b=> emit(b) && yrOf(b)===yr)
+  const orphansAll = emitYr.filter(b=> !b.client_id)
+  const emitidas = emitYr.length, sinCliente = orphansAll.length
+  const montoSin = orphansAll.reduce((a,b)=>a+(b.amount||0),0)
+  const pct = emitidas? Math.round((emitidas-sinCliente)/emitidas*100):100
+  const ql=q.trim().toLowerCase()
+  const orphans = orphansAll.filter(b=> !ql || (`n°${folioN(b.invoice_no)||''} ${b.receptor_name||''} ${b.receptor_rut||''} ${b.amount||''} ${b.concept||''}`.toLowerCase().includes(ql))).sort((a,b)=>String(b.issued_at||'').localeCompare(String(a.issued_at||'')))
+  const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const byMes={}; orphans.forEach(b=>{ const mk=String(b.issued_at||b.sii_synced_at||'').slice(0,7); (byMes[mk]=byMes[mk]||[]).push(b) })
+  const meses=Object.keys(byMes).sort().reverse()
+  return (
+    <Modal title='Cobertura SII' onClose={onClose}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:11,flexWrap:'wrap'}}>
+        <select value={yr} onChange={e=>setYr(e.target.value)} style={{fontSize:13,fontWeight:600,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,color:C.accent}}>{(years.length?years:[yr]).map(y=><option key={y} value={y}>{y}</option>)}</select>
+        <span style={{fontSize:11,color:C.muted}}>facturas emitidas del año que están en el sistema</span>
+      </div>
+      <div style={{border:`1px solid ${sinCliente?'#F0997B':'#BFE3D5'}`,background:sinCliente?C.overdueBg:C.greenBg,borderRadius:12,padding:'12px 14px',marginBottom:9}}>
+        {sinCliente>0?<>
+          <div style={{fontSize:10.5,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3}}>Sin cliente asignado</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:26,fontWeight:700,color:C.overdueText}}>{sinCliente}</span><span style={{fontSize:12,color:C.overdueText}}>{fmtM(montoSin)} · facturas fantasma por asignar</span></div>
+        </>:<>
+          <div style={{fontSize:13,fontWeight:600,color:C.greenText}}>✓ Todas con cliente</div>
+          <div style={{fontSize:11,color:C.greenText,marginTop:2}}>Las {emitidas} facturas emitidas del {yr} tienen cliente asignado.</div>
+        </>}
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:12}}>
+        <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,color:C.muted}}>Emitidas en el sistema</div><div style={{fontSize:16,fontWeight:700,color:C.text}}>{emitidas}</div></div>
+        <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,color:C.muted}}>Cobertura</div><div style={{fontSize:16,fontWeight:700,color:pct>=100?C.greenText:C.soonText}}>{pct}%</div></div>
+      </div>
+      {orphansAll.length>=8&&<input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar: N°, razón social, RUT, monto…' style={{width:'100%',boxSizing:'border-box',fontSize:12,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,marginBottom:9,outline:'none'}}/>}
+      {meses.map(mk=>(
+        <div key={mk} style={{marginBottom:8}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>{MES[+mk.slice(5,7)-1]||mk} {mk.slice(0,4)} · {byMes[mk].length}</div>
+          {byMes[mk].map(b=>{ const sug=resolverClienteSII(b.receptor_rut,b.receptor_name,clients,clientEntities); return (
+            <div key={b.id} style={{border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 10px',marginBottom:6}}>
+              <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12,fontWeight:700,color:C.accent}}>N°{folioN(b.invoice_no)||'—'}</span><span style={{fontSize:12,fontWeight:700,color:C.text}}>{fmtM(b.amount)}</span></div>
+              <div style={{fontSize:11,color:C.text,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.receptor_name||'—'}{b.receptor_rut?` · ${b.receptor_rut}`:''}</div>
+              <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.issued_at?fmtFechaDMY(b.issued_at):''}{b.concept?` · ${b.concept}`:''}</div>
+              <div style={{marginTop:6,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                {sug&&<button onClick={()=>onAssign(b,sug.id)} title='Sugerido por el RUT — un toque para asignar y aprender' style={{fontSize:10,fontWeight:700,padding:'4px 10px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}>✦ ¿{sug.name}?</button>}
+                <div style={{flex:'1 1 160px',minWidth:0}}><AsignarClienteInline bill={b} clients={clients} onAssign={(_,cid)=>onAssign(b,cid)} label={sug?'Otro cliente':'Asignar cliente'} placeholder='Buscar cliente…'/></div>
+              </div>
+            </div>
+          )})}
+        </div>
+      ))}
+      {orphansAll.length>0&&!orphans.length&&<div style={{fontSize:11,color:C.muted,padding:'6px 0'}}>Nada calza con "{q}".</div>}
+      <div style={{marginTop:6,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:0,fontSize:11,color:C.muted,lineHeight:1.4}}>¿Faltan facturas del SII que no están acá? El cotejo mes a mes trae del portal las que no están en el sistema.</div>
+        <button onClick={onCotejar} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',flexShrink:0}}>Cotejar con el SII</button>
+      </div>
+    </Modal>
+  )
+}
+
 function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes,onOpenClientFicha}) {
   const hoy = new Date()
   const [mes,setMes] = useState((/^\d{4}-\d{2}$/.test(initialMes||'')?initialMes:`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`))
@@ -22412,6 +22476,7 @@ export default function App() {
         {modal?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
           const dupN=matchProgEmitidas(billing,clients,clientEntities).length
           const siiN=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&(b.billing_type||'')!=='reembolso'&&String(b.due||'').startsWith(mesA)).length
+          const cobN=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Programada'&&b.status!=='Anulada'&&/\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,''))&&!b.client_id).length
           const ic=(d,col)=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke={col||C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
           const row=(icon,bg,titulo,sub,count,onClick)=>(
             <button onClick={onClick} style={{display:'flex',alignItems:'center',gap:12,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px',cursor:'pointer',textAlign:'left'}}>
@@ -22426,9 +22491,11 @@ export default function App() {
               {row(ic(<><line x1='3' y1='21' x2='21' y2='21'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></>,C.greenText),C.greenBg,'Banco','Cartola del banco ↔ facturas y fondos',0,()=>{setModal(null);setOpenConcProp(true);setTab('conciliacion')})}
               {row(ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>,C.soonText),C.ambarBg,'Cotejar con el SII','Folios emitidos ↔ programadas del mes',siiN,()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')})}
               {row(ic(<><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></>,C.accent),C.azulBg,'Revisar duplicados','Programadas ya emitidas y copias',dupN,()=>{setModal({type:'conciliar',data:null})})}
+              {row(ic(<><path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></>,C.soonText),C.ambarBg,'Cobertura SII','Facturas del año sin cliente asignado',cobN,()=>{setModal({type:'coberturaSII'})})}
             </div>
           </Modal>
         })()}
+        {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')}} onClose={()=>setModal(null)}/>}
         {modal?.type==='conciliar'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><ConciliarFacturasModal scope={modal.data?.client?billing.filter(b=>String(b.client_id)===String(modal.data.client.id)):billing} clientId={modal.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></Modal>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect}/>
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
