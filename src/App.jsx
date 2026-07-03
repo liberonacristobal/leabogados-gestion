@@ -13660,8 +13660,10 @@ function facturaGlosa(factura, sale){
     .replace(/\s*\(\s*cuota\s*\d+\s*\/\s*\d+\s*\)\s*$/i,'')
     .replace(/\s*cuota\s*\d+\s*\/\s*\d+\s*$/i,'')
     .trim()
-  // Lo mejor entre el proyecto y la glosa de la factura: la glosa limpia; si queda vacía (era solo "cuota N/M"), el proyecto; si no, el concepto crudo.
-  return limpio || proyecto || concept
+  // Un concepto genérico ("Honorarios", "Servicios legales", "Asesoría") NO describe el servicio → conviene el proyecto.
+  const esGenerico = !limpio || /^(honorarios(\s+profesionales)?|servicios(\s+legales|\s+profesionales)?|asesor[ií]a(\s+legal|\s+jur[ií]dica)?|factura)\.?$/i.test(limpio)
+  // Lo mejor entre el proyecto y la glosa de la factura: si el concepto es genérico → el proyecto; si no → la glosa limpia. Sin dato útil → '' (el cuerpo usa "los servicios prestados").
+  return esGenerico ? proyecto : (limpio || proyecto)
 }
 // despedida = SIEMPRE va al final del correo (después de los bloques insertados). Con sinCierre no la incluye el cuerpo (el modal la agrega al final).
 const CORREO_DESPEDIDA = lang => lang==='en'?'We remain at your disposal for any questions.':'Quedamos atentos a sus comentarios.'
