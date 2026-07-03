@@ -5977,17 +5977,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             try{ await supabase.from('billing').update({dte_xml:d,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id) }catch(_){}
             const rzn=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||''
             const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
-            // Dedup REAL contra Drive: si el PDF ya está en la carpeta, no lo re-sube; si lo borraste, lo vuelve a subir.
-            const yaEnDrive = await driveBuscarEnCarpeta(token, folders.facturas, fname)
-            if(yaEnDrive.length){ res.push({folio:folioM, cliente:cli, monto:b.amount, estado:'duplicada', url:yaEnDrive[0].webViewLink||null}); continue }
-            // No está en Drive → limpia filas de respaldo colgadas de esta factura y sube fresco (una sola copia).
+            // Idempotente: limpia filas de respaldo colgadas de esta factura (queda UNA sola).
             try{ await supabase.from('billing_attachments').delete().eq('billing_id',b.id).eq('uploaded_by','Respaldo SII') }catch(_){}
-            const r = await facturaDtePdfBase64(d)
-            const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
-            const up = await driveUpload(token, folders.facturas, new File([u8], fname, {type:'application/pdf'}), fname)
-            const { error:iErr } = await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:'Respaldo SII' })
+            // Dedup REAL contra Drive: si el PDF ya está en la carpeta, lo ENLAZA (no re-sube); si lo borraste, lo sube fresco.
+            const yaEnDrive = await driveBuscarEnCarpeta(token, folders.facturas, fname)
+            let fileId, url, nombre=fname, subido=false
+            if(yaEnDrive.length){ fileId=yaEnDrive[0].id; url=yaEnDrive[0].webViewLink||null }
+            else { const r = await facturaDtePdfBase64(d); const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); const up = await driveUpload(token, folders.facturas, new File([u8], fname, {type:'application/pdf'}), fname); fileId=up.id; url=up.webViewLink||null; nombre=up.name||fname; subido=true }
+            const { error:iErr } = await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:fileId, name:nombre, url, uploaded_by:'Respaldo SII' })
             if(iErr) throw new Error('subió a Drive pero no se pudo adjuntar a la factura: '+iErr.message)
-            res.push({folio:folioM, cliente:cli, monto:b.amount, estado:'adjuntada', url:up.webViewLink||null})
+            res.push({folio:folioM, cliente:cli, monto:b.amount, estado:subido?'adjuntada':'duplicada', url})
           }catch(e){ res.push({folio:folioM, cliente:cli, estado:'error', msg:e.message||String(e)}) }
         }
       }
