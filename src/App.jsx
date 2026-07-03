@@ -5971,6 +5971,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             continue
           }
           try{
+            // Guarda el DTE en la factura para que "sepa" su XML: así el PDF con timbre se auto-adjunta al enviar por
+            // correo y aparece el botón "PDF" en el listado (antes solo quedaba el adjunto en Drive, no ligado a la factura).
+            if(!b.dte_xml){ const td=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null; try{ await supabase.from('billing').update({dte_xml:d,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id) }catch(_){} }
             const r = await facturaDtePdfBase64(d)
             const fname = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
             const { data:ex } = await supabase.from('billing_attachments').select('id,name,url,uploaded_by').eq('billing_id',b.id)
