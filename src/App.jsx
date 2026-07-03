@@ -13657,23 +13657,27 @@ function facturaGlosa(factura, sale){
   const esRec=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
   return esRec?(proyecto||concept):(concept||proyecto)   // recurrente → proyecto (no "Cuota N/M"); puntual → concepto
 }
-function facturaCorreoBody(factura, sale, lang){
+// despedida = SIEMPRE va al final del correo (después de los bloques insertados). Con sinCierre no la incluye el cuerpo (el modal la agrega al final).
+const CORREO_DESPEDIDA = lang => lang==='en'?'We remain at your disposal for any questions.':'Quedamos atentos a sus comentarios.'
+function facturaCorreoBody(factura, sale, lang, sinCierre=false){
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const glosa=facturaGlosa(factura,sale)
+  const cierre = sinCierre?'':`\n\n${CORREO_DESPEDIDA(lang)}`
   // Sin saludo: el saludo (Estimado/Estimada/Estimados o Dear …) lo antepone quien envía, según el destinatario.
-  if(lang==='en') return `We are pleased to attach the invoice for our legal services. Invoice No. ${folio} corresponds to ${glosa||'the services rendered'}, in the amount of ${fmtN(factura.amount)}.\n\nWe remain at your disposal for any questions.`
-  return `Junto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`
+  if(lang==='en') return `We are pleased to attach the invoice for our legal services. Invoice No. ${folio} corresponds to ${glosa||'the services rendered'}, in the amount of ${fmtN(factura.amount)}.${cierre}`
+  return `Junto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.${cierre}`
 }
 // Cuerpo para VARIAS facturas del mismo cliente en un solo correo (lista + total). saleOf(f) resuelve la venta de cada factura.
-function facturaCorreoBodyMulti(list, saleOf, lang, amountOf){
+function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false){
   const rows = list.map(f=>({ folio: folioN(f.invoice_no||'')||f.invoice_no||'', glosa: facturaGlosa(f, saleOf?saleOf(f):null), amount: amountOf?amountOf(f):(f.amount||0) }))
   const total = rows.reduce((a,r)=>a+r.amount,0)
+  const cierre = sinCierre?'':`\n\n${CORREO_DESPEDIDA(lang)}`
   if(lang==='en'){
     const items = rows.map(r=>`- Invoice No. ${r.folio} — ${r.glosa||'services rendered'}, ${fmtN(r.amount)}`).join('\n')
-    return `We are pleased to attach the invoices for our legal services:\n${items}\nTotal: ${fmtN(total)}.\n\nWe remain at your disposal for any questions.`
+    return `We are pleased to attach the invoices for our legal services:\n${items}\nTotal: ${fmtN(total)}.${cierre}`
   }
   const items = rows.map(r=>`- Factura N° ${r.folio} — ${r.glosa||'los servicios prestados'}, por ${fmtN(r.amount)}`).join('\n')
-  return `Junto con saludar, adjuntamos las facturas correspondientes a nuestros servicios legales:\n${items}\nTotal: ${fmtN(total)}.\n\nQuedamos atentos a sus comentarios.`
+  return `Junto con saludar, adjuntamos las facturas correspondientes a nuestros servicios legales:\n${items}\nTotal: ${fmtN(total)}.${cierre}`
 }
 function facturaCorreoHtml(body, firma, incPago, lang='es', fondoHtml=''){
   return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${fondoHtml||''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
@@ -13684,7 +13688,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const multi=listF.length>1
   const saleOf=f=>(sales||[]).find(s=>String(s.id)===String(f.sale_id))||(String(f.id)===String(factura.id)?sale:null)
   // genBody usa amountOf (monto real del DTE cuando ya se generó el PDF; si no, el del sistema). Solo se llama en efectos (amountOf ya existe).
-  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf) : facturaCorreoBody({...factura,amount:amountOf(factura)}, sale, lg)
+  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf, true) : facturaCorreoBody({...factura,amount:amountOf(factura)}, sale, lg, true)   // sinCierre: la despedida la agrega cuerpoFull al final
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const foliosMulti=listF.map(f=>folioN(f.invoice_no||'')||f.invoice_no||'').filter(Boolean)
   const concept=(factura.concept||'').trim()
@@ -13698,7 +13702,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio} · ${client?.name||''}`)
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
-  const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es') : facturaCorreoBody(factura, sale, 'es'))
+  const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es', undefined, true) : facturaCorreoBody(factura, sale, 'es', true))
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
@@ -13748,8 +13752,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const redactarIA=async()=>{ setIaBusy(true)
     try{
       const prompt = lang==='en'
-        ? `You are an assistant at a Chilean law firm (Liberona Escala Abogados). Write the BODY of a formal, cordial email (professional English) to send an invoice to a client.\nEXACT data, do not alter or round:\n- Invoice No.: ${folio}\n- Amount: ${fmtN(amountOf(factura))}\n- Project/service: ${proyecto||'—'}\n- Detail/concept: ${concept||'—'}${esRecurrente?'\n- It is a RECURRING service (monthly fee): describe it as the advisory/service of the project for the period, NEVER as "installment N/M".':''}\nRules: state the invoice number and amount verbatim; describe the service from the project and concept, naturally and professionally; do NOT mention due dates or payment terms; do NOT include a greeting (no "Dear …") nor a signature; close offering to clarify any questions. Return ONLY the 1-2 paragraphs of the message body.`
-        : `Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(amountOf(factura))}\n- Proyecto/servicio: ${proyecto||'—'}\n- Detalle/concepto: ${concept||'—'}${esRecurrente?'\n- Es un servicio RECURRENTE (cuota/mensualidad): descríbelo como la asesoría/servicio del proyecto correspondiente al período, NUNCA como "cuota N/M".':''}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir del proyecto y el concepto, de forma natural y profesional (no copies literal una glosa abreviada); NO menciones vencimiento ni plazos de pago; NO incluyas saludo (nada de "Estimados…") ni firma; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (1 o 2 párrafos del mensaje).`
+        ? `You are an assistant at a Chilean law firm (Liberona Escala Abogados). Write the BODY of a formal, cordial email (professional English) to send an invoice to a client.\nEXACT data, do not alter or round:\n- Invoice No.: ${folio}\n- Amount: ${fmtN(amountOf(factura))}\n- Project/service: ${proyecto||'—'}\n- Detail/concept: ${concept||'—'}${esRecurrente?'\n- It is a RECURRING service (monthly fee): describe it as the advisory/service of the project for the period, NEVER as "installment N/M".':''}\nRules: state the invoice number and amount verbatim; describe the service from the project and concept, naturally and professionally; do NOT mention due dates or payment terms; do NOT include a greeting (no "Dear …"), a signature, or a closing line (the closing is added separately). Return ONLY the 1-2 paragraphs of the message body.`
+        : `Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(amountOf(factura))}\n- Proyecto/servicio: ${proyecto||'—'}\n- Detalle/concepto: ${concept||'—'}${esRecurrente?'\n- Es un servicio RECURRENTE (cuota/mensualidad): descríbelo como la asesoría/servicio del proyecto correspondiente al período, NUNCA como "cuota N/M".':''}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir del proyecto y el concepto, de forma natural y profesional (no copies literal una glosa abreviada); NO menciones vencimiento ni plazos de pago; NO incluyas saludo (nada de "Estimados…"), firma NI despedida (la despedida se agrega aparte). Devuelve SOLO el cuerpo (1 o 2 párrafos del mensaje).`
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim()
       if(txt){ bodyTocado.current=true; setBody(txt) }
@@ -13775,7 +13779,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   useEffect(()=>{ if(!fondoTocado.current) setFondoMsg(genFondoMsg(lang)) },[lang,fondoMonto])
   const recordatorio=()=> (recordarSaldo && otroSaldo>0 && saldoMsg.trim()) ? `\n\n${saldoMsg.trim()}` : ''
   const fondoFrase=()=> (pedirFondo && fondoMsg.trim()) ? `\n\n${fondoMsg.trim()}` : ''
-  const cuerpoFull=()=>`${saludo}\n\n${body}${recordatorio()}${fondoFrase()}`   // saludo + mensaje + (recordatorio opcional) + (solicitud de fondo opcional)
+  const cuerpoFull=()=>`${saludo}\n\n${body}${recordatorio()}${fondoFrase()}\n\n${CORREO_DESPEDIDA(lang)}`   // saludo + mensaje + (recordatorio) + (fondo) + despedida SIEMPRE al final
   const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago, lang, pedirFondo?datosGastosHtml(ctaGastos,lang):'')
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
