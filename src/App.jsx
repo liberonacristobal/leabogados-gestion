@@ -18843,6 +18843,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [importing,setImporting] = useState(false)
   const [prog,setProg] = useState(null)          // {done,total}
   const [reportes,setReportes] = useState(null)  // resultado por archivo del último lote
+  const [cargaPreview,setCargaPreview] = useState(null)  // {entries:[...]} parseado y sin escribir: compuerta antes de guardar
   const [verifRes,setVerifRes] = useState(null)  // resultado de "Verificar contra cartola oficial" (read-only, no inserta)
   const [verificando,setVerificando] = useState(false)
   const [aliases,setAliases] = useState([])
@@ -19032,30 +19033,47 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true})
           const res=parseCartola(aoa,{filename:file.name})
           const rows=res.movimientos.map(m=>({ ...m, cliente_id: m.es_interno?null:(resolver(m.rut_contraparte)||resolverNombre(m.nombre_contraparte)), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
-          // dedup: cuántos son nuevos vs ya cargados
-          let nuevos=rows.length
+          // dedup: separa los GENUINAMENTE nuevos de los ya cargados (NO escribe todavía — eso es la compuerta de confirmación)
+          let nuevosRows=rows
           if(rows.length){
             const {data:ex}=await supabase.from('cartola_movimientos').select('hash').in('hash',rows.map(r=>r.hash))
-            const set=new Set((ex||[]).map(x=>x.hash)); const nuevosRows=rows.filter(r=>!set.has(r.hash)); nuevos=nuevosRows.length
-            // Solo inserta los GENUINAMENTE nuevos (ignoreDuplicates). Recargar NO pisa estado/cliente_id/categoría/
-            // monto_conciliado de los ya cargados → nunca deshace una conciliación ni una identificación manual.
-            for(let i=0;i<nuevosRows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(nuevosRows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}); if(error) throw error }
+            const set=new Set((ex||[]).map(x=>x.hash)); nuevosRows=rows.filter(r=>!set.has(r.hash))
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
           const sinId=abo.filter(r=>!r.es_interno && !r.cliente_id).length
+          const fechas=rows.map(r=>r.fecha).filter(Boolean).sort(); const minF=fechas[0]||null, maxF=fechas[fechas.length-1]||null
           reps.push({ file:file.name, cuenta:res.cuenta, rol:res.rol_cuenta, ok:!res.error, error:res.error||null,
             nAbonos:abo.length, sumAbonos:sumA, nCargos:car.length, sumCargos:sumC,
-            internos:rows.filter(r=>r.es_interno).length, sinId, nuevos, dup:rows.length-nuevos,
+            internos:rows.filter(r=>r.es_interno).length, sinId, total:rows.length, nuevos:nuevosRows.length, dup:rows.length-nuevosRows.length,
+            minF, maxF, nuevosRows,
             verA: res.totalAbonos!=null?{banco:res.totalAbonos,parsed:sumA,diff:sumA-res.totalAbonos}:null,
             verC: res.totalCargos!=null?{banco:res.totalCargos,parsed:sumC,diff:sumC-res.totalCargos}:null })
-        }catch(e){ reps.push({ file:file.name, ok:false, error:e.message }) }
+        }catch(e){ reps.push({ file:file.name, ok:false, error:e.message, nuevosRows:[] }) }
         setProg({done:fi+1,total:files.length})
       }
-      setReportes(reps)
-      await cargar()
+      setCargaPreview({ entries:reps })   // muestra la compuerta; guardar es confirmarCarga()
     }catch(e){ appAlert('Error al leer: '+e.message) }
     setImporting(false); setProg(null)
+  }
+  // Confirmar la carga: escribe SOLO los nuevos (dedup ya hecho al preparar). ignoreDuplicates → recargar nunca pisa
+  // estado/cliente_id/categoría de lo ya cargado. Reversible por el mismo hash. Tras guardar, muestra el reporte.
+  const confirmarCarga = async()=>{
+    if(!cargaPreview) return
+    setImporting(true)
+    const reps=[]
+    try{
+      for(const en of (cargaPreview.entries||[])){
+        try{
+          const nuevosRows=en.nuevosRows||[]
+          for(let i=0;i<nuevosRows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(nuevosRows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}); if(error) throw error }
+          const {nuevosRows:_omit, minF:_a, maxF:_b, total:_c, ...rep}=en; reps.push(rep)
+        }catch(e){ reps.push({ file:en.file, ok:false, error:e.message }) }
+      }
+      setReportes(reps); setCargaPreview(null)
+      await cargar()
+    }catch(e){ appAlert('Error al guardar: '+e.message) }
+    setImporting(false)
   }
 
   // Verificar (SIN insertar) que la base tenga todos los movimientos de una cartola OFICIAL (mensual).
@@ -20021,6 +20039,43 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             <div style={{fontSize:11,color:C.muted,marginTop:8}}>Varios a la vez o una carpeta entera (ambas cuentas). Re-subir no duplica.</div>
           </div>
         )}
+
+        {/* Compuerta: revisar la cartola parseada ANTES de escribir (evita cargar mal sin darse cuenta) */}
+        {cargaPreview&&(()=>{ const ents=cargaPreview.entries||[]; const totNuevos=ents.reduce((a,e)=>a+(e.nuevos||0),0); const rolTxt=r=>r==='gastos'?'Cta. Gastos':r==='honorarios'?'Cta. Honorarios':'la cuenta'; const dmy=f=>f?fmtFechaDMY(f):'—'; const uni=ents.length===1?ents[0]:null
+          return (
+          <div style={{border:`1px solid ${C.accent}`,borderRadius:12,overflow:'hidden',marginBottom:14}}>
+            <div style={{padding:'10px 12px',background:C.azulBg}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.accent}}>Revisa antes de guardar</div>
+              <div style={{fontSize:10.5,color:C.muted}}>Nada se escribe todavía · {ents.length} archivo{ents.length!==1?'s':''}</div>
+            </div>
+            <div style={{padding:'10px 12px'}}>
+              {ents.map((e,i)=>(
+                <div key={i} style={{marginBottom:i<ents.length-1?10:0,paddingBottom:i<ents.length-1?10:0,borderBottom:i<ents.length-1?`1px solid ${C.border}`:'none'}}>
+                  {e.error&&!e.total? <div style={{fontSize:11,color:C.overdueText}}><b>{e.file}</b>: {e.error}</div> : <>
+                    <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginBottom:8}}>
+                      <span style={{fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:20,background:e.rol==='gastos'?C.ambarBg:C.azulBg,color:e.rol==='gastos'?C.soonText:C.accent}}>{rolTxt(e.rol)}{e.cuenta?` · ${e.cuenta}`:''}</span>
+                      {e.minF&&<span style={{fontSize:11,color:C.muted}}>{dmy(e.minF)} – {dmy(e.maxF)}</span>}
+                    </div>
+                    <div style={{display:'flex',gap:8,marginBottom:8}}>
+                      <div style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 10px'}}><div style={{fontSize:9.5,color:C.muted}}>Movimientos</div><div style={{fontSize:16,fontWeight:700,color:C.text}}>{e.total}</div></div>
+                      <div style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 10px'}}><div style={{fontSize:9.5,color:C.muted}}>Nuevos</div><div style={{fontSize:16,fontWeight:700,color:C.greenText}}>{e.nuevos}</div></div>
+                      <div style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 10px'}}><div style={{fontSize:9.5,color:C.muted}}>Ya cargados</div><div style={{fontSize:16,fontWeight:700,color:C.muted}}>{e.dup}</div></div>
+                    </div>
+                    <div style={{display:'flex',gap:14,alignItems:'center',background:C.bgSoft,borderRadius:9,padding:'7px 10px',flexWrap:'wrap'}}>
+                      <div><div style={{fontSize:9.5,color:C.muted}}>Abonos</div><div style={{fontSize:13,fontWeight:700,color:C.greenText}}>+{fmtM(e.sumAbonos)}</div></div>
+                      <div><div style={{fontSize:9.5,color:C.muted}}>Cargos</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>−{fmtM(e.sumCargos)}</div></div>
+                      {(e.verA||e.verC)&&(()=>{ const okA=!e.verA||e.verA.diff===0; const okC=!e.verC||e.verC.diff===0; const cuadra=okA&&okC; return <div style={{marginLeft:'auto',textAlign:'right'}}><div style={{fontSize:9.5,color:C.muted}}>Cuadra con el banco</div><div style={{fontSize:12,fontWeight:700,color:cuadra?C.greenText:C.overdue}}>{cuadra?'✓ sí':'revisar'}</div></div> })()}
+                    </div>
+                    {e.error&&<div style={{fontSize:10,color:C.overdueText,marginTop:5}}>{e.error}</div>}
+                  </>}
+                </div>
+              ))}
+              <div style={{display:'flex',gap:8,marginTop:12}}>
+                <button disabled={importing} onClick={()=>setCargaPreview(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'9px 13px',cursor:importing?'default':'pointer'}}>Descartar</button>
+                <button disabled={importing||totNuevos===0} onClick={confirmarCarga} style={{flex:1,fontSize:12,fontWeight:700,color:'#fff',background:totNuevos>0?C.accent:C.done,border:'none',borderRadius:8,padding:'9px 13px',cursor:(importing||totNuevos===0)?'default':'pointer'}}>{importing?'Guardando…':totNuevos>0?`Cargar ${totNuevos} movimiento${totNuevos!==1?'s':''}${uni&&uni.rol?` en ${rolTxt(uni.rol)}`:''}`:'Nada nuevo por cargar'}</button>
+              </div>
+            </div>
+          </div>) })()}
 
         {/* Reporte del último lote */}
         {reportes&&(
