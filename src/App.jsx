@@ -13776,10 +13776,15 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       const adjuntos = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
       let bodyTxt=cuerpoFull(); if(incPago) bodyTxt+=`\n\n${DATOS_PAGO_TXT}`; if(pedirFondo) bodyTxt+=`\n\n${datosGastosTxt(ctaGastos,lang)}`
       if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
-      // Envía por Gmail del usuario; si su token venció (401) u otro error, cae al relay de oficina para NO bloquear el envío.
+      // Envía SIEMPRE desde el correo del usuario. Si su token de Gmail venció (401) o no hay, NO se manda solo desde otra cuenta:
+      // se detiene, se explica cómo dejarlo saliendo desde su correo (reingresar) y se pregunta si quiere usar la oficina esta vez.
       let viaServer=false, sent=false
       try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:bodyTxt,bodyHtml:buildHtml(),attachments:adjuntos}); sent=true } }catch(_){}
-      if(!sent){ await sendMailServer({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos}); sent=true; viaServer=true }
+      if(!sent){
+        const usarOficina = await appConfirm('No se pudo enviar desde tu correo: tu acceso a Gmail expiró.\n\nPara que salga desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl, y reintenta el envío.\n\n¿Enviarlo ahora desde la cuenta de oficina en su lugar?\n(Cancelar = no enviar; reingresas y lo mandas tú)')
+        if(!usarOficina){ setSending(false); return }
+        await sendMailServer({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos}); sent=true; viaServer=true
+      }
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
