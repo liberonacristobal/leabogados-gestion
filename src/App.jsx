@@ -5950,7 +5950,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     try{
       const token = await driveToken()
       if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
-      const folders = await driveAdjuntosFolders(token)
       const res=[]
       for(const file of files){
         let docs=[]; try{ const buf=await file.arrayBuffer(); const enc=((new TextDecoder('ascii').decode(buf.slice(0,200)).match(/encoding=["']([^"']+)["']/i)||[])[1]||'utf-8').toLowerCase(); docs=splitSetDTE(new TextDecoder(/8859|latin|1252/.test(enc)?'iso-8859-1':'utf-8').decode(buf)) }catch(_){ try{ docs=splitSetDTE(await file.text()) }catch(__){} }
@@ -5977,13 +5976,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             try{ await supabase.from('billing').update({dte_xml:d,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id) }catch(_){}
             const rzn=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||''
             const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
+            // Carpeta real por año/mes de la emisión (Facturación → 2026 → Mes), ya no la BETA.
+            const fEmis=(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||b.issued_at||''
+            const carpeta=await driveCarpetaFacturacion(token, fEmis)
             // Idempotente: limpia filas de respaldo colgadas de esta factura (queda UNA sola).
             try{ await supabase.from('billing_attachments').delete().eq('billing_id',b.id).eq('uploaded_by','Respaldo SII') }catch(_){}
             // Dedup REAL contra Drive: si el PDF ya está en la carpeta, lo ENLAZA (no re-sube); si lo borraste, lo sube fresco.
-            const yaEnDrive = await driveBuscarEnCarpeta(token, folders.facturas, fname)
+            const yaEnDrive = await driveBuscarEnCarpeta(token, carpeta, fname)
             let fileId, url, nombre=fname, subido=false
             if(yaEnDrive.length){ fileId=yaEnDrive[0].id; url=yaEnDrive[0].webViewLink||null }
-            else { const r = await facturaDtePdfBase64(d); const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); const up = await driveUpload(token, folders.facturas, new File([u8], fname, {type:'application/pdf'}), fname); fileId=up.id; url=up.webViewLink||null; nombre=up.name||fname; subido=true }
+            else { const r = await facturaDtePdfBase64(d); const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); const up = await driveUpload(token, carpeta, new File([u8], fname, {type:'application/pdf'}), fname); fileId=up.id; url=up.webViewLink||null; nombre=up.name||fname; subido=true }
             const { error:iErr } = await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:fileId, name:nombre, url, uploaded_by:'Respaldo SII' })
             if(iErr) throw new Error('subió a Drive pero no se pudo adjuntar a la factura: '+iErr.message)
             res.push({folio:folioM, cliente:cli, monto:b.amount, estado:subido?'adjuntada':'duplicada', url})
@@ -6007,7 +6009,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setCreandoFac(item.row.folio)
     try{
       const fac = await onIngresarSII(item.row, clienteId)
-      if(fac?.id){ try{ const token=await driveToken(); if(token){ const folders=await driveAdjuntosFolders(token); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const {data:ex}=await supabase.from('billing_attachments').select('id,name').eq('billing_id',fac.id); if(!(ex||[]).some(a=>a.name===fname)){ const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,folders.facturas,new File([u8],fname,{type:'application/pdf'}),fname); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:up.id,name:up.name||fname,url:up.webViewLink||null,uploaded_by:'Respaldo SII'}) } } }catch(_){} }
+      if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(_){} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
     }catch(e){ appAlert('No se pudo crear la factura: '+(e.message||e)) }
@@ -15089,6 +15091,19 @@ async function driveBuscarEnCarpeta(token, folderId, name){
   if(!r.ok) return []
   const d=await r.json().catch(()=>({})); return d.files||[]
 }
+// Carpeta destino de una factura en Drive: raíz de Facturación → Año → Mes (según la fecha de emisión). Crea las que
+// falten y cachea el id por año-mes (evita re-buscar). Reemplaza a la carpeta única "BETA" de pruebas.
+async function driveCarpetaFacturacion(token, isoDate){
+  const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const s=String(isoDate||''); const y=/^\d{4}/.test(s)?s.slice(0,4):'Sin fecha'; const mi=+s.slice(5,7); const mes=(mi>=1&&mi<=12)?MES[mi-1]:''
+  const ckey='drive_fact_'+y+'_'+(mes||'x')
+  let cached=null; try{ cached=localStorage.getItem(ckey) }catch(_){}
+  if(cached) return cached
+  const anio=await driveFindOrCreateFolder(token, FACTURACION_ROOT, y)
+  const dest=mes?await driveFindOrCreateFolder(token, anio, mes):anio
+  try{ localStorage.setItem(ckey, dest) }catch(_){}
+  return dest
+}
 // Tras emitir un DTE: reusa el PDF ya definido (facturaDtePdfBase64, con logo+timbre) y la carpeta de facturación de
 // Drive (folders.facturas) — mismo camino que procesarRespaldoSII — para subir PDF + XML y adjuntarlos a la factura
 // (billing_attachments) → verlos desde Facturación y la ficha. No bloquea la emisión: si Drive no está conectado
@@ -15097,7 +15112,8 @@ async function subirFacturaADrive(billId, dteXml){
   try{
     const doc = splitSetDTE(dteXml)[0]; if(!doc) return {ok:false}
     const token = await driveToken(); if(!token) return {ok:false, sinDrive:true}
-    const folders = await driveAdjuntosFolders(token)
+    const fEmis=(doc.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||''
+    const carpeta = await driveCarpetaFacturacion(token, fEmis)   // Facturación → Año → Mes de emisión
     const r = await facturaDtePdfBase64(doc)
     const rs = String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)
     const baseName = 'Factura '+r.folio+(rs?' - '+rs:'')
@@ -15106,7 +15122,7 @@ async function subirFacturaADrive(billId, dteXml){
     const rows=[]
     const adjuntar = async(file, name)=>{
       if(has(name)) return
-      const up = await driveUpload(token, folders.facturas, file, name)
+      const up = await driveUpload(token, carpeta, file, name)
       const { data:ins } = await supabase.from('billing_attachments').insert({ billing_id:billId, drive_file_id:up.id, name:up.name||name, url:up.webViewLink||null, uploaded_by:'Emisión SII' }).select('id,billing_id').single()
       if(ins) rows.push(ins)
     }
