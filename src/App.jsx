@@ -6251,7 +6251,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     for(const b of conDest){
       try{
         const dest=factToMap[String(b.client_id)]
-        const sale=(sales||[]).find(s=>String(s.id)===String(b.sale_id))
+        const sale=mejorVenta(b, sales, b.client_id)
         const body=facturaCorreoBody(b, sale)
         const html=facturaCorreoHtml(body, firma, false)
         const folio=folioN(b.invoice_no||'')||b.invoice_no||''
@@ -7556,7 +7556,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         )
       })()}
-      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
+      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
       {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
         <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -13651,6 +13651,18 @@ async function verFacturaPdf(b){
     const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000)
   }catch(e){ appAlert('No se pudo abrir el PDF.') }
 }
+// Resuelve la MEJOR venta/proyecto para una factura: la vinculada (sale_id); si no, la única venta del cliente (o su única Activa).
+// Así la glosa siempre muestra lo más robusto disponible aunque la factura no esté vinculada a su venta.
+function mejorVenta(factura, sales, clientId){
+  const list = sales||[]
+  const direct = factura?.sale_id!=null ? list.find(s=>String(s.id)===String(factura.sale_id)) : null
+  if(direct && (direct.name||'').trim()) return direct
+  const cs = list.filter(s=>String(s.client_id)===String(clientId||'') && (s.name||'').trim())
+  if(cs.length===1) return cs[0]
+  const act = cs.filter(s=>s.status==='Activo')
+  if(act.length===1) return act[0]
+  return direct || null
+}
 // Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
 function facturaGlosa(factura, sale){
   const concept=(factura.concept||'').trim(), proyecto=(sale?.name||'').trim()
@@ -13700,13 +13712,15 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const myEmail=(user?.email||'').toLowerCase()
   const listF=(facturas&&facturas.length)?facturas:[factura]   // 1 o VARIAS facturas del MISMO cliente en un solo correo
   const multi=listF.length>1
-  const saleOf=f=>(sales||[]).find(s=>String(s.id)===String(f.sale_id))||(String(f.id)===String(factura.id)?sale:null)
+  // Venta/proyecto MÁS ROBUSTO por factura: la vinculada, o la del cliente si no hay vínculo directo.
+  const saleR=mejorVenta(factura, sales, client?.id) || sale
+  const saleOf=f=>mejorVenta(f, sales, f.client_id||client?.id) || (String(f.id)===String(factura.id)?saleR:null)
   // genBody usa amountOf (monto real del DTE cuando ya se generó el PDF; si no, el del sistema). Solo se llama en efectos (amountOf ya existe).
-  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf, true) : facturaCorreoBody({...factura,amount:amountOf(factura)}, sale, lg, true)   // sinCierre: la despedida la agrega cuerpoFull al final
+  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf, true) : facturaCorreoBody({...factura,amount:amountOf(factura)}, saleR, lg, true)   // sinCierre: la despedida la agrega cuerpoFull al final
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const foliosMulti=listF.map(f=>folioN(f.invoice_no||'')||f.invoice_no||'').filter(Boolean)
   const concept=(factura.concept||'').trim()
-  const proyecto=(sale?.name||'').trim()   // nombre de la venta/proyecto (sales.name) = descripción real del servicio
+  const proyecto=(saleR?.name||'').trim()   // nombre de la venta/proyecto (más robusto: vinculada o la del cliente) = descripción real del servicio
   const esRecurrente=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
   // En recurrentes el concepto es "Cuota 3/12" (no le sirve al cliente) → usar el proyecto; en puntuales el concepto suele ser la glosa real.
   const glosa=esRecurrente?(proyecto||concept):(concept||proyecto)
@@ -13714,10 +13728,10 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [cc,setCc]=useState([]); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
-  const glosaFac=facturaGlosa(factura, sale)   // misma glosa que el cuerpo (proyecto o glosa de la factura, sin "cuota N/M")
+  const glosaFac=facturaGlosa(factura, saleR)   // misma glosa que el cuerpo (proyecto o glosa de la factura, sin "cuota N/M")
   const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio}${glosaFac?` · ${glosaFac}`:(client?.name?` · ${client.name}`:'')}`)   // número + glosa de la factura
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
-  const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es', undefined, true) : facturaCorreoBody(factura, sale, 'es', true))
+  const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es', undefined, true) : facturaCorreoBody(factura, saleR, 'es', true))
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
@@ -22949,7 +22963,7 @@ export default function App() {
       try{ const {data:lt}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(fact?.client_id)).maybeSingle(); dest=lt?.value||null }catch(_){}
       if(dest && r.dteXml && await appConfirm(`Factura emitida (folio ${r.folio}).\n¿Enviarla ahora al cliente (${dest})?`)){
         try{
-          const sale=(sales||[]).find(s=>String(s.id)===String(fact?.sale_id))
+          const sale=mejorVenta(fact, sales, fact?.client_id)
           const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
           const cliNom=(clients||[]).find(c=>String(c.id)===String(fact?.client_id))?.name||''
           const bodyTxt=`${saludoCli(cliNom)},\n\n`+facturaCorreoBody({...fact,invoice_no:String(r.folio)}, sale)
