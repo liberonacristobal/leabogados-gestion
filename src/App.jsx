@@ -13532,7 +13532,7 @@ function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onC
   // Al cambiar de idioma, regenera el cuerpo con la plantilla del idioma (salvo que lo hayas editado a mano).
   useEffect(()=>{ if(!bodyTocado.current) setBody(facturaCorreoBody(factura, sale, lang)) },[lang])
   useEffect(()=>{ if(!client?.id) return; let alive=true
-    supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
+    supabase.from('contacts').select('nombre,email,principal').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value) setPara(String(data.value).trim()) },()=>{})   // destinatario de facturas aprendido (prima sobre client.email)
     return ()=>{alive=false} },[client?.id])
@@ -13585,7 +13585,7 @@ function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onC
   return (<Modal title={<><span style={{color:C.accent}}>Enviar factura</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose}>
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>
-        {contacts.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:5}}>{contacts.map(c=><button key={c.email} type='button' onClick={()=>{ if(!para.trim()) setPara(c.email); else addCc(c.email) }} style={{fontSize:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>{c.nombre||c.email}</button>)}</div>}
+        {contacts.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:5}}>{[...contacts].sort((a,b)=>{ const ta=(a.email||'').toLowerCase()===(para||'').toLowerCase(), tb=(b.email||'').toLowerCase()===(para||'').toLowerCase(); return (tb-ta)||((b.principal?1:0)-(a.principal?1:0)) }).map(c=>{ const isTo=(c.email||'').toLowerCase()===(para||'').toLowerCase(); return <button key={c.email} type='button' title={c.email} onClick={()=>{ if(isTo) return; if(!para.trim()) setPara(c.email); else addCc(c.email) }} style={{fontSize:10,border:isTo?`0.5px solid ${C.accent}`:`0.5px solid ${C.border}`,background:isTo?C.accent:'#fff',color:isTo?'#fff':C.accent,borderRadius:20,padding:'2px 9px',cursor:isTo?'default':'pointer'}}>{isTo?'✓ ':''}{c.nombre||c.email}</button> })}</div>}
       </div>
       <div><div style={lbl}>CC</div>
         <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>{cc.map(e=><span key={e} style={{fontSize:10,background:C.azulBg,color:C.accent,borderRadius:20,padding:'2px 4px 2px 9px',display:'inline-flex',alignItems:'center'}}>{e}<button type='button' onClick={()=>removeCc(e)} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontWeight:700,padding:'0 4px'}}>×</button></span>)}
