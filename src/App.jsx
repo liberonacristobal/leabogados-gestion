@@ -5237,7 +5237,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onCotejar, onCargarXML, onReplaceProgramada}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onUnsend, onCotejar, onCargarXML, onReplaceProgramada}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
   const rsDe = b => {
     const nrm=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
@@ -5480,7 +5480,10 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                       </div>
                       <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
                         <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
-                        {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Reenviar</button>}
+                        <div style={{display:'flex',gap:6}}>
+                          {onUnsend&&<button onClick={()=>onUnsend(b)} title='Deshacer el envío (fue una prueba) → vuelve a Por enviar' style={{background:'#fff',color:C.muted,border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>No enviada</button>}
+                          {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Reenviar</button>}
+                        </div>
                       </div>
                     </div>
                   )})}
@@ -6178,6 +6181,13 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     }
     setEnvioMasivoBusy(false)
     appAlert(`Envío masivo listo.\nEnviadas: ${ok}${err?` · con error: ${err}`:''}${sinDest?` · omitidas sin correo: ${sinDest}`:''}`)
+  }
+  // Deshacer un envío (ej. una prueba): limpia email_sent_at → la factura vuelve a "Por enviar". Reversible (vuelves a Enviar cuando quieras).
+  const onUnsendFactura = async (b) => {
+    const cli=clients.find(c=>String(c.id)===String(b.client_id))
+    if(!await appConfirm(`¿Marcar la Factura N° ${folioN(b.invoice_no)||b.folio||''} como NO enviada?\nVuelve a "Por enviar"${cli?.name?` (${cli.name})`:''}. Útil si el envío fue una prueba.`)) return
+    try{ await supabase.from('billing').update({email_sent_at:null}).eq('id',b.id) }catch(_){}
+    setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:null}:x))
   }
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
   const [fYear,setFYear] = useState(()=>{ try{ const v=localStorage.getItem('fac_year'); return v!=null?v:String(currentYear) }catch(e){ return String(currentYear) } })
@@ -7190,7 +7200,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onUnsend={onUnsendFactura} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
