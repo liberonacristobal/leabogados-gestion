@@ -5257,6 +5257,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const [aniosEmitOpen,setAniosEmitOpen] = useState(()=>new Set())   // años de "Emitidas" abiertos (colapsados por defecto)
   const [factOpen,setFactOpen] = useState(()=>new Set())             // facturas emitidas con acciones desplegadas
   const [emitExp,setEmitExp] = useState(()=>new Set())               // programadas con la comparación "ya emitida" desplegada
+  const [checklistTab,setChecklistTab] = useState(null)              // acordeón: null | 'emitir' | 'enviar' (Opción 1)
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const ufState = useUF()
@@ -5273,6 +5274,10 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso')   // las Programadas de este mes = las que debo emitir (los reembolsos NUNCA se facturan)
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
   const cargadasXml = billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length   // respaldadas por XML este mes (trazabilidad de la carga)
+  // Por enviar al cliente: emitidas con respaldo (XML/PDF) que aún no se envían por correo, del mes de emisión seleccionado.
+  const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
+    .sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||'')))
+  const porEnviarTotal = porEnviar.reduce((a,b)=>a+(b.amount||0),0)
   // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
   // Emitidas: agrupar y ordenar por FECHA DE EMISIÓN (issued_at), no por vencimiento — así una factura emitida en julio
   // con vencimiento en agosto NO aparece bajo agosto. Orden nuevo→antiguo dentro de cada mes (regla de listas).
@@ -5374,9 +5379,24 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         </div>
       )}
 
-      {/* Por emitir — las Programadas del mes (lo que debo emitir) */}
+      {/* Por emitir + Por enviar al cliente — dos tarjetas (estilo Cotejar/Cargar) que despliegan su lista al tocar (acordeón). */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:checklistTab?8:12}}>
+        <button onClick={()=>setChecklistTab(t=>t==='emitir'?null:'emitir')} title='Programadas del mes por emitir al SII' style={{display:'flex',alignItems:'center',gap:10,background:checklistTab==='emitir'?C.overdueBg:'#fff',border:checklistTab==='emitir'?`1.5px solid ${C.overdueText}`:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
+          <span style={{width:36,height:36,borderRadius:10,background:checklistTab==='emitir'?'#fff':C.overdueBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.overdueText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 18v-6M9 15l3-3 3 3'/></svg></span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Por emitir</div><div style={{fontSize:10,color:C.muted}}>al SII</div></div>
+          <span style={{fontSize:19,fontWeight:600,color:C.overdueText,flexShrink:0}}>{porEmitir.length}</span>
+        </button>
+        <button onClick={()=>setChecklistTab(t=>t==='enviar'?null:'enviar')} title='Emitidas con respaldo que aún no envías al cliente' style={{display:'flex',alignItems:'center',gap:10,background:checklistTab==='enviar'?C.azulBg:'#fff',border:checklistTab==='enviar'?`1.5px solid ${C.accent}`:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
+          <span style={{width:36,height:36,borderRadius:10,background:checklistTab==='enviar'?'#fff':C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z'/></svg></span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Por enviar</div><div style={{fontSize:10,color:C.muted}}>al cliente</div></div>
+          <span style={{fontSize:19,fontWeight:600,color:C.accent,flexShrink:0}}>{porEnviar.length}</span>
+        </button>
+      </div>
+
+      {/* Acordeón · Por emitir */}
+      {checklistTab==='emitir'&&(<>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,margin:'0 2px 6px'}}>
-        <span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.4}}>Por emitir · {porEmitir.length}{porEmitir.length?` · ${fmt(porEmitirTotal)}`:''}</span>
+        <span style={{fontSize:10,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.4}}>Por emitir · {porEmitir.length}{porEmitir.length?` · ${fmt(porEmitirTotal)}`:''}</span>
         <button onClick={descargarExcel} disabled={desc} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:desc?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{desc?'…':'↓ Descargar mes'}</button>
       </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:12}}>
@@ -5413,6 +5433,31 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           </div>
         )})}
       </div>
+      </>)}
+
+      {/* Acordeón · Por enviar al cliente — emitidas con respaldo, sin correo. Estilo aprobado: día grande + Factura N° + RS·RUT + Enviar navy bajo el monto. */}
+      {checklistTab==='enviar'&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Por enviar al cliente · {porEnviar.length}{porEnviar.length?` · ${fmt(porEnviarTotal)}`:''}</div>
+          <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
+            {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todas enviadas ✓</div>}
+            {porEnviar.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
+              <div key={b.id} style={{display:'flex',gap:11,alignItems:'flex-start',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
+                {bigDate(b.issued_at||b.due,C.accent)}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:9.5,color:C.muted,marginBottom:1}}>emitida {fmtFechaDMY(b.issued_at||b.due)}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
+                  <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}{(rs&&rs.rut)||b.receptor_rut?<span style={{color:C.grisText}}> · {(rs&&rs.rut)||b.receptor_rut}</span>:''}</div>
+                </div>
+                <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                  {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'5px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
+                </div>
+              </div>
+            )})}
+          </div>
+        </div>
+      )}
 
       {/* Emitidas — con folio (aparecen en el SII), COLAPSADAS POR AÑO → MES. Al abrir una factura: conciliar, asignar RS, enviar. */}
       {emitidasPorAnio.length>0&&(
