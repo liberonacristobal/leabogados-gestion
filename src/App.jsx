@@ -5272,6 +5272,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   ,[billing,mesKey])
   const porEmitir = items.filter(b=>!esEmitida(b) && b.billing_type!=='reembolso')   // las Programadas de este mes = las que debo emitir (los reembolsos NUNCA se facturan)
   const porEmitirTotal = porEmitir.reduce((a,b)=>a+(b.amount||0),0)
+  const cargadasXml = billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length   // respaldadas por XML este mes (trazabilidad de la carga)
   // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
   // Emitidas: agrupar y ordenar por FECHA DE EMISIÓN (issued_at), no por vencimiento — así una factura emitida en julio
   // con vencimiento en agosto NO aparece bajo agosto. Orden nuevo→antiguo dentro de cada mes (regla de listas).
@@ -5353,20 +5354,24 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         </select>
       </div>
 
-      {/* SII: cotejar (RCV online) + cargar el XML del respaldo (MIPYME) para generar el PDF y adjuntarlo */}
-      {onCotejar&&(
-        <button onClick={onCotejar} style={{display:'flex',alignItems:'center',gap:9,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:8,cursor:'pointer',textAlign:'left'}}>
-          <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></svg>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Cotejar con el SII</div><div style={{fontSize:10,color:C.muted}}>trae lo emitido del SII y lo calza con las programadas</div></div>
-          <span style={{color:C.muted,fontSize:16}}>›</span>
-        </button>
-      )}
-      {onCargarXML&&(
-        <button onClick={onCargarXML} style={{display:'flex',alignItems:'center',gap:9,width:'100%',background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:12,cursor:'pointer',textAlign:'left'}}>
-          <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></svg>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Cargar XML del SII</div><div style={{fontSize:10,color:C.muted}}>sube el archivo respaldo de MIPYME → genera el PDF y lo adjunta</div></div>
-          <span style={{color:C.muted,fontSize:16}}>›</span>
-        </button>
+      {/* SII: cotejar (RCV online) + cargar el XML del respaldo (MIPYME). Dos tarjetas en una línea (no apiladas). */}
+      {(onCotejar||onCargarXML)&&(
+        <div style={{display:'grid',gridTemplateColumns:(onCotejar&&onCargarXML)?'1fr 1fr':'1fr',gap:8,marginBottom:12}}>
+          {onCotejar&&(
+            <button onClick={onCotejar} title='Trae lo emitido del SII y lo calza con las programadas' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
+              <span style={{width:36,height:36,borderRadius:10,background:C.ambarBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></svg></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cotejar SII</div><div style={{fontSize:10,color:C.muted}}>por cotejar</div></div>
+              <span style={{fontSize:19,fontWeight:600,color:C.soonText,flexShrink:0}}>{porEmitir.length}</span>
+            </button>
+          )}
+          {onCargarXML&&(
+            <button onClick={onCargarXML} title='Sube el archivo respaldo de MIPYME → genera el PDF y lo adjunta' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
+              <span style={{width:36,height:36,borderRadius:10,background:C.tealBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.tealText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></svg></span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cargar XML</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>cargadas en {(MESES[+month-1]||'').toLowerCase()}</div></div>
+              <span style={{fontSize:19,fontWeight:600,color:C.tealText,flexShrink:0}}>{cargadasXml}</span>
+            </button>
+          )}
+        </div>
       )}
 
       {/* Por emitir — las Programadas del mes (lo que debo emitir) */}
