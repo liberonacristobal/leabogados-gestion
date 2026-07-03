@@ -6103,7 +6103,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const td=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
             // Guarda/REFRESCA el DTE en la factura: así el PDF con timbre se auto-adjunta al enviar y aparece el botón "PDF";
             // refrescarlo corrige el dte_xml de cargas viejas que quedó con acentos mal (�).
-            try{ await supabase.from('billing').update({dte_xml:d,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id) }catch(_){}
+            // Además corrige el MONTO al del SII (MntTotal del DTE = valor real), no el programado de la venta.
+            const dteTot=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
+            const fixAmt = dteTot&&Math.round(dteTot)!==Math.round(b.amount||0) ? {amount:dteTot} : {}
+            try{ await supabase.from('billing').update({dte_xml:d,...fixAmt,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id); if(fixAmt.amount!=null&&setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,amount:dteTot}:x)) }catch(_){}
             const rzn=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||''
             const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
             // Carpeta real por año/mes de la emisión (Facturación → 2026 → Mes), ya no la BETA.
@@ -7497,7 +7500,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         )
       })()}
-      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
+      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onFixAmount={async(id,amt)=>{ if(!await appConfirm(`Corregir el monto de esta factura a ${fmt(amt)} (el del SII)?`)) return; try{ await supabase.from('billing').update({amount:amt}).eq('id',id) }catch(_){}; setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,amount:amt}:b)); setFacturaEmail(f=>f&&f.id===id?{...f,amount:amt}:f) }} onClose={()=>setFacturaEmail(null)}/>}
       {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
         <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -13527,6 +13530,12 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
 // Datos bancarios del estudio para el pago (transferencia) — fuente única, reusada en el recordatorio de cobro y en el correo de factura.
 const DATOS_PAGO_TXT = `Datos para el pago (transferencia):\n  Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco BICE · Cuenta corriente 138392-2\n  Confirmación a: administracion@leabogados.cl`
 const DATOS_PAGO_HTML = `<div style="margin:14px 0;padding:12px 16px;background:#F7F9FA;border:1px solid #E4E8EB;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#537281;font-weight:600;margin-bottom:3px">Datos para el pago (transferencia)</div><div>Liberona Escala Abogados Limitada</div><div><span style="color:#537281">RUT:</span> <b>77.700.387-9</b></div><div><span style="color:#537281">Banco BICE · Cuenta corriente:</span> <b>138392-2</b></div><div><span style="color:#537281">Confirmación a:</span> administracion@leabogados.cl</div></div>`
+// Cuenta destinada a GASTOS (fondo por rendir) — editable y recordada por el usuario (no está fija como la de honorarios).
+const CUENTA_GASTOS_DEFAULT = { razon:'Liberona Escala Abogados Limitada', rut:'77.700.387-9', banco:'Banco BICE', cuenta:'', email:'administracion@leabogados.cl' }
+const datosGastosTxt = (cta,lang='es') => (lang==='en'
+  ? `Account for the expense fund (bank transfer):\n  ${cta.razon}\n  Tax ID: ${cta.rut}\n  ${cta.banco} · Account ${cta.cuenta}\n  Confirmation to: ${cta.email}`
+  : `Cuenta para el fondo de gastos (transferencia):\n  ${cta.razon}\n  RUT: ${cta.rut}\n  ${cta.banco} · Cuenta corriente ${cta.cuenta}\n  Confirmación a: ${cta.email}`)
+const datosGastosHtml = (cta,lang='es') => `<div style="margin:14px 0;padding:12px 16px;background:#FAEEDA;border:1px solid #F0C784;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#854F0B;font-weight:600;margin-bottom:3px">${lang==='en'?'Account for the expense fund (bank transfer)':'Cuenta para el fondo de gastos (transferencia)'}</div><div>${cta.razon}</div><div><span style="color:#537281">${lang==='en'?'Tax ID:':'RUT:'}</span> <b>${cta.rut}</b></div><div><span style="color:#537281">${cta.banco} · ${lang==='en'?'Account:':'Cuenta corriente:'}</span> <b>${cta.cuenta}</b></div><div><span style="color:#537281">${lang==='en'?'Confirmation to:':'Confirmación a:'}</span> ${cta.email}</div></div>`
 // Acuse de pago: confirma al cliente que recibimos el pago de una factura (al conciliar el abono). Formato oficina, vía la cuenta del estudio.
 async function acusePagoEmail(to, {folio, monto, fecha}){
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -13584,10 +13593,10 @@ function facturaCorreoBodyMulti(list, saleOf, lang, amountOf){
   const items = rows.map(r=>`- Factura N° ${r.folio} — ${r.glosa||'los servicios prestados'}, por ${fmtN(r.amount)}`).join('\n')
   return `Junto con saludar, adjuntamos las facturas correspondientes a nuestros servicios legales:\n${items}\nTotal: ${fmtN(total)}.\n\nQuedamos atentos a sus comentarios.`
 }
-function facturaCorreoHtml(body, firma, incPago, lang='es'){
-  return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
+function facturaCorreoHtml(body, firma, incPago, lang='es', fondoHtml=''){
+  return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${fondoHtml||''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
 }
-function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onClose}) {
+function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onFixAmount, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
   const listF=(facturas&&facturas.length)?facturas:[factura]   // 1 o VARIAS facturas del MISMO cliente en un solo correo
   const multi=listF.length>1
@@ -13618,6 +13627,9 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
   const [recordarSaldo,setRecordarSaldo]=useState(false)   // recordar otro saldo pendiente del cliente (opcional)
+  const [pedirFondo,setPedirFondo]=useState(false)   // solicitar por primera vez la provisión de un fondo por rendir
+  const [fondoMonto,setFondoMonto]=useState('')      // monto sugerido del fondo (opcional)
+  const [ctaGastos,setCtaGastos]=useState(CUENTA_GASTOS_DEFAULT)   // datos de la cuenta destinada a gastos (editable, se recuerda)
   const [sending,setSending]=useState(false)
   const bodyTocado=useRef(false)
   // Saldo pendiente del cliente en OTRAS facturas (excluye esta, reembolsos y ya pagadas). Fuente única saldoBill.
@@ -13634,6 +13646,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
     supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value) setPara(String(data.value).trim()) },()=>{})   // destinatario de facturas aprendido (prima sobre client.email)
     return ()=>{alive=false} },[client?.id])
   useEffect(()=>{ let alive=true; supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',myEmail).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setFirma(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{}); return ()=>{alive=false} },[myEmail])
+  useEffect(()=>{ let alive=true; supabase.from('learnings').select('value').eq('kind','cuenta_gastos').eq('key','estudio').maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ try{ setCtaGastos(p=>({...p,...JSON.parse(data.value)})) }catch(_){} } },()=>{}); return ()=>{alive=false} },[])   // cuenta de gastos recordada (la ingresas una vez)
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
@@ -13656,14 +13669,19 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
     }catch(e){ appAlert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
   const recordatorio=()=> (recordarSaldo && otroSaldo>0) ? (lang==='en' ? `\n\nWe also kindly remind you of an outstanding balance of ${fmtN(otroSaldo)} in previous invoices.` : `\n\nAdemás, le recordamos que mantiene un saldo pendiente de ${fmtN(otroSaldo)} en facturas anteriores.`) : ''
-  const cuerpoFull=()=>`${saludo}\n\n${body}${recordatorio()}`   // saludo + mensaje + (recordatorio opcional)
-  const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago, lang)
+  // Solicitud de provisión de fondo por rendir (opcional, primera vez). El bloque de la cuenta va aparte (HTML/TXT) para que se vea con formato.
+  const fondoFrase=()=> !pedirFondo ? '' : (lang==='en'
+    ? `\n\nAdditionally, to set up an expense fund (fondo por rendir)${fondoMonto?` in the amount of ${fmtN(+fondoMonto||0)}`:''}, you may transfer to the account below.`
+    : `\n\nAsimismo, para constituir un fondo por rendir${fondoMonto?` por ${fmtN(+fondoMonto||0)}`:''}, puede transferir a la cuenta indicada a continuación.`)
+  const cuerpoFull=()=>`${saludo}\n\n${body}${recordatorio()}${fondoFrase()}`   // saludo + mensaje + (recordatorio opcional) + (solicitud de fondo opcional)
+  const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago, lang, pedirFondo?datosGastosHtml(ctaGastos,lang):'')
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
     try{
       const adjuntos = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
-      const bodyTxt=incPago?`${cuerpoFull()}\n\n${DATOS_PAGO_TXT}`:cuerpoFull()
+      let bodyTxt=cuerpoFull(); if(incPago) bodyTxt+=`\n\n${DATOS_PAGO_TXT}`; if(pedirFondo) bodyTxt+=`\n\n${datosGastosTxt(ctaGastos,lang)}`
+      if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
       // Envía por Gmail del usuario; si su token venció (401) u otro error, cae al relay de oficina para NO bloquear el envío.
       let viaServer=false, sent=false
       try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:bodyTxt,bodyHtml:buildHtml(),attachments:adjuntos}); sent=true } }catch(_){}
@@ -13717,9 +13735,30 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       </div>
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
       {otroSaldo>0&&<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance from other invoices (${fmtN(otroSaldo)})`:`Recordar saldo pendiente de otras facturas (${fmtN(otroSaldo)})`}</span></label>}
+      <div>
+        <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={pedirFondo} onChange={e=>setPedirFondo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Request an expense fund (fondo por rendir)':'Solicitar provisión de fondo por rendir'}</span></label>
+        {pedirFondo&&(()=>{ const up=(k,v)=>setCtaGastos(p=>({...p,[k]:v})); const gi={...fInp,padding:'7px 9px',fontSize:12}; return (
+          <div style={{marginTop:7,padding:'10px 11px',background:C.ambarBg,border:`1px solid ${C.soon}`,borderRadius:10,display:'flex',flexDirection:'column',gap:7}}>
+            <div style={{fontSize:10,color:C.soonText,fontWeight:600}}>Cuenta destinada a gastos (se recuerda para la próxima)</div>
+            <div style={{display:'flex',gap:7}}>
+              <input value={ctaGastos.banco} onChange={e=>up('banco',e.target.value)} placeholder='Banco' style={{...gi,flex:1}}/>
+              <input value={ctaGastos.cuenta} onChange={e=>up('cuenta',e.target.value)} placeholder='N° cuenta corriente' style={{...gi,flex:1}}/>
+            </div>
+            <div style={{display:'flex',gap:7}}>
+              <input value={ctaGastos.razon} onChange={e=>up('razon',e.target.value)} placeholder='Razón social' style={{...gi,flex:2}}/>
+              <input value={ctaGastos.rut} onChange={e=>up('rut',e.target.value)} placeholder='RUT' style={{...gi,flex:1}}/>
+            </div>
+            <div style={{display:'flex',gap:7}}>
+              <input value={ctaGastos.email} onChange={e=>up('email',e.target.value)} placeholder='Email confirmación' style={{...gi,flex:2}}/>
+              <input value={fondoMonto} onChange={e=>setFondoMonto(e.target.value.replace(/[^\d]/g,''))} placeholder='Monto (opcional)' inputMode='numeric' style={{...gi,flex:1}}/>
+            </div>
+          </div>
+        )})()}
+      </div>
       {!multi&&dteTotals[factura.id]!=null&&Math.round(dteTotals[factura.id])!==Math.round(factura.amount||0)&&(
-        <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:8,padding:'8px 11px',fontSize:11,color:C.soonText}}>
-          El monto guardado en el sistema (<b>{fmt(factura.amount)}</b>) no coincide con el de la factura oficial (<b>{fmt(dteTotals[factura.id])}</b>). El correo usa el de la factura oficial. Conviene corregir el registro con "Editar".
+        <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:8,padding:'8px 11px',fontSize:11,color:C.soonText,display:'flex',flexDirection:'column',gap:6}}>
+          <div>El monto guardado en el sistema (<b>{fmt(factura.amount)}</b>) no coincide con el de la factura del SII (<b>{fmt(dteTotals[factura.id])}</b>). El correo usa el del SII (el real).</div>
+          {onFixAmount&&<button type='button' onClick={()=>onFixAmount(factura.id,dteTotals[factura.id])} style={{alignSelf:'flex-start',fontSize:11,fontWeight:600,color:'#fff',background:C.soonText,border:'none',borderRadius:7,padding:'4px 11px',cursor:'pointer'}}>Corregir en el sistema → {fmt(dteTotals[factura.id])}</button>}
         </div>
       )}
       <div><div style={lbl}>{multi?`PDF DE LAS ${listF.length} FACTURAS (DTE con timbre)`:'PDF DE LA FACTURA (DTE con timbre)'}</div>
@@ -13728,6 +13767,13 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
           : (pdf? <div style={{display:'flex',alignItems:'center',gap:10,fontSize:12,flexWrap:'wrap'}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span>{pdf.base64&&<button type='button' onClick={()=>verPdf(pdf.base64,pdf.name)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',cursor:'pointer'}}>Ver PDF</button>}<button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
               : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>)}
         {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente. Toca uno para verlo.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
+      </div>
+      {/* Vista previa del correo — SIEMPRE visible, se actualiza en vivo con cada opción (idioma, saludo, pago, saldo, fondo). */}
+      <div>
+        <div style={{...lbl,display:'flex',alignItems:'center',gap:6}}>VISTA PREVIA DEL CORREO {(incPago||recordarSaldo||pedirFondo)&&<span style={{fontWeight:600,color:C.greenText}}>· en vivo</span>}</div>
+        <div style={{border:`1px solid ${C.border}`,borderRadius:10,maxHeight:280,overflowY:'auto',background:C.bgSoft,padding:8}}>
+          <div style={{background:'#fff',borderRadius:6}} dangerouslySetInnerHTML={{__html:buildHtml()}}/>
+        </div>
       </div>
       <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?(multi?`Send ${listF.length} invoices`:'Send invoice'):(multi?`Enviar las ${listF.length} facturas`:'Enviar factura'))}</button>
     </div>
