@@ -13742,7 +13742,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       if(txt){ bodyTocado.current=true; setBody(txt) }
     }catch(e){ appAlert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
-  const recordatorio=()=> (recordarSaldo && otroSaldo>0) ? (lang==='en' ? `\n\nWe also kindly remind you of an outstanding balance of ${fmtN(otroSaldo)} in previous invoices.` : `\n\nAdemás, le recordamos que mantiene un saldo pendiente de ${fmtN(otroSaldo)} en facturas anteriores.`) : ''
+  const recordatorio=()=> (recordarSaldo && otroSaldo>0) ? (lang==='en' ? `\n\nAlso, according to our records, there may be an outstanding balance of ${fmtN(otroSaldo)} from previous invoices. If it has already been settled, please disregard this note.` : `\n\nAdemás, según nuestros registros, habría un saldo pendiente de ${fmtN(otroSaldo)} de facturas anteriores. Si ya lo regularizó, por favor omita este mensaje.`) : ''
   // Solicitud de provisión de fondo por rendir (opcional, primera vez). El bloque de la cuenta va aparte (HTML/TXT) para que se vea con formato.
   const fondoFrase=()=> !pedirFondo ? '' : (lang==='en'
     ? `\n\nAdditionally, to set up an expense fund (fondo por rendir)${fondoMonto?` in the amount of ${fmtN(+fondoMonto||0)}`:''}, you may transfer to the account below.`
