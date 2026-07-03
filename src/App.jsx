@@ -5237,7 +5237,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onUnsend, onCotejar, onCargarXML, onReplaceProgramada}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onEnviarVarias, onUnsend, onCotejar, onCargarXML, onReplaceProgramada}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
   const rsDe = b => {
     const nrm=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
@@ -5279,6 +5279,8 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||'')))
   const porEnviarTotal = porEnviar.reduce((a,b)=>a+(b.amount||0),0)
+  // Agrupa por cliente: los que tienen 2+ facturas del mes se pueden "Enviar juntas" (un correo, varios PDF). client_id null → cada una su grupo.
+  const porEnviarGrupos = (()=>{ const m=new Map(); porEnviar.forEach(b=>{ const k=b.client_id?String(b.client_id):('sin-'+b.id); if(!m.has(k)) m.set(k,[]); m.get(k).push(b) }); return [...m.values()] })()
   // Ya enviadas de las cargadas por XML este mes (con correo despachado) → explica por qué "Por enviar" < "Cargadas": las ya despachadas salen.
   const enviadasXmlMes = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.email_sent_at||'').localeCompare(String(a.email_sent_at||'')))
@@ -5445,19 +5447,45 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.4,margin:'0 2px 6px'}}>Por enviar al cliente · {porEnviar.length}{porEnviar.length?` · ${fmt(porEnviarTotal)}`:''}</div>
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todas enviadas ✓</div>}
-            {porEnviar.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
-              <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
-                {bigDate(b.issued_at||b.due,C.accent)}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
-                  <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}{(rs&&rs.rut)||b.receptor_rut?<span style={{color:C.grisText}}> · {(rs&&rs.rut)||b.receptor_rut}</span>:''}</div>
+            {porEnviarGrupos.map((g,gi)=>{ const top=gi>0?{borderTop:`1px solid ${C.border}`}:{}
+              if(g.length===1){ const b=g[0]; const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
+                <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'10px 12px',background:'#fff',...top}}>
+                  {bigDate(b.issued_at||b.due,C.accent)}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
+                    <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}{(rs&&rs.rut)||b.receptor_rut?<span style={{color:C.grisText}}> · {(rs&&rs.rut)||b.receptor_rut}</span>:''}</div>
+                  </div>
+                  <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                    {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'5px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
+                  </div>
                 </div>
-                <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
-                  {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'5px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
+              )}
+              const c=clients.find(x=>x.id===g[0].client_id); const tot=g.reduce((a,b)=>a+(b.amount||0),0); return (
+                <div key={'g'+g[0].id} style={{...top}}>
+                  <div style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.azulBg}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div onClick={e=>abrirCli(e,g[0])} style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&g[0].client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}</div>
+                      <div style={{fontSize:10,color:C.azulInfo}}>{g.length} facturas · {fmt(tot)}</div>
+                    </div>
+                    {onEnviarVarias&&<button onClick={()=>onEnviarVarias(g)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Enviar juntas</button>}
+                  </div>
+                  {g.map(b=>{ const rs=rsDe(b); return (
+                    <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'9px 12px 9px 14px',borderTop:`1px solid ${C.border}`,background:'#fff'}}>
+                      {bigDate(b.issued_at||b.due,C.accent)}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
+                        <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?rsDisplay(rs):''}{(rs&&rs.rut)||b.receptor_rut?`${rs?' · ':''}${(rs&&rs.rut)||b.receptor_rut}`:''}{!rs&&!b.receptor_rut?(b.concept||''):''}</div>
+                      </div>
+                      <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                        {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',fontSize:10.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
+                      </div>
+                    </div>
+                  )})}
                 </div>
-              </div>
-            )})}
+              )
+            })}
           </div>
           {/* Pie auditable: cargadas por XML = por enviar + ya enviadas. Explica por qué "Por enviar" < contador de "Cargar XML". */}
           {enviadasXmlMes.length>0&&(
@@ -6308,6 +6336,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setPagando(false); setPayingId(null)
   }
   const [facturaEmail,setFacturaEmail] = useState(null)   // factura cuya ventana de "Enviar por correo" está abierta
+  const [facturasEmail,setFacturasEmail] = useState(null)   // VARIAS facturas del mismo cliente en un correo (Enviar juntas)
   const [soloSinEnviar,setSoloSinEnviar] = useState(false)   // filtro: solo facturas emitidas que aún no se envían por correo
   const esEmitida = b => b.invoice_no && b.status!=='Programada' && b.status!=='Anulada'
   // "Por enviar" = SOLO facturas EMITIDAS POR LA APP (tienen dte_track_id) que aún no se mandaron por correo.
@@ -7198,7 +7227,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onUnsend={onUnsendFactura} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onEnviarVarias={arr=>setFacturasEmail(arr)} onUnsend={onUnsendFactura} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
@@ -7469,6 +7498,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         )
       })()}
       {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
+      {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
         <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
@@ -13538,12 +13568,28 @@ function facturaCorreoBody(factura, sale, lang){
   if(lang==='en') return `We are pleased to attach the invoice for our legal services. Invoice No. ${folio} corresponds to ${glosa||'the services rendered'}, in the amount of ${fmtN(factura.amount)}.\n\nWe remain at your disposal for any questions.`
   return `Junto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`
 }
+// Cuerpo para VARIAS facturas del mismo cliente en un solo correo (lista + total). saleOf(f) resuelve la venta de cada factura.
+function facturaCorreoBodyMulti(list, saleOf, lang){
+  const rows = list.map(f=>({ folio: folioN(f.invoice_no||'')||f.invoice_no||'', glosa: facturaGlosa(f, saleOf?saleOf(f):null), amount: f.amount||0 }))
+  const total = rows.reduce((a,r)=>a+r.amount,0)
+  if(lang==='en'){
+    const items = rows.map(r=>`- Invoice No. ${r.folio} — ${r.glosa||'services rendered'}, ${fmtN(r.amount)}`).join('\n')
+    return `We are pleased to attach the invoices for our legal services:\n${items}\nTotal: ${fmtN(total)}.\n\nWe remain at your disposal for any questions.`
+  }
+  const items = rows.map(r=>`- Factura N° ${r.folio} — ${r.glosa||'los servicios prestados'}, por ${fmtN(r.amount)}`).join('\n')
+  return `Junto con saludar, adjuntamos las facturas correspondientes a nuestros servicios legales:\n${items}\nTotal: ${fmtN(total)}.\n\nQuedamos atentos a sus comentarios.`
+}
 function facturaCorreoHtml(body, firma, incPago, lang='es'){
   return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
 }
-function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onClose}) {
+function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
+  const listF=(facturas&&facturas.length)?facturas:[factura]   // 1 o VARIAS facturas del MISMO cliente en un solo correo
+  const multi=listF.length>1
+  const saleOf=f=>(sales||[]).find(s=>String(s.id)===String(f.sale_id))||(String(f.id)===String(factura.id)?sale:null)
+  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg) : facturaCorreoBody(factura, sale, lg)
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
+  const foliosMulti=listF.map(f=>folioN(f.invoice_no||'')||f.invoice_no||'').filter(Boolean)
   const concept=(factura.concept||'').trim()
   const proyecto=(sale?.name||'').trim()   // nombre de la venta/proyecto (sales.name) = descripción real del servicio
   const esRecurrente=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
@@ -13553,24 +13599,25 @@ function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onC
   const [cc,setCc]=useState([]); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
-  const [asunto,setAsunto]=useState(`Factura ${folio} · ${client?.name||''}`)
+  const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio} · ${client?.name||''}`)
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
-  const [body,setBody]=useState(facturaCorreoBody(factura, sale, 'es'))
+  const [body,setBody]=useState(genBody('es'))
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
+  const [atts,setAtts]=useState([])   // adjuntos cuando es multi (un PDF por factura)
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
   const [recordarSaldo,setRecordarSaldo]=useState(false)   // recordar otro saldo pendiente del cliente (opcional)
   const [sending,setSending]=useState(false)
   const bodyTocado=useRef(false)
   // Saldo pendiente del cliente en OTRAS facturas (excluye esta, reembolsos y ya pagadas). Fuente única saldoBill.
-  const otroSaldo = useMemo(()=> (billing||[]).filter(b=>String(b.client_id)===String(client?.id||'') && String(b.id)!==String(factura.id) && !b.deleted_at && (b.billing_type||'')!=='reembolso' && ['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0), [billing,client,factura])
+  const otroSaldo = useMemo(()=> (billing||[]).filter(b=>String(b.client_id)===String(client?.id||'') && !listF.some(f=>String(f.id)===String(b.id)) && !b.deleted_at && (b.billing_type||'')!=='reembolso' && ['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0), [billing,client,factura,facturas])
   const saludoEnDe = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
   // Nombre del destinatario (el contacto que calza con "Para", o el cliente). Con eso, si hay varios y el idioma, arma el saludo.
   const destNombre = useMemo(()=>{ const c=(contacts||[]).find(x=>(x.email||'').toLowerCase()===(para||'').toLowerCase()); return (c&&c.nombre)||client?.name||'' },[contacts,para,client])
   useEffect(()=>{ if(!saludoAuto) return; const multi=cc.length>0; setSaludo(lang==='en' ? (multi?'Dear Sir or Madam,':saludoEnDe(destNombre)+',') : (multi?'Estimados,':saludoCli(destNombre)+',')) },[saludoAuto,cc.length,destNombre,lang])
   // Al cambiar de idioma, regenera el cuerpo con la plantilla del idioma (salvo que lo hayas editado a mano).
-  useEffect(()=>{ if(!bodyTocado.current) setBody(facturaCorreoBody(factura, sale, lang)) },[lang])
+  useEffect(()=>{ if(!bodyTocado.current) setBody(genBody(lang)) },[lang])
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email,principal').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
@@ -13580,8 +13627,10 @@ function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onC
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(para||'').toLowerCase()) setCc(p=>[...p,e]); setCcInput('') }
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
-  // Si la factura se emitió por el SII (tiene dte_xml), adjunta el PDF oficial con timbre automáticamente.
-  useEffect(()=>{ if(!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc) return; const r=await facturaDtePdfBase64(doc); if(alive) setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}) }catch(_){} })(); return ()=>{alive=false} },[])
+  // Si la factura se emitió por el SII (tiene dte_xml), adjunta el PDF oficial con timbre automáticamente. (solo modo individual)
+  useEffect(()=>{ if(multi||!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc) return; const r=await facturaDtePdfBase64(doc); if(alive) setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}) }catch(_){} })(); return ()=>{alive=false} },[])
+  // Multi: genera el PDF con timbre de CADA factura y los adjunta todos.
+  useEffect(()=>{ if(!multi) return; let alive=true; (async()=>{ const out=[]; for(const f of listF){ if(!f.dte_xml) continue; try{ const doc=splitSetDTE(f.dte_xml)[0]; if(!doc) continue; const r=await facturaDtePdfBase64(doc); out.push({base64:r.base64,name:`Factura ${folioN(f.invoice_no)||r.folio}.pdf`,mime:'application/pdf'}) }catch(_){} } if(alive) setAtts(out) })(); return ()=>{alive=false} },[])
   const [iaBusy,setIaBusy]=useState(false)
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
   const redactarIA=async()=>{ setIaBusy(true)
@@ -13603,7 +13652,8 @@ function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onC
     try{
       const token=await driveToken()
       if(!token){ appAlert('No se pudo conectar a Gmail. Reingresa con tu correo @leabogados.cl.'); setSending(false); return }
-      await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${cuerpoFull()}\n\n${DATOS_PAGO_TXT}`:cuerpoFull(),bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
+      const adjuntos = multi ? atts : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
+      await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${cuerpoFull()}\n\n${DATOS_PAGO_TXT}`:cuerpoFull(),bodyHtml:buildHtml(),attachments:adjuntos})
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
@@ -13615,14 +13665,14 @@ function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onC
         if(dedup.length){ const {data:ins}=await supabase.from('contacts').insert(dedup.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))).select(); if(ins) setContacts(p=>[...p,...ins]) }
       }catch(_){} }
       const at=new Date().toISOString()
-      try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',factura.id) }catch(_){}
-      onSent&&onSent(factura.id,at); appAlert('Factura enviada al cliente.'); onClose()
+      for(const f of listF){ try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id) }catch(_){}; onSent&&onSent(f.id,at) }
+      appAlert(multi?`${listF.length} facturas enviadas al cliente.`:'Factura enviada al cliente.'); onClose()
     }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
     setSending(false)
   }
   const fInp={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,boxSizing:'border-box'}
   const lbl={fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}
-  return (<Modal title={<><span style={{color:C.accent}}>Enviar factura</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose}>
+  return (<Modal title={<><span style={{color:C.accent}}>Enviar {multi?'facturas':'factura'}</span>{client?.name&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}{multi?` · ${listF.length}`:''}</span></>}</>} onClose={onClose}>
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>
         {contacts.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:5}}>{[...contacts].sort((a,b)=>{ const ta=(a.email||'').toLowerCase()===(para||'').toLowerCase(), tb=(b.email||'').toLowerCase()===(para||'').toLowerCase(); return (tb-ta)||((b.principal?1:0)-(a.principal?1:0)) }).map(c=>{ const isTo=(c.email||'').toLowerCase()===(para||'').toLowerCase(); return <button key={c.email} type='button' title={c.email} onClick={()=>{ if(isTo) return; if(!para.trim()) setPara(c.email); else addCc(c.email) }} style={{fontSize:10,border:isTo?`0.5px solid ${C.accent}`:`0.5px solid ${C.border}`,background:isTo?C.accent:'#fff',color:isTo?'#fff':C.accent,borderRadius:20,padding:'2px 9px',cursor:isTo?'default':'pointer'}}>{isTo?'✓ ':''}{c.nombre||c.email}</button> })}</div>}
@@ -13646,18 +13696,20 @@ function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onC
       <div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
           <span style={{fontSize:10,color:C.muted,fontWeight:600}}>MENSAJE</span>
-          <button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':'✦ Redactar con IA'}</button>
+          {!multi&&<button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':'✦ Redactar con IA'}</button>}
         </div>
         <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
       </div>
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
       {otroSaldo>0&&<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance from other invoices (${fmtN(otroSaldo)})`:`Recordar saldo pendiente de otras facturas (${fmtN(otroSaldo)})`}</span></label>}
-      <div><div style={lbl}>PDF DE LA FACTURA (DTE con timbre)</div>
-        {pdf? <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span><button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
-          : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>}
-        {pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
+      <div><div style={lbl}>{multi?`PDF DE LAS ${listF.length} FACTURAS (DTE con timbre)`:'PDF DE LA FACTURA (DTE con timbre)'}</div>
+        {multi
+          ? (atts.length?<div style={{display:'flex',flexWrap:'wrap',gap:6}}>{atts.map(a=><span key={a.name} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'5px 9px'}}><span style={{fontWeight:600}}>✓</span> {a.name}</span>)}</div>:<div style={{fontSize:11,color:C.muted}}>Generando los PDF con timbre…</div>)
+          : (pdf? <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span><button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
+              : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>)}
+        {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
       </div>
-      <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?'Send invoice':'Enviar factura')}</button>
+      <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?(multi?`Send ${listF.length} invoices`:'Send invoice'):(multi?`Enviar las ${listF.length} facturas`:'Enviar factura'))}</button>
     </div>
   </Modal>)
 }
