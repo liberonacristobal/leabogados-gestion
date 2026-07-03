@@ -15003,6 +15003,33 @@ async function driveUpload(token, folderId, file, name){
   if(!put.ok) throw new Error('Drive subida '+put.status)
   return put.json()
 }
+// Tras emitir un DTE: reusa el PDF ya definido (facturaDtePdfBase64, con logo+timbre) y la carpeta de facturación de
+// Drive (folders.facturas) — mismo camino que procesarRespaldoSII — para subir PDF + XML y adjuntarlos a la factura
+// (billing_attachments) → verlos desde Facturación y la ficha. No bloquea la emisión: si Drive no está conectado
+// devuelve {sinDrive}. Idempotente por nombre (no re-sube si ya está adjunto).
+async function subirFacturaADrive(billId, dteXml){
+  try{
+    const doc = splitSetDTE(dteXml)[0]; if(!doc) return {ok:false}
+    const token = await driveToken(); if(!token) return {ok:false, sinDrive:true}
+    const folders = await driveAdjuntosFolders(token)
+    const r = await facturaDtePdfBase64(doc)
+    const rs = String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)
+    const baseName = 'Factura '+r.folio+(rs?' - '+rs:'')
+    const { data:ex } = await supabase.from('billing_attachments').select('id,name').eq('billing_id',billId)
+    const has = n => (ex||[]).some(a=>a.name===n)
+    const rows=[]
+    const adjuntar = async(file, name)=>{
+      if(has(name)) return
+      const up = await driveUpload(token, folders.facturas, file, name)
+      const { data:ins } = await supabase.from('billing_attachments').insert({ billing_id:billId, drive_file_id:up.id, name:up.name||name, url:up.webViewLink||null, uploaded_by:'Emisión SII' }).select('id,billing_id').single()
+      if(ins) rows.push(ins)
+    }
+    const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
+    await adjuntar(new File([u8], baseName+'.pdf', {type:'application/pdf'}), baseName+'.pdf')
+    await adjuntar(new File([dteXml], baseName+'.xml', {type:'application/xml'}), baseName+'.xml')
+    return {ok:rows.length>0, rows}
+  }catch(e){ return {ok:false, err:e.message} }
+}
 // Manda un archivo a la papelera de Drive.
 async function driveTrash(token, fileId){
   const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,{
@@ -22230,6 +22257,9 @@ export default function App() {
       await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha}).eq('id',ep.billId)
       setBilling(p=>p.map(x=>x.id===ep.billId?{...x,...patch}:x))
       setEmitirPreview(null)
+      // Guarda el PDF (logo+timbre) y el XML en Drive (carpeta de facturación) y los adjunta a la factura. No bloquea.
+      let driveMsg=''
+      if(r.dteXml){ try{ const dr=await subirFacturaADrive(ep.billId, r.dteXml); if(dr.rows?.length){ setBillingAttachments(p=>[...p,...dr.rows]); driveMsg='\nPDF y XML guardados en Drive (adjuntos a la factura).' } else if(dr.sinDrive){ driveMsg='\n(Conecta Drive para guardar el PDF y XML automáticamente.)' } else if(dr.err){ driveMsg=`\n(No se pudo guardar en Drive: ${dr.err})` } }catch(_){} }
       // Automatización emitir→enviar: si el cliente tiene destinatario recordado, ofrece mandar la factura de inmediato (con PDF del DTE). Compuerta humana.
       const fact=(billing||[]).find(x=>String(x.id)===String(ep.billId))
       let dest=null
@@ -22245,10 +22275,10 @@ export default function App() {
           const at=new Date().toISOString()
           await supabase.from('billing').update({email_sent_at:at}).eq('id',ep.billId)
           setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at}:x))
-          appAlert(`Factura ${r.folio} emitida y enviada a ${dest}.`)
-        }catch(e){ appAlert(`Emitida (folio ${r.folio}), pero no se pudo enviar el correo: ${e.message}\nQueda en "Por enviar".`) }
+          appAlert(`Factura ${r.folio} emitida y enviada a ${dest}.`+driveMsg)
+        }catch(e){ appAlert(`Emitida (folio ${r.folio}), pero no se pudo enviar el correo: ${e.message}\nQueda en "Por enviar".`+driveMsg) }
       } else {
-        appAlert(`Emitida al SII.\nFolio ${r.folio} · estado ${r.estado||'enviado'}${dest?'':`\nQueda en "Por enviar".`}`)
+        appAlert(`Emitida al SII.\nFolio ${r.folio} · estado ${r.estado||'enviado'}${dest?'':`\nQueda en "Por enviar".`}`+driveMsg)
       }
     }catch(e){ appAlert('No se pudo emitir al SII: '+e.message) }
     setEmitirBusy(false)
