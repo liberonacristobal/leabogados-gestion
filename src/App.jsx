@@ -20066,6 +20066,15 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                       <div><div style={{fontSize:9.5,color:C.muted}}>Cargos</div><div style={{fontSize:13,fontWeight:700,color:C.overdue}}>−{fmtM(e.sumCargos)}</div></div>
                       {(e.verA||e.verC)&&(()=>{ const okA=!e.verA||e.verA.diff===0; const okC=!e.verC||e.verC.diff===0; const cuadra=okA&&okC; return <div style={{marginLeft:'auto',textAlign:'right'}}><div style={{fontSize:9.5,color:C.muted}}>Cuadra con el banco</div><div style={{fontSize:12,fontWeight:700,color:cuadra?C.greenText:C.overdue}}>{cuadra?'✓ sí':'revisar'}</div></div> })()}
                     </div>
+                    {(e.nuevosRows||[]).length>0&&<div style={{marginTop:8}}>
+                      <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Muestra · {Math.min(3,e.nuevosRows.length)} de {e.nuevos}</div>
+                      {e.nuevosRows.slice(0,3).map((r,ri)=>(
+                        <div key={ri} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'3px 0',borderTop:ri?`1px solid ${C.bgSoft}`:'none'}}>
+                          <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.muted}}>{dmy(r.fecha)} · {r.nombre_contraparte||r.descripcion||'—'}</span>
+                          <span style={{whiteSpace:'nowrap',fontWeight:600,color:r.tipo==='abono'?C.greenText:C.overdue}}>{r.tipo==='abono'?'+':'−'}{fmtM(r.monto)}</span>
+                        </div>
+                      ))}
+                    </div>}
                     {e.error&&<div style={{fontSize:10,color:C.overdueText,marginTop:5}}>{e.error}</div>}
                   </>}
                 </div>
