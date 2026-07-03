@@ -18832,6 +18832,97 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
   )
 }
 
+// Revisión histórica: el STOCK de facturas COBRADAS (Pagado) SIN respaldo bancario de un año → las cruza con la cartola
+// cargada (abono del mismo cliente/RUT, monto exacto, fecha cercana al pago). Separa calce exacto (conciliar en lote) /
+// por revisar / sin pago, mes a mes. Concilia reusando onConciliar=reconciliar (fuente única; una Pagado sin respaldo
+// tiene saldoFactura=monto, así que se liga sin cambiar estado ni mandar correo). No re-usa un mismo abono dos veces.
+function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=[],aplicadoByFactura={},onConciliar,busy,onClose}){
+  const fmtM = fmt
+  const nrm = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+  const cmap = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>m[c.id]=c.name); return m },[clients])
+  const realFolio = b => /\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,''))
+  const yrs = [...new Set((billing||[]).filter(b=>b.status==='Pagado'&&b.paid_at).map(b=>String(b.paid_at).slice(0,4)))].sort().reverse()
+  const [yr,setYr]=useState(yrs.includes('2026')?'2026':(yrs[0]||'2026'))
+  const [openMes,setOpenMes]=useState(null)      // Set de meses abiertos; null = todos abiertos
+  const [pickFac,setPickFac]=useState(null)      // factura con candidatos alternativos desplegados
+  const [loteBusy,setLoteBusy]=useState(false)
+  const [loteProg,setLoteProg]=useState(0)
+  const rutsFac = fac => { const s=new Set(); const add=r=>{const n=nrm(r); if(n)s.add(n)}; add(fac.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(fac.entity_id)); if(e)add(e.rut); const c=(clients||[]).find(x=>String(x.id)===String(fac.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(fac.client_id)).forEach(x=>add(x.rut)); return s }
+  const candsFor = fac => { const facR=rutsFac(fac); const amt=fac.amount||0; const pt=fac.paid_at?new Date(fac.paid_at+'T12:00').getTime():null
+    return (movs||[]).filter(m=> m.tipo==='abono' && !m.es_interno && ((m.monto||0)-(m.monto_conciliado||0))>0 && (String(m.cliente_id)===String(fac.client_id) || (m.rut_contraparte&&facR.has(nrm(m.rut_contraparte)))))
+      .map(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const dt=m.fecha?new Date(m.fecha+'T12:00').getTime():null; const dias=(pt&&dt)?Math.round((dt-pt)/86400000):null; return {m,resto,dias,exacto:resto===amt,adias:dias==null?99999:Math.abs(dias)} })
+      .sort((a,b)=> (b.exacto-a.exacto)||(a.adias-b.adias)) }
+  const items = useMemo(()=>{ const cob=(billing||[]).filter(b=> !b.deleted_at && b.status==='Pagado' && (b.billing_type||'')!=='reembolso' && realFolio(b) && (aplicadoByFactura[b.id]||0)<=0 && String(b.paid_at||'').slice(0,4)===yr && String(b.paid_at||'')>=RESPALDO_CUTOFF )
+    return cob.map(fac=>{ const cs=candsFor(fac); const ex=cs.filter(c=>c.exacto); const best=ex.length===1?ex[0]:null; const cls=best?'exacto':(cs.length?'revisar':'sinpago'); return {fac,cs,ex,best,cls} })
+      .sort((a,b)=> String(a.fac.paid_at||'').localeCompare(String(b.fac.paid_at||''))) },[billing,movs,aplicadoByFactura,yr])   // eslint-disable-line
+  const nExacto=items.filter(i=>i.cls==='exacto').length, nRev=items.filter(i=>i.cls==='revisar').length, nSin=items.filter(i=>i.cls==='sinpago').length
+  const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const byMes={}; items.forEach(it=>{ const mk=String(it.fac.paid_at||'').slice(0,7); (byMes[mk]=byMes[mk]||[]).push(it) })
+  const meses=Object.keys(byMes).sort()
+  const conciliarExactos = async()=>{ if(loteBusy||busy) return; setLoteBusy(true); setLoteProg(0); const used=new Set(); let done=0
+    for(const it of items.filter(i=>i.cls==='exacto')){ if(used.has(it.best.m.id)) continue; used.add(it.best.m.id); try{ await onConciliar(it.best.m, it.fac) }catch(_){}; done++; setLoteProg(done) } setLoteBusy(false) }
+  const depLine = m => `${fmtFechaDMY(m.fecha)}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}${m.n_operacion?` · N° op. ${m.n_operacion}`:''}`
+  const diasTxt = d => d==null?'':d===0?'mismo día':`${d>0?'+':''}${d} d`
+  const Deposito = ({c,fac})=>(
+    <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:11}}><b style={{color:C.greenText}}>+{fmtM(c.m.monto)}</b> <span style={{color:C.done}}>· {depLine(c.m)}</span></div>
+        <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap'}}>
+          <span style={{fontSize:9,fontWeight:700,color:c.exacto?C.greenText:C.soonText,background:c.exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'1px 7px'}}>{c.exacto?'✓ monto exacto':`dif ${fmtM(Math.abs(c.resto-(fac.amount||0)))}`}</span>
+          {c.dias!=null&&<span style={{fontSize:9,fontWeight:600,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'1px 7px'}}>{diasTxt(c.dias)}</span>}
+          {c.m.descripcion&&<span style={{fontSize:9,color:C.muted,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.m.descripcion.slice(0,40)}</span>}
+        </div>
+      </div>
+      <button disabled={!!busy||loteBusy} onClick={()=>onConciliar(c.m,fac)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:(busy||loteBusy)?'default':'pointer',flexShrink:0}}>Conciliar</button>
+    </div>
+  )
+  return (
+    <Modal title='Conciliar cobradas · cartola' onClose={onClose}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+        <select value={yr} onChange={e=>{setYr(e.target.value);setPickFac(null)}} style={{fontSize:13,fontWeight:600,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,color:C.accent}}>{(yrs.length?yrs:[yr]).map(y=><option key={y} value={y}>{y}</option>)}</select>
+        <span style={{fontSize:11,color:C.muted}}>facturas cobradas sin respaldo bancario</span>
+      </div>
+      {items.length===0
+        ? <div style={{background:C.greenBg,border:'1px solid #BFE3D5',borderRadius:12,padding:'14px',fontSize:12,color:C.greenText,fontWeight:600}}>✓ Ninguna cobrada del {yr} quedó sin respaldo.</div>
+        : <>
+        <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+          <div style={{flex:'1 1 90px',background:C.greenBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.greenText}}>Calce exacto</div><div style={{fontSize:17,fontWeight:700,color:C.greenText}}>{nExacto}</div></div>
+          <div style={{flex:'1 1 90px',background:C.soonBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.soonText}}>Por revisar</div><div style={{fontSize:17,fontWeight:700,color:C.soonText}}>{nRev}</div></div>
+          <div style={{flex:'1 1 90px',background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.muted}}>Sin pago</div><div style={{fontSize:17,fontWeight:700,color:C.muted}}>{nSin}</div></div>
+        </div>
+        {nExacto>0&&<button disabled={loteBusy||!!busy} onClick={conciliarExactos} style={{width:'100%',fontSize:12,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:9,padding:'10px',cursor:(loteBusy||busy)?'default':'pointer',marginBottom:12,opacity:(loteBusy||busy)?.7:1}}>{loteBusy?`Conciliando ${loteProg}/${nExacto}…`:`Conciliar los ${nExacto} de calce exacto`}</button>}
+        {meses.map(mk=>{ const its=byMes[mk]; const abierto = openMes===null || openMes.has(mk); const ex=its.filter(i=>i.cls==='exacto').length
+          return (
+          <div key={mk} style={{marginBottom:10}}>
+            <div onClick={()=>setOpenMes(s=>{ const base=s===null?new Set(meses):new Set(s); base.has(mk)?base.delete(mk):base.add(mk); return base })} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'6px 2px',borderBottom:`1px solid ${C.border}`}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{MES[+mk.slice(5,7)-1]||mk} {mk.slice(0,4)} <span style={{color:C.muted,fontWeight:500}}>· {its.length}</span></span>
+              <span style={{fontSize:10,color:C.muted}}>{ex?`${ex} exacto${ex!==1?'s':''} · `:''}{abierto?'▾':'▸'}</span>
+            </div>
+            {abierto&&its.map(it=>{ const fac=it.fac; const rs=fac.receptor_name||cmap[fac.client_id]||'—'
+              return (
+              <div key={fac.id} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginTop:7}}>
+                <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
+                  <span style={{fontSize:12,fontWeight:700,color:C.accent}}>N°{folioN(fac.invoice_no)||'—'}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:C.text}}>{fmtM(fac.amount)}</span>
+                </div>
+                <div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{fac.receptor_rut?` · ${fac.receptor_rut}`:''}</div>
+                <div style={{fontSize:10,color:C.muted,marginBottom:4}}>cobrada {fac.paid_at?fmtFechaDMY(fac.paid_at):'—'}{fac.concept?` · ${fac.concept}`:''}</div>
+                {it.cls==='exacto'&&<Deposito c={it.best} fac={fac}/>}
+                {it.cls==='revisar'&&<>
+                  <div style={{fontSize:10,fontWeight:600,color:C.soonText,marginTop:2}}>{it.ex.length>1?`${it.ex.length} pagos calzan exacto — elige`:'sin calce exacto — revisa los cercanos'}</div>
+                  {(pickFac===fac.id?it.cs:it.cs.slice(0,3)).map(c=><Deposito key={c.m.id} c={c} fac={fac}/>)}
+                  {it.cs.length>3&&<button onClick={()=>setPickFac(pickFac===fac.id?null:fac.id)} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',marginTop:3,padding:0}}>{pickFac===fac.id?'ver menos':`ver ${it.cs.length-3} más`}</button>}
+                </>}
+                {it.cls==='sinpago'&&<div style={{fontSize:10.5,color:C.muted,marginTop:2}}>No hay un pago que calce en la cartola cargada. Si el pago existe, carga ese mes de cartola o revísalo en el Banco.</div>}
+              </div>
+            )})}
+          </div>
+        )})}
+      </>}
+    </Modal>
+  )
+}
+
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
 function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII}){
   // Capa 2 — RUT conocidos para el tag "quién es"
@@ -18848,6 +18939,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [verificando,setVerificando] = useState(false)
   const [aliases,setAliases] = useState([])
   const [sub,setSub] = useState('abonos')        // 'abonos' | 'cargos'
+  const [cobradasOpen,setCobradasOpen] = useState(false)   // modal de revisión histórica: cobradas sin respaldo ↔ cartola
   const [cuentaF,setCuentaF] = useState('ambas')   // filtro por cuenta: 'ambas' | 'honorarios' | 'gastos'
   const [anioF,setAnioF] = useState('todos')       // filtro por año
   const [mesF,setMesF] = useState('todos')         // filtro por mes (01-12)
@@ -20153,6 +20245,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                 <button key={v} onClick={()=>setSub(v)} style={{fontSize:10.5,fontWeight:600,padding:'0 11px',border:'none',borderRadius:7,background:sub===v?C.accent:'transparent',color:sub===v?'#fff':C.muted,cursor:'pointer'}}>{l}</button>
               ))}
             </span>
+            {(()=>{ const n=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Pagado'&&(b.billing_type||'')!=='reembolso'&&/\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,''))&&(aplicadoByFactura[b.id]||0)<=0&&String(b.paid_at||'')>=RESPALDO_CUTOFF).length; return <button onClick={()=>setCobradasOpen(true)} title='Revisión histórica: cobradas sin respaldo bancario ↔ cartola' style={{fontSize:10.5,fontWeight:600,height:26,boxSizing:'border-box',padding:'0 10px',borderRadius:7,border:'none',background:n?C.ambarBg:'#F2F5F7',color:n?C.soonText:C.muted,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}>Cobradas s/ respaldo{n?` · ${n}`:''}</button> })()}
+            {cobradasOpen&&<CobradasSinRespaldoModal billing={billing} movs={movs} clients={clients} clientEntities={clientEntities} aplicadoByFactura={aplicadoByFactura} onConciliar={reconciliar} busy={busy} onClose={()=>setCobradasOpen(false)}/>}
             <select value={cuentaF} onChange={e=>setCuentaF(e.target.value)} style={selSty}>
               <option value='ambas'>Cuenta</option>
               <option value='honorarios'>Honorarios</option>
