@@ -13654,8 +13654,14 @@ async function verFacturaPdf(b){
 // Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
 function facturaGlosa(factura, sale){
   const concept=(factura.concept||'').trim(), proyecto=(sale?.name||'').trim()
-  const esRec=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
-  return esRec?(proyecto||concept):(concept||proyecto)   // recurrente → proyecto (no "Cuota N/M"); puntual → concepto
+  // Limpia el marcador de cuota del concepto ("— cuota 2/10", "cuota 2/10", "(cuota 2/10)") para que la glosa sea el SERVICIO, no la cuota.
+  const limpio = concept
+    .replace(/\s*[—\-·|:]\s*cuota\s*\d+\s*\/\s*\d+\s*$/i,'')
+    .replace(/\s*\(\s*cuota\s*\d+\s*\/\s*\d+\s*\)\s*$/i,'')
+    .replace(/\s*cuota\s*\d+\s*\/\s*\d+\s*$/i,'')
+    .trim()
+  // Lo mejor entre el proyecto y la glosa de la factura: la glosa limpia; si queda vacía (era solo "cuota N/M"), el proyecto; si no, el concepto crudo.
+  return limpio || proyecto || concept
 }
 // despedida = SIEMPRE va al final del correo (después de los bloques insertados). Con sinCierre no la incluye el cuerpo (el modal la agrega al final).
 const CORREO_DESPEDIDA = lang => lang==='en'?'We remain at your disposal for any questions.':'Quedamos atentos a sus comentarios.'
@@ -13706,7 +13712,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [cc,setCc]=useState([]); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
-  const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio}${glosa?` · ${glosa}`:(client?.name?` · ${client.name}`:'')}`)   // número + glosa de la factura
+  const glosaFac=facturaGlosa(factura, sale)   // misma glosa que el cuerpo (proyecto o glosa de la factura, sin "cuota N/M")
+  const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio}${glosaFac?` · ${glosaFac}`:(client?.name?` · ${client.name}`:'')}`)   // número + glosa de la factura
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
   const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es', undefined, true) : facturaCorreoBody(factura, sale, 'es', true))
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
