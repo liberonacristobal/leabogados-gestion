@@ -13406,6 +13406,14 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
       await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${body}\n\n${DATOS_PAGO_TXT}`:body,bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
+      // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
+      // (no repetir: la app aprende quién recibe facturas). No pisa contactos existentes.
+      if(client?.id){ try{
+        const yaMails=new Set((contacts||[]).map(c=>(c.email||'').toLowerCase()))
+        const nuevos=[para.trim(),...cc].map(e=>e.trim()).filter(e=>e&&e.includes('@')&&!yaMails.has(e.toLowerCase()))
+        const dedup=[...new Set(nuevos.map(e=>e.toLowerCase()))]
+        if(dedup.length){ const {data:ins}=await supabase.from('contacts').insert(dedup.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))).select(); if(ins) setContacts(p=>[...p,...ins]) }
+      }catch(_){} }
       const at=new Date().toISOString()
       try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',factura.id) }catch(_){}
       onSent&&onSent(factura.id,at); appAlert('Factura enviada al cliente.'); onClose()
