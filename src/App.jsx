@@ -13662,8 +13662,12 @@ function mejorVenta(factura, sales, clientId){
   if(direct && ventaNombre(direct)) return direct
   const cs = list.filter(s=>String(s.client_id)===String(clientId||'') && ventaNombre(s))
   if(cs.length===1) return cs[0]
-  const act = cs.filter(s=>s.status==='Activo')
-  if(act.length===1) return act[0]
+  if(cs.length>1){
+    // Varias ventas: la Activa más reciente; si ninguna Activa, la más reciente con nombre (mejor traer de más, el usuario recorta/edita).
+    const rec = a => String(a.created_at||a.date||a.year||'')
+    const act = cs.filter(s=>s.status==='Activo').sort((a,b)=>rec(b).localeCompare(rec(a)))
+    return (act[0] || [...cs].sort((a,b)=>rec(b).localeCompare(rec(a)))[0]) || null
+  }
   return direct || null
 }
 // Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
