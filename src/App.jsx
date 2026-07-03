@@ -5278,7 +5278,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   // Por enviar al cliente: emitidas con respaldo (XML/PDF) que aún no se envían por correo, del mes de emisión seleccionado.
   const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||'')))
-  const porEnviarTotal = porEnviar.reduce((a,b)=>a+(b.amount||0),0)
+  const porEnviarTotal = porEnviar.reduce((a,b)=>a+montoFactura(b),0)
   // Agrupa por cliente: los que tienen 2+ facturas del mes se pueden "Enviar juntas" (un correo, varios PDF). client_id null → cada una su grupo.
   const porEnviarGrupos = (()=>{ const m=new Map(); porEnviar.forEach(b=>{ const k=b.client_id?String(b.client_id):('sin-'+b.id); if(!m.has(k)) m.set(k,[]); m.get(k).push(b) }); return [...m.values()] })()
   // Ya enviadas de las cargadas por XML este mes (con correo despachado) → explica por qué "Por enviar" < "Cargadas": las ya despachadas salen.
@@ -5456,12 +5456,12 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                     <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}{(rs&&rs.rut)||b.receptor_rut?<span style={{color:C.grisText}}> · {(rs&&rs.rut)||b.receptor_rut}</span>:''}</div>
                   </div>
                   <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
                     {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'5px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
                   </div>
                 </div>
               )}
-              const c=clients.find(x=>x.id===g[0].client_id); const tot=g.reduce((a,b)=>a+(b.amount||0),0); return (
+              const c=clients.find(x=>x.id===g[0].client_id); const tot=g.reduce((a,b)=>a+montoFactura(b),0); return (
                 <div key={'g'+g[0].id} style={{...top}}>
                   <div style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.azulBg}}>
                     <div style={{flex:1,minWidth:0}}>
@@ -5478,7 +5478,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                         <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?rsDisplay(rs):''}{(rs&&rs.rut)||b.receptor_rut?`${rs?' · ':''}${(rs&&rs.rut)||b.receptor_rut}`:''}{!rs&&!b.receptor_rut?(b.concept||''):''}</div>
                       </div>
                       <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
                         {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',fontSize:10.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
                       </div>
                     </div>
@@ -5505,7 +5505,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                         <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
                       </div>
                       <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
                         <div style={{display:'flex',gap:6}}>
                           {onUnsend&&<button onClick={()=>onUnsend(b)} title='Deshacer el envío (fue una prueba) → vuelve a Por enviar' style={{background:'#fff',color:C.muted,border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>No enviada</button>}
                           {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Reenviar</button>}
@@ -13555,6 +13555,11 @@ function recordatorioCobro(b){
   const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>${esc(apertura)}${DATOS_PAGO_HTML}Si ya realizó el pago, por favor omita este mensaje. Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
   return { nivel, folio, monto, subject:`${nivel==='amable'?'Recordatorio de cobro':'Pago vencido'} — ${folio}`, html, text }
 }
+// Monto REAL de una factura emitida = MntTotal de su DTE (autoridad legal), no el monto programado de la venta.
+// Barato: regex sobre el XML, sin generar el PDF. Devuelve número o null si no hay DTE.
+function dteMontoTotal(dteXml){ if(!dteXml) return null; const m=String(dteXml).match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); return m?Math.round(+m[1]):null }
+// Monto a mostrar/usar de una factura: el del DTE si está emitida con XML; si no, el guardado (programado).
+function montoFactura(b){ const t=b&&b.dte_xml?dteMontoTotal(b.dte_xml):null; return (t!=null)?t:(b?.amount||0) }
 // Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
 function facturaGlosa(factura, sale){
   const concept=(factura.concept||'').trim(), proyecto=(sale?.name||'').trim()
@@ -13607,7 +13612,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
   const [atts,setAtts]=useState([])   // adjuntos cuando es multi (un PDF por factura)
-  const [dteTotals,setDteTotals]=useState({})   // id factura → MntTotal REAL del DTE (autoridad = lo que dice el PDF); prima sobre amount del sistema
+  const [dteTotals,setDteTotals]=useState(()=>{ const m={}; listF.forEach(f=>{ if(f.dte_xml){ const t=dteMontoTotal(f.dte_xml); if(t!=null) m[f.id]=t } }); return m })   // id factura → MntTotal REAL del DTE (autoridad = el DTE); prima sobre amount del sistema (programado)
   const amountOf=f=>{ const t=dteTotals[f?.id]; return (t!=null)?t:(f?.amount||0) }
   // Abre el PDF (base64) en una pestaña para previsualizarlo antes de enviar.
   const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
