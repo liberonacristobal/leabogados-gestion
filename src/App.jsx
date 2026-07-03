@@ -1248,8 +1248,8 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
           const token = await driveToken()
           if(token && pdf){ await sendGmailWithPdf(token, {to:toAll, subject:asunto, bodyText:texto, bodyHtml:html, pdfBase64:pdf, pdfName}); sent=true }
         }catch(_){ sent=false }
-        // 2) fallback: desde la cuenta de oficina (servidor SMTP) con el PDF adjunto — siempre funciona
-        if(!sent && pdf){ try{ await sendMailServer({to:toAll, subject:asunto, html, text:texto, pdfBase64:pdf, pdfName}); sent=true }catch(_){ sent=false } }
+        // 2) si el Gmail del usuario falló, se PREGUNTA antes de usar la oficina; si dice que no, cae al mailto (3) desde su correo
+        if(!sent && pdf && await appConfirm(MAIL_OFICINA_CONFIRM)){ try{ await sendMailServer({to:toAll, subject:asunto, html, text:texto, pdfBase64:pdf, pdfName}); sent=true }catch(_){ sent=false } }
         // 3) último recurso: mailto + PDF imprimible para adjuntar a mano
         if(!sent){
           const ccStr = (cc||'').trim() ? '&cc=' + encodeURIComponent(cc.trim()) : ''
@@ -6238,7 +6238,13 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const conDest=porEnviar.filter(b=>factToMap[String(b.client_id)])
     const sinDest=porEnviar.length-conDest.length
     if(!conDest.length){ appAlert('Ninguna factura por enviar tiene un destinatario recordado todavía.\nEnvíalas una a una: ahí eliges el correo y la app lo aprende para la próxima.'); return }
-    if(!await appConfirm(`Enviar ${conDest.length} factura(s) a su destinatario recordado, desde la cuenta de oficina.${sinDest?`\n${sinDest} se omiten (sin correo recordado).`:''}\n\n¿Continuar?`)) return
+    // Modo del lote: si hay acceso a Gmail → desde TU correo; si no, se pregunta antes de usar la oficina (o se cancela).
+    const _tok = await driveToken()
+    let batchModo = _tok ? 'usuario' : null
+    if(!batchModo){
+      if(!await appConfirm(`No se pudo preparar el envío desde tu correo: tu acceso a Gmail expiró.\nPara que salgan desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl.\n\n¿Enviar las ${conDest.length} desde la cuenta de oficina en su lugar?${sinDest?`\n(${sinDest} se omiten sin correo recordado.)`:''}\n(Cancelar = no enviar)`)) return
+      batchModo='oficina'
+    } else if(!await appConfirm(`Enviar ${conDest.length} factura(s) desde TU correo a su destinatario recordado.${sinDest?`\n${sinDest} se omiten (sin correo recordado).`:''}\n\n¿Continuar?`)) return
     setEnvioMasivoBusy(true)
     const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
     let ok=0, err=0
@@ -6250,7 +6256,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         const html=facturaCorreoHtml(body, firma, false)
         const folio=folioN(b.invoice_no||'')||b.invoice_no||''
         let pdf=null; if(b.dte_xml){ try{ const doc=splitSetDTE(b.dte_xml)[0]; if(doc) pdf=await facturaDtePdfBase64(doc) }catch(_){} }
-        await sendMailServer({to:dest, subject:`Factura ${folio}`, html, text:body, ...(pdf?{pdfBase64:pdf.base64, pdfName:`Factura ${folio}.pdf`}:{})})
+        const via=await enviarComoUsuario({to:dest, subject:`Factura ${folio}`, html, text:body, ...(pdf?{pdfBase64:pdf.base64, pdfName:`Factura ${folio}.pdf`}:{})}, batchModo)
+        if(via===null){ err++; continue }
         const at=new Date().toISOString()
         try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',b.id) }catch(_){}
         setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at}:x))
@@ -6498,7 +6505,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const filas=pend.map(b=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">N° ${folioN(b.invoice_no)||b.invoice_no}</td><td style="padding:6px 8px;border-bottom:1px solid #eee">${b.due?fmtFechaDMY(b.due):'—'}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">$${saldoBill(b).toLocaleString('es-CL')}</td></tr>`).join('')
     const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Junto con saludar, les compartimos el estado de cuenta con las facturas pendientes a la fecha:<br><br><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Factura</th><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #003C50">Vence</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #003C50">Saldo</th></tr></thead><tbody>${filas}</tbody><tfoot><tr><td colspan="2" style="padding:8px 8px;font-weight:bold">Total adeudado</td><td style="padding:8px 8px;text-align:right;font-weight:bold;color:#003C50">$${total.toLocaleString('es-CL')}</td></tr></tfoot></table><br>${DATOS_PAGO_HTML}Quedamos atentos a su confirmación.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div></div>`
     const text=`Estado de cuenta — ${cli.name}\n\n${pend.map(b=>`N° ${folioN(b.invoice_no)||b.invoice_no} · vence ${b.due?fmtFechaDMY(b.due):'—'} · $${saldoBill(b).toLocaleString('es-CL')}`).join('\n')}\n\nTotal adeudado: ${fmt(total)}\n\n${DATOS_PAGO_TXT}\n\nSaludos cordiales,\nLiberona Escala Abogados`
-    try{ await sendMailServer({to, subject:'Estado de cuenta — Liberona Escala Abogados', html, text}); appAlert(`Estado de cuenta enviado a ${to}.`) }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
+    try{ const via=await enviarComoUsuario({to, subject:'Estado de cuenta — Liberona Escala Abogados', html, text}); if(via) appAlert(`Estado de cuenta enviado a ${to}${via==='oficina'?' (desde la cuenta de oficina)':''}.`) }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
   }
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   const recordarCobro = async(b)=>{
@@ -6507,7 +6514,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const r=recordatorioCobro(b)
     if(!await appConfirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
-    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
+    try{ const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
@@ -6518,7 +6525,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     const folio=b.invoice_no?`Factura N°${folioN(b.invoice_no)}`:'la factura'
     const monto='$'+(b.amount||0).toLocaleString('es-CL')
     if(!await appConfirm(`¿Enviar acuse de pago a ${to} por ${folio} (${monto})?`)) return
-    try{ await acusePagoEmail(to,{folio,monto,fecha:b.paid_at?fmtFechaDMY(b.paid_at):''}); appAlert('Acuse de pago enviado desde la cuenta de oficina.') }
+    try{ const via=await acusePagoEmail(to,{folio,monto,fecha:b.paid_at?fmtFechaDMY(b.paid_at):''}); if(via) appAlert(`Acuse de pago enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) }
     catch(e){ appAlert('No se pudo enviar el acuse: '+e.message) }
   }
   const emitirConRS = async(b) => { const ents=(clientEntities||[]).filter(e=>e.client_id===b.client_id); const ent=b.entity_id?ents.find(e=>e.id===b.entity_id):(ents.length===1?ents[0]:null); await onEmitir(b, ent||null) }
@@ -10514,8 +10521,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
       else if(pdf) adjuntos.push({base64:pdf, name:`Liquidacion Notaria Lascar al ${fechaLiq}.pdf`, mime:'application/pdf'})
       adjuntos.push({base64:compB64, name:`Comprobante transferencia.${ext}`, mime:compMime})
       let sent=false
-      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,cc:ccEstudio,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
-      if(!sent){ try{ await sendMailServer({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
+      try{ const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); if(via===null){ setNotaSending(false); return } sent=true }catch(_){ sent=false }
       if(!sent){ appAlert('No se pudo enviar el correo. Revisa la conexión o reintenta.'); setNotaSending(false); return }
       const now=new Date().toISOString()
       await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl}).eq('id',r.id)
@@ -10556,8 +10562,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         if(fid){ try{ const tk=await driveToken(); if(tk){ const b=await driveDownloadB64(tk,fid); if(b&&b.base64){ adjuntos.push({base64:b.base64,name:`Comprobante transferencia.${b.ext}`,mime:b.mime}); conComp=true } } }catch(_){} }
       }
       let sent=false
-      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:dest,cc:ccEstudio,subject:subjectNota,bodyText:texto,bodyHtml:html,attachments:adjuntos}); sent=true } }catch(_){ sent=false }
-      if(!sent){ try{ await sendMailServer({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); sent=true }catch(_){ sent=false } }
+      try{ const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos}); if(via===null){ setReenviando(null); return } sent=true }catch(_){ sent=false }
       if(!sent){ appAlert('No se pudo reenviar. Revisa la conexión o reintenta.'); setReenviando(null); return }
       appAlert('Reenviado a la notaría'+(conComp?' con el comprobante.':'.\n(No se pudo recuperar el comprobante de Drive; se reenvió solo el detalle.)'))
     }catch(e){ appAlert('Error al reenviar: '+e.message) }
@@ -13200,7 +13205,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     if(!to){ appAlert('El cliente no tiene correo en su ficha. Agrégalo para poder recordar el cobro.'); return }
     const r=recordatorioCobro(b)
     if(!await appConfirm(`¿Enviar recordatorio (${r.nivel}) de cobro a ${to} por ${r.folio} (${r.monto})?`)) return
-    try{ await sendMailServer({to, subject:r.subject, html:r.html, text:r.text}); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado desde la cuenta de oficina.`) }
+    try{ const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:new Date().toISOString()},{onConflict:'kind,key'}) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Registrar pago (total o parcial/abono). Si el monto recibido < saldo → queda "abonado" (paid_amount) y la factura sigue pendiente.
@@ -13517,7 +13522,10 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     const atts=comp?[{base64:comp.b64,name:comp.name,mime:comp.mime}]:[]
     let sent=false,err=null
     try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:ccStr,subject:asunto,bodyText:body,bodyHtml:buildHtml(body,true),inlineImages:logosInline,attachments:atts}); sent=true } }catch(e){ err=e }
-    if(!sent){ try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; appAlert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 } }
+    if(!sent){
+      if(!await appConfirm(MAIL_OFICINA_CONFIRM)){ setSending(false); return }
+      try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; appAlert('Enviado desde la cuenta de oficina, con el comprobante adjunto.\n(Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)') }catch(e2){ err=e2 }
+    }
     setSending(false)
     if(sent){ try{ if(cc.length) await supabase.from('learnings').upsert({kind:'rendicion_cc',key:String(client.id),value:cc.join(', ')},{onConflict:'kind,key'}) }catch(_){} try{ if((para||'').trim()) await supabase.from('learnings').upsert({kind:'rendicion_para',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}
       // Registrar el envío de la devolución en la rendición → chip "Devolución enviada" en el historial.
@@ -13590,7 +13598,7 @@ async function acusePagoEmail(to, {folio, monto, fecha}){
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const texto=`Estimados,\n\nConfirmamos la recepción del pago de ${folio} por ${monto}${fecha?`, con fecha ${fecha}`:''}. Agradecemos su pago.\n\nSaludos cordiales,\nLiberona Escala Abogados`
   const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Confirmamos la recepción del pago de <b>${esc(folio)}</b> por <b>${esc(monto)}</b>${fecha?`, con fecha <b>${esc(fecha)}</b>`:''}. Agradecemos su pago.<br><br>Saludos cordiales,<br><b>Liberona Escala Abogados</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl</div></div>`
-  return sendMailServer({to, subject:`Confirmación de pago — ${folio}`, html, text:texto})
+  return enviarComoUsuario({to, subject:`Confirmación de pago — ${folio}`, html, text:texto})
 }
 // Envío de una factura por correo. Reusa el motor de la rendición (driveToken + sendGmailWithPdf + firma).
 // Plantilla genérica auto-rellenada + destinatarios de la ficha (contactos) + CC aprendido. PDF a mano por ahora (con la emisión DTE saldrá solo).
@@ -13776,15 +13784,10 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       const adjuntos = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
       let bodyTxt=cuerpoFull(); if(incPago) bodyTxt+=`\n\n${DATOS_PAGO_TXT}`; if(pedirFondo) bodyTxt+=`\n\n${datosGastosTxt(ctaGastos,lang)}`
       if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
-      // Envía SIEMPRE desde el correo del usuario. Si su token de Gmail venció (401) o no hay, NO se manda solo desde otra cuenta:
-      // se detiene, se explica cómo dejarlo saliendo desde su correo (reingresar) y se pregunta si quiere usar la oficina esta vez.
-      let viaServer=false, sent=false
-      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:bodyTxt,bodyHtml:buildHtml(),attachments:adjuntos}); sent=true } }catch(_){}
-      if(!sent){
-        const usarOficina = await appConfirm('No se pudo enviar desde tu correo: tu acceso a Gmail expiró.\n\nPara que salga desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl, y reintenta el envío.\n\n¿Enviarlo ahora desde la cuenta de oficina en su lugar?\n(Cancelar = no enviar; reingresas y lo mandas tú)')
-        if(!usarOficina){ setSending(false); return }
-        await sendMailServer({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos}); sent=true; viaServer=true
-      }
+      // Envía SIEMPRE desde el correo del usuario; si su Gmail venció, enviarComoUsuario pregunta antes de usar la oficina (o cancela).
+      const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos})
+      if(via===null){ setSending(false); return }
+      const viaServer = via==='oficina'
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
@@ -14020,16 +14023,21 @@ Saludos cordiales,`
         }catch(err){ sendErr = err /* sin scope gmail.send (403) u otro: caemos al fallback */ }
       }
       if(!conAdjunto){
-        // Fallback robusto: el usuario no tiene permiso gmail.send → enviar IGUAL desde la cuenta de oficina
-        // (servidor SMTP) con el PDF adjunto. Solo si el servidor también falla, se descarga y se abre Gmail a mano.
-        try{
-          const pdf = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
-          await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:textoFull, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
-          conAdjunto = true
-          appAlert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
-        }catch(srvErr){
-          // Último recurso: descargar el PDF REAL (jsPDF) y abrir Gmail para adjuntarlo a mano.
-          appAlert('No se pudo enviar automáticamente.\nGmail: '+(sendErr?.message||sendErr||'—')+'\nServidor: '+(srvErr?.message||srvErr||'—')+'\n\nDescargamos el PDF y abrimos Gmail para que lo adjuntes.')
+        // No se pudo desde el correo del usuario. NO se manda solo desde otra cuenta: se pregunta.
+        // Si acepta → oficina. Si NO (o la oficina falla) → se descarga el PDF y se abre Gmail para enviarlo a mano DESDE SU correo.
+        const usarOficina = await appConfirm(MAIL_OFICINA_CONFIRM)
+        let irAManual = !usarOficina
+        if(usarOficina){
+          try{
+            const pdf = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
+            await sendMailServer({to:para.trim(), cc:ccStr, subject:asunto, html:buildEmailHtml(texto, lang), text:textoFull, pdfBase64:pdf, pdfName:`${lang==='en'?'Expense Report':'Rendicion'} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${r.project||''}`.trim()+'.pdf'})
+            conAdjunto = true
+            appAlert('Enviado al cliente desde la cuenta de oficina, con el PDF adjunto. (Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)')
+          }catch(srvErr){ irAManual = true; sendErr = sendErr || srvErr }
+        }
+        if(irAManual && !conAdjunto){
+          // Sale desde TU correo: descargamos el PDF y abrimos Gmail para que lo adjuntes a mano.
+          appAlert('Para enviarlo desde tu correo: descargamos el PDF y abrimos Gmail para que lo adjuntes.\n(O cierra sesión y vuelve a entrar para enviarlo automático desde tu cuenta.)')
           try{
             const b64 = await rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang)
             const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
@@ -15340,8 +15348,22 @@ async function liquidacionExcelB64({gastos, clients, titulo, sub}){
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
   return XLSX.write(wb,{bookType:'xlsx',type:'base64'})
 }
-// Envío desde la CUENTA DE OFICINA vía edge function (SMTP). Fallback cuando el usuario no tiene
-// el permiso gmail.send: la rendición/liquidación se envía igual, con el PDF adjunto.
+// REGLA (usuario): los correos SIEMPRE salen desde el correo del usuario. Si su acceso a Gmail venció o no tiene el permiso,
+// NO se manda a escondidas desde otra cuenta: se pregunta y se explica cómo dejarlo saliendo desde el suyo (reingresar).
+const MAIL_OFICINA_CONFIRM = 'No se pudo enviar desde tu correo: tu acceso a Gmail expiró.\n\nPara que salga desde TU correo: cierra sesión y vuelve a entrar con tu cuenta @leabogados.cl, y reintenta el envío.\n\n¿Enviarlo ahora desde la cuenta de oficina en su lugar?\n(Cancelar = no enviar; reingresas y lo mandas tú)'
+// Envía desde el Gmail del usuario; si falla, PREGUNTA antes de usar la oficina. Devuelve 'usuario' | 'oficina' | null (cancelado, no se envió).
+// Para envíos masivos pasa modo pre-decidido en `batch` ('usuario'|'oficina'|'cancelar') para no preguntar por cada correo.
+async function enviarComoUsuario(opts, batch){
+  const gmail = {to:opts.to, cc:opts.cc, subject:opts.subject, bodyText:opts.text, bodyHtml:opts.html, pdfBase64:opts.pdfBase64, pdfName:opts.pdfName, attachments:opts.attachments, inlineImages:opts.inlineImages}
+  const server = {to:opts.to, cc:opts.cc, subject:opts.subject, html:opts.html, text:opts.text, pdfBase64:opts.pdfBase64, pdfName:opts.pdfName, attachments:opts.attachments}
+  if(batch==='oficina'){ await sendMailServer(server); return 'oficina' }
+  if(batch==='cancelar'){ return null }
+  try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token, gmail); return 'usuario' } }catch(_){}
+  if(batch==='usuario') return null   // en masivo modo-usuario, si falla uno no preguntamos: se omite
+  if(!await appConfirm(MAIL_OFICINA_CONFIRM)) return null
+  await sendMailServer(server); return 'oficina'
+}
+// Envío desde la CUENTA DE OFICINA vía edge function (SMTP). Se usa SOLO cuando el usuario aceptó (ver enviarComoUsuario).
 async function sendMailServer({to, cc, subject, html, text, pdfBase64, pdfName, attachments}){
   // El SMTP del servidor (denomailer) trata un string "a@x, b@x" como UNA dirección y rebota
   // ("not a valid RFC 5321 address"). Mandar los destinatarios SIEMPRE como array de correos.
@@ -19877,7 +19899,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
-      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N°${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(await appConfirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).then(()=>appAlert('Acuse de pago enviado al cliente.')).catch(e=>appAlert('No se pudo enviar el acuse: '+(e?.message||e))) } }
+      if(marcaPago(factura,aplTot)){ const cli=clients.find(c=>String(c.id)===String(factura.client_id)); const to=(cli?.email||'').trim(); if(to){ const fol=`Factura N°${folioN(factura.invoice_no)||'—'}`; const mnt='$'+(factura.amount||0).toLocaleString('es-CL'); if(await appConfirm(`Factura conciliada y pagada por completo. ¿Enviar acuse de pago a ${to}?`)) acusePagoEmail(to,{folio:fol,monto:mnt,fecha:mov.fecha?fmtFechaDMY(mov.fecha):''}).then(via=>{ if(via) appAlert(`Acuse de pago enviado al cliente${via==='oficina'?' (desde la cuenta de oficina)':''}.`) }).catch(e=>appAlert('No se pudo enviar el acuse: '+(e?.message||e))) } }
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('Error al conciliar: '+e.message) }
     setBusy(null)
   }
@@ -22900,11 +22922,12 @@ export default function App() {
           const bodyTxt=`${saludoCli(cliNom)},\n\n`+facturaCorreoBody({...fact,invoice_no:String(r.folio)}, sale)
           const html=facturaCorreoHtml(bodyTxt, firma, false)
           const doc=splitSetDTE(r.dteXml)[0]; const pdf=doc?await facturaDtePdfBase64(doc):null
-          await sendMailServer({to:dest, subject:`Factura ${r.folio}`, html, text:bodyTxt, ...(pdf?{pdfBase64:pdf.base64,pdfName:`Factura ${r.folio}.pdf`}:{})})
-          const at=new Date().toISOString()
-          await supabase.from('billing').update({email_sent_at:at}).eq('id',ep.billId)
-          setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at}:x))
-          appAlert(`Factura ${r.folio} emitida y enviada a ${dest}.`+driveMsg)
+          const via=await enviarComoUsuario({to:dest, subject:`Factura ${r.folio}`, html, text:bodyTxt, ...(pdf?{pdfBase64:pdf.base64,pdfName:`Factura ${r.folio}.pdf`}:{})})
+          if(via){ const at=new Date().toISOString()
+            await supabase.from('billing').update({email_sent_at:at}).eq('id',ep.billId)
+            setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at}:x))
+            appAlert(`Factura ${r.folio} emitida y enviada a ${dest}${via==='oficina'?' (desde la cuenta de oficina)':''}.`+driveMsg)
+          } else appAlert(`Factura ${r.folio} emitida. Queda en "Por enviar" — la mandas al reingresar a tu correo.`+driveMsg)
         }catch(e){ appAlert(`Emitida (folio ${r.folio}), pero no se pudo enviar el correo: ${e.message}\nQueda en "Por enviar".`+driveMsg) }
       } else {
         appAlert(`Emitida al SII.\nFolio ${r.folio} · estado ${r.estado||'enviado'}${dest?'':`\nQueda en "Por enviar".`}`+driveMsg)
