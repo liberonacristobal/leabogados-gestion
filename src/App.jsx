@@ -5237,7 +5237,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 
 // Checklist de facturación del mes: lista de programadas + emitidas con vencimiento en el mes elegido.
 // Marcar = emitir (Programada -> Pendiente); desmarcar = volver a Programada. KPIs en vivo.
-function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onEnviarVarias, onUnsend, onCotejar, onCargarXML, onReplaceProgramada}) {
+function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onEnviarVarias, onUnsend, onAssignSeries, onCotejar, onCargarXML, onReplaceProgramada}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
   const rsDe = b => {
     const nrm=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
@@ -5410,6 +5410,8 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
               </div>
             </div>
             <div style={{fontSize:9.5,color:C.muted}}>Se enviará a {dest?<b style={{color:C.accent}}>{dest}</b>:<span style={{color:C.soonText}}>lo eliges al enviar</span>}{sent?<span style={{color:C.greenText}}> · enviado el {fmtFechaDMY(b.email_sent_at)}</span>:''}</div>
+            {/* Venta asociada (para el registro): muestra la vinculada o un selector para vincularla en el flujo. */}
+            <div style={{fontSize:9.5,color:C.muted,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Venta:{(()=>{ const linked=(sales||[]).find(s=>String(s.id)===String(b.client_id?b.sale_id:null)); if(linked&&ventaNombre(linked)) return <b style={{color:C.text}}>{ventaNombre(linked)}</b>; const cs=(sales||[]).filter(s=>String(s.client_id)===String(b.client_id)&&ventaNombre(s)); if(!onAssignSeries||!cs.length) return <span style={{color:C.soonText}}>sin venta asociada{cs.length?'':' · el cliente no tiene ventas'}</span>; return <select defaultValue='' onChange={e=>{ if(e.target.value) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:`1px solid ${C.soon}`,background:'#fff',color:C.text}}><option value=''>Vincular a venta…</option>{cs.map(s=><option key={s.id} value={s.id}>{ventaNombre(s)}{s.year?` · ${s.year}`:''}</option>)}</select> })()}</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
               <button onClick={()=>verFacturaPdf(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver PDF con timbre</button>
               {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver ficha</button>}
@@ -6089,7 +6091,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,intent,onIntentDone}) {
+function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onAssignSeries,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,intent,onIntentDone}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
@@ -7286,7 +7288,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         })()
         : filter==='anticipos' ? null
         : filter==='checklist' ? (
-          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onEnviarVarias={arr=>setFacturasEmail(arr)} onUnsend={onUnsendFactura} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
+          <ChecklistFacturacion billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onEnviarVarias={arr=>setFacturasEmail(arr)} onUnsend={onUnsendFactura} onAssignSeries={onAssignSeries} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>respaldoRef.current&&respaldoRef.current.click()} onReplaceProgramada={onReplaceProgramada}/>
         ) : filter==='sinanio' ? (() => {
           const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
           return (<>
@@ -13653,11 +13655,12 @@ async function verFacturaPdf(b){
 }
 // Resuelve la MEJOR venta/proyecto para una factura: la vinculada (sale_id); si no, la única venta del cliente (o su única Activa).
 // Así la glosa siempre muestra lo más robusto disponible aunque la factura no esté vinculada a su venta.
+const ventaNombre = s => (s?.title||s?.name||'').trim()   // el nombre del proyecto de la venta vive en `title` (SaleForm), con `name` de respaldo
 function mejorVenta(factura, sales, clientId){
   const list = sales||[]
   const direct = factura?.sale_id!=null ? list.find(s=>String(s.id)===String(factura.sale_id)) : null
-  if(direct && (direct.name||'').trim()) return direct
-  const cs = list.filter(s=>String(s.client_id)===String(clientId||'') && (s.name||'').trim())
+  if(direct && ventaNombre(direct)) return direct
+  const cs = list.filter(s=>String(s.client_id)===String(clientId||'') && ventaNombre(s))
   if(cs.length===1) return cs[0]
   const act = cs.filter(s=>s.status==='Activo')
   if(act.length===1) return act[0]
@@ -13665,7 +13668,7 @@ function mejorVenta(factura, sales, clientId){
 }
 // Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
 function facturaGlosa(factura, sale){
-  const concept=(factura.concept||'').trim(), proyecto=(sale?.name||'').trim()
+  const concept=(factura.concept||'').trim(), proyecto=ventaNombre(sale)
   // Limpia el marcador de cuota del concepto ("— cuota 2/10", "cuota 2/10", "(cuota 2/10)") para que la glosa sea el SERVICIO, no la cuota.
   const limpio = concept
     .replace(/\s*[—\-·|:]\s*cuota\s*\d+\s*\/\s*\d+\s*$/i,'')
@@ -13720,7 +13723,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const foliosMulti=listF.map(f=>folioN(f.invoice_no||'')||f.invoice_no||'').filter(Boolean)
   const concept=(factura.concept||'').trim()
-  const proyecto=(saleR?.name||'').trim()   // nombre de la venta/proyecto (más robusto: vinculada o la del cliente) = descripción real del servicio
+  const proyecto=ventaNombre(saleR)   // nombre de la venta/proyecto (más robusto: vinculada o la del cliente) = descripción real del servicio
   const esRecurrente=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
   // En recurrentes el concepto es "Cuota 3/12" (no le sirve al cliente) → usar el proyecto; en puntuales el concepto suele ser la glosa real.
   const glosa=esRecurrente?(proyecto||concept):(concept||proyecto)
@@ -22746,6 +22749,14 @@ export default function App() {
   const handleReplaceProgramada=useCallback(async(progId,realId,opts={})=>{
     try{
       const row=(billing||[]).find(b=>b.id===progId)
+      const real=(billing||[]).find(b=>b.id===realId)
+      // La factura emitida HEREDA la venta/RS de la programada que reemplaza (si no las tenía) → queda asociada a su proyecto para el registro.
+      if(realId && row){
+        const patch={}
+        if(row.sale_id && !real?.sale_id) patch.sale_id=row.sale_id
+        if(row.entity_id && !real?.entity_id) patch.entity_id=row.entity_id
+        if(Object.keys(patch).length){ try{ await supabase.from('billing').update({...patch,updated_at:new Date().toISOString()}).eq('id',realId); setBilling(p=>p.map(b=>b.id===realId?{...b,...patch}:b)) }catch(_){} }
+      }
       await supabase.from('billing').update({deleted_at:new Date().toISOString(),replaced_by_id:realId||null}).eq('id',progId)
       setBilling(p=>p.filter(b=>b.id!==progId))
       const u={msg:'Programada reemplazada por la factura emitida', onUndo: async()=>{ await supabase.from('billing').update({deleted_at:null,replaced_by_id:null}).eq('id',progId); if(row) setBilling(p=>p.some(x=>x.id===progId)?p:[row,...p]) }}
@@ -23184,7 +23195,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
