@@ -13704,6 +13704,9 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [pedirFondo,setPedirFondo]=useState(false)   // solicitar por primera vez la provisión de un fondo por rendir
   const [fondoMonto,setFondoMonto]=useState('')      // monto sugerido del fondo (opcional)
   const [ctaGastos,setCtaGastos]=useState(CUENTA_GASTOS_DEFAULT)   // datos de la cuenta destinada a gastos (editable, se recuerda)
+  const [saldoMsg,setSaldoMsg]=useState('')          // texto EDITABLE del recordatorio de saldo (se regenera solo hasta que lo tocas)
+  const [fondoMsg,setFondoMsg]=useState('')          // texto EDITABLE de la solicitud de fondo
+  const saldoTocado=useRef(false); const fondoTocado=useRef(false)
   const [sending,setSending]=useState(false)
   const bodyTocado=useRef(false)
   // Saldo pendiente del cliente en OTRAS facturas (excluye esta, reembolsos y ya pagadas). Fuente única saldoBill.
@@ -13744,21 +13747,26 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       if(txt){ bodyTocado.current=true; setBody(txt) }
     }catch(e){ appAlert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
-  const recordatorio=()=>{
-    if(!(recordarSaldo && otroSaldo>0)) return ''
+  // Texto por defecto del recordatorio de saldo (sin salto inicial). Cita las facturas pendientes por folio.
+  const genSaldoMsg=(lg)=>{
+    if(!(otroSaldo>0)) return ''
     const uno = otrasPendientes.length===1
     const listar = (con) => otrasPendientes.map(x=>con?`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'} (${fmtN(x.saldo)})`:`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'}`).join(', ')
-    if(lang==='en') return uno
-      ? `\n\nAlso, according to our records, invoice ${listar(false)} for ${fmtN(otroSaldo)} may still be outstanding. If it has already been settled, please disregard this note.`
-      : `\n\nAlso, according to our records, the following invoices may still be outstanding: ${listar(true)} — totaling ${fmtN(otroSaldo)}. If they have already been settled, please disregard this note.`
+    if(lg==='en') return uno
+      ? `Also, according to our records, invoice ${listar(false)} for ${fmtN(otroSaldo)} may still be outstanding. If it has already been settled, please disregard this note.`
+      : `Also, according to our records, the following invoices may still be outstanding: ${listar(true)} — totaling ${fmtN(otroSaldo)}. If they have already been settled, please disregard this note.`
     return uno
-      ? `\n\nAdemás, según nuestros registros, quedaría pendiente la factura ${listar(false)} por ${fmtN(otroSaldo)}. Si ya la regularizó, por favor omita este mensaje.`
-      : `\n\nAdemás, según nuestros registros, quedarían pendientes las facturas ${listar(true)}, por un total de ${fmtN(otroSaldo)}. Si ya las regularizó, por favor omita este mensaje.`
+      ? `Además, según nuestros registros, quedaría pendiente la factura ${listar(false)} por ${fmtN(otroSaldo)}. Si ya la regularizó, por favor omita este mensaje.`
+      : `Además, según nuestros registros, quedarían pendientes las facturas ${listar(true)}, por un total de ${fmtN(otroSaldo)}. Si ya las regularizó, por favor omita este mensaje.`
   }
-  // Solicitud de provisión de fondo por rendir (opcional, primera vez). El bloque de la cuenta va aparte (HTML/TXT) para que se vea con formato.
-  const fondoFrase=()=> !pedirFondo ? '' : (lang==='en'
-    ? `\n\nAdditionally, to set up an expense fund (fondo por rendir)${fondoMonto?` in the amount of ${fmtN(+fondoMonto||0)}`:''}, you may transfer to the account below.`
-    : `\n\nAsimismo, para constituir un fondo por rendir${fondoMonto?` por ${fmtN(+fondoMonto||0)}`:''}, puede transferir a la cuenta indicada a continuación.`)
+  const genFondoMsg=(lg)=> lg==='en'
+    ? `Additionally, to set up an expense fund (fondo por rendir)${fondoMonto?` in the amount of ${fmtN(+fondoMonto||0)}`:''}, you may transfer to the account below.`
+    : `Asimismo, para constituir un fondo por rendir${fondoMonto?` por ${fmtN(+fondoMonto||0)}`:''}, puede transferir a la cuenta indicada a continuación.`
+  // Regeneran el texto por defecto mientras no lo edites a mano (saldoTocado/fondoTocado).
+  useEffect(()=>{ if(!saldoTocado.current) setSaldoMsg(genSaldoMsg(lang)) },[lang,otroSaldo,otrasPendientes.length])
+  useEffect(()=>{ if(!fondoTocado.current) setFondoMsg(genFondoMsg(lang)) },[lang,fondoMonto])
+  const recordatorio=()=> (recordarSaldo && otroSaldo>0 && saldoMsg.trim()) ? `\n\n${saldoMsg.trim()}` : ''
+  const fondoFrase=()=> (pedirFondo && fondoMsg.trim()) ? `\n\n${fondoMsg.trim()}` : ''
   const cuerpoFull=()=>`${saludo}\n\n${body}${recordatorio()}${fondoFrase()}`   // saludo + mensaje + (recordatorio opcional) + (solicitud de fondo opcional)
   const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago, lang, pedirFondo?datosGastosHtml(ctaGastos,lang):'')
   const enviar=async()=>{
@@ -13820,11 +13828,21 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
         <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
       </div>
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
-      {otroSaldo>0&&<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance (${otrasPendientes.length} invoice${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`:`Recordar saldo pendiente (${otrasPendientes.length} factura${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`}</span></label>}
+      {otroSaldo>0&&<div>
+        <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance (${otrasPendientes.length} invoice${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`:`Recordar saldo pendiente (${otrasPendientes.length} factura${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`}</span></label>
+        {recordarSaldo&&<div style={{marginTop:5}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:9.5,color:C.muted}}>Puedes editar este texto</span>{saldoTocado.current&&<button type='button' onClick={()=>{saldoTocado.current=false;setSaldoMsg(genSaldoMsg(lang))}} style={{fontSize:9.5,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>↺ texto por defecto</button>}</div>
+          <textarea value={saldoMsg} onChange={e=>{saldoTocado.current=true;setSaldoMsg(e.target.value)}} rows={3} style={{...fInp,fontSize:12,resize:'vertical',fontFamily:'inherit'}}/>
+        </div>}
+      </div>}
       <div>
         <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={pedirFondo} onChange={e=>setPedirFondo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Request an expense fund (fondo por rendir)':'Solicitar provisión de fondo por rendir'}</span></label>
         {pedirFondo&&(()=>{ const up=(k,v)=>setCtaGastos(p=>({...p,[k]:v})); const gi={...fInp,padding:'7px 9px',fontSize:12}; return (
           <div style={{marginTop:7,padding:'10px 11px',background:C.ambarBg,border:`1px solid ${C.soon}`,borderRadius:10,display:'flex',flexDirection:'column',gap:7}}>
+            <div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}><span style={{fontSize:10,color:C.soonText,fontWeight:600}}>Texto de la solicitud (editable)</span>{fondoTocado.current&&<button type='button' onClick={()=>{fondoTocado.current=false;setFondoMsg(genFondoMsg(lang))}} style={{fontSize:9.5,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>↺ por defecto</button>}</div>
+              <textarea value={fondoMsg} onChange={e=>{fondoTocado.current=true;setFondoMsg(e.target.value)}} rows={2} style={{...gi,width:'100%',boxSizing:'border-box',resize:'vertical',fontFamily:'inherit'}}/>
+            </div>
             <div style={{fontSize:10,color:C.soonText,fontWeight:600}}>Cuenta destinada a gastos (se recuerda para la próxima)</div>
             <div style={{display:'flex',gap:7}}>
               <input value={ctaGastos.banco} onChange={e=>up('banco',e.target.value)} placeholder='Banco' style={{...gi,flex:1}}/>
