@@ -13696,10 +13696,10 @@ function facturaGlosaPartes(factura, sale){
   if(detalle) detalle = detalle.charAt(0).toUpperCase()+detalle.slice(1)
   // Ítem genérico ("Servicios legales", "Honorarios", "Asesoría") no describe → usar el PROYECTO en su lugar (se descarta el genérico).
   const esGenerico = !nombre || /^(honorarios(\s+profesionales)?|servicios(\s+legales|\s+profesionales)?|asesor[ií]a(\s+legal|\s+jur[ií]dica)?|factura)\.?$/i.test(nombre)
-  let relacion = nombre
-  if(esGenerico && proyecto) relacion = proyecto   // el proyecto reemplaza al ítem genérico
-  else if(!nombre) relacion = proyecto
-  return { relacion:(relacion||'').trim(), detalle:(detalle||'').trim() }
+  let relacion = nombre, esProyecto = false
+  if(esGenerico && proyecto){ relacion = proyecto; esProyecto = true }   // el proyecto reemplaza al ítem genérico
+  else if(!nombre){ relacion = proyecto; esProyecto = !!proyecto }
+  return { relacion:(relacion||'').trim(), detalle:(detalle||'').trim(), esProyecto }
 }
 // Glosa PLANA para el asunto: "Proyecto — Pago 1 de 10".
 function facturaGlosa(factura, sale){
@@ -13710,17 +13710,17 @@ function facturaGlosa(factura, sale){
 const CORREO_DESPEDIDA = lang => lang==='en'?'We remain at your disposal for any questions.':'Quedamos atentos a sus comentarios.'
 function facturaCorreoBody(factura, sale, lang, sinCierre=false){
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
-  const {relacion, detalle} = facturaGlosaPartes(factura, sale)
+  const {relacion, detalle, esProyecto} = facturaGlosaPartes(factura, sale)
   const cierre = sinCierre?'':`\n\n${CORREO_DESPEDIDA(lang)}`
-  // Redacción: "correspondiente al {Pago X} de nuestros servicios profesionales en relación a {proyecto}".
+  // Redacción: "correspondiente al {Pago X} de nuestros servicios profesionales en relación al proyecto {nombre}".
   if(lang==='en'){
     const desc = detalle ? `the ${detalle} of our professional services` : 'our professional services'
-    const rel = relacion ? ` in connection with ${relacion}` : ''
+    const rel = relacion ? (esProyecto ? ` in connection with the ${relacion} project` : ` in connection with ${relacion}`) : ''
     return `We are pleased to attach invoice No. ${folio}, corresponding to ${desc}${rel}, in the amount of ${fmtN(factura.amount)}.${cierre}`
   }
   const artDet = /^cuota/i.test(detalle)?'a la':'al'   // "al Pago 1 de 10" / "a la Cuota 1/2"
   const desc = detalle ? `${artDet} ${detalle} de nuestros servicios profesionales` : 'a nuestros servicios profesionales'
-  const rel = relacion ? ` en relación a ${relacion}` : ''
+  const rel = relacion ? (esProyecto ? ` en relación al proyecto ${relacion}` : ` en relación a ${relacion}`) : ''
   return `Junto con saludar, adjuntamos la factura N° ${folio}, correspondiente ${desc}${rel}, por ${fmtN(factura.amount)}.${cierre}`
 }
 // Cuerpo para VARIAS facturas del mismo cliente en un solo correo (lista + total). saleOf(f) resuelve la venta de cada factura.
