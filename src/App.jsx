@@ -5946,13 +5946,24 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const procesarRespaldoSII = async(fileList)=>{
     const files=[...(fileList||[])].filter(f=>/\.xml$/i.test(f.name||'')||/xml/i.test(f.type||''))
     if(!files.length){ appAlert('Sube el o los "Archivo Respaldo" (.xml) de MIPYME.'); return }
+    const leerXml=async(f)=>{ const buf=await f.arrayBuffer(); const enc=((new TextDecoder('ascii').decode(buf.slice(0,200)).match(/encoding=["']([^"']+)["']/i)||[])[1]||'utf-8').toLowerCase(); return new TextDecoder(/8859|latin|1252/.test(enc)?'iso-8859-1':'utf-8').decode(buf) }
+    // Preguntar a qué mes corresponde la tanda. Default inteligente: si la emisión cae en los primeros días del mes, la
+    // tanda es del mes ANTERIOR (se termina de emitir a inicio del siguiente). TODAS las facturas de la carga van a ese mes.
+    let periodoISO=null
+    try{
+      const d0=splitSetDTE(await leerXml(files[0]))[0]||''; const f0=(d0.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||''
+      const def=(()=>{ const s=String(f0||''); if(!/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,7); let [y,m,dd]=s.slice(0,10).split('-').map(Number); if(dd<=5){ m--; if(m<1){m=12;y--} } return `${y}-${String(m).padStart(2,'0')}` })()
+      const p=await appPrompt('¿A qué mes corresponde esta tanda? (AAAA-MM)\nLa tanda de un mes que terminas de emitir a inicio del siguiente va en el mes del servicio (ej. junio = 2026-06).', def)
+      if(p===null) return
+      periodoISO = /^\d{4}-\d{2}$/.test(String(p).trim()) ? String(p).trim()+'-01' : (def?def+'-01':null)
+    }catch(_){}
     setProcResp(true); setRespaldoRes(null)
     try{
       const token = await driveToken()
       if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
       const res=[]
       for(const file of files){
-        let docs=[]; try{ const buf=await file.arrayBuffer(); const enc=((new TextDecoder('ascii').decode(buf.slice(0,200)).match(/encoding=["']([^"']+)["']/i)||[])[1]||'utf-8').toLowerCase(); docs=splitSetDTE(new TextDecoder(/8859|latin|1252/.test(enc)?'iso-8859-1':'utf-8').decode(buf)) }catch(_){ try{ docs=splitSetDTE(await file.text()) }catch(__){} }
+        let docs=[]; try{ docs=splitSetDTE(await leerXml(file)) }catch(_){ try{ docs=splitSetDTE(await file.text()) }catch(__){} }
         if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); continue }
         for(const d of docs){
           const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
@@ -5978,7 +5989,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
             // Carpeta real por año/mes de la emisión (Facturación → 2026 → Mes), ya no la BETA.
             const fEmis=(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||b.issued_at||''
-            const carpeta=await driveCarpetaFacturacion(token, fEmis)
+            const carpeta=await driveCarpetaFacturacion(token, periodoISO||fEmis)   // toda la tanda al mes elegido
             // Idempotente: limpia filas de respaldo colgadas de esta factura (queda UNA sola).
             try{ await supabase.from('billing_attachments').delete().eq('billing_id',b.id).eq('uploaded_by','Respaldo SII') }catch(_){}
             // Dedup REAL contra Drive: si el PDF ya está en la carpeta, lo ENLAZA (no re-sube); si lo borraste, lo sube fresco.
