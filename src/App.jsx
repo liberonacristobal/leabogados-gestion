@@ -5446,10 +5446,9 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todas enviadas ✓</div>}
             {porEnviar.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
-              <div key={b.id} style={{display:'flex',gap:11,alignItems:'flex-start',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
+              <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,background:'#fff'}}>
                 {bigDate(b.issued_at||b.due,C.accent)}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:9.5,color:C.muted,marginBottom:1}}>emitida {fmtFechaDMY(b.issued_at||b.due)}</div>
                   <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
                   <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}{(rs&&rs.rut)||b.receptor_rut?<span style={{color:C.grisText}}> · {(rs&&rs.rut)||b.receptor_rut}</span>:''}</div>
                 </div>
@@ -5471,11 +5470,10 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
               {enviadasOpen&&(
                 <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:4}}>
                   {enviadasXmlMes.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
-                    <div key={b.id} style={{display:'flex',gap:11,alignItems:'flex-start',padding:'9px 12px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft}}>
-                      {bigDate(b.issued_at||b.due,C.greenText)}
+                    <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'9px 12px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft}}>
+                      {bigDate(b.issued_at||b.due,C.accent)}
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:9.5,color:C.greenText,marginBottom:1}}>enviada {fmtFechaDMY(b.email_sent_at)}</div>
-                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
+                        <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}><span style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span><span style={{fontSize:9.5,fontWeight:600,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>enviada {String(b.email_sent_at||'').slice(0,10).split('-').reverse().slice(0,2).join('-')}</span></div>
                         <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
                       </div>
                       <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
