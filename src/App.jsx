@@ -13707,7 +13707,9 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [sending,setSending]=useState(false)
   const bodyTocado=useRef(false)
   // Saldo pendiente del cliente en OTRAS facturas (excluye esta, reembolsos y ya pagadas). Fuente única saldoBill.
-  const otroSaldo = useMemo(()=> (billing||[]).filter(b=>String(b.client_id)===String(client?.id||'') && !listF.some(f=>String(f.id)===String(b.id)) && !b.deleted_at && (b.billing_type||'')!=='reembolso' && ['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0), [billing,client,factura,facturas])
+  // Facturas del cliente con saldo pendiente (excluye esta/estas, reembolsos y ya pagadas). El sistema SÍ sabe cuáles son → se citan por folio.
+  const otrasPendientes = useMemo(()=> (billing||[]).filter(b=>String(b.client_id)===String(client?.id||'') && !listF.some(f=>String(f.id)===String(b.id)) && !b.deleted_at && (b.billing_type||'')!=='reembolso' && ['Pendiente','Vencido'].includes(b.status)).map(b=>({b,saldo:saldoBill(b)})).filter(x=>x.saldo>0).sort((a,z)=>String(a.b.due||'').localeCompare(String(z.b.due||''))), [billing,client,factura,facturas])
+  const otroSaldo = otrasPendientes.reduce((a,x)=>a+x.saldo,0)
   const saludoEnDe = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
   // Nombre del destinatario (el contacto que calza con "Para", o el cliente). Con eso, si hay varios y el idioma, arma el saludo.
   const destNombre = useMemo(()=>{ const c=(contacts||[]).find(x=>(x.email||'').toLowerCase()===(para||'').toLowerCase()); return (c&&c.nombre)||client?.name||'' },[contacts,para,client])
@@ -13742,7 +13744,17 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       if(txt){ bodyTocado.current=true; setBody(txt) }
     }catch(e){ appAlert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
-  const recordatorio=()=> (recordarSaldo && otroSaldo>0) ? (lang==='en' ? `\n\nAlso, according to our records, there may be an outstanding balance of ${fmtN(otroSaldo)} from previous invoices. If it has already been settled, please disregard this note.` : `\n\nAdemás, según nuestros registros, habría un saldo pendiente de ${fmtN(otroSaldo)} de facturas anteriores. Si ya lo regularizó, por favor omita este mensaje.`) : ''
+  const recordatorio=()=>{
+    if(!(recordarSaldo && otroSaldo>0)) return ''
+    const uno = otrasPendientes.length===1
+    const listar = (con) => otrasPendientes.map(x=>con?`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'} (${fmtN(x.saldo)})`:`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'}`).join(', ')
+    if(lang==='en') return uno
+      ? `\n\nAlso, according to our records, invoice ${listar(false)} for ${fmtN(otroSaldo)} may still be outstanding. If it has already been settled, please disregard this note.`
+      : `\n\nAlso, according to our records, the following invoices may still be outstanding: ${listar(true)} — totaling ${fmtN(otroSaldo)}. If they have already been settled, please disregard this note.`
+    return uno
+      ? `\n\nAdemás, según nuestros registros, quedaría pendiente la factura ${listar(false)} por ${fmtN(otroSaldo)}. Si ya la regularizó, por favor omita este mensaje.`
+      : `\n\nAdemás, según nuestros registros, quedarían pendientes las facturas ${listar(true)}, por un total de ${fmtN(otroSaldo)}. Si ya las regularizó, por favor omita este mensaje.`
+  }
   // Solicitud de provisión de fondo por rendir (opcional, primera vez). El bloque de la cuenta va aparte (HTML/TXT) para que se vea con formato.
   const fondoFrase=()=> !pedirFondo ? '' : (lang==='en'
     ? `\n\nAdditionally, to set up an expense fund (fondo por rendir)${fondoMonto?` in the amount of ${fmtN(+fondoMonto||0)}`:''}, you may transfer to the account below.`
@@ -13808,7 +13820,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
         <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
       </div>
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
-      {otroSaldo>0&&<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance from other invoices (${fmtN(otroSaldo)})`:`Recordar saldo pendiente de otras facturas (${fmtN(otroSaldo)})`}</span></label>}
+      {otroSaldo>0&&<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance (${otrasPendientes.length} invoice${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`:`Recordar saldo pendiente (${otrasPendientes.length} factura${otrasPendientes.length>1?'s':''} · ${fmtN(otroSaldo)})`}</span></label>}
       <div>
         <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={pedirFondo} onChange={e=>setPedirFondo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Request an expense fund (fondo por rendir)':'Solicitar provisión de fondo por rendir'}</span></label>
         {pedirFondo&&(()=>{ const up=(k,v)=>setCtaGastos(p=>({...p,[k]:v})); const gi={...fInp,padding:'7px 9px',fontSize:12}; return (
