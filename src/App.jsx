@@ -7370,7 +7370,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         )
       })()}
-      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
+      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
         <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:16,maxWidth:480,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
@@ -13433,16 +13433,17 @@ function facturaGlosa(factura, sale){
   const esRec=/cuota\s*\d+\s*\/\s*\d+/i.test(concept)||/mensual|recurrente/i.test(concept)
   return esRec?(proyecto||concept):(concept||proyecto)   // recurrente → proyecto (no "Cuota N/M"); puntual → concepto
 }
-function facturaCorreoBody(factura, sale){
+function facturaCorreoBody(factura, sale, lang){
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const glosa=facturaGlosa(factura,sale)
-  // Sin saludo: el saludo (Estimado/Estimada/Estimados) lo antepone quien envía, según el destinatario.
+  // Sin saludo: el saludo (Estimado/Estimada/Estimados o Dear …) lo antepone quien envía, según el destinatario.
+  if(lang==='en') return `We are pleased to attach the invoice for our legal services. Invoice No. ${folio} corresponds to ${glosa||'the services rendered'}, in the amount of ${fmtN(factura.amount)}.\n\nWe remain at your disposal for any questions.`
   return `Junto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`
 }
-function facturaCorreoHtml(body, firma, incPago){
-  return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,'es')}</div></div>`
+function facturaCorreoHtml(body, firma, incPago, lang='es'){
+  return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
 }
-function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
+function FacturaEmailModal({factura, client, user, sale, billing=[], onSent, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const concept=(factura.concept||'').trim()
@@ -13455,15 +13456,23 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [asunto,setAsunto]=useState(`Factura ${folio} · ${client?.name||''}`)
-  const [body,setBody]=useState(facturaCorreoBody(factura, sale))
-  const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios)
+  const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
+  const [body,setBody]=useState(facturaCorreoBody(factura, sale, 'es'))
+  const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
+  const [recordarSaldo,setRecordarSaldo]=useState(false)   // recordar otro saldo pendiente del cliente (opcional)
   const [sending,setSending]=useState(false)
-  // Nombre del destinatario (el contacto que calza con "Para", o el cliente). Con eso y si hay varios en copia, arma el saludo.
+  const bodyTocado=useRef(false)
+  // Saldo pendiente del cliente en OTRAS facturas (excluye esta, reembolsos y ya pagadas). Fuente única saldoBill.
+  const otroSaldo = useMemo(()=> (billing||[]).filter(b=>String(b.client_id)===String(client?.id||'') && String(b.id)!==String(factura.id) && !b.deleted_at && (b.billing_type||'')!=='reembolso' && ['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0), [billing,client,factura])
+  const saludoEnDe = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
+  // Nombre del destinatario (el contacto que calza con "Para", o el cliente). Con eso, si hay varios y el idioma, arma el saludo.
   const destNombre = useMemo(()=>{ const c=(contacts||[]).find(x=>(x.email||'').toLowerCase()===(para||'').toLowerCase()); return (c&&c.nombre)||client?.name||'' },[contacts,para,client])
-  useEffect(()=>{ if(!saludoAuto) return; setSaludo(cc.length>0 ? 'Estimados,' : (saludoCli(destNombre)+',')) },[saludoAuto,cc.length,destNombre])
+  useEffect(()=>{ if(!saludoAuto) return; const multi=cc.length>0; setSaludo(lang==='en' ? (multi?'Dear Sir or Madam,':saludoEnDe(destNombre)+',') : (multi?'Estimados,':saludoCli(destNombre)+',')) },[saludoAuto,cc.length,destNombre,lang])
+  // Al cambiar de idioma, regenera el cuerpo con la plantilla del idioma (salvo que lo hayas editado a mano).
+  useEffect(()=>{ if(!bodyTocado.current) setBody(facturaCorreoBody(factura, sale, lang)) },[lang])
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
@@ -13479,14 +13488,17 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
   const redactarIA=async()=>{ setIaBusy(true)
     try{
-      const prompt=`Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(factura.amount)}\n- Proyecto/servicio: ${proyecto||'—'}\n- Detalle/concepto: ${concept||'—'}${esRecurrente?'\n- Es un servicio RECURRENTE (cuota/mensualidad): descríbelo como la asesoría/servicio del proyecto correspondiente al período, NUNCA como "cuota N/M".':''}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir del proyecto y el concepto, de forma natural y profesional (no copies literal una glosa abreviada); NO menciones vencimiento ni plazos de pago; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (saludo + 1 o 2 párrafos), sin asunto ni firma.`
+      const prompt = lang==='en'
+        ? `You are an assistant at a Chilean law firm (Liberona Escala Abogados). Write the BODY of a formal, cordial email (professional English) to send an invoice to a client.\nEXACT data, do not alter or round:\n- Invoice No.: ${folio}\n- Amount: ${fmtN(factura.amount)}\n- Project/service: ${proyecto||'—'}\n- Detail/concept: ${concept||'—'}${esRecurrente?'\n- It is a RECURRING service (monthly fee): describe it as the advisory/service of the project for the period, NEVER as "installment N/M".':''}\nRules: state the invoice number and amount verbatim; describe the service from the project and concept, naturally and professionally; do NOT mention due dates or payment terms; do NOT include a greeting (no "Dear …") nor a signature; close offering to clarify any questions. Return ONLY the 1-2 paragraphs of the message body.`
+        : `Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(factura.amount)}\n- Proyecto/servicio: ${proyecto||'—'}\n- Detalle/concepto: ${concept||'—'}${esRecurrente?'\n- Es un servicio RECURRENTE (cuota/mensualidad): descríbelo como la asesoría/servicio del proyecto correspondiente al período, NUNCA como "cuota N/M".':''}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir del proyecto y el concepto, de forma natural y profesional (no copies literal una glosa abreviada); NO menciones vencimiento ni plazos de pago; NO incluyas saludo (nada de "Estimados…") ni firma; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (1 o 2 párrafos del mensaje).`
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim()
-      if(txt) setBody(txt)
+      if(txt){ bodyTocado.current=true; setBody(txt) }
     }catch(e){ appAlert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
-  const cuerpoFull=()=>`${saludo}\n\n${body}`   // saludo + mensaje
-  const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago)
+  const recordatorio=()=> (recordarSaldo && otroSaldo>0) ? (lang==='en' ? `\n\nWe also kindly remind you of an outstanding balance of ${fmtN(otroSaldo)} in previous invoices.` : `\n\nAdemás, le recordamos que mantiene un saldo pendiente de ${fmtN(otroSaldo)} en facturas anteriores.`) : ''
+  const cuerpoFull=()=>`${saludo}\n\n${body}${recordatorio()}`   // saludo + mensaje + (recordatorio opcional)
+  const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago, lang)
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
@@ -13521,11 +13533,15 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
         <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>{cc.map(e=><span key={e} style={{fontSize:10,background:C.azulBg,color:C.accent,borderRadius:20,padding:'2px 4px 2px 9px',display:'inline-flex',alignItems:'center'}}>{e}<button type='button' onClick={()=>removeCc(e)} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontWeight:700,padding:'0 4px'}}>×</button></span>)}
           <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>addCc(ccInput)} placeholder='+ correo' style={{flex:1,minWidth:90,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></div>
       </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:10,color:C.muted,fontWeight:600}}>IDIOMA</span>
+        <span style={{display:'inline-flex',borderRadius:20,overflow:'hidden',background:C.bgSoft}}>{[['es','Español'],['en','English']].map(([v,l])=><button key={v} type='button' onClick={()=>setLang(v)} style={{fontSize:10.5,fontWeight:600,padding:'3px 13px',border:'none',cursor:'pointer',background:lang===v?C.accent:'transparent',color:lang===v?'#fff':C.muted}}>{l}</button>)}</span>
+      </div>
       <div><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e=>setAsunto(e.target.value)} style={fInp}/></div>
       <div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3,gap:8}}>
           <span style={{fontSize:10,color:C.muted,fontWeight:600}}>SALUDO</span>
-          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{(()=>{ const n1=(destNombre||'').trim().split(/\s+/)[0]; const opt=[['Estimado', n1?`Estimado ${n1},`:'Estimado,'],['Estimada', n1?`Estimada ${n1},`:'Estimada,'],['Estimados','Estimados,'],['Estimadas','Estimadas,']]; return opt.map(([l,v])=><button key={l} type='button' onClick={()=>{setSaludoAuto(false);setSaludo(v)}} style={{fontSize:9.5,fontWeight:600,borderRadius:20,padding:'2px 9px',border:'none',cursor:'pointer',background:saludo===v?C.accent:C.bgSoft,color:saludo===v?'#fff':C.muted}}>{l}</button>) })()}</div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{(()=>{ const n1=(destNombre||'').trim().split(/\s+/)[0]; const opt=lang==='en'?[[n1?`Dear ${n1}`:'Dear', n1?`Dear ${n1},`:'Dear,'],['Sir/Madam','Dear Sir or Madam,']]:[['Estimado', n1?`Estimado ${n1},`:'Estimado,'],['Estimada', n1?`Estimada ${n1},`:'Estimada,'],['Estimados','Estimados,'],['Estimadas','Estimadas,']]; return opt.map(([l,v])=><button key={l} type='button' onClick={()=>{setSaludoAuto(false);setSaludo(v)}} style={{fontSize:9.5,fontWeight:600,borderRadius:20,padding:'2px 9px',border:'none',cursor:'pointer',background:saludo===v?C.accent:C.bgSoft,color:saludo===v?'#fff':C.muted}}>{l}</button>) })()}</div>
         </div>
         <input value={saludo} onChange={e=>{setSaludoAuto(false);setSaludo(e.target.value)}} style={fInp}/>
       </div>
@@ -13534,15 +13550,16 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
           <span style={{fontSize:10,color:C.muted,fontWeight:600}}>MENSAJE</span>
           <button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':'✦ Redactar con IA'}</button>
         </div>
-        <textarea value={body} onChange={e=>setBody(e.target.value)} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
+        <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={5} style={{...fInp,resize:'vertical',fontFamily:'inherit'}}/>
       </div>
-      <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>Incluir datos de pago (transferencia)</span></label>
+      <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
+      {otroSaldo>0&&<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance from other invoices (${fmtN(otroSaldo)})`:`Recordar saldo pendiente de otras facturas (${fmtN(otroSaldo)})`}</span></label>}
       <div><div style={lbl}>PDF DE LA FACTURA (DTE con timbre)</div>
         {pdf? <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span><button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
           : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>}
         {pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
       </div>
-      <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?'Enviando…':'Enviar factura'}</button>
+      <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?'Send invoice':'Enviar factura')}</button>
     </div>
   </Modal>)
 }
