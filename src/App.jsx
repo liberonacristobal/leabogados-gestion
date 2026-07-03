@@ -13674,7 +13674,8 @@ function mejorVenta(factura, sales, clientId){
 // Glosa = [proyecto · si el ítem es genérico] + descripción del DTE (NmbItem + DscItem sin la base UF) + [— cuota para trazabilidad].
 // En el peor caso trae de más (editable); nunca menos. El DTE es lo que ve el cliente en el PDF.
 const _RX_CUOTA = /(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+)/i
-function facturaGlosa(factura, sale){
+// Descompone la glosa en {relacion, detalle}: relacion = el servicio/proyecto (para "en relación a …"); detalle = la cuota/pago ("Pago 1 de 10").
+function facturaGlosaPartes(factura, sale){
   const proyecto=ventaNombre(sale)
   const dte = factura?.dte_xml ? parseDteFactura(factura.dte_xml) : null
   const item = dte&&dte.items&&dte.items[0]
@@ -13695,22 +13696,32 @@ function facturaGlosa(factura, sale){
   if(detalle) detalle = detalle.charAt(0).toUpperCase()+detalle.slice(1)
   // Ítem genérico ("Servicios legales", "Honorarios", "Asesoría") no describe → usar el PROYECTO en su lugar (se descarta el genérico).
   const esGenerico = !nombre || /^(honorarios(\s+profesionales)?|servicios(\s+legales|\s+profesionales)?|asesor[ií]a(\s+legal|\s+jur[ií]dica)?|factura)\.?$/i.test(nombre)
-  let base = nombre
-  if(esGenerico && proyecto) base = proyecto   // proyecto reemplaza al ítem genérico; queda "Proyecto — cuota"
-  else if(!nombre) base = proyecto
-  const g = (base + (detalle ? ` — ${detalle}` : '')).trim()
-  return g || proyecto || ''
+  let relacion = nombre
+  if(esGenerico && proyecto) relacion = proyecto   // el proyecto reemplaza al ítem genérico
+  else if(!nombre) relacion = proyecto
+  return { relacion:(relacion||'').trim(), detalle:(detalle||'').trim() }
+}
+// Glosa PLANA para el asunto: "Proyecto — Pago 1 de 10".
+function facturaGlosa(factura, sale){
+  const {relacion, detalle} = facturaGlosaPartes(factura, sale)
+  return (relacion + (detalle ? ` — ${detalle}` : '')).trim()
 }
 // despedida = SIEMPRE va al final del correo (después de los bloques insertados). Con sinCierre no la incluye el cuerpo (el modal la agrega al final).
 const CORREO_DESPEDIDA = lang => lang==='en'?'We remain at your disposal for any questions.':'Quedamos atentos a sus comentarios.'
 function facturaCorreoBody(factura, sale, lang, sinCierre=false){
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
-  const glosa=facturaGlosa(factura,sale)
+  const {relacion, detalle} = facturaGlosaPartes(factura, sale)
   const cierre = sinCierre?'':`\n\n${CORREO_DESPEDIDA(lang)}`
-  // Sin saludo: el saludo (Estimado/Estimada/Estimados o Dear …) lo antepone quien envía, según el destinatario.
-  // Una sola frase con la glosa directa (evita repetir "servicios legales" cuando la glosa ya lo dice).
-  if(lang==='en') return `We are pleased to attach invoice No. ${folio}, corresponding to ${glosa||'the legal services rendered'}, in the amount of ${fmtN(factura.amount)}.${cierre}`
-  return `Junto con saludar, adjuntamos la factura N° ${folio}, correspondiente a ${glosa||'los servicios legales prestados'}, por ${fmtN(factura.amount)}.${cierre}`
+  // Redacción: "correspondiente al {Pago X} de nuestros servicios profesionales en relación a {proyecto}".
+  if(lang==='en'){
+    const desc = detalle ? `the ${detalle} of our professional services` : 'our professional services'
+    const rel = relacion ? ` in connection with ${relacion}` : ''
+    return `We are pleased to attach invoice No. ${folio}, corresponding to ${desc}${rel}, in the amount of ${fmtN(factura.amount)}.${cierre}`
+  }
+  const artDet = /^cuota/i.test(detalle)?'a la':'al'   // "al Pago 1 de 10" / "a la Cuota 1/2"
+  const desc = detalle ? `${artDet} ${detalle} de nuestros servicios profesionales` : 'a nuestros servicios profesionales'
+  const rel = relacion ? ` en relación a ${relacion}` : ''
+  return `Junto con saludar, adjuntamos la factura N° ${folio}, correspondiente ${desc}${rel}, por ${fmtN(factura.amount)}.${cierre}`
 }
 // Cuerpo para VARIAS facturas del mismo cliente en un solo correo (lista + total). saleOf(f) resuelve la venta de cada factura.
 function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false){
@@ -13754,7 +13765,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const glosaFac=facturaGlosa(factura, saleR)   // misma glosa que el cuerpo (proyecto o glosa de la factura, sin "cuota N/M")
-  const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio}${glosaFac?` · ${glosaFac}`:(client?.name?` · ${client.name}`:'')}`)   // número + glosa de la factura
+  const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} | ${client?.name||''}` : `Factura ${folio}${glosaFac?` | ${glosaFac}`:(client?.name?` | ${client.name}`:'')}`)   // número | glosa de la factura (separador | en el asunto, por pedido del usuario)
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
   const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es', undefined, true) : facturaCorreoBody(factura, saleR, 'es', true))
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
