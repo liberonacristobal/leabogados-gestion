@@ -15107,7 +15107,7 @@ async function driveBuscarEnCarpeta(token, folderId, name){
 async function driveCarpetaFacturacion(token, isoDate){
   const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const s=String(isoDate||''); const y=/^\d{4}/.test(s)?s.slice(0,4):'Sin fecha'; const mi=+s.slice(5,7); const mes=(mi>=1&&mi<=12)?MES[mi-1]:''
-  const nombre = mes?`${y} - ${mi}. ${mes} SII`:`${y} - SII`   // estilo "2026 - 6. Junio SII"
+  const nombre = mes?`${y} - ${String(mi).padStart(2,'0')}. ${mes} SII`:`${y} - SII`   // estilo "2026 - 06. Junio SII" (con cero → ordena bien)
   const ckey='drive_fact_sii_'+nombre
   let cached=null; try{ cached=localStorage.getItem(ckey) }catch(_){}
   if(cached) return cached
