@@ -6511,7 +6511,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
-              <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=e.target.files; e.target.value=''; procesarRespaldoSII(fs) }}/>
+              <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
               {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),err=[...g('error'),...g('sin_dte')]
                 const STY={adjuntada:{t:'Adjuntada al Drive',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_factura:{t:'Sin factura en el sistema',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg}}
                 const row=(r,i)=>{ const s=STY[r.estado]||STY.error; return (
