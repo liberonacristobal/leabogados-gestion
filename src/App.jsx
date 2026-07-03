@@ -5985,7 +5985,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             const r = await facturaDtePdfBase64(d)
             const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
             const up = await driveUpload(token, folders.facturas, new File([u8], fname, {type:'application/pdf'}), fname)
-            await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:'Respaldo SII' })
+            const { error:iErr } = await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:'Respaldo SII' })
+            if(iErr) throw new Error('subió a Drive pero no se pudo adjuntar a la factura: '+iErr.message)
             res.push({folio:folioM, cliente:cli, monto:b.amount, estado:'adjuntada', url:up.webViewLink||null})
           }catch(e){ res.push({folio:folioM, cliente:cli, estado:'error', msg:e.message||String(e)}) }
         }
