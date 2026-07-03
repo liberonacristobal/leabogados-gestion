@@ -13585,10 +13585,10 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
   )
 }
 // Datos bancarios del estudio para el pago (transferencia) — fuente única, reusada en el recordatorio de cobro y en el correo de factura.
-const DATOS_PAGO_TXT = `Datos para el pago (transferencia):\n  Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco BICE · Cuenta corriente 138392-2\n  Confirmación a: administracion@leabogados.cl`
-const DATOS_PAGO_HTML = `<div style="margin:14px 0;padding:12px 16px;background:#F7F9FA;border:1px solid #E4E8EB;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#537281;font-weight:600;margin-bottom:3px">Datos para el pago (transferencia)</div><div>Liberona Escala Abogados Limitada</div><div><span style="color:#537281">RUT:</span> <b>77.700.387-9</b></div><div><span style="color:#537281">Banco BICE · Cuenta corriente:</span> <b>138392-2</b></div><div><span style="color:#537281">Confirmación a:</span> administracion@leabogados.cl</div></div>`
+const DATOS_PAGO_TXT = `Datos para el pago (transferencia):\n  Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco BICE · Cuenta corriente 1403834\n  Confirmación a: contacto@leabogados.cl`
+const DATOS_PAGO_HTML = `<div style="margin:14px 0;padding:12px 16px;background:#F7F9FA;border:1px solid #E4E8EB;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#537281;font-weight:600;margin-bottom:3px">Datos para el pago (transferencia)</div><div>Liberona Escala Abogados Limitada</div><div><span style="color:#537281">RUT:</span> <b>77.700.387-9</b></div><div><span style="color:#537281">Banco BICE · Cuenta corriente:</span> <b>1403834</b></div><div><span style="color:#537281">Confirmación a:</span> contacto@leabogados.cl</div></div>`
 // Cuenta destinada a GASTOS (fondo por rendir) — editable y recordada por el usuario (no está fija como la de honorarios).
-const CUENTA_GASTOS_DEFAULT = { razon:'Liberona Escala Abogados Limitada', rut:'77.700.387-9', banco:'Banco BICE', cuenta:'', email:'administracion@leabogados.cl' }
+const CUENTA_GASTOS_DEFAULT = { razon:'Liberona Escala Abogados Limitada', rut:'77.700.387-9', banco:'Banco BICE', cuenta:'1383922', email:'administracion@leabogados.cl' }
 const datosGastosTxt = (cta,lang='es') => (lang==='en'
   ? `Account for the expense fund (bank transfer):\n  ${cta.razon}\n  Tax ID: ${cta.rut}\n  ${cta.banco} · Account ${cta.cuenta}\n  Confirmation to: ${cta.email}`
   : `Cuenta para el fondo de gastos (transferencia):\n  ${cta.razon}\n  RUT: ${cta.rut}\n  ${cta.banco} · Cuenta corriente ${cta.cuenta}\n  Confirmación a: ${cta.email}`)
@@ -13772,8 +13772,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       : `Además, según nuestros registros, quedarían pendientes saldos correspondientes a las facturas ${listar(true)}, por un total de ${fmtN(otroSaldo)}.`
   }
   const genFondoMsg=(lg)=> lg==='en'
-    ? `Additionally, to set up an expense fund (fondo por rendir)${fondoMonto?` in the amount of ${fmtN(+fondoMonto||0)}`:''}, you may transfer to the account below.`
-    : `Asimismo, para constituir un fondo por rendir${fondoMonto?` por ${fmtN(+fondoMonto||0)}`:''}, puede transferir a la cuenta indicada a continuación.`
+    ? `Additionally, we request an expense fund (fondo por rendir)${fondoMonto?` of ${fmtN(+fondoMonto||0)}`:''}, intended for notarial and other related expenses, which will be duly accounted for. You may transfer to the account below.`
+    : `Asimismo, solicitamos la provisión de un fondo por rendir${fondoMonto?` por ${fmtN(+fondoMonto||0)}`:''}, destinado a gastos notariales, entre otros, el cual será debidamente rendido. Puede transferir a la cuenta indicada a continuación.`
   // Regeneran el texto por defecto mientras no lo edites a mano (saldoTocado/fondoTocado).
   useEffect(()=>{ if(!saldoTocado.current) setSaldoMsg(genSaldoMsg(lang)) },[lang,otroSaldo,otrasPendientes.length])
   useEffect(()=>{ if(!fondoTocado.current) setFondoMsg(genFondoMsg(lang)) },[lang,fondoMonto])
