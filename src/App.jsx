@@ -5971,16 +5971,18 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             continue
           }
           try{
-            const yaProcesada = !!b.dte_xml   // ya se cargó su respaldo antes → NO re-subir a Drive (evita duplicados aunque la consulta de adjuntos no vea las filas)
             const td=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
             // Guarda/REFRESCA el DTE en la factura: así el PDF con timbre se auto-adjunta al enviar y aparece el botón "PDF";
             // refrescarlo corrige el dte_xml de cargas viejas que quedó con acentos mal (�).
             try{ await supabase.from('billing').update({dte_xml:d,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id) }catch(_){}
-            const { data:ex } = await supabase.from('billing_attachments').select('id,url,uploaded_by').eq('billing_id',b.id)
-            const prev=(ex||[]).find(a=>/respaldo SII/i.test(a.uploaded_by||''))
-            if(yaProcesada || prev){ res.push({folio:folioM, cliente:cli, monto:b.amount, estado:'duplicada', url:prev?.url||null}); continue }
+            const rzn=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||''
+            const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
+            // Dedup REAL contra Drive: si el PDF ya está en la carpeta, no lo re-sube; si lo borraste, lo vuelve a subir.
+            const yaEnDrive = await driveBuscarEnCarpeta(token, folders.facturas, fname)
+            if(yaEnDrive.length){ res.push({folio:folioM, cliente:cli, monto:b.amount, estado:'duplicada', url:yaEnDrive[0].webViewLink||null}); continue }
+            // No está en Drive → limpia filas de respaldo colgadas de esta factura y sube fresco (una sola copia).
+            try{ await supabase.from('billing_attachments').delete().eq('billing_id',b.id).eq('uploaded_by','Respaldo SII') }catch(_){}
             const r = await facturaDtePdfBase64(d)
-            const fname = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
             const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
             const up = await driveUpload(token, folders.facturas, new File([u8], fname, {type:'application/pdf'}), fname)
             await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:'Respaldo SII' })
@@ -15078,6 +15080,14 @@ async function driveUpload(token, folderId, file, name){
   if(put.status===401) throw new DriveAuthError()
   if(!put.ok) throw new Error('Drive subida '+put.status)
   return put.json()
+}
+// Busca por nombre exacto dentro de una carpeta de Drive (con el token del usuario, misma vista que driveUpload).
+// Sirve para deduplicar de verdad: si el archivo NO está (lo borraste), se vuelve a subir; si está, no se duplica.
+async function driveBuscarEnCarpeta(token, folderId, name){
+  const q=encodeURIComponent(`name='${String(name).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' and '${folderId}' in parents and trashed=false`)
+  const r=await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,webViewLink)&supportsAllDrives=true&includeItemsFromAllDrives=true`,{headers:{Authorization:'Bearer '+token}})
+  if(!r.ok) return []
+  const d=await r.json().catch(()=>({})); return d.files||[]
 }
 // Tras emitir un DTE: reusa el PDF ya definido (facturaDtePdfBase64, con logo+timbre) y la carpeta de facturación de
 // Drive (folders.facturas) — mismo camino que procesarRespaldoSII — para subir PDF + XML y adjuntarlos a la factura
