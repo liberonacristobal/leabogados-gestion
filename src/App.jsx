@@ -5921,7 +5921,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   )
 }
 
-function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,intent,onIntentDone}) {
+function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,intent,onIntentDone}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
@@ -5959,7 +5959,17 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
           const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioM)
           const cli = b ? ((clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||'—') : null
-          if(!b){ res.push({folio:folioM||'?', estado:'sin_factura'}); continue }
+          if(!b){
+            const tipoDte=+((d.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||0)||null
+            const fecha=(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1]||null
+            const rut=(d.match(/<RUTRecep>([^<]+)<\/RUTRecep>/)||[])[1]||null
+            const receptor=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||null
+            const monto=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
+            const nmb=(d.match(/<NmbItem>([^<]+)<\/NmbItem>/)||[])[1]||''
+            const concepto=nmb||'Honorarios'
+            res.push({folio:folioM||'?', estado:'sin_factura', cliente:receptor, monto, row:{folio:folioM, rut, receptor, monto, fechaEmision:fecha, tipoDte, concepto}, doc:d})
+            continue
+          }
           try{
             const r = await facturaDtePdfBase64(d)
             const fname = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
@@ -5977,6 +5987,21 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       onRefresh&&onRefresh()
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
+  }
+  const [creandoFac,setCreandoFac] = useState(null)   // folio en curso al crear una factura huérfana desde el XML
+  // Crea en el sistema una factura que se emitió en el SII pero no estaba en la app (huérfana), desde su DTE del XML:
+  // reusa onIngresarSII (fuente única, resuelve el cliente por RUT) y le adjunta el PDF a la ficha/Drive.
+  const crearDesdeXML = async(item, idx)=>{
+    if(!onIngresarSII||creandoFac) return
+    if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)}) en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
+    setCreandoFac(item.row.folio)
+    try{
+      const fac = await onIngresarSII(item.row)
+      if(fac?.id){ try{ const token=await driveToken(); if(token){ const folders=await driveAdjuntosFolders(token); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const {data:ex}=await supabase.from('billing_attachments').select('id,name').eq('billing_id',fac.id); if(!(ex||[]).some(a=>a.name===fname)){ const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,folders.facturas,new File([u8],fname,{type:'application/pdf'}),fname); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:up.id,name:up.name||fname,url:up.webViewLink||null,uploaded_by:'Respaldo SII'}) } } }catch(_){} }
+      const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
+      setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
+    }catch(e){ appAlert('No se pudo crear la factura: '+(e.message||e)) }
+    setCreandoFac(null)
   }
   const [moreOpen,setMoreOpen] = useState(false)   // menú ⋯ (Resumen/Proveedores/Anticipos/Sin año)
   const [saludCobranza,setSaludCobranza] = useState(false)   // panel de salud de cobranza (DSO, tasa, morosidad, top deudores)
@@ -6512,14 +6537,16 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
               <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
-              {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),err=[...g('error'),...g('sin_dte')]
-                const STY={adjuntada:{t:'Adjuntada al Drive',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_factura:{t:'Sin factura en el sistema',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg}}
+              {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),cre=g('creada'),err=[...g('error'),...g('sin_dte')]
+                const STY={adjuntada:{t:'Adjuntada al Drive',c:C.greenText,bg:C.greenBg},creada:{t:'Creada ✓',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_factura:{t:'Sin factura en el sistema',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg}}
                 const row=(r,i)=>{ const s=STY[r.estado]||STY.error; return (
                   <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.folio?`N°${r.folio}`:r.archivo||'—'}{r.cliente?<span style={{fontWeight:400,color:C.muted}}> · {r.cliente}</span>:''}{r.monto?<span style={{fontWeight:400,color:C.muted}}> · {fmt(r.monto)}</span>:''}</div>
                       {r.msg&&<div style={{fontSize:10,color:C.overdueText}}>{r.msg}</div>}
+                      {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en Cobertura SII o en la factura.</div>}
                     </div>
+                    {r.estado==='sin_factura'&&r.row&&onIngresarSII&&<button disabled={creandoFac===r.row.folio} onClick={()=>crearDesdeXML(r,i)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'4px 10px',cursor:creandoFac?'default':'pointer',flexShrink:0}}>{creandoFac===r.row.folio?'Creando…':'Crear factura'}</button>}
                     {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>ver PDF ↗</a>}
                     <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
                   </div>) }
@@ -6529,9 +6556,10 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     <div style={{flex:'1 1 90px',background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.muted}}>Ya tenían</div><div style={{fontSize:18,fontWeight:700,color:C.muted}}>{dup.length}</div></div>
                     <div style={{flex:'1 1 90px',background:C.soonBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.soonText}}>Sin factura</div><div style={{fontSize:18,fontWeight:700,color:C.soonText}}>{sinf.length}</div></div>
                   </div>
-                  {adj.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:4}}>Adjuntadas al Drive · {adj.length}</div>{adj.map(row)}</>}
+                  {cre.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:4}}>Creadas ahora · {cre.length}</div>{cre.map(row)}</>}
+                  {adj.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Adjuntadas al Drive · {adj.length}</div>{adj.map(row)}</>}
                   {dup.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Ya tenían respaldo · {dup.length}</div>{dup.map(row)}</>}
-                  {sinf.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Sin factura en el sistema · {sinf.length}</div><div style={{fontSize:10,color:C.muted,margin:'2px 0 2px'}}>El folio del XML no existe como factura acá. Cárgala o revisa el folio.</div>{sinf.map(row)}</>}
+                  {sinf.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Sin factura en el sistema · {sinf.length}</div><div style={{fontSize:10,color:C.muted,margin:'2px 0 2px'}}>El folio del XML se emitió en el SII pero no está acá. Toca <b>"Crear factura"</b> para ingresarla desde el XML.</div>{sinf.map(row)}</>}
                   {err.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Con problema · {err.length}</div>{err.map(row)}</>}
                 </Modal> })()}
               {impOpen&&<>
@@ -22420,7 +22448,7 @@ export default function App() {
     let created=null
     try{
       const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(row.fechaEmision)   // DD/MM/YYYY→ISO
-      created=await upsertBilling({ client_id:cli?.id||null, concept:'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:row.monto, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, sii_synced_at:new Date().toISOString(), notes:null })
+      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:row.monto, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, sii_synced_at:new Date().toISOString(), notes:null })
       if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut',ignoreDuplicates:true}) }catch(_){}}   // M5: no pisar el nombre bueno de la RS
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
@@ -22682,7 +22710,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
             {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
