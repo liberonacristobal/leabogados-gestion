@@ -5259,6 +5259,8 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const [emitExp,setEmitExp] = useState(()=>new Set())               // programadas con la comparación "ya emitida" desplegada
   const [checklistTab,setChecklistTab] = useState(null)              // acordeón: null | 'emitir' | 'enviar' (Opción 1)
   const [enviadasOpen,setEnviadasOpen] = useState(false)             // pie "ya enviadas este mes" desplegado (auditar cargadas = por enviar + ya enviadas)
+  const [expEnviar,setExpEnviar] = useState(()=>new Set())           // filas de "Por enviar" con el detalle desplegado (Ver PDF, destinatario, glosa)
+  const [factTo,setFactTo] = useState({})                            // client_id → destinatario recordado (learnings factura_to) para saber a quién irá
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const ufState = useUF()
@@ -5279,11 +5281,20 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||'')))
   const porEnviarTotal = porEnviar.reduce((a,b)=>a+montoFactura(b),0)
-  // Agrupa por cliente: los que tienen 2+ facturas del mes se pueden "Enviar juntas" (un correo, varios PDF). client_id null → cada una su grupo.
-  const porEnviarGrupos = (()=>{ const m=new Map(); porEnviar.forEach(b=>{ const k=b.client_id?String(b.client_id):('sin-'+b.id); if(!m.has(k)) m.set(k,[]); m.get(k).push(b) }); return [...m.values()] })()
   // Ya enviadas de las cargadas por XML este mes (con correo despachado) → explica por qué "Por enviar" < "Cargadas": las ya despachadas salen.
   const enviadasXmlMes = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.email_sent_at||'').localeCompare(String(a.email_sent_at||'')))
+  // Agrupa por cliente: unsent = por enviar; sent = ya enviadas ESTE MES del mismo cliente (para poder mandarlas juntas o deshacer el envío).
+  // client_id null → cada una su grupo. Un cliente con 2+ facturas (contando las ya enviadas) muestra encabezado "Enviar juntas".
+  const porEnviarGrupos = (()=>{ const m=new Map()
+    porEnviar.forEach(b=>{ const k=b.client_id?String(b.client_id):('sin-'+b.id); if(!m.has(k)) m.set(k,{cid:b.client_id,unsent:[],sent:[]}); m.get(k).unsent.push(b) })
+    enviadasXmlMes.forEach(b=>{ const k=b.client_id?String(b.client_id):null; if(k&&m.has(k)) m.get(k).sent.push(b) })   // adjunta las ya enviadas SOLO a clientes que tienen pendientes
+    return [...m.values()] })()
+  const enviadasEnGrupo = new Set(porEnviarGrupos.flatMap(g=>g.sent.map(b=>b.id)))   // las ya enviadas que se muestran dentro de un grupo → no repetir en el pie
+  const enviadasSueltas = enviadasXmlMes.filter(b=>!enviadasEnGrupo.has(b.id))         // el pie audita solo las de clientes ya 100% enviados
+  useEffect(()=>{ const ids=[...new Set(porEnviar.map(b=>b.client_id).filter(Boolean).map(String))]; if(!ids.length){ setFactTo({}); return } let alive=true
+    supabase.from('learnings').select('key,value').eq('kind','factura_to').in('key',ids).then(({data})=>{ if(!alive) return; const mm={}; (data||[]).forEach(r=>{ mm[String(r.key)]=String(r.value||'').trim() }); setFactTo(mm) },()=>{})
+    return ()=>{alive=false} },[porEnviar.map(b=>b.id).join(',')])
   // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
   // Emitidas: agrupar y ordenar por FECHA DE EMISIÓN (issued_at), no por vencimiento — así una factura emitida en julio
   // con vencimiento en agosto NO aparece bajo agosto. Orden nuevo→antiguo dentro de cada mes (regla de listas).
@@ -5350,6 +5361,46 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   if(!years.includes(String(now.getFullYear()))) years.push(String(now.getFullYear()))
   years.sort((a,b)=>b-a)
   const selStyle = {padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12,outline:'none'}
+
+  const toggleExp = id => setExpEnviar(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  // Fila de una factura en "Por enviar" — tappable para desplegar detalle (Ver PDF, destinatario, glosa). sent=ya enviada (chip + deshacer).
+  const filaFactura = (b, {compact=false, sent=false}={}) => {
+    const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const open=expEnviar.has(b.id); const dest=factTo[String(b.client_id)]||''
+    return (
+      <div key={b.id} style={{background: sent?C.bgSoft:'#fff', borderTop: compact?`1px solid ${C.border}`:undefined}}>
+        <div onClick={()=>toggleExp(b.id)} style={{display:'flex',gap:11,alignItems:'center',padding: compact?'9px 12px 9px 14px':'10px 12px',cursor:'pointer'}}>
+          {bigDate(b.issued_at||b.due,C.accent)}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
+              <span style={{fontSize:compact?12.5:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span>
+              {sent&&<span style={{fontSize:9.5,fontWeight:600,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>enviada {String(b.email_sent_at||'').slice(0,10).split('-').reverse().slice(0,2).join('-')}</span>}
+            </div>
+            <div onClick={e=>abrirCli(e,b)} style={{fontSize:compact?10.5:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{compact?'':`${c?.name||'Sin cliente'} · `}{rs?rsDisplay(rs):(c?.name||'')}{(rs&&rs.rut)||b.receptor_rut?` · ${(rs&&rs.rut)||b.receptor_rut}`:''}</div>
+          </div>
+          <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
+            <div style={{fontSize:compact?12.5:13,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
+            {onEnviar&&<button onClick={e=>{e.stopPropagation(); onEnviar(b)}} style={{background: sent?'#fff':C.accent,color: sent?C.accent:'#fff',border: sent?`1px solid ${C.accent}`:'none',borderRadius:8,padding: compact?'3px 11px':'5px 12px',fontSize: compact?10.5:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{sent?'Reenviar':'Enviar'}</button>}
+          </div>
+          <span style={{fontSize:12,color:C.muted,flexShrink:0}}>{open?'▾':'▸'}</span>
+        </div>
+        {open&&(
+          <div style={{padding: compact?'0 12px 10px 14px':'0 12px 10px', display:'flex',flexDirection:'column',gap:7}}>
+            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:10.5,color:C.muted,display:'flex',flexDirection:'column',gap:3}}>
+              <div>Emitida <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at||b.due)}</b> · concepto: <b style={{color:C.text}}>{b.concept||'—'}</b></div>
+              <div>Se enviará a: {dest?<b style={{color:C.accent}}>{dest}</b>:<span style={{color:C.soonText}}>sin destinatario recordado (lo eliges al enviar)</span>}</div>
+              {sent&&<div>Correo <b style={{color:C.greenText}}>enviado el {fmtFechaDMY(b.email_sent_at)}</b></div>}
+            </div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+              <button onClick={()=>verFacturaPdf(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver PDF</button>
+              {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver ficha</button>}
+              {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Editar</button>}
+              {sent&&onUnsend&&<button onClick={()=>onUnsend(b)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Marcar no enviada</button>}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -5448,56 +5499,34 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
             {porEnviar.length===0&&<div style={{color:C.greenText,textAlign:'center',padding:22,fontSize:12,fontWeight:600}}>Todas enviadas ✓</div>}
             {porEnviarGrupos.map((g,gi)=>{ const top=gi>0?{borderTop:`1px solid ${C.border}`}:{}
-              if(g.length===1){ const b=g[0]; const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
-                <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'10px 12px',background:'#fff',...top}}>
-                  {bigDate(b.issued_at||b.due,C.accent)}
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
-                    <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}{(rs&&rs.rut)||b.receptor_rut?<span style={{color:C.grisText}}> · {(rs&&rs.rut)||b.receptor_rut}</span>:''}</div>
-                  </div>
-                  <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
-                    {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'5px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
-                  </div>
-                </div>
-              )}
-              const c=clients.find(x=>x.id===g[0].client_id); const tot=g.reduce((a,b)=>a+montoFactura(b),0); return (
-                <div key={'g'+g[0].id} style={{...top}}>
+              // 1 pendiente y ninguna ya enviada del cliente → fila simple. Si no → tarjeta de cliente con "Enviar juntas".
+              if(g.unsent.length===1 && g.sent.length===0){ return <div key={g.unsent[0].id} style={{...top}}>{filaFactura(g.unsent[0],{})}</div> }
+              const cid=g.cid; const c=clients.find(x=>x.id===cid); const tot=g.unsent.reduce((a,b)=>a+montoFactura(b),0); return (
+                <div key={'g'+(cid||g.unsent[0].id)} style={{...top}}>
                   <div style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:C.azulBg}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div onClick={e=>abrirCli(e,g[0])} style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&g[0].client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}</div>
-                      <div style={{fontSize:10,color:C.azulInfo}}>{g.length} facturas · {fmt(tot)}</div>
+                      <div onClick={e=>abrirCli(e,g.unsent[0])} style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&cid?'pointer':'default'}}>{c?.name||'Sin cliente'}</div>
+                      <div style={{fontSize:10,color:C.azulInfo}}>{g.unsent.length} por enviar · {fmt(tot)}{g.sent.length?` · ${g.sent.length} ya enviada${g.sent.length>1?'s':''}`:''}</div>
                     </div>
-                    {onEnviarVarias&&<button onClick={()=>onEnviarVarias(g)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Enviar juntas</button>}
+                    {onEnviarVarias&&g.unsent.length>1&&<button onClick={()=>onEnviarVarias(g.unsent)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Enviar juntas</button>}
                   </div>
-                  {g.map(b=>{ const rs=rsDe(b); return (
-                    <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'9px 12px 9px 14px',borderTop:`1px solid ${C.border}`,background:'#fff'}}>
-                      {bigDate(b.issued_at||b.due,C.accent)}
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
-                        <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?rsDisplay(rs):''}{(rs&&rs.rut)||b.receptor_rut?`${rs?' · ':''}${(rs&&rs.rut)||b.receptor_rut}`:''}{!rs&&!b.receptor_rut?(b.concept||''):''}</div>
-                      </div>
-                      <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
-                        {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',fontSize:10.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Enviar</button>}
-                      </div>
-                    </div>
-                  )})}
+                  {g.unsent.map(b=>filaFactura(b,{compact:true}))}
+                  {g.sent.map(b=>filaFactura(b,{compact:true,sent:true}))}
                 </div>
               )
             })}
           </div>
-          {/* Pie auditable: cargadas por XML = por enviar + ya enviadas. Explica por qué "Por enviar" < contador de "Cargar XML". */}
-          {enviadasXmlMes.length>0&&(
+          {/* Pie auditable: ya enviadas de clientes 100% enviados (las de clientes con pendientes se muestran en su grupo). */}
+          {enviadasSueltas.length>0&&(
             <div style={{marginTop:6}}>
               <div onClick={()=>setEnviadasOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:10.5,color:C.muted,padding:'2px 2px'}}>
-                <span style={{color:C.greenText,fontWeight:600}}>{enviadasXmlMes.length} ya enviada{enviadasXmlMes.length>1?'s':''} este mes ✓</span>
+                <span style={{color:C.greenText,fontWeight:600}}>{enviadasSueltas.length} ya enviada{enviadasSueltas.length>1?'s':''} este mes ✓</span>
                 <span>· cargadas por XML = por enviar + enviadas</span>
                 <span style={{marginLeft:'auto'}}>{enviadasOpen?'▾':'▸'}</span>
               </div>
               {enviadasOpen&&(
                 <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:4}}>
-                  {enviadasXmlMes.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
+                  {enviadasSueltas.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
                     <div key={b.id} style={{display:'flex',gap:11,alignItems:'center',padding:'9px 12px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft}}>
                       {bigDate(b.issued_at||b.due,C.accent)}
                       <div style={{flex:1,minWidth:0}}>
@@ -13569,6 +13598,16 @@ function recordatorioCobro(b){
 function dteMontoTotal(dteXml){ if(!dteXml) return null; const m=String(dteXml).match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); return m?Math.round(+m[1]):null }
 // Monto a mostrar/usar de una factura: el del DTE si está emitida con XML; si no, el guardado (programado).
 function montoFactura(b){ const t=b&&b.dte_xml?dteMontoTotal(b.dte_xml):null; return (t!=null)?t:(b?.amount||0) }
+// Genera el PDF con timbre de una factura (desde su DTE) y lo abre en una pestaña para revisarlo.
+async function verFacturaPdf(b){
+  try{
+    const doc=splitSetDTE(b?.dte_xml||'')[0]
+    if(!doc){ appAlert('Esta factura no tiene XML del SII para generar el PDF.'); return }
+    const r=await facturaDtePdfBase64(doc)
+    const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i)
+    const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000)
+  }catch(e){ appAlert('No se pudo abrir el PDF.') }
+}
 // Contenido del correo de factura — FUENTE ÚNICA (la usan el modal individual y el envío masivo).
 function facturaGlosa(factura, sale){
   const concept=(factura.concept||'').trim(), proyecto=(sale?.name||'').trim()
