@@ -13700,7 +13700,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [cc,setCc]=useState([]); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
-  const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio} · ${client?.name||''}`)
+  const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio}${glosa?` · ${glosa}`:(client?.name?` · ${client.name}`:'')}`)   // número + glosa de la factura
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
   const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es', undefined, true) : facturaCorreoBody(factura, sale, 'es', true))
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
