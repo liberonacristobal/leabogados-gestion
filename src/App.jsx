@@ -2532,10 +2532,11 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
             </div>
             {mine.length>0&&(
               <div style={{marginBottom:14}}>
-                <div onClick={()=>setMisProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:misProyOpen?'10px 10px 0 0':10,padding:'10px 12px',cursor:'pointer'}}>
-                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z'/></svg>
-                  <span style={{flex:1,fontSize:13,fontWeight:600,color:C.accent}}>Mis proyectos · {mine.length}</span>
-                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:misProyOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
+                <div onClick={()=>setMisProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,border:'0.5px solid #9FE1CB',borderLeft:`3px solid ${C.normal}`,borderRadius:misProyOpen?'10px 10px 0 0':10,padding:'12px 14px',cursor:'pointer'}}>
+                  <svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z'/></svg>
+                  <span style={{flex:1,fontSize:14,fontWeight:600,color:C.accent}}>Mis proyectos</span>
+                  <span style={{fontSize:11,fontWeight:600,color:C.greenText,background:'#fff',border:'0.5px solid #9FE1CB',borderRadius:20,padding:'2px 10px'}}>{mine.length} activos</span>
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:misProyOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
                 </div>
                 {misProyOpen&&<div style={{border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 10px 10px',overflow:'hidden'}}>
                   {sorted.slice(0,6).map(p=>(
