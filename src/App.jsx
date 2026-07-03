@@ -23106,8 +23106,9 @@ export default function App() {
     setRendiciones(p=>[r,...p])
   },[])
 
+  // Badge del tab Facturación: SOLO vencidas reales por cobrar — excluye eliminadas, reembolsos y las que ya tienen saldo 0 (pagadas). Fuente única saldoBill.
   const overdueN=useMemo(()=>{
-    return billing.filter(b=>b.status==='Vencido').length
+    return billing.filter(b=> !b.deleted_at && b.status==='Vencido' && (b.billing_type||'')!=='reembolso' && saldoBill(b)>0).length
   },[billing])
 
   if(loadingAuth) return <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center'}}><Spin/></div>
