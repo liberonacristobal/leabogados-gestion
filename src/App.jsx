@@ -5258,6 +5258,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const [factOpen,setFactOpen] = useState(()=>new Set())             // facturas emitidas con acciones desplegadas
   const [emitExp,setEmitExp] = useState(()=>new Set())               // programadas con la comparación "ya emitida" desplegada
   const [checklistTab,setChecklistTab] = useState(null)              // acordeón: null | 'emitir' | 'enviar' (Opción 1)
+  const [enviadasOpen,setEnviadasOpen] = useState(false)             // pie "ya enviadas este mes" desplegado (auditar cargadas = por enviar + ya enviadas)
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const ufState = useUF()
@@ -5278,6 +5279,9 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const porEnviar = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
     .sort((a,b)=>String(b.issued_at||b.due||'').localeCompare(String(a.issued_at||a.due||'')))
   const porEnviarTotal = porEnviar.reduce((a,b)=>a+(b.amount||0),0)
+  // Ya enviadas de las cargadas por XML este mes (con correo despachado) → explica por qué "Por enviar" < "Cargadas": las ya despachadas salen.
+  const enviadasXmlMes = billing.filter(b=> !b.deleted_at && esEmitida(b) && b.dte_xml && b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
+    .sort((a,b)=>String(b.email_sent_at||'').localeCompare(String(a.email_sent_at||'')))
   // Emitidas (con folio): archivo AGRUPADO POR AÑO → MES, todas, colapsado por defecto — no solo el mes seleccionado.
   // Emitidas: agrupar y ordenar por FECHA DE EMISIÓN (issued_at), no por vencimiento — así una factura emitida en julio
   // con vencimiento en agosto NO aparece bajo agosto. Orden nuevo→antiguo dentro de cada mes (regla de listas).
@@ -5456,6 +5460,34 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
               </div>
             )})}
           </div>
+          {/* Pie auditable: cargadas por XML = por enviar + ya enviadas. Explica por qué "Por enviar" < contador de "Cargar XML". */}
+          {enviadasXmlMes.length>0&&(
+            <div style={{marginTop:6}}>
+              <div onClick={()=>setEnviadasOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:10.5,color:C.muted,padding:'2px 2px'}}>
+                <span style={{color:C.greenText,fontWeight:600}}>{enviadasXmlMes.length} ya enviada{enviadasXmlMes.length>1?'s':''} este mes ✓</span>
+                <span>· cargadas por XML = por enviar + enviadas</span>
+                <span style={{marginLeft:'auto'}}>{enviadasOpen?'▾':'▸'}</span>
+              </div>
+              {enviadasOpen&&(
+                <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:4}}>
+                  {enviadasXmlMes.map(b=>{ const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); return (
+                    <div key={b.id} style={{display:'flex',gap:11,alignItems:'flex-start',padding:'9px 12px',borderBottom:`1px solid ${C.border}`,background:C.bgSoft}}>
+                      {bigDate(b.issued_at||b.due,C.greenText)}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:9.5,color:C.greenText,marginBottom:1}}>enviada {fmtFechaDMY(b.email_sent_at)}</div>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</div>
+                        <div onClick={e=>abrirCli(e,b)} style={{fontSize:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs?<span style={{color:C.muted}}> · {rsDisplay(rs)}</span>:''}</div>
+                      </div>
+                      <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{fmt(b.amount)}</div>
+                        {onEnviar&&<button onClick={()=>onEnviar(b)} style={{background:'#fff',color:C.accent,border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 11px',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Reenviar</button>}
+                      </div>
+                    </div>
+                  )})}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
