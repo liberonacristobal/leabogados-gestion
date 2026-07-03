@@ -13569,8 +13569,8 @@ function facturaCorreoBody(factura, sale, lang){
   return `Junto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`
 }
 // Cuerpo para VARIAS facturas del mismo cliente en un solo correo (lista + total). saleOf(f) resuelve la venta de cada factura.
-function facturaCorreoBodyMulti(list, saleOf, lang){
-  const rows = list.map(f=>({ folio: folioN(f.invoice_no||'')||f.invoice_no||'', glosa: facturaGlosa(f, saleOf?saleOf(f):null), amount: f.amount||0 }))
+function facturaCorreoBodyMulti(list, saleOf, lang, amountOf){
+  const rows = list.map(f=>({ folio: folioN(f.invoice_no||'')||f.invoice_no||'', glosa: facturaGlosa(f, saleOf?saleOf(f):null), amount: amountOf?amountOf(f):(f.amount||0) }))
   const total = rows.reduce((a,r)=>a+r.amount,0)
   if(lang==='en'){
     const items = rows.map(r=>`- Invoice No. ${r.folio} — ${r.glosa||'services rendered'}, ${fmtN(r.amount)}`).join('\n')
@@ -13587,7 +13587,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const listF=(facturas&&facturas.length)?facturas:[factura]   // 1 o VARIAS facturas del MISMO cliente en un solo correo
   const multi=listF.length>1
   const saleOf=f=>(sales||[]).find(s=>String(s.id)===String(f.sale_id))||(String(f.id)===String(factura.id)?sale:null)
-  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg) : facturaCorreoBody(factura, sale, lg)
+  // genBody usa amountOf (monto real del DTE cuando ya se generó el PDF; si no, el del sistema). Solo se llama en efectos (amountOf ya existe).
+  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf) : facturaCorreoBody({...factura,amount:amountOf(factura)}, sale, lg)
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const foliosMulti=listF.map(f=>folioN(f.invoice_no||'')||f.invoice_no||'').filter(Boolean)
   const concept=(factura.concept||'').trim()
@@ -13601,11 +13602,15 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} · ${client?.name||''}` : `Factura ${folio} · ${client?.name||''}`)
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
-  const [body,setBody]=useState(genBody('es'))
+  const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es') : facturaCorreoBody(factura, sale, 'es'))
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
   const [atts,setAtts]=useState([])   // adjuntos cuando es multi (un PDF por factura)
+  const [dteTotals,setDteTotals]=useState({})   // id factura → MntTotal REAL del DTE (autoridad = lo que dice el PDF); prima sobre amount del sistema
+  const amountOf=f=>{ const t=dteTotals[f?.id]; return (t!=null)?t:(f?.amount||0) }
+  // Abre el PDF (base64) en una pestaña para previsualizarlo antes de enviar.
+  const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
   const [recordarSaldo,setRecordarSaldo]=useState(false)   // recordar otro saldo pendiente del cliente (opcional)
   const [sending,setSending]=useState(false)
@@ -13628,16 +13633,18 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
   // Si la factura se emitió por el SII (tiene dte_xml), adjunta el PDF oficial con timbre automáticamente. (solo modo individual)
-  useEffect(()=>{ if(multi||!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc) return; const r=await facturaDtePdfBase64(doc); if(alive) setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}) }catch(_){} })(); return ()=>{alive=false} },[])
-  // Multi: genera el PDF con timbre de CADA factura y los adjunta todos.
-  useEffect(()=>{ if(!multi) return; let alive=true; (async()=>{ const out=[]; for(const f of listF){ if(!f.dte_xml) continue; try{ const doc=splitSetDTE(f.dte_xml)[0]; if(!doc) continue; const r=await facturaDtePdfBase64(doc); out.push({base64:r.base64,name:`Factura ${folioN(f.invoice_no)||r.folio}.pdf`,mime:'application/pdf'}) }catch(_){} } if(alive) setAtts(out) })(); return ()=>{alive=false} },[])
+  useEffect(()=>{ if(multi||!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc) return; const r=await facturaDtePdfBase64(doc); if(alive){ setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}); if(r.total!=null) setDteTotals(m=>({...m,[factura.id]:r.total})) } }catch(_){} })(); return ()=>{alive=false} },[])
+  // Multi: genera el PDF con timbre de CADA factura, los adjunta todos y guarda su total real.
+  useEffect(()=>{ if(!multi) return; let alive=true; (async()=>{ const out=[]; const tot={}; for(const f of listF){ if(!f.dte_xml) continue; try{ const doc=splitSetDTE(f.dte_xml)[0]; if(!doc) continue; const r=await facturaDtePdfBase64(doc); out.push({id:f.id,base64:r.base64,name:`Factura ${folioN(f.invoice_no)||r.folio}.pdf`,mime:'application/pdf'}); if(r.total!=null) tot[f.id]=r.total }catch(_){} } if(alive){ setAtts(out); setDteTotals(m=>({...m,...tot})) } })(); return ()=>{alive=false} },[])
+  // Cuando llega el monto real del DTE, regenera el cuerpo (salvo que lo hayas editado a mano) para que el correo coincida con el PDF.
+  useEffect(()=>{ if(!bodyTocado.current) setBody(genBody(lang)) },[dteTotals])
   const [iaBusy,setIaBusy]=useState(false)
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
   const redactarIA=async()=>{ setIaBusy(true)
     try{
       const prompt = lang==='en'
-        ? `You are an assistant at a Chilean law firm (Liberona Escala Abogados). Write the BODY of a formal, cordial email (professional English) to send an invoice to a client.\nEXACT data, do not alter or round:\n- Invoice No.: ${folio}\n- Amount: ${fmtN(factura.amount)}\n- Project/service: ${proyecto||'—'}\n- Detail/concept: ${concept||'—'}${esRecurrente?'\n- It is a RECURRING service (monthly fee): describe it as the advisory/service of the project for the period, NEVER as "installment N/M".':''}\nRules: state the invoice number and amount verbatim; describe the service from the project and concept, naturally and professionally; do NOT mention due dates or payment terms; do NOT include a greeting (no "Dear …") nor a signature; close offering to clarify any questions. Return ONLY the 1-2 paragraphs of the message body.`
-        : `Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(factura.amount)}\n- Proyecto/servicio: ${proyecto||'—'}\n- Detalle/concepto: ${concept||'—'}${esRecurrente?'\n- Es un servicio RECURRENTE (cuota/mensualidad): descríbelo como la asesoría/servicio del proyecto correspondiente al período, NUNCA como "cuota N/M".':''}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir del proyecto y el concepto, de forma natural y profesional (no copies literal una glosa abreviada); NO menciones vencimiento ni plazos de pago; NO incluyas saludo (nada de "Estimados…") ni firma; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (1 o 2 párrafos del mensaje).`
+        ? `You are an assistant at a Chilean law firm (Liberona Escala Abogados). Write the BODY of a formal, cordial email (professional English) to send an invoice to a client.\nEXACT data, do not alter or round:\n- Invoice No.: ${folio}\n- Amount: ${fmtN(amountOf(factura))}\n- Project/service: ${proyecto||'—'}\n- Detail/concept: ${concept||'—'}${esRecurrente?'\n- It is a RECURRING service (monthly fee): describe it as the advisory/service of the project for the period, NEVER as "installment N/M".':''}\nRules: state the invoice number and amount verbatim; describe the service from the project and concept, naturally and professionally; do NOT mention due dates or payment terms; do NOT include a greeting (no "Dear …") nor a signature; close offering to clarify any questions. Return ONLY the 1-2 paragraphs of the message body.`
+        : `Eres asistente de un estudio de abogados chileno (Liberona Escala Abogados). Redacta el CUERPO de un correo formal y cordial (trato "ustedes", español de Chile) para enviarle una factura a un cliente.\nDatos EXACTOS, respétalos sin alterar ni redondear:\n- Factura N°: ${folio}\n- Monto: ${fmtN(amountOf(factura))}\n- Proyecto/servicio: ${proyecto||'—'}\n- Detalle/concepto: ${concept||'—'}${esRecurrente?'\n- Es un servicio RECURRENTE (cuota/mensualidad): descríbelo como la asesoría/servicio del proyecto correspondiente al período, NUNCA como "cuota N/M".':''}\nReglas: nombra el N° de factura y el monto tal cual; describe el servicio a partir del proyecto y el concepto, de forma natural y profesional (no copies literal una glosa abreviada); NO menciones vencimiento ni plazos de pago; NO incluyas saludo (nada de "Estimados…") ni firma; cierra con disposición a aclarar consultas. Devuelve SOLO el cuerpo (1 o 2 párrafos del mensaje).`
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim()
       if(txt){ bodyTocado.current=true; setBody(txt) }
@@ -13650,10 +13657,12 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
     try{
-      const token=await driveToken()
-      if(!token){ appAlert('No se pudo conectar a Gmail. Reingresa con tu correo @leabogados.cl.'); setSending(false); return }
-      const adjuntos = multi ? atts : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
-      await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${cuerpoFull()}\n\n${DATOS_PAGO_TXT}`:cuerpoFull(),bodyHtml:buildHtml(),attachments:adjuntos})
+      const adjuntos = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
+      const bodyTxt=incPago?`${cuerpoFull()}\n\n${DATOS_PAGO_TXT}`:cuerpoFull()
+      // Envía por Gmail del usuario; si su token venció (401) u otro error, cae al relay de oficina para NO bloquear el envío.
+      let viaServer=false, sent=false
+      try{ const token=await driveToken(); if(token){ await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:bodyTxt,bodyHtml:buildHtml(),attachments:adjuntos}); sent=true } }catch(_){}
+      if(!sent){ await sendMailServer({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos}); sent=true; viaServer=true }
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
@@ -13666,7 +13675,8 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       }catch(_){} }
       const at=new Date().toISOString()
       for(const f of listF){ try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id) }catch(_){}; onSent&&onSent(f.id,at) }
-      appAlert(multi?`${listF.length} facturas enviadas al cliente.`:'Factura enviada al cliente.'); onClose()
+      const okMsg=multi?`${listF.length} facturas enviadas al cliente.`:'Factura enviada al cliente.'
+      appAlert(viaServer?`${okMsg}\n(Salió desde la cuenta de oficina porque tu acceso a Gmail expiró. Para que salga desde tu propio correo, cierra sesión y vuelve a entrar una vez.)`:okMsg); onClose()
     }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
     setSending(false)
   }
@@ -13702,12 +13712,17 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
       </div>
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={incPago} onChange={e=>setIncPago(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?'Include payment (bank transfer) details':'Incluir datos de pago (transferencia)'}</span></label>
       {otroSaldo>0&&<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type='checkbox' checked={recordarSaldo} onChange={e=>setRecordarSaldo(e.target.checked)} style={{cursor:'pointer'}}/><span style={{fontSize:12,color:C.text}}>{lang==='en'?`Remind outstanding balance from other invoices (${fmtN(otroSaldo)})`:`Recordar saldo pendiente de otras facturas (${fmtN(otroSaldo)})`}</span></label>}
+      {!multi&&dteTotals[factura.id]!=null&&Math.round(dteTotals[factura.id])!==Math.round(factura.amount||0)&&(
+        <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:8,padding:'8px 11px',fontSize:11,color:C.soonText}}>
+          El monto guardado en el sistema (<b>{fmt(factura.amount)}</b>) no coincide con el de la factura oficial (<b>{fmt(dteTotals[factura.id])}</b>). El correo usa el de la factura oficial. Conviene corregir el registro con "Editar".
+        </div>
+      )}
       <div><div style={lbl}>{multi?`PDF DE LAS ${listF.length} FACTURAS (DTE con timbre)`:'PDF DE LA FACTURA (DTE con timbre)'}</div>
         {multi
-          ? (atts.length?<div style={{display:'flex',flexWrap:'wrap',gap:6}}>{atts.map(a=><span key={a.name} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'5px 9px'}}><span style={{fontWeight:600}}>✓</span> {a.name}</span>)}</div>:<div style={{fontSize:11,color:C.muted}}>Generando los PDF con timbre…</div>)
-          : (pdf? <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span><button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
+          ? (atts.length?<div style={{display:'flex',flexWrap:'wrap',gap:6}}>{atts.map(a=><button key={a.name} type='button' onClick={()=>verPdf(a.base64,a.name)} title='Ver PDF' style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'5px 9px',cursor:'pointer'}}><span style={{fontWeight:600}}>✓</span> {a.name} <span style={{color:C.accent,fontWeight:600}}>· Ver</span></button>)}</div>:<div style={{fontSize:11,color:C.muted}}>Generando los PDF con timbre…</div>)
+          : (pdf? <div style={{display:'flex',alignItems:'center',gap:10,fontSize:12,flexWrap:'wrap'}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span>{pdf.base64&&<button type='button' onClick={()=>verPdf(pdf.base64,pdf.name)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',cursor:'pointer'}}>Ver PDF</button>}<button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
               : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>)}
-        {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
+        {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente. Toca uno para verlo.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
       </div>
       <button disabled={sending||!para.trim()} onClick={enviar} style={{marginTop:4,padding:11,borderRadius:10,border:'none',background:(!para.trim())?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!para.trim())?'default':'pointer'}}>{sending?(lang==='en'?'Sending…':'Enviando…'):(lang==='en'?(multi?`Send ${listF.length} invoices`:'Send invoice'):(multi?`Enviar las ${listF.length} facturas`:'Enviar factura'))}</button>
     </div>
