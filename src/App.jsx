@@ -13436,7 +13436,8 @@ function facturaGlosa(factura, sale){
 function facturaCorreoBody(factura, sale){
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const glosa=facturaGlosa(factura,sale)
-  return `Estimados,\n\nJunto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`
+  // Sin saludo: el saludo (Estimado/Estimada/Estimados) lo antepone quien envía, según el destinatario.
+  return `Junto con saludar, adjuntamos la factura correspondiente a nuestros servicios legales. La factura N° ${folio} corresponde a ${glosa||'los servicios prestados'}, por ${fmtN(factura.amount)}.\n\nQuedamos atentos a sus comentarios.`
 }
 function facturaCorreoHtml(body, firma, incPago){
   return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,'es')}</div></div>`
@@ -13455,9 +13456,14 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
   const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [asunto,setAsunto]=useState(`Factura ${folio} · ${client?.name||''}`)
   const [body,setBody]=useState(facturaCorreoBody(factura, sale))
+  const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios)
+  const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
   const [sending,setSending]=useState(false)
+  // Nombre del destinatario (el contacto que calza con "Para", o el cliente). Con eso y si hay varios en copia, arma el saludo.
+  const destNombre = useMemo(()=>{ const c=(contacts||[]).find(x=>(x.email||'').toLowerCase()===(para||'').toLowerCase()); return (c&&c.nombre)||client?.name||'' },[contacts,para,client])
+  useEffect(()=>{ if(!saludoAuto) return; setSaludo(cc.length>0 ? 'Estimados,' : (saludoCli(destNombre)+',')) },[saludoAuto,cc.length,destNombre])
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(p=>[...new Set([...p,...ems])]) } },()=>{})
@@ -13479,14 +13485,15 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
       if(txt) setBody(txt)
     }catch(e){ appAlert('No se pudo redactar: '+(e?.message||e)) }
     setIaBusy(false) }
-  const buildHtml=()=>facturaCorreoHtml(body, firma, incPago)
+  const cuerpoFull=()=>`${saludo}\n\n${body}`   // saludo + mensaje
+  const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago)
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
     try{
       const token=await driveToken()
       if(!token){ appAlert('No se pudo conectar a Gmail. Reingresa con tu correo @leabogados.cl.'); setSending(false); return }
-      await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${body}\n\n${DATOS_PAGO_TXT}`:body,bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
+      await sendGmailWithPdf(token,{to:para.trim(),cc:cc.join(','),subject:asunto,bodyText:incPago?`${cuerpoFull()}\n\n${DATOS_PAGO_TXT}`:cuerpoFull(),bodyHtml:buildHtml(),...(pdf?{pdfBase64:pdf.base64,pdfName:pdf.name}:{})})
       if(cc.length) try{ await supabase.from('learnings').upsert({kind:'factura_cc',key:String(client.id),value:cc.join(',')},{onConflict:'kind,key'}) }catch(_){}
       if(para.trim()&&client?.id) try{ await supabase.from('learnings').upsert({kind:'factura_to',key:String(client.id),value:para.trim()},{onConflict:'kind,key'}) }catch(_){}   // aprende el destinatario de facturas de este cliente
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
@@ -13515,6 +13522,13 @@ function FacturaEmailModal({factura, client, user, sale, onSent, onClose}) {
           <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>addCc(ccInput)} placeholder='+ correo' style={{flex:1,minWidth:90,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:12}}/></div>
       </div>
       <div><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e=>setAsunto(e.target.value)} style={fInp}/></div>
+      <div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3,gap:8}}>
+          <span style={{fontSize:10,color:C.muted,fontWeight:600}}>SALUDO</span>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{(()=>{ const n1=(destNombre||'').trim().split(/\s+/)[0]; const opt=[['Estimado', n1?`Estimado ${n1},`:'Estimado,'],['Estimada', n1?`Estimada ${n1},`:'Estimada,'],['Estimados','Estimados,'],['Estimadas','Estimadas,']]; return opt.map(([l,v])=><button key={l} type='button' onClick={()=>{setSaludoAuto(false);setSaludo(v)}} style={{fontSize:9.5,fontWeight:600,borderRadius:20,padding:'2px 9px',border:'none',cursor:'pointer',background:saludo===v?C.accent:C.bgSoft,color:saludo===v?'#fff':C.muted}}>{l}</button>) })()}</div>
+        </div>
+        <input value={saludo} onChange={e=>{setSaludoAuto(false);setSaludo(e.target.value)}} style={fInp}/>
+      </div>
       <div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
           <span style={{fontSize:10,color:C.muted,fontWeight:600}}>MENSAJE</span>
@@ -22546,7 +22560,8 @@ export default function App() {
         try{
           const sale=(sales||[]).find(s=>String(s.id)===String(fact?.sale_id))
           const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
-          const bodyTxt=facturaCorreoBody({...fact,invoice_no:String(r.folio)}, sale)
+          const cliNom=(clients||[]).find(c=>String(c.id)===String(fact?.client_id))?.name||''
+          const bodyTxt=`${saludoCli(cliNom)},\n\n`+facturaCorreoBody({...fact,invoice_no:String(r.folio)}, sale)
           const html=facturaCorreoHtml(bodyTxt, firma, false)
           const doc=splitSetDTE(r.dteXml)[0]; const pdf=doc?await facturaDtePdfBase64(doc):null
           await sendMailServer({to:dest, subject:`Factura ${r.folio}`, html, text:bodyTxt, ...(pdf?{pdfBase64:pdf.base64,pdfName:`Factura ${r.folio}.pdf`}:{})})
