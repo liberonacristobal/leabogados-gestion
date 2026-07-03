@@ -13584,15 +13584,15 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     </Modal>
   )
 }
-// Datos bancarios del estudio para el pago (transferencia) — fuente única, reusada en el recordatorio de cobro y en el correo de factura.
-const DATOS_PAGO_TXT = `Datos para el pago (transferencia):\n  Liberona Escala Abogados Limitada\n  RUT: 77.700.387-9\n  Banco BICE · Cuenta corriente 1403834\n  Confirmación a: contacto@leabogados.cl`
-const DATOS_PAGO_HTML = `<div style="margin:14px 0;padding:12px 16px;background:#F7F9FA;border:1px solid #E4E8EB;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#537281;font-weight:600;margin-bottom:3px">Datos para el pago (transferencia)</div><div>Liberona Escala Abogados Limitada</div><div><span style="color:#537281">RUT:</span> <b>77.700.387-9</b></div><div><span style="color:#537281">Banco BICE · Cuenta corriente:</span> <b>1403834</b></div><div><span style="color:#537281">Confirmación a:</span> contacto@leabogados.cl</div></div>`
-// Cuenta destinada a GASTOS (fondo por rendir) — editable y recordada por el usuario (no está fija como la de honorarios).
+// Cuentas del estudio (fuente única). Honorarios: fija. Gastos: default editable/recordado por el usuario.
+const CUENTA_HONORARIOS = { razon:'Liberona Escala Abogados Limitada', rut:'77.700.387-9', banco:'Banco BICE', cuenta:'1403834', email:'contacto@leabogados.cl' }
 const CUENTA_GASTOS_DEFAULT = { razon:'Liberona Escala Abogados Limitada', rut:'77.700.387-9', banco:'Banco BICE', cuenta:'1383922', email:'administracion@leabogados.cl' }
-const datosGastosTxt = (cta,lang='es') => (lang==='en'
-  ? `Account for the expense fund (bank transfer):\n  ${cta.razon}\n  Tax ID: ${cta.rut}\n  ${cta.banco} · Account ${cta.cuenta}\n  Confirmation to: ${cta.email}`
-  : `Cuenta para el fondo de gastos (transferencia):\n  ${cta.razon}\n  RUT: ${cta.rut}\n  ${cta.banco} · Cuenta corriente ${cta.cuenta}\n  Confirmación a: ${cta.email}`)
-const datosGastosHtml = (cta,lang='es') => `<div style="margin:14px 0;padding:12px 16px;background:#FAEEDA;border:1px solid #F0C784;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#854F0B;font-weight:600;margin-bottom:3px">${lang==='en'?'Account for the expense fund (bank transfer)':'Cuenta para el fondo de gastos (transferencia)'}</div><div>${cta.razon}</div><div><span style="color:#537281">${lang==='en'?'Tax ID:':'RUT:'}</span> <b>${cta.rut}</b></div><div><span style="color:#537281">${cta.banco} · ${lang==='en'?'Account:':'Cuenta corriente:'}</span> <b>${cta.cuenta}</b></div><div><span style="color:#537281">${lang==='en'?'Confirmation to:':'Confirmación a:'}</span> ${cta.email}</div></div>`
+// Recuadro de una cuenta bancaria (texto + HTML) con encabezado libre. ambar=true → estilo cuenta de gastos.
+const cuentaTxt = (header, cta) => `${header}:\n  ${cta.razon}\n  RUT: ${cta.rut}\n  ${cta.banco} · Cuenta corriente ${cta.cuenta}\n  Confirmación a: ${cta.email}`
+const cuentaHtml = (header, cta, ambar=false) => `<div style="margin:14px 0;padding:12px 16px;background:${ambar?'#FAEEDA':'#F7F9FA'};border:1px solid ${ambar?'#F0C784':'#E4E8EB'};border-radius:8px;font-size:13px;line-height:1.7"><div style="color:${ambar?'#854F0B':'#537281'};font-weight:600;margin-bottom:3px">${header}</div><div>${cta.razon}</div><div><span style="color:#537281">RUT:</span> <b>${cta.rut}</b></div><div><span style="color:#537281">${cta.banco} · Cuenta corriente:</span> <b>${cta.cuenta}</b></div><div><span style="color:#537281">Confirmación a:</span> ${cta.email}</div></div>`
+// DATOS_PAGO (honorarios, header genérico) — usado por recordatorio de cobro y estado de cuenta. El correo de factura usa su propio header.
+const DATOS_PAGO_TXT = cuentaTxt('Datos para el pago (transferencia)', CUENTA_HONORARIOS)
+const DATOS_PAGO_HTML = cuentaHtml('Datos para el pago (transferencia)', CUENTA_HONORARIOS)
 // Acuse de pago: confirma al cliente que recibimos el pago de una factura (al conciliar el abono). Formato oficina, vía la cuenta del estudio.
 async function acusePagoEmail(to, {folio, monto, fecha}){
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -13679,8 +13679,14 @@ function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false){
   const items = rows.map(r=>`- Factura N° ${r.folio} — ${r.glosa||'los servicios prestados'}, por ${fmtN(r.amount)}`).join('\n')
   return `Junto con saludar, adjuntamos las facturas correspondientes a nuestros servicios legales:\n${items}\nTotal: ${fmtN(total)}.${cierre}`
 }
+// Convierte texto (con \n) en párrafos <p> escapados. Fuente única para armar cuerpos de correo.
+const _correoToP = txt => String(txt).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')
+// Cascarón del correo del estudio: header navy con logo + contenido (ya en HTML) + firma. innerHtml es el cuerpo ya armado.
+function facturaCorreoShell(innerHtml, firma, lang='es'){
+  return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${innerHtml}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
+}
 function facturaCorreoHtml(body, firma, incPago, lang='es', fondoHtml=''){
-  return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${fondoHtml||''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
+  return facturaCorreoShell(`${_correoToP(body)}${incPago?DATOS_PAGO_HTML:''}${fondoHtml||''}`, firma, lang)
 }
 function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
@@ -13777,16 +13783,30 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   // Regeneran el texto por defecto mientras no lo edites a mano (saldoTocado/fondoTocado).
   useEffect(()=>{ if(!saldoTocado.current) setSaldoMsg(genSaldoMsg(lang)) },[lang,otroSaldo,otrasPendientes.length])
   useEffect(()=>{ if(!fondoTocado.current) setFondoMsg(genFondoMsg(lang)) },[lang,fondoMonto])
-  const recordatorio=()=> (recordarSaldo && otroSaldo>0 && saldoMsg.trim()) ? `\n\n${saldoMsg.trim()}` : ''
-  const fondoFrase=()=> (pedirFondo && fondoMsg.trim()) ? `\n\n${fondoMsg.trim()}` : ''
-  const cuerpoFull=()=>`${saludo}\n\n${body}${recordatorio()}${fondoFrase()}\n\n${CORREO_DESPEDIDA(lang)}`   // saludo + mensaje + (recordatorio) + (fondo) + despedida SIEMPRE al final
-  const buildHtml=()=>facturaCorreoHtml(cuerpoFull(), firma, incPago, lang, pedirFondo?datosGastosHtml(ctaGastos,lang):'')
+  // Encabezados de los recuadros de cuenta + la mención al incluir la cuenta de honorarios (se envía por primera vez).
+  const H_PAGO = lang==='en'?'Account for the invoice payment':'Cuenta para el pago de la factura'
+  const H_FONDO = lang==='en'?'Account for the expense fund':'Cuenta para el fondo de gastos'
+  const pagoFrase = () => lang==='en'
+    ? 'For the payment of our fees, you may transfer to the current account below.'
+    : 'Para el pago de nuestros honorarios, puede transferir a la cuenta corriente que se indica a continuación.'
+  // Segmentos del cuerpo EN ORDEN: mensaje, (recordatorio), (frase pago + cuenta honorarios), (frase fondo + cuenta gastos), despedida.
+  // Cada segmento es texto {t} o un recuadro HTML {h}. Así cada cuenta va JUSTO DESPUÉS de su frase, y la despedida al final.
+  const segmentos = () => {
+    const s = [{t:body}]
+    if(recordarSaldo && otroSaldo>0 && saldoMsg.trim()) s.push({t:saldoMsg.trim()})
+    if(incPago){ s.push({t:pagoFrase()}); s.push({t:cuentaTxt(H_PAGO,CUENTA_HONORARIOS), h:cuentaHtml(H_PAGO,CUENTA_HONORARIOS)}) }
+    if(pedirFondo){ if(fondoMsg.trim()) s.push({t:fondoMsg.trim()}); s.push({t:cuentaTxt(H_FONDO,ctaGastos), h:cuentaHtml(H_FONDO,ctaGastos,true)}) }
+    s.push({t:CORREO_DESPEDIDA(lang)})
+    return s
+  }
+  const cuerpoFull=()=>`${saludo}\n\n${segmentos().map(x=>x.t).join('\n\n')}`   // versión texto plano (los recuadros van como texto)
+  const buildHtml=()=>facturaCorreoShell(`${_correoToP(saludo)}${segmentos().map(x=>x.h?x.h:_correoToP(x.t)).join('')}`, firma, lang)   // HTML: recuadros como cajas
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
     setSending(true)
     try{
       const adjuntos = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
-      let bodyTxt=cuerpoFull(); if(incPago) bodyTxt+=`\n\n${DATOS_PAGO_TXT}`; if(pedirFondo) bodyTxt+=`\n\n${datosGastosTxt(ctaGastos,lang)}`
+      const bodyTxt=cuerpoFull()   // ya incluye las cuentas (segmentos), en el orden correcto
       if(pedirFondo){ try{ await supabase.from('learnings').upsert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(ctaGastos)},{onConflict:'kind,key'}) }catch(_){} }   // recuerda la cuenta de gastos ingresada
       // Envía SIEMPRE desde el correo del usuario; si su Gmail venció, enviarComoUsuario pregunta antes de usar la oficina (o cancela).
       const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos})
