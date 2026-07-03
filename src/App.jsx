@@ -5940,36 +5940,40 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [impOpen,setImpOpen] = useState(false)
   const respaldoRef = useRef(null)
   const [procResp,setProcResp] = useState(false)
-  // Sube el "Archivo Respaldo" (SetDTE XML de MIPYME) y genera/descarga la representación impresa de cada factura.
-  const procesarRespaldoSII = async(file)=>{
-    if(!file) return
-    setProcResp(true)
+  const [respaldoRes,setRespaldoRes] = useState(null)   // listado de resultados del último cargue de XML (por factura)
+  // Sube uno o VARIOS "Archivo Respaldo" (SetDTE XML de MIPYME): por cada factura genera el PDF (logo+timbre), lo sube a
+  // la carpeta de facturación en Drive y lo adjunta a la ficha. Devuelve un LISTADO de resultados factura por factura.
+  const procesarRespaldoSII = async(fileList)=>{
+    const files=[...(fileList||[])].filter(f=>/\.xml$/i.test(f.name||'')||/xml/i.test(f.type||''))
+    if(!files.length){ appAlert('Sube el o los "Archivo Respaldo" (.xml) de MIPYME.'); return }
+    setProcResp(true); setRespaldoRes(null)
     try{
-      const xml = await file.text()
-      const docs = splitSetDTE(xml)
-      if(!docs.length){ appAlert('No encontré facturas (<DTE>) en ese archivo. Sube el "Archivo Respaldo" (XML) de MIPYME.'); setProcResp(false); return }
       const token = await driveToken()
       if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
       const folders = await driveAdjuntosFolders(token)
-      let adj=0, dup=0, sin=0; const sinList=[]
-      for(const d of docs){
-        const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
-        const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioM)
-        if(!b){ sin++; if(folioM) sinList.push(folioM); continue }
-        const r = await facturaDtePdfBase64(d)
-        const fname = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
-        const { data:ex } = await supabase.from('billing_attachments').select('id,name').eq('billing_id',b.id)
-        if((ex||[]).some(a=>a.name===fname || /respaldo SII/i.test(a.uploaded_by||''))){ dup++; continue }
-        const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
-        const fileObj = new File([u8], fname, {type:'application/pdf'})
-        const up = await driveUpload(token, folders.facturas, fileObj, fname)
-        await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:'Respaldo SII' })
-        adj++
+      const res=[]
+      for(const file of files){
+        let docs=[]; try{ docs=splitSetDTE(await file.text()) }catch(_){}
+        if(!docs.length){ res.push({archivo:file.name, estado:'sin_dte'}); continue }
+        for(const d of docs){
+          const folioM = ((d.match(/<Folio>([^<]+)<\/Folio>/)||[])[1]||'').trim()
+          const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioM)
+          const cli = b ? ((clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||'—') : null
+          if(!b){ res.push({folio:folioM||'?', estado:'sin_factura'}); continue }
+          try{
+            const r = await facturaDtePdfBase64(d)
+            const fname = 'Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
+            const { data:ex } = await supabase.from('billing_attachments').select('id,name,url,uploaded_by').eq('billing_id',b.id)
+            const prev=(ex||[]).find(a=>a.name===fname || /respaldo SII/i.test(a.uploaded_by||''))
+            if(prev){ res.push({folio:folioM, cliente:cli, monto:b.amount, estado:'duplicada', url:prev.url||null}); continue }
+            const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
+            const up = await driveUpload(token, folders.facturas, new File([u8], fname, {type:'application/pdf'}), fname)
+            await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:'Respaldo SII' })
+            res.push({folio:folioM, cliente:cli, monto:b.amount, estado:'adjuntada', url:up.webViewLink||null})
+          }catch(e){ res.push({folio:folioM, cliente:cli, estado:'error', msg:e.message||String(e)}) }
+        }
       }
-      let msg='Respaldo: '+adj+' factura(s) adjuntada(s) a su ficha (Drive)'
-      if(dup) msg+=', '+dup+' ya tenían respaldo'
-      if(sin) msg+=', '+sin+' sin factura en el sistema (folios: '+sinList.slice(0,10).join(', ')+(sinList.length>10?'…':'')+')'
-      appAlert(msg+'.')
+      setRespaldoRes(res)
       onRefresh&&onRefresh()
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
@@ -6507,7 +6511,29 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
             <div style={{position:'relative'}}>
               <button onClick={()=>setImpOpen(o=>!o)} style={chipBtn('primary')}>↑ Importar ▾</button>
-              <input ref={respaldoRef} type='file' accept='.xml,text/xml' style={{display:'none'}} onChange={e=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; procesarRespaldoSII(f) }}/>
+              <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=e.target.files; e.target.value=''; procesarRespaldoSII(fs) }}/>
+              {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),err=[...g('error'),...g('sin_dte')]
+                const STY={adjuntada:{t:'Adjuntada al Drive',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_factura:{t:'Sin factura en el sistema',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg}}
+                const row=(r,i)=>{ const s=STY[r.estado]||STY.error; return (
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.folio?`N°${r.folio}`:r.archivo||'—'}{r.cliente?<span style={{fontWeight:400,color:C.muted}}> · {r.cliente}</span>:''}{r.monto?<span style={{fontWeight:400,color:C.muted}}> · {fmt(r.monto)}</span>:''}</div>
+                      {r.msg&&<div style={{fontSize:10,color:C.overdueText}}>{r.msg}</div>}
+                    </div>
+                    {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>ver PDF ↗</a>}
+                    <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
+                  </div>) }
+                return <Modal title='Respaldo XML · resultados' onClose={()=>setRespaldoRes(null)}>
+                  <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+                    <div style={{flex:'1 1 90px',background:C.greenBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.greenText}}>Adjuntadas</div><div style={{fontSize:18,fontWeight:700,color:C.greenText}}>{adj.length}</div></div>
+                    <div style={{flex:'1 1 90px',background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.muted}}>Ya tenían</div><div style={{fontSize:18,fontWeight:700,color:C.muted}}>{dup.length}</div></div>
+                    <div style={{flex:'1 1 90px',background:C.soonBg,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9.5,color:C.soonText}}>Sin factura</div><div style={{fontSize:18,fontWeight:700,color:C.soonText}}>{sinf.length}</div></div>
+                  </div>
+                  {adj.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:4}}>Adjuntadas al Drive · {adj.length}</div>{adj.map(row)}</>}
+                  {dup.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Ya tenían respaldo · {dup.length}</div>{dup.map(row)}</>}
+                  {sinf.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Sin factura en el sistema · {sinf.length}</div><div style={{fontSize:10,color:C.muted,margin:'2px 0 2px'}}>El folio del XML no existe como factura acá. Cárgala o revisa el folio.</div>{sinf.map(row)}</>}
+                  {err.length>0&&<><div style={{fontSize:9,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3,marginTop:10}}>Con problema · {err.length}</div>{err.map(row)}</>}
+                </Modal> })()}
               {impOpen&&<>
                 <div onClick={()=>setImpOpen(false)} style={{position:'fixed',inset:0,zIndex:90}}/>
                 <div style={{position:'absolute',top:36,right:0,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,minWidth:150,overflow:'hidden'}}>
