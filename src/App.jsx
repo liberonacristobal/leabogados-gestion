@@ -13693,10 +13693,10 @@ function facturaGlosa(factura, sale){
     nombre = concept.replace(/\s*[—\-·|:]?\s*(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+)\s*$/i,'').trim()
   }
   if(detalle) detalle = detalle.charAt(0).toUpperCase()+detalle.slice(1)
-  // Ítem genérico ("Servicios legales", "Honorarios", "Asesoría") no describe → anteponer el proyecto.
+  // Ítem genérico ("Servicios legales", "Honorarios", "Asesoría") no describe → usar el PROYECTO en su lugar (se descarta el genérico).
   const esGenerico = !nombre || /^(honorarios(\s+profesionales)?|servicios(\s+legales|\s+profesionales)?|asesor[ií]a(\s+legal|\s+jur[ií]dica)?|factura)\.?$/i.test(nombre)
   let base = nombre
-  if(esGenerico && proyecto) base = nombre ? `${proyecto} · ${nombre}` : proyecto
+  if(esGenerico && proyecto) base = proyecto   // proyecto reemplaza al ítem genérico; queda "Proyecto — cuota"
   else if(!nombre) base = proyecto
   const g = (base + (detalle ? ` — ${detalle}` : '')).trim()
   return g || proyecto || ''
