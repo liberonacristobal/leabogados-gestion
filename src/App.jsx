@@ -13761,11 +13761,11 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
     const uno = otrasPendientes.length===1
     const listar = (con) => otrasPendientes.map(x=>con?`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'} (${fmtN(x.saldo)})`:`N° ${folioN(x.b.invoice_no)||x.b.invoice_no||'—'}`).join(', ')
     if(lg==='en') return uno
-      ? `Also, according to our records, invoice ${listar(false)} for ${fmtN(otroSaldo)} may still be outstanding. If it has already been settled, please disregard this note.`
-      : `Also, according to our records, the following invoices may still be outstanding: ${listar(true)} — totaling ${fmtN(otroSaldo)}. If they have already been settled, please disregard this note.`
+      ? `Also, according to our records, a balance corresponding to invoice ${listar(false)} for ${fmtN(otroSaldo)} may still be outstanding.`
+      : `Also, according to our records, balances corresponding to the following invoices may still be outstanding: ${listar(true)} — totaling ${fmtN(otroSaldo)}.`
     return uno
-      ? `Además, según nuestros registros, quedaría pendiente la factura ${listar(false)} por ${fmtN(otroSaldo)}. Si ya la regularizó, por favor omita este mensaje.`
-      : `Además, según nuestros registros, quedarían pendientes las facturas ${listar(true)}, por un total de ${fmtN(otroSaldo)}. Si ya las regularizó, por favor omita este mensaje.`
+      ? `Además, según nuestros registros, quedaría pendiente un saldo correspondiente a la factura ${listar(false)} por ${fmtN(otroSaldo)}.`
+      : `Además, según nuestros registros, quedarían pendientes saldos correspondientes a las facturas ${listar(true)}, por un total de ${fmtN(otroSaldo)}.`
   }
   const genFondoMsg=(lg)=> lg==='en'
     ? `Additionally, to set up an expense fund (fondo por rendir)${fondoMonto?` in the amount of ${fmtN(+fondoMonto||0)}`:''}, you may transfer to the account below.`
