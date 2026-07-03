@@ -5383,21 +5383,41 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           </div>
           <span style={{fontSize:12,color:C.muted,flexShrink:0}}>{open?'▾':'▸'}</span>
         </div>
-        {open&&(
-          <div style={{padding: compact?'0 12px 10px 14px':'0 12px 10px', display:'flex',flexDirection:'column',gap:7}}>
-            <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:10.5,color:C.muted,display:'flex',flexDirection:'column',gap:3}}>
-              <div>Emitida <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at||b.due)}</b> · concepto: <b style={{color:C.text}}>{b.concept||'—'}</b></div>
-              <div>Se enviará a: {dest?<b style={{color:C.accent}}>{dest}</b>:<span style={{color:C.soonText}}>sin destinatario recordado (lo eliges al enviar)</span>}</div>
-              {sent&&<div>Correo <b style={{color:C.greenText}}>enviado el {fmtFechaDMY(b.email_sent_at)}</b></div>}
+        {open&&(()=>{
+          const dte = b.dte_xml?parseDteFactura(b.dte_xml):null
+          const items = (dte&&dte.items&&dte.items.length)?dte.items:[{dsc:b.concept||'',nmb:'',mnt:montoFactura(b)}]
+          const tot = dte?dte.total:montoFactura(b)
+          const recRs = dte?.rznR || (rs?rsDisplay(rs):'') || b.receptor_name || (c?.name||'')
+          const recRut = dte?.rutR || (rs&&rs.rut) || b.receptor_rut || ''
+          const row = (l,v) => <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:10.5}}><span style={{color:C.muted}}>{l}</span><span style={{color:C.text,textAlign:'right',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}</span></div>
+          return (
+          <div style={{padding: compact?'0 12px 11px 14px':'0 12px 11px', display:'flex',flexDirection:'column',gap:9}}>
+            {/* Ficha inline de la factura (datos del DTE = del SII). El PDF real con timbre va en "Ver PDF con timbre". */}
+            <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+              <div style={{background:C.accent,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{color:'#fff',fontSize:11,fontWeight:600}}>Factura electrónica exenta</span>
+                <span style={{color:C.done,fontSize:11}}>N° {folioN(b.invoice_no)||b.folio||'—'}</span>
+              </div>
+              <div style={{padding:'9px 11px',display:'flex',flexDirection:'column',gap:6,background:'#fff'}}>
+                {row('Emisor', `${dte?.rznE||'Liberona Escala Abogados'}${dte?.rutE?` · ${dte.rutE}`:''}`)}
+                {row('Receptor', `${recRs||'—'}${recRut?` · ${recRut}`:''}`)}
+                {row('Emisión', fmtFechaDMY(b.issued_at||b.due))}
+                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:7}}>
+                  <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Detalle</div>
+                  {items.map((it,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,color:C.text,marginBottom:i<items.length-1?3:0}}><span style={{flex:1,minWidth:0}}>{it.dsc||it.nmb||'Servicios prestados'}</span><span style={{fontWeight:600,whiteSpace:'nowrap'}}>{fmt(it.mnt)}</span></div>)}
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',borderTop:`1px solid ${C.border}`,paddingTop:7}}><span style={{fontSize:12,fontWeight:600,color:C.accent}}>Total exento</span><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmt(tot)}</span></div>
+              </div>
             </div>
+            <div style={{fontSize:9.5,color:C.muted}}>Se enviará a {dest?<b style={{color:C.accent}}>{dest}</b>:<span style={{color:C.soonText}}>lo eliges al enviar</span>}{sent?<span style={{color:C.greenText}}> · enviado el {fmtFechaDMY(b.email_sent_at)}</span>:''}</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-              <button onClick={()=>verFacturaPdf(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver PDF</button>
+              <button onClick={()=>verFacturaPdf(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver PDF con timbre</button>
               {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver ficha</button>}
               {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Editar</button>}
               {sent&&onUnsend&&<button onClick={()=>onUnsend(b)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Marcar no enviada</button>}
             </div>
           </div>
-        )}
+        )})()}
       </div>
     )
   }
@@ -13598,6 +13618,21 @@ function recordatorioCobro(b){
 function dteMontoTotal(dteXml){ if(!dteXml) return null; const m=String(dteXml).match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); return m?Math.round(+m[1]):null }
 // Monto a mostrar/usar de una factura: el del DTE si está emitida con XML; si no, el guardado (programado).
 function montoFactura(b){ const t=b&&b.dte_xml?dteMontoTotal(b.dte_xml):null; return (t!=null)?t:(b?.amount||0) }
+// Parser LIVIANO del DTE (sin jsPDF/timbre): datos para la ficha inline de previsualización. Devuelve null si no hay DTE.
+function parseDteFactura(dteXml){
+  const doc = splitSetDTE(dteXml||'')[0] || dteXml || ''
+  if(!doc) return null
+  const g=(t,s=doc)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?m[1].trim():'' }
+  const idDoc=(doc.match(/<IdDoc>[\s\S]*?<\/IdDoc>/)||[''])[0], emi=(doc.match(/<Emisor>[\s\S]*?<\/Emisor>/)||[''])[0], rec=(doc.match(/<Receptor>[\s\S]*?<\/Receptor>/)||[''])[0], tot=(doc.match(/<Totales>[\s\S]*?<\/Totales>/)||[''])[0]
+  const detalles=[...doc.matchAll(/<Detalle>[\s\S]*?<\/Detalle>/g)].map(m=>m[0])
+  return {
+    folio:g('Folio',idDoc), fch:g('FchEmis',idDoc),
+    rutE:g('RUTEmisor',emi), rznE:g('RznSoc',emi),
+    rutR:g('RUTRecep',rec), rznR:g('RznSocRecep',rec),
+    exe:+g('MntExe',tot)||0, total:+g('MntTotal',tot)||0,
+    items:detalles.map(d=>({ nmb:g('NmbItem',d), dsc:g('DscItem',d), mnt:+g('MontoItem',d)||0 }))
+  }
+}
 // Genera el PDF con timbre de una factura (desde su DTE) y lo abre en una pestaña para revisarlo.
 async function verFacturaPdf(b){
   try{
