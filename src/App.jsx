@@ -5437,11 +5437,19 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                         <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,color:parcial?C.soonText:C.muted,fontWeight:parcial?600:400}}>{fmt(saldoB)}</div>{parcial&&<div style={{fontSize:9,color:C.done,whiteSpace:'nowrap'}}>saldo · de {fmt(b.amount)}</div>}</div>
                       </div>
                       {fo&&(
-                        <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'0 12px 10px 20px'}}>
-                          {onEnviar&&<button onClick={()=>onEnviar(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Enviar al cliente</button>}
-                          {onConciliar&&needConc&&<button onClick={()=>onConciliar(clients.find(x=>String(x.id)===String(b.client_id))||null)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Buscar conciliación</button>}
-                          {!rs&&onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Asignar razón social</button>}
-                          {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Ver ficha</button>}
+                        <div style={{padding:'2px 12px 10px 20px'}}>
+                          {/* Traza de la factura: emitida · correo (con fecha de envío) · estado de cobro */}
+                          <div style={{background:C.bgSoft,borderRadius:8,padding:'7px 10px',marginBottom:8,fontSize:10.5,color:C.muted,display:'flex',flexDirection:'column',gap:2}}>
+                            <div>Emitida <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b>{b.dte_xml?<span style={{color:C.greenText}}> · PDF con timbre</span>:''}</div>
+                            <div>Correo: {b.email_sent_at?<b style={{color:C.greenText}}>✓ enviado el {fmtFechaDMY(b.email_sent_at)}</b>:<span style={{color:C.soonText}}>sin enviar</span>}</div>
+                            <div>Cobro: <b style={{color:(est&&est.fg)||C.muted}}>{(est&&est.label)||b.status}</b></div>
+                          </div>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                            {onEnviar&&<button onClick={()=>onEnviar(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>{b.email_sent_at?'Reenviar correo':'Enviar al cliente'}</button>}
+                            {!rs&&onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Asignar razón social</button>}
+                            {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Editar · ver PDF</button>}
+                            {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Ver ficha</button>}
+                          </div>
                         </div>
                       )}
                     </div>
