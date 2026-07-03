@@ -5994,14 +5994,17 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     setProcResp(false)
   }
   const [creandoFac,setCreandoFac] = useState(null)   // folio en curso al crear una factura huérfana desde el XML
+  const [crearCli,setCrearCli] = useState({})         // folio -> client_id elegido a mano para la huérfana
   // Crea en el sistema una factura que se emitió en el SII pero no estaba en la app (huérfana), desde su DTE del XML:
-  // reusa onIngresarSII (fuente única, resuelve el cliente por RUT) y le adjunta el PDF a la ficha/Drive.
+  // reusa onIngresarSII (fuente única). Cliente: el que elijas a mano (crearCli), o si no, lo resuelve por RUT.
   const crearDesdeXML = async(item, idx)=>{
     if(!onIngresarSII||creandoFac) return
-    if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)}) en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
+    const clienteId = crearCli[item.row.folio]||null
+    const cliNom = clienteId ? ((clients||[]).find(c=>String(c.id)===String(clienteId))?.name||'') : ''
+    if(!await appConfirm(`¿Crear la Factura N°${item.row.folio} (${item.row.receptor||'—'} · ${fmt(item.row.monto)})${cliNom?`\nCliente: ${cliNom}`:''} en el sistema?\nSe emitió en el SII pero no estaba acá.`)) return
     setCreandoFac(item.row.folio)
     try{
-      const fac = await onIngresarSII(item.row)
+      const fac = await onIngresarSII(item.row, clienteId)
       if(fac?.id){ try{ const token=await driveToken(); if(token){ const folders=await driveAdjuntosFolders(token); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const {data:ex}=await supabase.from('billing_attachments').select('id,name').eq('billing_id',fac.id); if(!(ex||[]).some(a=>a.name===fname)){ const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,folders.facturas,new File([u8],fname,{type:'application/pdf'}),fname); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:up.id,name:up.name||fname,url:up.webViewLink||null,uploaded_by:'Respaldo SII'}) } } }catch(_){} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map((r,i)=>i===idx?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id}:r))
@@ -6544,16 +6547,22 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{display:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
               {respaldoRes&&(()=>{ const g=k=>respaldoRes.filter(r=>r.estado===k); const adj=g('adjuntada'),dup=g('duplicada'),sinf=g('sin_factura'),cre=g('creada'),err=[...g('error'),...g('sin_dte')]
                 const STY={adjuntada:{t:'Adjuntada al Drive',c:C.greenText,bg:C.greenBg},creada:{t:'Creada ✓',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_factura:{t:'Sin factura en el sistema',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg}}
-                const row=(r,i)=>{ const s=STY[r.estado]||STY.error; return (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.folio?`N°${r.folio}`:r.archivo||'—'}{r.cliente?<span style={{fontWeight:400,color:C.muted}}> · {r.cliente}</span>:''}{r.monto?<span style={{fontWeight:400,color:C.muted}}> · {fmt(r.monto)}</span>:''}</div>
-                      {r.msg&&<div style={{fontSize:10,color:C.overdueText}}>{r.msg}</div>}
-                      {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en Cobertura SII o en la factura.</div>}
+                const row=(r,i)=>{ const s=STY[r.estado]||STY.error; const esSin=r.estado==='sin_factura'&&r.row&&onIngresarSII; const pick=esSin&&crearCli[r.row.folio]; return (
+                  <div key={i} style={{padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.folio?`N°${r.folio}`:r.archivo||'—'}{r.cliente?<span style={{fontWeight:400,color:C.muted}}> · {r.cliente}</span>:''}{r.monto?<span style={{fontWeight:400,color:C.muted}}> · {fmt(r.monto)}</span>:''}</div>
+                        {r.msg&&<div style={{fontSize:10,color:C.overdueText}}>{r.msg}</div>}
+                        {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en Cobertura SII o en la factura.</div>}
+                      </div>
+                      {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>ver PDF ↗</a>}
+                      <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
                     </div>
-                    {r.estado==='sin_factura'&&r.row&&onIngresarSII&&<button disabled={creandoFac===r.row.folio} onClick={()=>crearDesdeXML(r,i)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'4px 10px',cursor:creandoFac?'default':'pointer',flexShrink:0}}>{creandoFac===r.row.folio?'Creando…':'Crear factura'}</button>}
-                    {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>ver PDF ↗</a>}
-                    <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
+                    {esSin&&<div style={{display:'flex',gap:8,alignItems:'center',marginTop:6,flexWrap:'wrap'}}>
+                      <div style={{flex:'1 1 150px',minWidth:0}}><AsignarClienteInline bill={{id:r.row.folio}} clients={clients} onAssign={(_,cid)=>setCrearCli(p=>({...p,[r.row.folio]:cid}))} label='Asignar a un cliente (opcional)' placeholder='Buscar cliente…'/></div>
+                      {pick&&<span style={{fontSize:10,color:C.greenText,fontWeight:600,flexShrink:0}}>✓ {(clients||[]).find(c=>String(c.id)===String(pick))?.name||''}</span>}
+                      <button disabled={creandoFac===r.row.folio} onClick={()=>crearDesdeXML(r,i)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:creandoFac?'default':'pointer',flexShrink:0}}>{creandoFac===r.row.folio?'Creando…':'Crear factura'}</button>
+                    </div>}
                   </div>) }
                 return <Modal title='Respaldo XML · resultados' onClose={()=>setRespaldoRes(null)}>
                   <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
