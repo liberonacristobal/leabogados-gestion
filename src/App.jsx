@@ -7500,7 +7500,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         )
       })()}
-      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onFixAmount={async(id,amt)=>{ if(!await appConfirm(`Corregir el monto de esta factura a ${fmt(amt)} (el del SII)?`)) return; try{ await supabase.from('billing').update({amount:amt}).eq('id',id) }catch(_){}; setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,amount:amt}:b)); setFacturaEmail(f=>f&&f.id===id?{...f,amount:amt}:f) }} onClose={()=>setFacturaEmail(null)}/>}
+      {facturaEmail&&<FacturaEmailModal factura={facturaEmail} client={clients.find(c=>String(c.id)===String(facturaEmail.client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturaEmail.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturaEmail(null)}/>}
       {facturasEmail&&facturasEmail.length>0&&<FacturaEmailModal factura={facturasEmail[0]} facturas={facturasEmail} sales={sales} client={clients.find(c=>String(c.id)===String(facturasEmail[0].client_id))} sale={(sales||[]).find(s=>String(s.id)===String(facturasEmail[0].sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={()=>setFacturasEmail(null)}/>}
       {bandejaEnvio&&(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null; return (
         <div onClick={()=>setBandejaEnvio(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:190,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -13596,7 +13596,7 @@ function facturaCorreoBodyMulti(list, saleOf, lang, amountOf){
 function facturaCorreoHtml(body, firma, incPago, lang='es', fondoHtml=''){
   return `<div style="font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%"><tbody><tr><td bgcolor="#003C50" style="background-color:#003C50;padding:18px 24px"><img src="${location.origin}/le-logo-blanco.png" alt="Liberona Escala Abogados" style="height:26px;display:block"/></td></tr></tbody></table><div style="padding:24px;border:1px solid #E4E8EB;border-top:none">${String(body).split('\n').map(l=>l.trim()?`<p style="margin:0 0 10px">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</p>`:'').join('')}${incPago?DATOS_PAGO_HTML:''}${fondoHtml||''}${firmaCorreoHtml(firma,`${location.origin}/le-logo-color.png`,lang)}</div></div>`
 }
-function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onFixAmount, onClose}) {
+function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, billing=[], onSent, onClose}) {
   const myEmail=(user?.email||'').toLowerCase()
   const listF=(facturas&&facturas.length)?facturas:[factura]   // 1 o VARIAS facturas del MISMO cliente en un solo correo
   const multi=listF.length>1
@@ -13755,12 +13755,6 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
           </div>
         )})()}
       </div>
-      {!multi&&dteTotals[factura.id]!=null&&Math.round(dteTotals[factura.id])!==Math.round(factura.amount||0)&&(
-        <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:8,padding:'8px 11px',fontSize:11,color:C.soonText,display:'flex',flexDirection:'column',gap:6}}>
-          <div>El monto guardado en el sistema (<b>{fmt(factura.amount)}</b>) no coincide con el de la factura del SII (<b>{fmt(dteTotals[factura.id])}</b>). El correo usa el del SII (el real).</div>
-          {onFixAmount&&<button type='button' onClick={()=>onFixAmount(factura.id,dteTotals[factura.id])} style={{alignSelf:'flex-start',fontSize:11,fontWeight:600,color:'#fff',background:C.soonText,border:'none',borderRadius:7,padding:'4px 11px',cursor:'pointer'}}>Corregir en el sistema → {fmt(dteTotals[factura.id])}</button>}
-        </div>
-      )}
       <div><div style={lbl}>{multi?`PDF DE LAS ${listF.length} FACTURAS (DTE con timbre)`:'PDF DE LA FACTURA (DTE con timbre)'}</div>
         {multi
           ? (atts.length?<div style={{display:'flex',flexWrap:'wrap',gap:6}}>{atts.map(a=><button key={a.name} type='button' onClick={()=>verPdf(a.base64,a.name)} title='Ver PDF' style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'5px 9px',cursor:'pointer'}}><span style={{fontWeight:600}}>✓</span> {a.name} <span style={{color:C.accent,fontWeight:600}}>· Ver</span></button>)}</div>:<div style={{fontSize:11,color:C.muted}}>Generando los PDF con timbre…</div>)
