@@ -10032,6 +10032,8 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
     return Object.entries(byCat).map(([cat,v])=>({cat,...v,neto:v.costo-v.recupero,subList:Object.entries(v.subs).map(([s,n])=>({s,n})).sort((a,b)=>b.n-a.n)})).sort((a,b)=>b.neto-a.neto)
   }, [office,mes])
   const totNeto = cats.reduce((a,c)=>a+c.neto,0)
+  // Neto del mes ANTERIOR por categoría → comparar cada categoría y cazar anomalías (subió/bajó).
+  const catsPrevMap = useMemo(()=>{ const [y,mo]=mes.split('-').map(Number); const d=new Date(y,mo-2,1); const pm=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; const m={}; office.filter(e=>(e.date||'').slice(0,7)===pm).forEach(e=>{ const cat=e.category||'Sin categoría'; if(e.type==='fondo') m[cat]=(m[cat]||0)-(e.amount||0); else if(!e.no_descuenta_saldo) m[cat]=(m[cat]||0)+(e.amount||0) }); return m }, [office,mes])
   const yearNeto = useMemo(()=>{ const yr=mes.slice(0,4); let costo=0,recupero=0; office.filter(e=>(e.date||'').slice(0,4)===yr).forEach(e=>{ if(e.type==='fondo')recupero+=(e.amount||0); else if(!e.no_descuenta_saldo)costo+=(e.amount||0) }); return costo-recupero }, [office,mes])
   // Costos fijos: el molde = los ítems estructurales del mes anterior; se ofrece repetirlos si el mes actual está vacío.
   const prevMes = useMemo(()=>{ const [y,mo]=mes.split('-').map(Number); const d=new Date(y,mo-2,1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }, [mes])
@@ -10095,9 +10097,12 @@ function OficinaCostPanel({expenses, clientId, filtro=null, onRepetir, ultRep, o
         <div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin costos en {_mesLabelOf(mes)}.</div>
       ) : cats.map(c=>(
           <div key={c.cat} style={{borderBottom:`0.5px solid ${C.border}`}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0'}}>
-              <span style={{fontSize:12.5,color:c.cat==='Sin categoría'?C.soonText:C.text,fontWeight:500}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
-              <span style={{fontSize:13,fontWeight:700,color:c.neto<0?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(c.neto)}</span>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'6px 0'}}>
+              <span style={{fontSize:12.5,color:c.cat==='Sin categoría'?C.soonText:C.text,fontWeight:500,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.cat}{c.recupero>0&&<span style={{fontSize:10,color:C.greenText,marginLeft:6}}>−{fmt(c.recupero)} recupero</span>}</span>
+              <span style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                {(()=>{ const prevN=catsPrevMap[c.cat]; if(prevN==null||prevN===0){ return c.neto!==0?<span style={{fontSize:9,color:C.muted,fontWeight:600}}>nuevo</span>:null } const d=c.neto-prevN; if(Math.abs(d)<1) return <span style={{fontSize:9.5,color:C.done,fontWeight:600}}>=</span>; const up=d>0; return <span title={`Mes anterior: ${fmt(prevN)}`} style={{fontSize:9.5,fontWeight:600,color:up?C.overdueText:C.greenText}}>{up?'▲':'▼'} {fmt(Math.abs(d))}</span> })()}
+                <span style={{fontSize:13,fontWeight:700,color:c.neto<0?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(c.neto)}</span>
+              </span>
             </div>
             {c.subList.map(s=>(
               <div key={s.s} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'3px 0 3px 14px'}}>
