@@ -11265,7 +11265,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               const notaTot = notariaPend.reduce((a,e)=>a+(e.amount||0),0)
               // Depurar: gastos con categoría de oficina (Arriendo/Sueldos/Contadora/…) que quedaron en otro cliente → deben colgar del cliente interno.
               const _CATS_OFI_MOVER = CATS_OFICINA_ESTRUCTURAL.filter(c=>c!=='Compras')
-              const gastosOfiFuera = isAdmin ? (expenses||[]).filter(e=> !e.deleted_at && e.type==='gasto' && _CATS_OFI_MOVER.includes(String(e.category||'').trim()) && !esOficinaCli(e.client_id)) : []
+              const _ofiCli = (clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
+              const gastosOfiFuera = (isAdmin&&_ofiCli) ? (expenses||[]).filter(e=> !e.deleted_at && e.type==='gasto' && _CATS_OFI_MOVER.includes(String(e.category||'').trim()) && String(e.client_id||'')!==String(_ofiCli.id)) : []
               const ofiFueraTot = gastosOfiFuera.reduce((a,e)=>a+(e.amount||0),0)
               const acciones=[
                 nRev>0&&{ic:'alert',icC:C.soonText,bg:C.ambarBg,t:'Revisar gastos sin asignar',sub:`${nRev} gasto${nRev!==1?'s':''} · sin cliente, archivado u ocasional`,go:()=>setShowRevision(true)},
