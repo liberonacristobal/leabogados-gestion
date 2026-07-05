@@ -689,7 +689,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
     if(sFilter==='Prospecto' && c.status!=='Prospecto') return false
     if(q.trim() && !c.name.toLowerCase().includes(q.toLowerCase())) return false
     return true
-  }).sort((a,b)=>a.name.localeCompare(b.name))
+  }).sort((a,b)=>(a.name||'').localeCompare(b.name||''))
 
   const ClientRow = ({cl}) => {
     const tareasC=(tasks||[]).filter(t=>t.client_id===cl.id&&t.status!=='Terminado').length
@@ -6352,7 +6352,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       if(!byClient[cid].byEntity[ename]) byClient[cid].byEntity[ename] = []
       byClient[cid].byEntity[ename].push(b)
     })
-    return Object.values(byClient).sort((a,b)=>a.client.name.localeCompare(b.client.name,'es'))
+    return Object.values(byClient).sort((a,b)=>(a.client?.name||'').localeCompare(b.client?.name||'','es'))
   },[filtered,clients])
 
   // KPIs acotados al año/mes del filtro. Cada estado usa su fecha relevante: Programada→vencimiento, Pagado→pago, resto→emisión.
@@ -10267,7 +10267,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         const sb=(balances[b.id]?.fondos||0)-(balances[b.id]?.gastos||0)
         if(sa<0&&sb>=0) return -1
         if(sb<0&&sa>=0) return 1
-        return a.name.localeCompare(b.name,'es')
+        return (a.name||'').localeCompare(b.name||'','es')
       })
   },[clients,balances])
 
@@ -11562,7 +11562,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
         <div style={{padding:'4px 20px 100px'}}>
           {!showHistorial&&(()=>{
             const saldoDe = c => (balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
-            const alpha = (a,b)=>a.name.localeCompare(b.name,'es')
+            const alpha = (a,b)=>(a.name||'').localeCompare(b.name||'','es')
             const row = c => {
               const sal=saldoDe(c)
               const salCol = sal<0?C.overdue:(sal>0?C.normal:C.done)   // rojo=por reembolsar · verde=a favor · gris=$0
@@ -16026,7 +16026,7 @@ function InvoiceClientPicker({inv,clients,assigned,onAssign}) {
   const [q,setQ] = useState('')
   const matches = useMemo(()=>{
     if(!q.trim()) return []
-    return clients.filter(c=>c.name.toLowerCase().includes(q.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'es')).slice(0,6)
+    return clients.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es')).slice(0,6)
   },[q,clients])
   return (
     <div style={{background:C.card,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${assigned?C.accent:C.border}`}}>
