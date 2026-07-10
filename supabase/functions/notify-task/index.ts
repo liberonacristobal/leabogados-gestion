@@ -127,10 +127,20 @@ serve(async (req) => {
       subjectPrefix = "Tarea terminada";
       subtitle = `${task.who || "El responsable"} marcó como terminada una tarea que asignaste.`;
     }
-    if (!recipientName) {
+    const esCierreConReporte = tipo === "terminada" && !!task.completion_note;
+    if (!recipientName && !esCierreConReporte) {
       return new Response(JSON.stringify({ skipped: true, reason: "Sin destinatario" }), { status: 200 });
     }
-    const toEmail = EMAILS[recipientName];
+    const ADMINS = ["cl@leabogados.cl", "ee@leabogados.cl"];
+    // Remitente (para excluirlo del CC): en terminada = quien cerró (task.who).
+    const fromEmailEarly = EMAILS[tipo === "delegada" ? (task.delegated_by || by) : tipo === "terminada" ? (task.who || by) : by] || "";
+    let toEmail = EMAILS[recipientName] || "";
+    let ccEmail = "";
+    if (esCierreConReporte) {
+      // Reporte de cierre de un limited: SIEMPRE avisa a los admins (aunque el que asignó falte o sea el mismo que cerró).
+      if (!toEmail) toEmail = ADMINS[0];
+      ccEmail = ADMINS.filter((e) => e !== toEmail && e !== fromEmailEarly).join(", ");
+    }
     if (!toEmail) {
       return new Response(JSON.stringify({ skipped: true, reason: `No hay email para ${recipientName}` }), { status: 200 });
     }
@@ -144,6 +154,8 @@ serve(async (req) => {
     const estadoCierre = tipo === "terminada" ? String(task.completion_status || "") : "";
     const attachments: MailAttachment[] = Array.isArray(payload.attachments) ? payload.attachments : [];
     const attCount = attachments.length;
+    // Motivo de la delegación (obligatorio): viaja al delegado y a quien asignó.
+    const motivoDeleg = String(task.delegated_note || "");
     const due = task.due ? new Date(task.due + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
     // Urgencia del vencimiento: ≤ 2 días desde hoy → pill roja; si no, pill neutra.
     let dueUrgent = false;
@@ -189,6 +201,10 @@ serve(async (req) => {
           ${due ? `<tr><td style="${rowLabel}">Vence</td><td style="padding:6px 0;"><span style="display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:bold; background:${dueUrgent ? "#FCEBEB" : "#eeeeee"}; color:${dueUrgent ? "#A32D2D" : "#555555"};">${due}</span></td></tr>` : ""}
         </table>
       </div>
+      ${motivoDeleg ? `<div style="background:#FDF6E7; border-left:3px solid #E0A93B; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
+        <div style="font-size:11px; font-weight:bold; color:#854F0B; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Motivo de la delegacion</div>
+        <div style="font-size:13px; color:#1a1a1a; line-height:1.55; white-space:pre-wrap;">${esc(motivoDeleg)}</div>
+      </div>` : ""}
       ${gestion ? `<div style="background:#E1F5EE; border-left:3px solid #1D9E75; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
         <div style="font-size:11px; font-weight:bold; color:#0F6E56; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Gestion realizada${estadoCierre ? ` &middot; ${esc(estadoCierre)}` : ""}</div>
         <div style="font-size:13px; color:#1a1a1a; line-height:1.55; white-space:pre-wrap;">${esc(gestion)}</div>
@@ -217,7 +233,7 @@ serve(async (req) => {
     // "terminada" puede traer adjuntos (reporte de cierre) → sendMail (soporta adjuntos + from/replyTo).
     // El resto (nueva/delegada) sigue por sendViaSMTP, sin cambios.
     if (tipo === "terminada") {
-      await sendMail({ to: toEmail, subject, html, fromName, replyTo: fromEmail, attachments });
+      await sendMail({ to: toEmail, cc: ccEmail || undefined, subject, html, fromName, replyTo: fromEmail, attachments });
     } else {
       await sendViaSMTP(toEmail, subject, html, fromName, fromEmail);
     }

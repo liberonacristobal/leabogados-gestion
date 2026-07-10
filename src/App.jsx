@@ -12191,6 +12191,7 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
   const [deleg,setDeleg] = useState(false)        // switch "Delegar"
   const [delegTo,setDelegTo] = useState([])       // a quién se delega (multi)
   const [delegDue,setDelegDue] = useState('')     // nuevo plazo de la delegación
+  const [delegNota,setDelegNota] = useState('')   // motivo de la delegación (obligatorio)
   const [draftId,setDraftId] = useState(null)
   const draftRef = useRef(null)       // id de la tarea borrador (creada al adjuntar en tarea nueva)
   const committedRef = useRef(false)  // true si se guardó vía "Guardar" (no borrar al cerrar)
@@ -12284,13 +12285,14 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
   const addDaysISO = (iso,n)=>{ if(!iso) return ''; const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+n); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}` }
   const maxDelegDue = task?.due ? addDaysISO(task.due,3) : ''
   const delegDueOk = !!delegDue && (!maxDelegDue || delegDue<=maxDelegDue)
-  const puedeDelegar = deleg && delegTo.length>0 && delegDueOk
+  const puedeDelegar = deleg && delegTo.length>0 && delegDueOk && !!delegNota.trim()
   const toggleDelegTo = w => setDelegTo(a=>a.includes(w)?a.filter(x=>x!==w):[...a,w])
-  const handleDelegar = () => { committedRef.current=true; onDelegate(task,{to:delegTo,due:delegDue}) }
+  const handleDelegar = () => { committedRef.current=true; onDelegate(task,{to:delegTo,due:delegDue,nota:delegNota.trim()}) }
 
   const DelegBanner = () => (
     <div style={{fontSize:12,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'9px 11px',marginBottom:14}}>
       <span style={{fontWeight:600}}>{task.delegated_by}</span> la delegó a <span style={{fontWeight:600}}>{(task.delegated_to||[]).join(', ')}</span>{task.delegated_due?` · vence ${task.delegated_due}`:''}
+      {task.delegated_note&&<div style={{marginTop:4,fontStyle:'italic'}}>"{task.delegated_note}"</div>}
     </div>
   )
 
@@ -12420,6 +12422,9 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
                   <Fld label='Nuevo plazo'>
                     <Inp type='date' value={delegDue} max={maxDelegDue||undefined} onChange={e=>setDelegDue(e.target.value)} style={{width:170}}/>
                     {maxDelegDue&&<div style={{fontSize:11,color:delegDue&&!delegDueOk?C.overdue:C.muted,marginTop:5}}>Máximo {maxDelegDue} (plazo original + 3 días){delegDue&&!delegDueOk?' — excede el límite':''}</div>}
+                  </Fld>
+                  <Fld label='Motivo *'>
+                    <textarea value={delegNota} onChange={e=>setDelegNota(e.target.value)} placeholder='Ej: me voy de vacaciones, la sigue Rodrigo' rows={2} style={{width:'100%',boxSizing:'border-box',padding:'9px 11px',borderRadius:10,border:`1px solid ${C.border}`,fontSize:13,color:C.text,resize:'vertical',fontFamily:'inherit',lineHeight:1.4,outline:'none'}}/>
                   </Fld>
                 </>
               )}
@@ -16687,6 +16692,7 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
       {(task.delegated_to||[]).length>0&&(
         <div style={{fontSize:12,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'8px 11px',margin:'2px 0 10px'}}>
           <span style={{fontWeight:600}}>{task.delegated_by}</span> la delegó a <span style={{fontWeight:600}}>{(task.delegated_to||[]).join(', ')}</span>{task.delegated_due?` · vence ${task.delegated_due}`:''}
+          {task.delegated_note&&<div style={{marginTop:4,fontStyle:'italic'}}>"{task.delegated_note}"</div>}
         </div>
       )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -22442,10 +22448,10 @@ export default function App() {
   // Delegar: el responsable traspasa la tarea a otra(s) persona(s) con un nuevo plazo.
   // NO cambia who/assignees (sigue siendo responsable ante quien la asignó); solo registra
   // delegated_to/by/due/at y avisa por correo a los delegados.
-  const handleDelegateTask=useCallback(async(taskObj,{to,due})=>{
+  const handleDelegateTask=useCallback(async(taskObj,{to,due,nota})=>{
     setSaving(true)
     try{
-      const patch={ delegated_to:to, delegated_by:user?.name||null, delegated_due:due||null, delegated_at:new Date().toISOString() }   // tasks NO tiene columna updated_at
+      const patch={ delegated_to:to, delegated_by:user?.name||null, delegated_due:due||null, delegated_note:nota||null, delegated_at:new Date().toISOString() }   // tasks NO tiene columna updated_at
       const{data,error}=await supabase.from('tasks').update(patch).eq('id',taskObj.id).select().single()
       if(error)throw error
       setTasks(p=>p.map(x=>x.id===data.id?data:x))
