@@ -22445,6 +22445,28 @@ export default function App() {
     setModal({type:'cierreTarea',data:t})
   },[actualRole,handleSaveTask])
 
+  // Guarda en Drive (carpeta Tareas + tabla task_attachments) los adjuntos del reporte de cierre,
+  // además del correo. Best-effort: si no hay token de Drive, se omite en silencio (ya fueron por correo).
+  const subirAdjuntosCierreDrive=useCallback(async(taskId,task,files)=>{
+    if(!taskId || !files?.length) return
+    let token=null; try{ token=await driveToken() }catch(_){}
+    if(!token) return
+    try{
+      const folders=await driveAdjuntosFolders(token)
+      const cli=clients.find(c=>c.id===task.client_id)
+      const prefix=`${cli?.name||'Tarea'} · ${task.title||''}`.replace(/\s+/g,' ').slice(0,120)
+      for(const f of files){
+        try{
+          const bin=atob(f.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i)
+          const file=new File([u8], f.name, {type:f.mime||'application/octet-stream'})
+          const fname=`${prefix} · ${f.name}`.slice(0,250)
+          const up=await driveUpload(token, folders.tareas, file, fname)
+          await supabase.from('task_attachments').insert({task_id:taskId, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null})
+        }catch(_){}
+      }
+    }catch(_){}
+  },[clients,user])
+
   // Delegar: el responsable traspasa la tarea a otra(s) persona(s) con un nuevo plazo.
   // NO cambia who/assignees (sigue siendo responsable ante quien la asignó); solo registra
   // delegated_to/by/due/at y avisa por correo a los delegados.
@@ -23460,7 +23482,7 @@ export default function App() {
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
         {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
-        {modal?.type==='cierreTarea'&&<Modal title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>handleSaveTask({...modal.data,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files})}/></Modal>}
+        {modal?.type==='cierreTarea'&&<Modal title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>{ const t=modal.data; if(files?.length) subirAdjuntosCierreDrive(t.id,t,files); handleSaveTask({...t,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files}) }}/></Modal>}
         {modal?.type==='client'&&<Modal title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
       {undoToast&&(
