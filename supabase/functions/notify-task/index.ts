@@ -47,15 +47,16 @@ const toAscii = (s: string) =>
     .replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/[^\x20-\x7E]/g, "");
 async function sendMail(
-  { to, cc, subject, html, text, pdfBase64, pdfName, attachments }:
-  { to: string; cc?: string; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string; attachments?: MailAttachment[] },
+  { to, cc, subject, html, text, pdfBase64, pdfName, attachments, fromName, replyTo }:
+  { to: string; cc?: string; subject: string; html?: string; text?: string; pdfBase64?: string; pdfName?: string; attachments?: MailAttachment[]; fromName?: string; replyTo?: string },
 ) {
   const client = new SMTPClient({
     connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } },
   });
   try {
-    const msg: Record<string, unknown> = { from: `Liberona Escala Abogados <${GMAIL_USER}>`, to, subject: toAscii(subject) };
+    const msg: Record<string, unknown> = { from: `${toAscii(fromName || "Liberona Escala Abogados")} <${GMAIL_USER}>`, to, subject: toAscii(subject) };
     if (cc) msg.cc = cc;
+    if (replyTo) msg.replyTo = replyTo;
     if (html) msg.html = html;
     msg.content = text || (html ? "Ver el contenido en formato HTML." : subject);
     // Lista unificada de adjuntos. Compat: pdfBase64/pdfName = un adjunto PDF.
@@ -138,6 +139,11 @@ serve(async (req) => {
     const project = task.project || "";
     const titulo = task.title || "";
     const nota = task.note || task.descripcion || task.comentario || "";
+    // Reporte de cierre (solo tareas terminadas): detalle de la gestión + estado + adjuntos.
+    const gestion = tipo === "terminada" ? String(task.completion_note || "") : "";
+    const estadoCierre = tipo === "terminada" ? String(task.completion_status || "") : "";
+    const attachments: MailAttachment[] = Array.isArray(payload.attachments) ? payload.attachments : [];
+    const attCount = attachments.length;
     const due = task.due ? new Date(task.due + "T00:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
     // Urgencia del vencimiento: ≤ 2 días desde hoy → pill roja; si no, pill neutra.
     let dueUrgent = false;
@@ -183,6 +189,11 @@ serve(async (req) => {
           ${due ? `<tr><td style="${rowLabel}">Vence</td><td style="padding:6px 0;"><span style="display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:bold; background:${dueUrgent ? "#FCEBEB" : "#eeeeee"}; color:${dueUrgent ? "#A32D2D" : "#555555"};">${due}</span></td></tr>` : ""}
         </table>
       </div>
+      ${gestion ? `<div style="background:#E1F5EE; border-left:3px solid #1D9E75; border-radius:8px; padding:12px 14px; margin:16px 0 0;">
+        <div style="font-size:11px; font-weight:bold; color:#0F6E56; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Gestion realizada${estadoCierre ? ` &middot; ${esc(estadoCierre)}` : ""}</div>
+        <div style="font-size:13px; color:#1a1a1a; line-height:1.55; white-space:pre-wrap;">${esc(gestion)}</div>
+        ${attCount ? `<div style="font-size:12px; color:#0F6E56; margin-top:8px;">${attCount} documento${attCount > 1 ? "s" : ""} adjunto${attCount > 1 ? "s" : ""}</div>` : ""}
+      </div>` : ""}
 
       <div style="margin-top:22px;">
         <a href="https://gestion.leabogados.cl" style="display:inline-block; background:#003C50; color:#ffffff; text-decoration:none; padding:8px 16px; border-radius:18px; font-size:12px; font-weight:bold;">Ver en la app &rarr;</a>
@@ -203,7 +214,13 @@ serve(async (req) => {
     else if (tipo === "terminada") fromPerson = task.who || by;
     const fromEmail = EMAILS[fromPerson];
     const fromName = fromEmail ? `${fromPerson} - Liberona Escala Abogados` : "Liberona Escala Abogados";
-    await sendViaSMTP(toEmail, subject, html, fromName, fromEmail);
+    // "terminada" puede traer adjuntos (reporte de cierre) → sendMail (soporta adjuntos + from/replyTo).
+    // El resto (nueva/delegada) sigue por sendViaSMTP, sin cambios.
+    if (tipo === "terminada") {
+      await sendMail({ to: toEmail, subject, html, fromName, replyTo: fromEmail, attachments });
+    } else {
+      await sendViaSMTP(toEmail, subject, html, fromName, fromEmail);
+    }
 
     return new Response(JSON.stringify({ ok: true, sent_to: toEmail }), {
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
