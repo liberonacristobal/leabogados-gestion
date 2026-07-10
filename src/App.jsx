@@ -16579,6 +16579,73 @@ function printTasks(tasks, clients, filterLabel) {
 }
 
 // Vista previa de solo lectura de una tarea (se abre al click en una tarjeta)
+// Estados de cierre de una tarea (canon color+icono). Completada = verde; el resto avisa que algo quedó pendiente.
+const CIERRE_ESTADOS = [
+  {id:'Completada', label:'Completada', bg:C.greenBg, fg:C.greenText, bd:C.normal},
+  {id:'Parcial',    label:'Avance parcial', bg:C.soonBg, fg:C.soonText, bd:C.soonText},
+  {id:'Derivada',   label:'Derivada', bg:C.azulBg, fg:C.accent, bd:C.accent},
+  {id:'No se pudo', label:'No se pudo', bg:C.overdueBg, fg:C.overdueText, bd:C.overdueText},
+]
+
+// Cierre de tarea con REPORTE obligatorio — solo lo ven los usuarios limited (Martín/Martina).
+// Exige el detalle de la gestión + estado; permite adjuntar documentos. El detalle y los adjuntos
+// viajan en el correo "Tarea terminada" que le llega a quien asignó la tarea. Se guarda en la tarea.
+function CierreTareaModal({task, clients=[], saving, onConfirm, onClose}){
+  const [estado,setEstado] = useState('Completada')
+  const [detalle,setDetalle] = useState('')
+  const [files,setFiles] = useState([])   // [{name,base64,mime,size}]
+  const [err,setErr] = useState('')
+  const client = clients.find(c=>c.id===task.client_id)
+  const PLACEHOLDER = 'Ej: revisé el borrador, envié observaciones al cliente y quedó para firma el jueves…'
+  const addFiles = async (fileList)=>{
+    for(const f of Array.from(fileList||[])){
+      if(f.size > 8*1024*1024){ setErr(`"${f.name}" supera 8 MB`); continue }
+      const base64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]||''); r.onerror=()=>res(''); r.readAsDataURL(f) })
+      if(base64) setFiles(p=>[...p,{name:f.name, base64, mime:f.type||'application/octet-stream', size:f.size}])
+    }
+  }
+  const guardar = ()=>{
+    if(!detalle.trim()){ setErr('Escribe el detalle de la gestión realizada.'); return }
+    onConfirm({estado, detalle:detalle.trim(), files})
+  }
+  return (
+    <>
+      <div style={{fontSize:13,color:C.muted,marginBottom:14,lineHeight:1.4}}>{task.title}{client?.name?<> · <span style={{color:C.accent,fontWeight:600}}>{client.name}</span></>:null}</div>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Estado del cierre</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:16}}>
+        {CIERRE_ESTADOS.map(e=>{ const on=estado===e.id; return (
+          <button key={e.id} onClick={()=>setEstado(e.id)} style={{padding:'6px 12px',borderRadius:14,border:`1px solid ${on?e.bd:C.border}`,background:on?e.bg:'transparent',color:on?e.fg:C.muted,fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{e.label}</button>
+        )})}
+      </div>
+      <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Detalle de la gestión realizada *</div>
+      <textarea value={detalle} onChange={e=>{setDetalle(e.target.value);if(err)setErr('')}} placeholder={PLACEHOLDER} rows={4} autoFocus style={{width:'100%',boxSizing:'border-box',padding:'10px 12px',borderRadius:10,border:`1px solid ${err&&!detalle.trim()?C.overdueText:C.border}`,fontSize:13,color:C.text,resize:'vertical',fontFamily:'inherit',lineHeight:1.45,outline:'none'}}/>
+      <div style={{display:'flex',alignItems:'center',gap:10,margin:'12px 0 0',flexWrap:'wrap'}}>
+        <label style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:10,border:`1px dashed ${C.muted}`}}>
+          + Adjuntar documento
+          <input type='file' multiple onChange={e=>{addFiles(e.target.files);e.target.value=''}} style={{display:'none'}}/>
+        </label>
+        {files.length>0&&<span style={{fontSize:11,color:C.muted}}>{files.length} archivo{files.length>1?'s':''}</span>}
+      </div>
+      {files.length>0&&(
+        <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:8}}>
+          {files.map((f,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,background:C.bgSoft,borderRadius:7,padding:'6px 10px'}}>
+              <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
+              <span onClick={()=>setFiles(p=>p.filter((_,j)=>j!==i))} title='Quitar' style={{fontSize:17,color:C.muted,cursor:'pointer',lineHeight:1,flexShrink:0}}>&times;</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {err&&<div style={{fontSize:12,color:C.overdueText,marginTop:8}}>{err}</div>}
+      <div style={{fontSize:11,color:C.muted,marginTop:12,lineHeight:1.4}}>El detalle y los documentos le llegan por correo a quien asignó la tarea.</div>
+      <div style={{display:'flex',gap:8,marginTop:14}}>
+        <button onClick={onClose} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:saving?'default':'pointer',opacity:saving?.6:1}}>{saving?'Guardando…':'Terminar y reportar'}</button>
+      </div>
+    </>
+  )
+}
+
 function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
   const [comments,setComments] = useState([])
   const [links,setLinks] = useState([])
@@ -16626,6 +16693,13 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
         <Row label='Plazo'><span style={{fontWeight:600,color:plazoCol}}>{plazoTxt}</span></Row>
         <Row label='Estado'>{task.status||'—'}</Row>
       </div>
+      {terminada&&task.completion_note&&(
+        <div style={{background:C.greenBg,borderLeft:`3px solid ${C.normal}`,borderRadius:8,padding:'10px 12px',margin:'0 0 12px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Gestión realizada{task.completion_status?` · ${task.completion_status}`:''}</div>
+          <div style={{fontSize:13,color:C.text,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{task.completion_note}</div>
+          {task.completed_by&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Reportó {task.completed_by}{task.completed_at?` · ${fmtDate(String(task.completed_at).slice(0,10))}`:''}</div>}
+        </div>
+      )}
       {subs.length>0&&(
         <div style={{marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>Subtareas · {subsDone}/{subs.length}</div>
@@ -22321,7 +22395,7 @@ export default function App() {
     }})
   },[expenses,rendiciones])
 
-  const handleSaveTask=useCallback(async(f)=>{
+  const handleSaveTask=useCallback(async(f,opts={})=>{
     setSaving(true)
     try{
       // _isNew: marca "tarea nueva" aunque traiga id (caso borrador finalizado al adjuntar archivos)
@@ -22350,13 +22424,20 @@ export default function App() {
         fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notify-task',{
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+supabase.supabaseKey},
-          body:JSON.stringify({kind:'terminada', notifyName:data.assigned_by, task:{...data,client_name:client?.name||''}, assignedBy:user?.name||''})
+          body:JSON.stringify({kind:'terminada', notifyName:data.assigned_by, task:{...data,client_name:client?.name||''}, assignedBy:user?.name||'', attachments:(opts.attachments&&opts.attachments.length)?opts.attachments.map(a=>({base64:a.base64,name:a.name,mime:a.mime})):undefined})
         }).catch(()=>{})
       }
       setModal(null)
     }catch(e){appAlert('Error: '+e.message)}
     setSaving(false)
   },[user,tasks,clients])
+
+  // Compuerta de cierre de tarea: los usuarios limited (Martín/Martina) DEBEN reportar la gestión
+  // antes de terminar (abre CierreTareaModal); los admin terminan sin fricción.
+  const completeTaskWithGate=useCallback((t)=>{
+    if(actualRole==='admin'){ setModal(null); handleSaveTask({...t,status:'Terminado'}); return }
+    setModal({type:'cierreTarea',data:t})
+  },[actualRole,handleSaveTask])
 
   // Delegar: el responsable traspasa la tarea a otra(s) persona(s) con un nuevo plazo.
   // NO cambia who/assignees (sigue siendo responsable ante quien la asignó); solo registra
@@ -23265,13 +23346,13 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
-            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>handleSaveTask({...t,status:'Terminado'})} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={()=>setTab('dashboard')} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>{setBillingIntent(/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo');setTab('billing')}} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII}/>}
-            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={t=>handleSaveTask({...t,status:'Terminado'})} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
+            {tab==='cartera'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} sales={sales} tasks={tasks} currentUserName={user?.name} userRole={userRole} onClose={()=>setTab(userRole==='admin'?'dashboard':'tasks')} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='expenses'&&<ExpensesView expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={actualRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={handleCreateOccasional} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openOfi={ofiOpen} onOfiOpened={()=>setOfiOpen(false)}/>}
             {tab==='cajachica'&&<CajaChicaView expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha}/> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>setModal({type:'client',data:c})} onAdd={()=>setModal({type:'clientLimited',data:null})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} onImportDrive={()=>setModal({type:'clienteDrive'})}/>}
@@ -23372,7 +23453,8 @@ export default function App() {
         }}/></Modal>}
         {modal?.type==='report'&&<Modal title='Generar reporte' onClose={()=>setModal(null)} closeOnBackdrop={false}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} tasks={tasks} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='task'&&<Modal hideHeader onClose={()=>setModal(null)} closeOnBackdrop={false}><QuickTaskForm clients={clients} sales={sales} tasks={tasks} clientEntities={clientEntities} onSave={handleSaveTask} onDelegate={handleDelegateTask} onClose={()=>setModal(null)} saving={saving} preClient={modal.data?.preClient||null} preProject={modal.data?.preProject||null} preDue={modal.data?.preDue||null} user={user} task={modal.data?.id?modal.data:null}/></Modal>}
-        {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={t=>{handleSaveTask({...t,status:'Terminado'});setModal(null)}}/></Modal>}
+        {modal?.type==='taskPreview'&&<Modal title='Detalle de tarea' onClose={()=>setModal(null)}><TaskPreview task={modal.data} clients={clients} onClose={()=>setModal(null)} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate}/></Modal>}
+        {modal?.type==='cierreTarea'&&<Modal title='Terminar tarea' onClose={()=>setModal(null)} closeOnBackdrop={false}><CierreTareaModal task={modal.data} clients={clients} saving={saving} onClose={()=>setModal(null)} onConfirm={({estado,detalle,files})=>handleSaveTask({...modal.data,status:'Terminado',completion_note:detalle,completion_status:estado,completed_by:user?.name||null},{attachments:files})}/></Modal>}
         {modal?.type==='client'&&<Modal title={(()=>{ const cn=modal.data?.id?modal.data?.name:null; return <><span style={{color:C.accent}}>{modal.data?.id?'Editar cliente':'Nuevo cliente'}</span>{cn&&<><span style={{color:C.done,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cn}</span></>}</> })()} onClose={()=>setModal(null)} closeOnBackdrop={false}><ClientForm client={modal.data} onSave={handleSaveClient} onClose={()=>setModal(null)} onDelete={handleDeleteClient} saving={saving} sales={sales}/></Modal>}
       </div>
       {undoToast&&(
