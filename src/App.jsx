@@ -19084,9 +19084,22 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
   const fmtDia = iso => iso ? new Date(iso+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : ''
   const haceTxt = iso => { const d=cartDias(iso); return d==null?'sin actividad':d<=0?'hoy':d===1?'ayer':`hace ${d} días` }
   const haceCol = iso => { const d=cartDias(iso); return d==null?C.grisText:d>=21?'#A32D2D':d>=14?'#854F0B':C.muted }
+  // Propuesta abierta = proyecto cuya venta vinculada sigue en 'Propuesta' (pipeline no cerrado) → se mantiene visible arriba.
+  const saleDe = p => p.sale_id ? (sales||[]).find(s=>String(s.id)===String(p.sale_id)) : null
+  const esPropAbierta = p => { const s=saleDe(p); return !!(s && s.status==='Propuesta' && !s.deleted_at) }
+  // Momentum: recencia de actividad (fresco arriba) + trabajo activo (tareas) + vencimiento próximo + avance de etapa. Lo parado cae al fondo.
+  const carteraMomentum = p => {
+    const dias = cartDias(p.ultima_actividad)
+    const rec = dias==null?0 : dias<=3?6 : dias<=7?5 : dias<=14?3 : dias<=30?1 : 0
+    const nT = tareasDe(p).length
+    let dp = p.plazo ? cartDiasPlazo(p.plazo) : null
+    tareasDe(p).forEach(t=>{ if(t.due){ const d=cartDiasPlazo(t.due); if(d!=null&&(dp==null||d<dp)) dp=d } })
+    const soon = dp==null?0 : dp<0?2 : dp<=7?3 : dp<=14?2 : 0
+    return rec + (nT>0?2:0) + soon + Math.min(2,(p.etapa_idx||0)*0.4)
+  }
 
   const [q,setQ] = useState('')
-  const [sortBy,setSortBy] = usePersistedState('cartera_sort','sinmover')   // sinmover | plazo | prioridad | cliente (recuerda al volver)
+  const [sortBy,setSortBy] = usePersistedState('cartera_sort2','movimiento')   // movimiento | sinmover | plazo | prioridad | cliente (recuerda al volver)
   const [estadoF,setEstadoF] = usePersistedState('cartera_estadoF','todos') // todos | rojo | ambar | verde
   const [soloMios,setSoloMios] = usePersistedState('cartera_solomios2',true) // admin: por defecto ver solo donde soy responsable
   const [openId,setOpenId] = usePersistedState('cartera_open',null)         // proyecto abierto
@@ -19110,13 +19123,18 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
     if(q){ const s=q.toLowerCase(); arr = arr.filter(p=>(cnm(p.cliente_id)+' '+(p.nombre_proyecto||'')+' '+(p.nota||'')).toLowerCase().includes(s)) }
     const key = p => { const d=cartDias(p.ultima_actividad); return d==null?Infinity:d }
     return [...arr].sort((a,b)=>{
+      if(sortBy==='movimiento'){   // propuestas abiertas fijadas arriba; el resto por momentum (lo que se mueve arriba, lo parado al fondo)
+        const pa=esPropAbierta(a), pb=esPropAbierta(b)
+        if(pa!==pb) return pa?-1:1
+        return carteraMomentum(b)-carteraMomentum(a)
+      }
       if(sortBy==='sinmover') return key(b)-key(a)   // más olvidado (más días sin mover, o nunca) primero
       if(sortBy==='plazo'){ const pa=a.plazo?new Date(a.plazo).getTime():Infinity, pb=b.plazo?new Date(b.plazo).getTime():Infinity; return pa-pb }
       if(sortBy==='prioridad') return carteraScore(b)-carteraScore(a)
       if(sortBy==='cliente') return cnm(a.cliente_id).localeCompare(cnm(b.cliente_id),'es')
       return 0
     })
-  },[proyectos,esAdmin,miInicial,soloMios,estadoF,q,sortBy,clients])
+  },[proyectos,esAdmin,miInicial,soloMios,estadoF,q,sortBy,clients,sales,tasks])
 
   const abrir = p => { if(openId===p.id){ setOpenId(null) } else { setOpenId(p.id); setDraft(p.nota||'') } }
   useEffect(()=>{ if(openId){ const p=(proyectos||[]).find(x=>String(x.id)===String(openId)); if(p) setDraft(p.nota||'') } },[])   // eslint-disable-line -- al volver con un proyecto abierto, carga su nota en el editor
@@ -19284,6 +19302,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
 
       <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
         <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ fontSize:12, color:C.muted, background:'#EEF1F3', border:'none', borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
+          <option value='movimiento'>En movimiento</option>
           <option value='sinmover'>Sin mover</option>
           <option value='plazo'>Plazo</option>
           <option value='prioridad'>Prioridad</option>
@@ -19312,6 +19331,7 @@ function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[
                           <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
                           <span onClick={e=>{ e.stopPropagation(); onOpenClientFicha&&onOpenClientFicha(p.cliente_id) }} style={{ fontSize:14, fontWeight:600, color:C.accent, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:170 }}>{cnm(p.cliente_id)||'—'}</span>
                           <span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>· {p.nombre_proyecto||etapa}</span>
+                          {esPropAbierta(p)&&<span style={{ fontSize:9.5, fontWeight:700, color:C.accent, background:C.azulBg, borderRadius:20, padding:'1px 7px', flexShrink:0, textTransform:'uppercase', letterSpacing:.3 }}>Propuesta</span>}
                           {p.plazo&&dP!=null&&(dP<0||dP<=7)&&<span style={{ fontSize:10, fontWeight:600, color:dP<0?'#A32D2D':'#854F0B', background:dP<0?'#FCEBEB':'#FAEEDA', borderRadius:20, padding:'1px 7px', flexShrink:0 }}>{dP<0?`vencido ${-dP}d`:dP===0?'vence hoy':`vence ${dP}d`}</span>}
                         </div>
                         {p.nota&&<div style={{ fontSize:13, color:C.text, marginTop:5, paddingLeft:15 }}>{p.nota}</div>}
