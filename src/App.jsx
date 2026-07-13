@@ -2512,6 +2512,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           ['inteligencia','Power BI', ic(<><path d='M3 3v18h18'/><rect x='7' y='12' width='3' height='6'/><rect x='12' y='8' width='3' height='10'/><rect x='17' y='4' width='3' height='14'/></>,C.tealText), C.tealBg],
           ['conciliacion','Conciliación', ic(<><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></>,C.greenText), C.greenBg],
           ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>,C.accent), C.azulBg],
+          ['micarga','Mi carga', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><rect x='7' y='12' width='2.5' height='6' rx='.5' fill={C.soonText} stroke='none'/><rect x='11' y='14' width='2.5' height='4' rx='.5' fill={C.soonText} stroke='none'/><rect x='15' y='11' width='2.5' height='7' rx='.5' fill={C.soonText} stroke='none'/></>,C.soonText), C.ambarBg],
           ['mas','Más', ic(<><circle cx='5' cy='12' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='19' cy='12' r='1'/></>,C.muted), C.bgSoft||'#F5F7F9'],
         ]
         const miIni = INICIALES_RESP[user?.name]||null
@@ -19074,6 +19075,176 @@ function carteraEstadoAuto(p){
   return 'verde'
 }
 
+// ─── MI CARGA — mapa de calor de la carga personal + vacaciones ──────────────
+const MC_PESO_W = { alto:3, medio:2, ligero:1 }
+const MC_PESO_CELL = { alto:{bg:'#F6C6C0',fg:'#A32D2D',dot:'#E24B4A'}, medio:{bg:'#F5E2BE',fg:'#854F0B',dot:'#E0A93B'}, ligero:{bg:'#CFEDE0',fg:'#0F6E56',dot:'#1D9E75'} }
+const mcIsoAdd = (iso,n)=>{ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+n); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}` }
+const mcMonday = iso => { const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); const wd=(dt.getDay()+6)%7; return mcIsoAdd(iso,-wd) }
+
+function MiCargaModal({ tasks=[], proyectosCartera=[], setProyectosCartera, clients=[], user, onClose, onOpenClientFicha }){
+  const me = user?.name || ''
+  const miIni = INICIALES_RESP[me] || null
+  const soloMio = !!miIni
+  const HOY = new Date().toISOString().slice(0,10)
+  const SEMANAS = 6
+  const cnm = id => clients.find(c=>String(c.id)===String(id))?.name || ''
+  const fmtCorto = iso => iso ? new Date(String(iso).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{day:'numeric',month:'short'}) : ''
+  const fmtLargo = iso => iso ? new Date(String(iso).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}) : ''
+  const inp = { fontSize:12, padding:'6px 8px', borderRadius:8, border:`1px solid ${C.border}`, color:C.text, background:'#fff' }
+  const [vac,setVac] = useState([])
+  const [selDay,setSelDay] = useState(null)
+  const [addVac,setAddVac] = useState(false)
+  const [vDesde,setVDesde] = useState(''); const [vHasta,setVHasta] = useState('')
+
+  useEffect(()=>{
+    if(DEMO){ setVac(demoData.vacaciones||[]); return }
+    supabase.from('vacaciones').select('*').then(({data})=>setVac(data||[]),()=>{})
+  },[])
+
+  const projById = id => proyectosCartera.find(x=>String(x.id)===String(id))
+  // Peso mixto: override manual (proyectos_cartera.peso) o auto por estado del proyecto.
+  const pesoDeProyecto = p => p?.peso || (p?.estado==='rojo'?'alto':p?.estado==='ambar'?'medio':'ligero')
+
+  // Entregables de MI carga: tareas con plazo (mías) + hitos de mis proyectos.
+  const entregables = useMemo(()=>{
+    const out=[]
+    ;(tasks||[]).forEach(t=>{
+      if(t.status==='Terminado'||t.archived||!t.due) return
+      if(soloMio && !(isAssignee(t,me)||((t.delegated_to||[]).includes(me)))) return
+      const p = t.project_id?projById(t.project_id):null
+      out.push({ iso:String(t.due).slice(0,10), cli:cnm(t.client_id), titulo:t.title||'Tarea', peso:p?pesoDeProyecto(p):'medio', projectId:t.project_id||null, kind:'tarea', clientId:t.client_id })
+    })
+    ;(proyectosCartera||[]).forEach(p=>{
+      if(p.activo===false || !p.plazo) return
+      if(soloMio && (p.responsable||'')!==miIni) return
+      out.push({ iso:String(p.plazo).slice(0,10), cli:cnm(p.cliente_id), titulo:p.plazo_label||p.nombre_proyecto||'Hito', peso:pesoDeProyecto(p), projectId:p.id, kind:'hito', clientId:p.cliente_id })
+    })
+    return out
+  },[tasks,proyectosCartera,me,miIni,soloMio,clients])
+
+  const enVacaciones = iso => vac.some(v=> v.desde && v.hasta && iso>=String(v.desde).slice(0,10) && iso<=String(v.hasta).slice(0,10))
+  const delDia = iso => entregables.filter(e=>e.iso===iso)
+  const cargaDia = iso => delDia(iso).reduce((a,e)=>a+(MC_PESO_W[e.peso]||2),0)
+
+  const weeks = useMemo(()=>{
+    const start = mcMonday(HOY); const arr=[]
+    for(let w=0; w<SEMANAS; w++){ const ws=mcIsoAdd(start,w*7); arr.push({ ws, days:[0,1,2,3,4].map(d=>{ const iso=mcIsoAdd(ws,d); return { iso, dnum:Number(iso.slice(8,10)) } }) }) }
+    return arr
+  },[HOY])
+
+  // Próximas vacaciones + entregas que caen dentro → aviso de recarga.
+  const prox = vac.filter(v=>v.hasta && String(v.hasta).slice(0,10)>=HOY).sort((a,b)=>String(a.desde).localeCompare(String(b.desde)))[0]
+  const durante = prox ? entregables.filter(e=> e.iso>=String(prox.desde).slice(0,10) && e.iso<=String(prox.hasta).slice(0,10)) : []
+
+  const guardarVac = async ()=>{
+    if(!vDesde||!vHasta||vHasta<vDesde){ appAlert('Elige un rango válido (desde–hasta).'); return }
+    const row = { user_name:me||null, desde:vDesde, hasta:vHasta }
+    if(DEMO){ setVac(p=>[...p,{id:'v'+Date.now(),...row}]); setAddVac(false); setVDesde(''); setVHasta(''); return }
+    const { data,error } = await supabase.from('vacaciones').insert(row).select().single()
+    if(error){ appAlert('No se pudo guardar: '+error.message); return }
+    setVac(p=>[...p,data]); setAddVac(false); setVDesde(''); setVHasta('')
+  }
+  const borrarVac = async v =>{
+    if(!(await appConfirm('¿Quitar estas vacaciones?'))) return
+    setVac(p=>p.filter(x=>x.id!==v.id))
+    if(!DEMO) supabase.from('vacaciones').delete().eq('id',v.id).then(()=>{},()=>{})
+  }
+  // Override de peso: ciclo ligero→medio→alto sobre el proyecto (la app lo recuerda).
+  const ciclarPeso = (projectId, actual)=>{
+    const orden=['ligero','medio','alto']; const next=orden[(orden.indexOf(actual)+1)%3]
+    setProyectosCartera&&setProyectosCartera(prev=>prev.map(x=>String(x.id)===String(projectId)?{...x,peso:next}:x))
+    if(!DEMO) supabase.from('proyectos_cartera').update({peso:next}).eq('id',projectId).then(()=>{},()=>{})
+  }
+
+  return (
+    <div style={{maxWidth:'100%'}}>
+      <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Próximas {SEMANAS} semanas · lo que tienes que entregar, ponderado por peso.</div>
+
+      {durante.length>0 && prox && (
+        <div style={{background:C.overdueBg,border:'1px solid #F3C7C4',borderRadius:10,padding:'10px 12px',marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginBottom:2}}>Recarga antes de salir</div>
+          <div style={{fontSize:12,color:C.text,lineHeight:1.45}}>Sales el {fmtCorto(prox.desde)}. Tienes {durante.length} entrega{durante.length!==1?'s':''} durante tus vacaciones → conviene adelantarlas los días previos.</div>
+        </div>
+      )}
+
+      <div style={{display:'flex',fontSize:9,color:C.done,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>
+        <div style={{width:36,flexShrink:0}}/>
+        {['Lun','Mar','Mié','Jue','Vie'].map(d=><div key={d} style={{flex:1,textAlign:'center'}}>{d}</div>)}
+        <div style={{width:36,flexShrink:0}}/>
+      </div>
+      {weeks.map(wk=>{
+        const total = wk.days.reduce((a,d)=>a+cargaDia(d.iso),0)
+        return (
+          <div key={wk.ws} style={{display:'flex',alignItems:'center',gap:4,marginBottom:4}}>
+            <div style={{width:36,fontSize:9.5,color:C.muted,fontWeight:600,flexShrink:0}}>{fmtCorto(wk.ws)}</div>
+            {wk.days.map(d=>{
+              const dl=delDia(d.iso), load=cargaDia(d.iso)
+              const vaca=enVacaciones(d.iso), hoy=d.iso===HOY, pasado=d.iso<HOY
+              let bg='#F5F7F9', fg='#99ABB4', esVac=false
+              if(vaca){ bg='repeating-linear-gradient(45deg,#E1E6E9,#E1E6E9 3px,#EFF2F4 3px,#EFF2F4 7px)'; fg=C.muted; esVac=true }
+              else if(load>0){ const mp=dl.reduce((m,e)=>(MC_PESO_W[e.peso]||2)>(MC_PESO_W[m]||0)?e.peso:m,'ligero'); const cs=MC_PESO_CELL[mp]; bg=cs.bg; fg=cs.fg }
+              return (
+                <div key={d.iso} onClick={()=>setSelDay(d.iso===selDay?null:d.iso)} style={{flex:1,height:36,borderRadius:7,background:bg,color:fg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',position:'relative',opacity:pasado&&!vaca?.5:1,boxShadow:hoy?`inset 0 0 0 2px ${C.accent}`:selDay===d.iso?`inset 0 0 0 2px ${C.muted}`:'none'}}>
+                  <span style={{fontSize:11,fontWeight:700}}>{d.dnum}</span>
+                  {esVac?<span style={{fontSize:6.5,fontWeight:700,letterSpacing:.2}}>FUERA</span>:dl.length>0?<span style={{display:'flex',gap:2,marginTop:1}}>{dl.slice(0,4).map((e,i)=><span key={i} style={{width:4,height:4,borderRadius:'50%',background:MC_PESO_CELL[e.peso].dot}}/>)}</span>:null}
+                </div>
+              )
+            })}
+            <div style={{width:36,flexShrink:0,display:'flex',alignItems:'center',paddingLeft:2}}><div style={{height:6,borderRadius:3,background:'#EEF1F3',flex:1,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.min(100,total/9*100)}%`,background:total>=7?'#E24B4A':total>=4?'#E0A93B':total>0?'#1D9E75':'transparent'}}/></div></div>
+          </div>
+        )
+      })}
+
+      <div style={{display:'flex',gap:12,flexWrap:'wrap',fontSize:11,color:C.muted,margin:'11px 0 2px'}}>
+        {['alto','medio','ligero'].map(k=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:11,height:11,borderRadius:3,background:MC_PESO_CELL[k].bg}}/><b style={{color:C.text,fontWeight:600,textTransform:'capitalize'}}>{k}</b></span>)}
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{width:11,height:11,borderRadius:3,background:'repeating-linear-gradient(45deg,#E1E6E9,#E1E6E9 3px,#EFF2F4 3px,#EFF2F4 7px)'}}/>vacaciones</span>
+      </div>
+
+      {selDay && (
+        <div style={{background:C.bgSoft||'#F5F7F9',borderRadius:10,padding:'10px 12px',marginTop:10}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:6,textTransform:'capitalize'}}>{fmtLargo(selDay)}{enVacaciones(selDay)?' · vacaciones':''}</div>
+          {delDia(selDay).length===0
+            ? <div style={{fontSize:12,color:C.muted}}>Sin entregas este día.</div>
+            : delDia(selDay).map((e,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i?`1px solid ${C.border}`:'none'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div onClick={()=>e.clientId&&onOpenClientFicha&&onOpenClientFicha(e.clientId)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:e.clientId?'pointer':'default',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.cli||e.titulo}</div>
+                  <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.titulo}{e.kind==='hito'?' · hito':''}</div>
+                </div>
+                <span onClick={()=>e.projectId&&ciclarPeso(e.projectId,e.peso)} title={e.projectId?'Toca para ajustar el peso':''} style={{fontSize:10,fontWeight:700,color:MC_PESO_CELL[e.peso].fg,background:MC_PESO_CELL[e.peso].bg,borderRadius:20,padding:'2px 9px',cursor:e.projectId?'pointer':'default',textTransform:'capitalize',flexShrink:0}}>{e.peso}</span>
+              </div>
+            ))}
+          {delDia(selDay).some(e=>e.projectId)&&<div style={{fontSize:10,color:C.grisText,marginTop:6}}>Toca el peso para ajustarlo — la app lo recuerda.</div>}
+        </div>
+      )}
+
+      <div style={{marginTop:16,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+        <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Mis vacaciones</span>
+          <button onClick={()=>setAddVac(v=>!v)} style={{marginLeft:'auto',fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>{addVac?'Cancelar':'+ Marcar vacaciones'}</button>
+        </div>
+        {addVac&&(
+          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:10,flexWrap:'wrap'}}>
+            <input type='date' value={vDesde} onChange={e=>setVDesde(e.target.value)} style={inp}/>
+            <span style={{fontSize:12,color:C.muted}}>a</span>
+            <input type='date' value={vHasta} min={vDesde||undefined} onChange={e=>setVHasta(e.target.value)} style={inp}/>
+            <button onClick={guardarVac} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 14px',cursor:'pointer'}}>Guardar</button>
+          </div>
+        )}
+        {vac.length===0
+          ? <div style={{fontSize:12,color:C.grisText}}>Sin vacaciones marcadas. Márcalas para ver si conviene adelantar trabajo antes de salir.</div>
+          : vac.slice().sort((a,b)=>String(a.desde).localeCompare(String(b.desde))).map(v=>(
+            <div key={v.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0'}}>
+              <span style={{width:8,height:8,borderRadius:2,background:'repeating-linear-gradient(45deg,#C7CDD1,#C7CDD1 2px,#E4E8EB 2px,#E4E8EB 4px)',flexShrink:0}}/>
+              <span style={{fontSize:12,color:C.text}}>{fmtCorto(v.desde)} – {fmtCorto(v.hasta)}</span>
+              <span onClick={()=>borrarVac(v)} style={{marginLeft:'auto',fontSize:11,color:C.muted,cursor:'pointer'}}>Quitar</span>
+            </div>
+          ))}
+      </div>
+    </div>
+  )
+}
+
 function CarteraView({ proyectos=[], setProyectos, clients=[], sales=[], tasks=[], currentUserName, userRole, onClose, onOpenClientFicha, onOpenSale, onAddTaskForProject, onCompleteTask, onPreviewTask }){
   // Tareas de un proyecto: enlace firme por project_id, con respaldo por cliente (tareas antiguas sin project_id).
   const tareasDe = p => (tasks||[]).filter(t=> t.status!=='Terminado' && !t.archived && (String(t.project_id||'')===String(p.id) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id))))
@@ -21712,6 +21883,7 @@ const VIEWS_PALETTE = {
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
+  {id:'miCarga', label:'Mi carga'},
   {id:'redaccion', label:'Redactar con IA'},
   {id:'conciliar', label:'Conciliar facturas'},
   {id:'conciliacion', label:'Conciliación bancaria'},
@@ -23394,7 +23566,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
@@ -23489,6 +23661,7 @@ export default function App() {
         {modal?.type==='aprendizaje'&&<Modal title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redaccion'&&<Modal title='Redactar con IA' onClose={()=>setModal(null)}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='plazos'&&<Modal title='Plazos y obligaciones' onClose={()=>setModal(null)}><PlazosModal clients={clients} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='miCarga'&&<Modal title='Mi carga' onClose={()=>setModal(null)}><MiCargaModal tasks={tasks} proyectosCartera={proyectosCartera} setProyectosCartera={setProyectosCartera} clients={clients} user={user} onClose={()=>setModal(null)} onOpenClientFicha={handleOpenClientFicha}/></Modal>}
         {modal?.type==='gmailContactos'&&<Modal title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}

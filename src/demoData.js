@@ -113,4 +113,7 @@ export const demoData = {
   ],
   anticipos: [],
   rendiciones: [],
+  vacaciones: [
+    { id:'vac1', user_name:'Demo', desde:new Date(Date.now()+5*864e5).toISOString().slice(0,10), hasta:new Date(Date.now()+9*864e5).toISOString().slice(0,10) },
+  ],
 }
