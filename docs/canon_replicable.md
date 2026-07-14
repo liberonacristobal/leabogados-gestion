@@ -138,6 +138,11 @@ Color por persona, **nunca hardcodear**: Cristóbal navy · Erasmo azul · Mart�
 - **Sin emojis** en toda la app (regla global). Al tocar un componente que los tenga, quitarlos.
 - **Sin frases disclaimer/tagline** en la UI: la confianza va por diseño, no por notas al pie.
 
+### 5.4.1 Tipografía (jerarquía exacta)
+- **UI / cuerpo:** system font stack (`-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`).
+- **Saludo / títulos display / cifras hero:** sans limpia **navy bold** (intención `'DM Sans'`, peso 600, `C.accent`, `letterSpacing:-.4`; fallback system sans si no se carga DM Sans). **Upright, nunca italic.**
+- **Fraunces** (serif italic 300): **SOLO** el acento de bienvenida/login ("Bienvenido", "Gestión Oficina"). Nunca en saludos, títulos ni UI.
+
 ### 5.5 Economía de espacio (formularios densos pero legibles)
 - Labels dentro del cuadro; campos en una línea (label inline, toggle+input en fila); lo opcional colapsado y solo si hace falta.
 - Antes de agregar un campo: ¿cabe en una línea existente? Toda decisión de layout pasa por: **¿esto requiere scroll en iPhone que podría evitarse?**
