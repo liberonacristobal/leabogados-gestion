@@ -72,9 +72,10 @@ public/manifest.webmanifest
 ```
 > El `name` puede llevar el nombre del módulo de esta app; `short_name` siempre "LE Abogados".
 
-### 2.4 Tipografía de marca
-- **Fraunces** (serif), estilo italic peso 300, SOLO para acentos de marca (saludos, "Bienvenido", "Gestión Oficina", títulos-hero). Se carga por Google Fonts (link de arriba). Uso: `fontFamily:"'Fraunces',serif"`.
-- **Cuerpo/UI:** system font stack (`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`). NO usar Fraunces para texto de interfaz.
+### 2.4 Tipografía de marca (OJO — jerarquía exacta)
+- **Fraunces** (serif, italic 300): **SOLO** para el acento de **bienvenida/login** ("Bienvenido", "Gestión Oficina"). **NO** en el saludo ("¡Hola, X!") ni en títulos de la app ni en la UI. Se carga por Google Fonts (link de arriba). Uso: `fontFamily:"'Fraunces',serif"`.
+- **Saludo y títulos display** ("¡Hola, X!", encabezados de vista): **sans limpia navy bold**. La app de gestión los declara `fontFamily:"'DM Sans',sans-serif"`, peso 600, `color:C.accent` (navy, con el nombre en accent), `letterSpacing:-.4`. Nota: hoy gestión **no carga** DM Sans, así que en la práctica cae a **system sans** — para calzar de verdad, carga DM Sans por Google Fonts en ambas apps (o deja el fallback system, pero **sans upright, no Fraunces italic**).
+- **Cuerpo/UI:** system font stack (`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`).
 
 ### 2.5 Color de marca
 - `theme-color` y todo lo corporativo = **navy `#003C50`** (token `C.accent`). Fondo app `#F5F5F5` (`C.bg`). Usa la paleta `C` completa del canon; el logo blanco va sobre navy, el de color sobre claro.
