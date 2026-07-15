@@ -22070,11 +22070,12 @@ export default function App() {
   // Suma conciliada por factura (respaldo bancario) — fuente única del badge en Facturación y la ficha.
   const respaldoMap = useMemo(()=>{
     const m={}
-    for(const c of (conciliacion||[])){ if(c.tipo_destino==='factura'&&c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) }
+    for(const c of (conciliacion||[])){ if(c.tipo_destino==='factura'&&c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(Number(c.monto_aplicado)||0) }
     // Respaldo INDIRECTO: un anticipo con respaldo bancario (conciliación tipo 'anticipo') consumido en una factura
     // respalda ESA factura. Así una factura pagada con anticipos del cliente ya no queda como "pendiente cartola".
+    // (monto viene como texto desde la base → Number() para sumar, no concatenar.)
     const antBancarios = new Set((conciliacion||[]).filter(c=>c.tipo_destino==='anticipo'&&c.anticipo_id).map(c=>String(c.anticipo_id)))
-    for(const a of (anticipos||[])){ if(a.estado==='consumido'&&a.billing_id&&antBancarios.has(String(a.id))) m[a.billing_id]=(m[a.billing_id]||0)+(a.monto||0) }
+    for(const a of (anticipos||[])){ if(a.estado==='consumido'&&a.billing_id&&antBancarios.has(String(a.id))) m[a.billing_id]=(m[a.billing_id]||0)+(Number(a.monto)||0) }
     setRespaldoCache(m); return m
   },[conciliacion,anticipos])
 
