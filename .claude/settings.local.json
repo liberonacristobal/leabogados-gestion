@@ -319,7 +319,8 @@
       "Bash(perl -i -pe 's/titleCaseRS\\\\\\(rs\\\\\\)/titleCase\\(rs\\)/g' src/App.jsx)",
       "Bash(perl -0pi -e \"s/kMini\\\\\\('ventas','Ventas por mes'\\\\\\)/kMini\\('ventas','Ventas por mes',null,null,'chart'\\)/; s/kMini\\\\\\('cobrado','Cobrado del año',fmtShort\\\\\\(ingresosPorAnioVenta\\\\.total\\\\\\),C\\\\.accent\\\\\\)/kMini\\('cobrado','Cobrado del año',fmtShort\\(ingresosPorAnioVenta.total\\),C.accent,'check'\\)/; s/kMini\\\\\\('cobranza','Cobranza',fmtShort\\\\\\(totalPorCobrar\\\\\\),C\\\\.accent\\\\\\)/kMini\\('cobranza','Cobranza',fmtShort\\(totalPorCobrar\\),C.accent,'receipt'\\)/; s/kMini\\\\\\('cxp','Cuentas por pagar'\\\\\\)/kMini\\('cxp','Cuentas por pagar',null,null,'wallet'\\)/; s/kMini\\\\\\('equipo','Equipo · trazabilidad'\\\\\\)/kMini\\('equipo','Equipo · trazabilidad',null,null,'users'\\)/\" src/App.jsx)",
       "Bash(perl -0pi -e ' *)",
-      "Bash(perl -0pi -e 's/\\\\{titleCase\\\\\\(rs\\\\\\)\\\\}/{rsDisplay\\(rs\\)}/g' src/App.jsx)"
+      "Bash(perl -0pi -e 's/\\\\{titleCase\\\\\\(rs\\\\\\)\\\\}/{rsDisplay\\(rs\\)}/g' src/App.jsx)",
+      "Bash(perl -0pi -e 's/\\(- 2026-07-15 — \\\\*\\\\*Fix: el PDF con timbre no se auto-adjuntaba al enviar una factura recién importada\\\\*\\\\*\\\\.\\)/$1 Causa raíz adicional: una factura que entra como HUÉRFANA \\(sin match\\) y se asigna con \"Ingresar\" guardaba folio\\\\/monto pero NO el XML → nunca tenía PDF con timbre; ahora al asignarla se pasa y guarda el dte_xml. Para facturas ya creadas así, re-cargar el XML por \"Respaldo PDF\" \\(matchea por folio y guarda el XML\\)./' CHANGELOG.md)"
     ]
   }
 }
