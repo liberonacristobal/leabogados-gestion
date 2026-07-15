@@ -6159,7 +6159,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             // Además corrige el MONTO al del SII (MntTotal del DTE = valor real), no el programado de la venta.
             const dteTot=+((d.match(/<MntTotal>(\d+)<\/MntTotal>/)||[])[1]||(d.match(/<MntExe>(\d+)<\/MntExe>/)||[])[1]||0)||0
             const fixAmt = dteTot&&Math.round(dteTot)!==Math.round(b.amount||0) ? {amount:dteTot} : {}
-            try{ await supabase.from('billing').update({dte_xml:d,...fixAmt,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id); if(fixAmt.amount!=null&&setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,amount:dteTot}:x)) }catch(_){}
+            // Sincroniza al estado local TODO lo que se escribió (dte_xml + monto + tipo), no solo el monto:
+            // así el modal "Enviar factura" ve el XML y auto-adjunta el PDF con timbre SIN necesidad de recargar.
+            try{ await supabase.from('billing').update({dte_xml:d,...fixAmt,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id); if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,dte_xml:d,...(fixAmt.amount!=null?{amount:dteTot}:{}),...(td?{sii_tipo_dte:td}:{})}:x)) }catch(_){}
             const rzn=(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1]||''
             const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
             // Carpeta real por año/mes de la emisión (Facturación → 2026 → Mes), ya no la BETA.
@@ -13796,6 +13798,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [pdf,setPdf]=useState(null)
+  const [pdfErr,setPdfErr]=useState(null)   // por qué no se pudo auto-generar el PDF del DTE (para no fallar en silencio)
   const [atts,setAtts]=useState([])   // adjuntos cuando es multi (un PDF por factura)
   const [dteTotals,setDteTotals]=useState(()=>{ const m={}; listF.forEach(f=>{ if(f.dte_xml){ const t=dteMontoTotal(f.dte_xml); if(t!=null) m[f.id]=t } }); return m })   // id factura → MntTotal REAL del DTE (autoridad = el DTE); prima sobre amount del sistema (programado)
   const amountOf=f=>{ const t=dteTotals[f?.id]; return (t!=null)?t:(f?.amount||0) }
@@ -13832,7 +13835,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const removeCc=em=>setCc(p=>p.filter(x=>x!==em))
   const onFile=f=>{ if(!f) return; const r=new FileReader(); r.onload=()=>{ const b=String(r.result||'').split(',')[1]||''; setPdf({name:f.name,base64:b}) }; r.readAsDataURL(f) }
   // Si la factura se emitió por el SII (tiene dte_xml), adjunta el PDF oficial con timbre automáticamente. (solo modo individual)
-  useEffect(()=>{ if(multi||!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc) return; const r=await facturaDtePdfBase64(doc); if(alive){ setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}); if(r.total!=null) setDteTotals(m=>({...m,[factura.id]:r.total})) } }catch(_){} })(); return ()=>{alive=false} },[])
+  useEffect(()=>{ if(multi||!factura?.dte_xml) return; let alive=true; (async()=>{ try{ const doc=splitSetDTE(factura.dte_xml)[0]; if(!doc){ if(alive) setPdfErr('El XML guardado no contiene el documento (<Documento>). Vuelve a cargar el XML del SII.'); return } const r=await facturaDtePdfBase64(doc); if(alive){ setPdf({name:`Factura ${folio||r.folio}.pdf`,base64:r.base64,auto:true}); setPdfErr(null); if(r.total!=null) setDteTotals(m=>({...m,[factura.id]:r.total})) } }catch(e){ if(alive) setPdfErr(e.message||'No se pudo generar el PDF del DTE.') } })(); return ()=>{alive=false} },[])
   // Multi: genera el PDF con timbre de CADA factura, los adjunta todos y guarda su total real.
   useEffect(()=>{ if(!multi) return; let alive=true; (async()=>{ const out=[]; const tot={}; for(const f of listF){ if(!f.dte_xml) continue; try{ const doc=splitSetDTE(f.dte_xml)[0]; if(!doc) continue; const r=await facturaDtePdfBase64(doc); out.push({id:f.id,base64:r.base64,name:`Factura ${folioN(f.invoice_no)||r.folio}.pdf`,mime:'application/pdf'}); if(r.total!=null) tot[f.id]=r.total }catch(_){} } if(alive){ setAtts(out); setDteTotals(m=>({...m,...tot})) } })(); return ()=>{alive=false} },[])
   // Cuando llega el monto real del DTE, regenera el cuerpo (salvo que lo hayas editado a mano) para que el correo coincida con el PDF.
@@ -13980,7 +13983,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
           ? (atts.length?<div style={{display:'flex',flexWrap:'wrap',gap:6}}>{atts.map(a=><button key={a.name} type='button' onClick={()=>verPdf(a.base64,a.name)} title='Ver PDF' style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'5px 9px',cursor:'pointer'}}><span style={{fontWeight:600}}>✓</span> {a.name} <span style={{color:C.accent,fontWeight:600}}>· Ver</span></button>)}</div>:<div style={{fontSize:11,color:C.muted}}>Generando los PDF con timbre…</div>)
           : (pdf? <div style={{display:'flex',alignItems:'center',gap:10,fontSize:12,flexWrap:'wrap'}}><span style={{color:C.greenText,fontWeight:600}}>✓ {pdf.name}</span>{pdf.base64&&<button type='button' onClick={()=>verPdf(pdf.base64,pdf.name)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'3px 11px',cursor:'pointer'}}>Ver PDF</button>}<button type='button' onClick={()=>setPdf(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer'}}>quitar</button></div>
               : <label style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.accent,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>↑ Adjuntar PDF<input type='file' accept='application/pdf' onChange={e=>onFile(e.target.files?.[0])} style={{display:'none'}}/></label>)}
-        {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente. Toca uno para verlo.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
+        {multi?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>Un PDF por factura, con timbre, adjuntados automáticamente. Toca uno para verlo.</div>:pdf?.auto?<div style={{fontSize:9,color:C.greenText,marginTop:3}}>PDF oficial del DTE, adjuntado automáticamente.</div>:(!pdf&&pdfErr)?<div style={{fontSize:9,color:C.overdueText,marginTop:3}}>No pude generar el PDF con timbre: {pdfErr} Puedes adjuntarlo a mano.</div>:!factura?.dte_xml&&<div style={{fontSize:9,color:C.muted,marginTop:3}}>Adjunta el PDF de la factura.</div>}
       </div>
       {/* Vista previa del correo — SIEMPRE visible, se actualiza en vivo con cada opción (idioma, saludo, pago, saldo, fondo). */}
       <div>
