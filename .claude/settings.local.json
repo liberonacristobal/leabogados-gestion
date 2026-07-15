@@ -322,7 +322,8 @@
       "Bash(perl -0pi -e 's/\\\\{titleCase\\\\\\(rs\\\\\\)\\\\}/{rsDisplay\\(rs\\)}/g' src/App.jsx)",
       "Bash(perl -0pi -e 's/\\(- 2026-07-15 — \\\\*\\\\*Fix: el PDF con timbre no se auto-adjuntaba al enviar una factura recién importada\\\\*\\\\*\\\\.\\)/$1 Causa raíz adicional: una factura que entra como HUÉRFANA \\(sin match\\) y se asigna con \"Ingresar\" guardaba folio\\\\/monto pero NO el XML → nunca tenía PDF con timbre; ahora al asignarla se pasa y guarda el dte_xml. Para facturas ya creadas así, re-cargar el XML por \"Respaldo PDF\" \\(matchea por folio y guarda el XML\\)./' CHANGELOG.md)",
       "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__list_projects",
-      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__execute_sql"
+      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__execute_sql",
+      "mcp__0d65f0b5-a523-485f-a216-0e211c2659af__list_deployments"
     ]
   }
 }

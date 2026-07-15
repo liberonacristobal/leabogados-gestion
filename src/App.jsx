@@ -6472,7 +6472,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
       const estado=((m.monto||0)-movAplicado)<=0?'conciliado':'parcial'
       await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',m.id)
       setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
-      if(cubre) await onStatusChange(b.id,'Pagado',m.fecha)   // SOLO marca pagada si el abono cubre el saldo; en parcial la factura sigue pendiente
+      if(cubre) await onStatusChange(b.id,'Pagado',m.fecha,null,{skipRespaldoWarn:true})   // SOLO marca pagada si el abono cubre el saldo; en parcial la factura sigue pendiente. skip: ya estamos conciliando (creando el respaldo)
       setPagosFor(null); setOtraFor(null)
       appAlert(cubre?'Pago conciliado. La factura quedó pagada y enlazada al movimiento del banco.':'Pago parcial aplicado. La factura mantiene su saldo restante.')
     }catch(e){ appAlert('No se pudo conciliar: '+(e.message||e)) }
@@ -22106,7 +22106,7 @@ export default function App() {
       q('cuentas por pagar', supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})),
       q('importaciones', supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10)),
       q('memoria de alias', supabase.from('import_aliases').select('*')),
-      q('conciliación', supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino')),
+      q('conciliación', supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino,anticipo_id')),
       q('cobertura cartola', supabase.from('cartola_movimientos').select('fecha').order('fecha',{ascending:false}).limit(1)),
     ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia,cc,ch])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia);setConciliacion(cc);setCartolaHasta(ch&&ch[0]?String(ch[0].fecha).slice(0,10):null)
       if(loadErrs.length) appAlert('No se pudieron cargar: '+loadErrs.join(', ')+'.\nAlgunas cifras pueden verse incompletas. Recarga la página antes de ingresar datos para no duplicar.')})
@@ -23238,11 +23238,13 @@ export default function App() {
     }catch(e){appAlert('Error: '+e.message)}
   },[billing,anticipos])
 
-  const handleStatusChange=useCallback(async(id,status,paid_at,extra)=>{
+  const handleStatusChange=useCallback(async(id,status,paid_at,extra,opts)=>{
     const updates={status}
     if(paid_at!==undefined) updates.paid_at=paid_at
     if(extra&&typeof extra==='object') Object.assign(updates,extra)   // ej. {paid_amount} para abonos parciales
-    if(status==='Pagado'){   // aviso (NO bloqueo) si el pago quedaría sin respaldo bancario — nudge a conciliar contra la cartola
+    // opts.skipRespaldoWarn: viene de un flujo de CONCILIACIÓN (que acaba de crear el respaldo bancario) → no avisar,
+    // porque el respaldoMap todavía no refleja la fila recién insertada y saldría un falso "sin respaldo".
+    if(status==='Pagado' && !opts?.skipRespaldoWarn){   // aviso (NO bloqueo) si el pago quedaría sin respaldo bancario — nudge a conciliar contra la cartola
       const b=(billing||[]).find(x=>String(x.id)===String(id))
       const fp=paid_at||new Date().toISOString().slice(0,10)
       if(b && sinRespaldoAlPagar(b,fp,respaldoMap,cartolaHasta) && !(await appConfirm('Sin respaldo bancario\n\nLa cartola ya cubre esa fecha, pero ningún movimiento del banco respalda este pago. Lo ideal es conciliarlo contra la cartola.\n\n¿Marcar la factura pagada igual?'))) return
