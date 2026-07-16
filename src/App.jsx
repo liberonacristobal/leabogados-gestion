@@ -2456,12 +2456,12 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
     const tareasVenc = (tasks||[]).filter(t=>t.status!=='Terminado'&&t.due&&String(t.due)<today)
     const cajaUsers=['Martín','Martina']
     const cajaSinLiq = (expenses||[]).filter(e=>e.type==='gasto'&&cajaUsers.includes(e.created_by)&&!e.rendered_at&&!e.paid_by_client&&e.category!=='Notaria')
-    const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.client_rendered_at&&!e.paid_by_client).map(e=>e.client_id))]
+    const rendCli = [...new Set((expenses||[]).filter(e=>e.type==='gasto'&&e.client_id&&!e.no_descuenta_saldo&&!e.client_rendered_at).map(e=>e.client_id))]
     const propTardias = sales.filter(s=>s.status==='Propuesta'&&s.created_at&&Math.floor((Date.now()-new Date(s.created_at))/86400000)>14)
     const sum = arr => arr.reduce((a,b)=>a+(b.amount||0),0)
     const sumSaldo = arr => arr.reduce((a,b)=>a+saldoBill(b),0)
     const cnD = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || 'Cliente'
-    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.client_rendered_at&&!e.paid_by_client).reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot,cid} }).sort((a,b)=>b.v-a.v)
+    const rcRows = rendCli.map(cid=>{ const tot=(expenses||[]).filter(e=>e.type==='gasto'&&String(e.client_id)===String(cid)&&!e.no_descuenta_saldo&&!e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0); return {name:cnD(cid),val:fmtN(tot),v:tot,cid} }).sort((a,b)=>b.v-a.v)
     const en7plz = new Date(Date.now()+7*86400000).toISOString().slice(0,10)
     const plzVenc=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha<today)
     const plzProx=(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.fecha&&p.fecha>=today&&p.fecha<=en7plz)
