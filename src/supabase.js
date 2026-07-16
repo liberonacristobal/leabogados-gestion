@@ -198,7 +198,7 @@ export const updateBillingStatus = async (id, status) => {
 export const getAllEntities = async () => {
   const { data, error } = await supabase
     .from('client_entities')
-    .select('id, name, rut')
+    .select('id, name, rut, client_id')
     .order('name')
   if (error) throw error
   // deduplicar por nombre (ignora entidades sin nombre para no romper el autocomplete)
