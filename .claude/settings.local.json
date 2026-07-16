@@ -329,7 +329,8 @@
       "mcp__claude-in-chrome__computer",
       "mcp__claude-in-chrome__tabs_context_mcp",
       "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__get_advisors",
-      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__list_tables"
+      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__list_tables",
+      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__apply_migration"
     ]
   }
 }
