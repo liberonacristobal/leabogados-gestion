@@ -327,7 +327,9 @@
       "mcp__claude-in-chrome__list_connected_browsers",
       "mcp__claude-in-chrome__navigate",
       "mcp__claude-in-chrome__computer",
-      "mcp__claude-in-chrome__tabs_context_mcp"
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__get_advisors",
+      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__list_tables"
     ]
   }
 }
