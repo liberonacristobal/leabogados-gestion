@@ -14852,7 +14852,7 @@ function EntitiesEditor({clientId}) {
   // Elegir una la ASIGNA a este cliente (no crea duplicado). Si no existe, "+" crea una nueva.
   const handleNameChange=val=>{
     setName(val); if(val.trim().length<2){setSugg([]);setShowSugg(false);return}
-    const m=allEntities.filter(e=>!e.client_id && e.name.toLowerCase().includes(val.toLowerCase())).slice(0,6)
+    const m=allEntities.filter(e=>!e.client_id && (e.name||'').toLowerCase().includes(val.toLowerCase())).slice(0,6)
     setSugg(m);setShowSugg(m.length>0)
   }
   const add=async()=>{
@@ -16403,8 +16403,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
     // ── COBRANZA
     if(sections.cobranza){
       const bb=filterByPeriod(billing,'issued_at').filter(b=>b.billing_type!=='reembolso'&&['Pendiente','Vencido','Pagado'].includes(b.status))
-      const pending=bb.filter(b=>b.status==='Pendiente').reduce((a,b)=>a+(b.amount||0),0)
-      const overdue=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+(b.amount||0),0)
+      const pending=bb.filter(b=>b.status==='Pendiente').reduce((a,b)=>a+saldoBill(b),0)   // saldo real (descuenta abonos parciales), no el monto total
+      const overdue=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
       const paid=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
       html+=`<div class="section${sections.ventas?' page-break':''}">
         <div class="section-title">Cobranza</div>
