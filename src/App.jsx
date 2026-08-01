@@ -3933,13 +3933,20 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               {[['abogado','Responsable'],['area','Área']].map(([v,l])=>{ const on=groupBy===v; return <span key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{fontSize:10,fontWeight:on?700:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</span> })}
             </div>
           </div>
-          {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?Math.round(g.uf/vendUF*100):0; const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); return (
-            <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{display:'flex',alignItems:'center',gap:10,background:sin?'#FBF7EF':'#fff',border:`1px solid ${on?col:(sin?C.ambarBg:C.border)}`,borderLeft:`3px solid ${col}`,borderRadius:'0 11px 11px 0',padding:'10px 12px',marginBottom:6,cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
-              <SIcon n={groupBy==='abogado'?'users':areaIcon(g.key)} s={17} c={col}/>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'flex',alignItems:'center',gap:6}}>{g.key}{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px'}}>asignar</span>}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>{g.count} venta{g.count!==1?'s':''} · {pct}%</div></div>
-              <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:15,fontWeight:700,color:col,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(g.uf)}</div><div style={{fontSize:9,color:C.done}}>{fmtShort(gclp)}</div></div>
+          {(()=>{ const leader=grupos[0]?.uf||0; return grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?g.uf/vendUF*100:0; const pctTxt=(pct>0&&pct<1)?pct.toFixed(1).replace('.',','):Math.round(pct); const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); const barW=leader>0?Math.max(2,Math.round(g.uf/leader*100)):0; return (
+            <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{background:sin?'#FBF7EF':'#fff',border:`1px solid ${on?col:C.border}`,borderLeft:`4px solid ${col}`,borderRadius:13,padding:'12px 14px',marginBottom:10,cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:14,fontWeight:700,color:C.accent}}>{g.key}</span> <span style={{fontSize:11,color:C.done,fontWeight:500}}>· {g.count} venta{g.count!==1?'s':''}</span>{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px',marginLeft:6}}>asignar</span>}</span>
+                <span style={{fontSize:26,fontWeight:800,letterSpacing:'-1px',lineHeight:1,color:col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{pctTxt}%</span>
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:12,margin:'8px 0'}}>
+                <span style={{fontSize:20,fontWeight:800,letterSpacing:'-.4px',color:col,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(g.uf)}</span>
+                <span style={{width:1,alignSelf:'stretch',background:C.border}}/>
+                <span style={{fontSize:20,fontWeight:800,letterSpacing:'-.4px',color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(gclp)}</span>
+              </div>
+              <div style={{height:8,borderRadius:5,background:'#EEF1F3',overflow:'hidden'}}><div style={{height:'100%',width:`${barW}%`,background:col,borderRadius:5}}/></div>
             </div>
-          )})}
+          )}) })()}
           {selGroup&&(()=>{ const g=grupos.find(x=>x.key===selGroup); const rows=g?g.rows:[]; if(!rows.length) return null; const col=colorGrupo(selGroup); return (
             <div style={{marginTop:12}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>

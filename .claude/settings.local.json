@@ -330,7 +330,9 @@
       "mcp__claude-in-chrome__tabs_context_mcp",
       "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__get_advisors",
       "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__list_tables",
-      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__apply_migration"
+      "mcp__91fbb532-57b3-405a-9384-d4a436e1763e__apply_migration",
+      "Bash(pkill -f \"vite.*5188\")",
+      "Bash(perl -0pi -e 's/\\(# Changelog\\\\n\\)/$1- 2026-08-01 — **Ventas: desglose por responsable\\\\/área en tiles \\(cifras grandes y comparables\\)**. El desglose plano \\(filas chicas\\) pas\\\\x{f3} a tiles tipo tarjeta: porcentaje de participaci\\\\x{f3}n grande \\(color de la persona\\), UF y pesos en paralelo al mismo tama\\\\x{f1}o, y barra de participaci\\\\x{f3}n relativa al l\\\\x{ed}der en cada tile. Mantiene el drill al tocar \\(ventas de esa persona\\) y el toggle Responsable\\\\/\\\\x{c1}rea. Suma exacta al hero \\(fuente \\\\x{fa}nica ventaUF\\\\/ventaCLP\\). Verificado en demo. La meta NO se duplic\\\\x{f3} ac\\\\x{e1}: su % can\\\\x{f3}nico \\(neto\\\\/meta\\) vive en el Dashboard \\\\\"C\\\\x{f3}mo va el a\\\\x{f1}o\\\\\"; ponerlo en Ventas dar\\\\x{ed}a un segundo porcentaje distinto.\\\\n/' CHANGELOG.md)"
     ]
   }
 }
