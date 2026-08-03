@@ -6133,8 +6133,47 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
   )
 }
 
+// Confirmación DETALLADA de "depurar cobradas": lista cada factura saldada (cliente, folio, monto, estado,
+// emisión, pago y por qué quedó en $0), clickeable a la factura, con selección individual antes de marcar pagadas.
+function DepurarCobradasModal({rows=[], clients=[], respaldoMap={}, onOpenFactura, onConfirm, onClose}){
+  const [sel,setSel] = useState(()=>new Set(rows.map(r=>r.id)))
+  const toggle = id => setSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  const cn = id => (clients||[]).find(c=>String(c.id)===String(id))?.name || '—'
+  const fdmy = d => d ? new Date(String(d).slice(0,10)+'T00:00').toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'2-digit'}) : '—'
+  const fpago = b => b.paid_at||b.payment_date||b.reconciled_at||null
+  const evidencia = b => { const resp=respaldoMap[b.id]||0, ab=b.paid_amount||0; if(resp>=(b.amount||0)&&resp>0) return `Conciliada con el banco · ${fmt(resp)}`; if(ab>0) return `Abonos aplicados · ${fmt(ab)}`; return 'Saldo $0 (sin movimiento)' }
+  const selRows = rows.filter(r=>sel.has(r.id))
+  const totalSel = selRows.reduce((a,r)=>a+(r.amount||0),0)
+  return (<>
+    <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.4}}>{rows.length} factura{rows.length!==1?'s':''} con saldo $0 sigue{rows.length!==1?'n':''} marcada{rows.length!==1?'s':''} vencida/pendiente. Revisa y elige cuáles marcar como pagadas. Toca una para verla.</div>
+    <div style={{maxHeight:'50vh',overflowY:'auto',margin:'0 -2px'}}>
+      {rows.map((b,i)=>{ const on=sel.has(b.id); const venc=b.status==='Vencido'; return (
+        <div key={b.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'11px 2px',borderTop:i?`1px solid ${C.border}`:'none'}}>
+          <span onClick={()=>toggle(b.id)} style={{width:20,height:20,borderRadius:5,flexShrink:0,marginTop:1,cursor:'pointer',background:on?C.normal:'#fff',border:on?'none':`1.5px solid ${C.done}`,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700}}>{on?'✓':''}</span>
+          <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+            <div style={{fontSize:13.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cn(b.client_id)} <span style={{fontSize:11,color:C.done,fontWeight:500}}>· N° {folioN(b.invoice_no)}</span></div>
+            <div style={{fontSize:11,color:C.greenText,marginTop:2,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.normal,flexShrink:0}}/>{evidencia(b)}</div>
+            <div style={{fontSize:10.5,color:C.muted,marginTop:3}}>Emitida {fdmy(b.issued_at)} · Pago {fdmy(fpago(b))}</div>
+          </div>
+          <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{textAlign:'right',flexShrink:0,cursor:'pointer'}}>
+            <div style={{fontSize:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</div>
+            <span style={{fontSize:9,fontWeight:700,borderRadius:20,padding:'2px 7px',marginTop:3,display:'inline-block',background:venc?C.overdueBg:C.soonBg,color:venc?C.overdueText:C.soonText}}>{venc?'Vencida':'Pendiente'}</span>
+            <div style={{fontSize:10,color:C.accent,fontWeight:600,marginTop:2}}>ver ›</div>
+          </div>
+        </div>
+      )})}
+    </div>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <span style={{fontSize:10,color:C.grisText,marginRight:'auto'}}>Reversible · Deshacer</span>
+      <button onClick={onClose} style={{fontSize:13,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 14px',cursor:'pointer'}}>Cancelar</button>
+      <button disabled={!selRows.length} onClick={()=>onConfirm(selRows)} style={{fontSize:13,fontWeight:700,color:'#fff',background:selRows.length?C.normal:C.done,border:'none',borderRadius:9,padding:'9px 15px',cursor:selRows.length?'pointer':'default'}}>Marcar {selRows.length} pagada{selRows.length!==1?'s':''} · {fmtShort(totalSel)}</button>
+    </div>
+  </>)
+}
+
 function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,intent,onIntentDone}) {
   const [siiOpen,setSiiOpen] = useState(false)
+  const [depurarRows,setDepurarRows] = useState(null)   // facturas saldadas a confirmar (modal detallado)
   const [cubrirAnt,setCubrirAnt] = useState(null)   // anticipo en flujo "cubrir cuotas"
   const [facturarAnt,setFacturarAnt] = useState(null)   // anticipo en flujo "emitir factura del bloque"
   const [filter,setFilter] = useState('resumen')
@@ -6835,6 +6874,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
           </div>
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
+        {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
@@ -7146,7 +7186,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>
             ) })()}
             {(()=>{ const cob=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Vencido','Pendiente'].includes(b.status)&&(b.amount||0)>0&&saldoBill(b)===0); if(!cob.length||!onDepurarCobradas) return null; return (
-              <div onClick={()=>onDepurarCobradas(cob)} title='Facturas ya saldadas (saldo $0) que siguen marcadas vencidas/pendientes — marcarlas pagadas' style={{display:'flex',alignItems:'center',gap:11,background:C.greenBg,borderLeft:`3px solid ${C.normal}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
+              <div onClick={()=>setDepurarRows(cob)} title='Facturas ya saldadas (saldo $0) que siguen marcadas vencidas/pendientes — marcarlas pagadas' style={{display:'flex',alignItems:'center',gap:11,background:C.greenBg,borderLeft:`3px solid ${C.normal}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.greenText}}>Ya cobradas sin marcar</div><div style={{fontSize:9,color:C.greenText}}>{cob.length} factura{cob.length!==1?'s':''} saldada{cob.length!==1?'s':''} sigue{cob.length!==1?'n':''} vencida/pendiente — depurar</div></div>
                 <span style={{color:C.normal,fontSize:18,fontWeight:700}}>›</span>
@@ -23295,8 +23335,7 @@ export default function App() {
   },[respaldoMap,cartolaHasta,billing])
   // Depurar: facturas ya saldadas (saldo 0 por abono/conciliación) que siguen marcadas Vencido/Pendiente → marcarlas Pagadas en lote. Reversible.
   const handleDepurarCobradas=useCallback(async(rows)=>{
-    if(!rows?.length) return
-    if(!await appConfirm(`${rows.length} factura(s) ya están saldadas (saldo $0) pero siguen marcadas como vencidas/pendientes.\n\n¿Marcarlas como Pagadas? Es reversible (Deshacer).`)) return
+    if(!rows?.length) return   // la confirmación detallada la hace DepurarCobradasModal (muestra cada factura); acá solo se ejecuta
     const ids=rows.map(r=>r.id); const prev=rows.map(r=>({id:r.id,status:r.status}))
     try{ const {error}=await supabase.from('billing').update({status:'Pagado'}).in('id',ids); if(error) throw error; setBilling(p=>p.map(b=>ids.includes(b.id)?{...b,status:'Pagado'}:b)) }catch(e){ appAlert('No se pudo depurar: '+(e.message||e)); return }
     setUndoToast({msg:`${ids.length} factura${ids.length!==1?'s':''} marcada${ids.length!==1?'s':''} como pagada${ids.length!==1?'s':''}`, onUndo: async()=>{ for(const pr of prev){ try{ await supabase.from('billing').update({status:pr.status}).eq('id',pr.id) }catch(_){} } setBilling(p=>p.map(b=>{ const pr=prev.find(x=>x.id===b.id); return pr?{...b,status:pr.status}:b })) }})
