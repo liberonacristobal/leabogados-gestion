@@ -7025,7 +7025,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   {prog ? (
                     <button onClick={()=>marcarEmitida(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Ya emitida</button>
                   ):(!anulada&&!pagado&&!anticipada)?(
-                    <button onClick={()=>{setPayingId(b.id);setPayDate(new Date().toISOString().slice(0,10));setInclTerceros(true);setPayMonto(String(Math.max(0,(b.amount||0)-(b.paid_amount||0))))}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Registrar pago</button>
+                    <button onClick={()=>onConciliar&&onConciliar(client)} title='El pago se registra conciliándolo contra el banco' style={{fontSize:11,fontWeight:600,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Buscar pago</button>
                   ):(pagado&&onRevertirPago)?(
                     <button onClick={async()=>{ if(await appConfirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Deshacer pago</button>
                   ):(anulada&&onReactivar)&&(
@@ -8012,7 +8012,9 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
   const flabel={fontSize:10,fontWeight:600,color:C.done,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:3,display:'block'}
   const inp={width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const sel={...inp,appearance:'none'}
-  const estados=(()=>{ const base=['Pendiente','Pagado','Anulado']; return (f.status&&!base.includes(f.status))?[f.status,...base]:base })()
+  // 'Pagado' NO es seleccionable a mano: un pago solo se marca conciliando contra el banco (o al aplicar un anticipo).
+  // Una factura que ya está Pagada mantiene su opción (para poder revertirla), pero no se puede setear manualmente.
+  const estados=(()=>{ const base=['Pendiente','Anulado']; return (f.status&&!base.includes(f.status))?[f.status,...base]:base })()
   return (
     <>
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
@@ -23595,10 +23597,11 @@ export default function App() {
     if(extra&&typeof extra==='object') Object.assign(updates,extra)   // ej. {paid_amount} para abonos parciales
     // opts.skipRespaldoWarn: viene de un flujo de CONCILIACIÓN (que acaba de crear el respaldo bancario) → no avisar,
     // porque el respaldoMap todavía no refleja la fila recién insertada y saldría un falso "sin respaldo".
-    if(status==='Pagado' && !opts?.skipRespaldoWarn){   // aviso (NO bloqueo) si el pago quedaría sin respaldo bancario — nudge a conciliar contra la cartola
-      const b=(billing||[]).find(x=>String(x.id)===String(id))
-      const fp=paid_at||new Date().toISOString().slice(0,10)
-      if(b && sinRespaldoAlPagar(b,fp,respaldoMap,cartolaHasta) && !(await appConfirm('Sin respaldo bancario\n\nLa cartola ya cubre esa fecha, pero ningún movimiento del banco respalda este pago. Lo ideal es conciliarlo contra la cartola.\n\n¿Marcar la factura pagada igual?'))) return
+    // Marcado MANUAL de pago DESACTIVADO: un pago solo se registra conciliándolo contra el banco (así todo pago
+    // queda con respaldo y no se acumulan "pagadas sin evidencia"). La conciliación pasa skipRespaldoWarn:true.
+    if(status==='Pagado' && !opts?.skipRespaldoWarn){
+      appAlert('El pago se registra conciliándolo contra el banco.\n\nUsa "Buscar pago" en la factura o el módulo de Conciliación bancaria. El marcado manual está desactivado para que todo pago quede con respaldo del banco.')
+      return
     }
     const {error}=await supabase.from('billing').update(updates).eq('id',id)
     if(error){ appAlert('No se pudo cambiar el estado: '+error.message); return }   // no actualizar UI si la DB no cambió
