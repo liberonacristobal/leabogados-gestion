@@ -2161,6 +2161,8 @@ const ventaCLP = (s, ufRef) => {
   const clp = s.amount_clp || (s.amount_uf&&s.uf_value>0?Math.round(s.amount_uf*s.uf_value):Math.round((parseFloat(s.amount_uf)||0)*ufRef))
   return (clp||0)*factor
 }
+// Costo de terceros (reparto) de una venta en UF, anualizado si es recurrente. Fuente única del costo → margen de contribución = ventaUF − costoVentaUF.
+const costoVentaUF = (s, ufRef) => ((parseFloat(s?.cost_uf)||0)*(esRecurrente(s)?12:1)) + (s?.moneda==='CLP'&&s?.cost_clp&&ufRef>0 ? (parseFloat(s.cost_clp)||0)/ufRef*(esRecurrente(s)?12:1) : 0)
 // Venta histórica del cliente (Activo+Terminado) en UF — fuente única ventaUF (UF congelada).
 const ventaHistoricaUF = (clientId, sales, ufRef) => (sales||[]).filter(s=>String(s.client_id)===String(clientId)&&['Activo','Terminado'].includes(s.status)&&!s.deleted_at).reduce((a,s)=>a+ventaUF(s,ufRef),0)
 // Última actividad del cliente: fecha más reciente entre ventas, facturas (no anuladas) y gastos.
@@ -3258,7 +3260,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
 // ─── INTELIGENCIA DE NEGOCIOS (MVP) ───────────────────────────────────────────
 // Solo admin. KPIs sólidos + Oportunidades accionables calculadas con helpers fuente única.
 // El código calcula; el Resumen IA (claudeCall) se suma en una etapa siguiente.
-function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha}){
+function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], setTab, onOpenClientFicha, onOpenSale}){
   const [openOpp,setOpenOpp] = useState(null)
   const [openSeg,setOpenSeg] = useState(null)   // segmento de cartera abierto
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
@@ -3307,7 +3309,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const hoy = new Date().toISOString().slice(0,10)
   const mesesDesde = d => { if(!d) return 999; const a=new Date(hoy), b=new Date(String(d).slice(0,10)); if(isNaN(b.getTime())) return 999; return (a.getFullYear()-b.getFullYear())*12+(a.getMonth()-b.getMonth()) }
 
-  const {kpis, opp, cartera, carteraTot, servicios, serviciosTot, tendencias} = useMemo(()=>{
+  const {kpis, opp, cartera, carteraTot, servicios, serviciosTot, ventasSinCosto, tendencias} = useMemo(()=>{
     const reales = (clients||[]).filter(c=>!c.is_internal&&!c.is_occasional)
     const vh = id => ventaHistoricaUF(id, sales, ufRef)
     const ult = id => ultimaActividad(id, sales, billing, expenses)
@@ -3343,9 +3345,12 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     // Servicios y Precios: por área (venta, ticket, recurrencia, rango, clientes). Activo+Terminado.
     const ventasReales = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status))
     const areaAgg = {}
-    ventasReales.forEach(s=>{ const a=s.area||'Sin área'; const u=ventaUF(s,ufRef); if(!areaAgg[a]) areaAgg[a]={uf:0,n:0,rec:0,tickets:[],byCli:{}}; const A=areaAgg[a]; A.uf+=u; A.n++; if(esRecurrente(s)) A.rec++; if(u>0) A.tickets.push(u); if(s.client_id) A.byCli[s.client_id]=(A.byCli[s.client_id]||0)+u })
-    const servicios = Object.entries(areaAgg).map(([area,d])=>({ area, uf:d.uf, n:d.n, ticket:d.n?d.uf/d.n:0, recPct:d.n?Math.round(d.rec/d.n*100):0, min:d.tickets.length?Math.min(...d.tickets):0, max:d.tickets.length?Math.max(...d.tickets):0, clientes:Object.entries(d.byCli).map(([cid,uf])=>({cid,uf,name:((clients||[]).find(c=>String(c.id)===String(cid))||{}).name||'—'})).sort((a,b)=>b.uf-a.uf) })).sort((a,b)=>b.uf-a.uf)
-    const serviciosTot = {areas:servicios.length, uf:servicios.reduce((a,s)=>a+s.uf,0)}
+    ventasReales.forEach(s=>{ const a=s.area||'Sin área'; const u=ventaUF(s,ufRef); const co=costoVentaUF(s,ufRef); if(!areaAgg[a]) areaAgg[a]={uf:0,costo:0,conCosto:0,n:0,rec:0,tickets:[],byCli:{}}; const A=areaAgg[a]; A.uf+=u; A.costo+=co; if(co>0) A.conCosto++; A.n++; if(esRecurrente(s)) A.rec++; if(u>0) A.tickets.push(u); if(s.client_id) A.byCli[s.client_id]=(A.byCli[s.client_id]||0)+u })
+    const servicios = Object.entries(areaAgg).map(([area,d])=>({ area, uf:d.uf, costo:d.costo, margen:d.uf-d.costo, margenPct:d.uf>0?(d.uf-d.costo)/d.uf*100:0, conCosto:d.conCosto, n:d.n, ticket:d.n?d.uf/d.n:0, recPct:d.n?Math.round(d.rec/d.n*100):0, min:d.tickets.length?Math.min(...d.tickets):0, max:d.tickets.length?Math.max(...d.tickets):0, clientes:Object.entries(d.byCli).map(([cid,uf])=>({cid,uf,name:((clients||[]).find(c=>String(c.id)===String(cid))||{}).name||'—'})).sort((a,b)=>b.uf-a.uf) })).sort((a,b)=>b.uf-a.uf)
+    const costoTot = servicios.reduce((a,s)=>a+s.costo,0), ufTot = servicios.reduce((a,s)=>a+s.uf,0)
+    const serviciosTot = {areas:servicios.length, uf:ufTot, costo:costoTot, margen:ufTot-costoTot, conCosto:ventasReales.filter(s=>costoVentaUF(s,ufRef)>0).length, nTotal:ventasReales.length}
+    // Ventas sin costo cargado (Activo+Terminado): el margen no es representativo hasta cargar su reparto de terceros.
+    const ventasSinCosto = ventasReales.filter(s=>costoVentaUF(s,ufRef)<=0).sort((a,b)=>ventaUF(b,ufRef)-ventaUF(a,ufRef))
 
     // Tendencias: crecimiento año vs año anterior (total y por abogado). Complementa (no duplica) Ventas-por-mes ni Servicios.
     const prevYr = yr-1
@@ -3356,7 +3361,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
     const abCur=sumBy(curY,s=>s.responsible), abPrv=sumBy(prvY,s=>s.responsible)
     const dl=(cur,prv)=>[...new Set([...Object.keys(cur),...Object.keys(prv)])].map(k=>({k,cur:cur[k]||0,prv:prv[k]||0,pct:(prv[k]||0)>0?Math.round(((cur[k]||0)-(prv[k]||0))/(prv[k]||0)*100):null})).filter(x=>x.cur>0||x.prv>0).sort((a,b)=>b.cur-a.cur)
     const tendencias={prevYr,totCur,totPrv,pctTot: totPrv>0?Math.round((totCur-totPrv)/totPrv*100):null, abogados:dl(abCur,abPrv)}
-    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot, servicios, serviciosTot, tendencias}
+    return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot, servicios, serviciosTot, ventasSinCosto, tendencias}
   },[sales,billing,clients,expenses,ufRef,yr])
 
   // Radar tributario (Stage 7): cruza cada novedad del SII con los clientes cuya área coincide con la(s) área(s) de la novedad.
@@ -3685,10 +3690,37 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
               ))}
             </div>
           )})}
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:C.ambarBg,borderRadius:9,padding:'9px 11px',marginTop:11}}>
-            <span style={{fontSize:11,color:C.coralText}}>Margen por área <span style={{color:C.soon}}>(necesita costo de venta)</span></span>
-            <span style={{fontSize:11,color:C.soon,fontWeight:600}}>por desbloquear</span>
+          {(()=>{ const cov=serviciosTot.nTotal>0?serviciosTot.conCosto/serviciosTot.nTotal*100:0; const repr=cov>=60; const areasCon=servicios.filter(s=>s.conCosto>0); return (
+          <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:11}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+              <span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Rentabilidad · margen de contribución</span>
+              <span style={{fontSize:10,fontWeight:700,color:repr?C.greenText:C.soonText}}>{serviciosTot.conCosto}/{serviciosTot.nTotal} con costo</span>
+            </div>
+            <div style={{display:'flex',gap:7,marginBottom:repr?10:8}}>
+              <div style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Honorarios</div><div style={{fontSize:15,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(serviciosTot.uf)}</div></div>
+              <div style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Costo terceros</div><div style={{fontSize:15,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(serviciosTot.costo)}</div></div>
+              <div style={{flex:1,background:repr?C.greenBg:C.bgSoft,borderRadius:9,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Margen</div><div style={{fontSize:15,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{serviciosTot.uf>0?Math.round(serviciosTot.margen/serviciosTot.uf*100)+'%':'—'}</div></div>
+            </div>
+            {!repr&&<div style={{background:C.ambarBg,borderLeft:`3px solid ${C.soon}`,borderRadius:'0 9px 9px 0',padding:'8px 11px',marginBottom:10}}><div style={{fontSize:11,color:C.soonText,lineHeight:1.4}}>El margen aún no es representativo: falta cargar el costo de terceros en <b>{serviciosTot.nTotal-serviciosTot.conCosto} ventas</b>. Cárgalo abajo y se enciende con cifras reales.</div></div>}
+            {areasCon.map(s=>{ const mp=Math.round(s.margenPct); const cp=Math.max(0,100-mp); return (
+              <div key={s.area} style={{marginBottom:9}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.done,fontWeight:500}}>· {s.conCosto}/{s.n} con costo</span></span><span style={{fontWeight:700,color:C.greenText}}>{mp}% <span style={{fontSize:10,color:C.muted,fontWeight:500}}>margen</span></span></div>
+                <div style={{height:9,borderRadius:5,background:'#EEF1F3',display:'flex',overflow:'hidden'}}><div style={{width:`${Math.max(1,mp)}%`,background:C.normal}}/><div style={{width:`${cp}%`,background:C.soon}}/></div>
+              </div>
+            )})}
+            {areasCon.length===0&&<div style={{fontSize:11,color:C.grisText,marginBottom:8}}>Aún ninguna área con costo cargado.</div>}
+            {ventasSinCosto.length>0&&onOpenSale&&(<div style={{marginTop:6}}>
+              <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.3,textTransform:'uppercase',marginBottom:4}}>Cargar costo de terceros</div>
+              {ventasSinCosto.slice(0,6).map(s=>{ const cli=(clients||[]).find(c=>String(c.id)===String(s.client_id)); return (
+                <div key={s.id} onClick={()=>onOpenSale(s)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0',borderTop:'0.5px solid #EEF1F3',cursor:'pointer'}}>
+                  <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'Venta'}</div><div style={{fontSize:10,color:C.muted}}>{cli?.name||'—'} · {s.area||'Sin área'}</div></div>
+                  <span style={{fontSize:11,fontWeight:600,color:C.accent,flexShrink:0,whiteSpace:'nowrap'}}>+ costo ›</span>
+                </div>
+              )})}
+              {ventasSinCosto.length>6&&<div style={{fontSize:10,color:C.muted,textAlign:'center',padding:'5px 0'}}>+{ventasSinCosto.length-6} ventas más sin costo</div>}
+            </div>)}
           </div>
+          )})()}
         </div>
         </div>)}
         {biSec==='tendencias'&&(<div style={{marginTop:12}}>
@@ -23589,7 +23621,7 @@ export default function App() {
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
-            {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
             {tab==='tasks'&&<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} currentUserName={user?.name} setTab={setTab} isAdmin={actualRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/>}
