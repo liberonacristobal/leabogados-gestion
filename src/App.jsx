@@ -20501,7 +20501,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   // con cartolas grandes). Ahora el lookup por cliente es O(1) y la conversión a candidatos solo recorre las facturas de ese cliente.
   // Pool de conciliación = TODAS las facturas EMITIDAS (con folio) con saldo por conciliar, SALVO las ya conciliadas (saldo 0)
   // y las Anuladas/Anticipadas. Incluye VENCIDO (antes se excluía y dejaba fuera casi todo lo impago → 0 calces).
-  const facturasConSaldo = useMemo(()=> (billing||[]).filter(b=> !b.deleted_at && (b.amount||0)>0 && String(b.invoice_no||'').trim()!=='' && ['Pendiente','Vencido','Pagado'].includes(b.status) && saldoFactura(b) > TOL), [billing,aplicadoByFactura])
+  // Pool de facturas ofrecibles para conciliar un depósito. Excluye las Pagadas ya SALDADAS (no ofrecer facturas
+  // pagadas). Salvo que una Pagada tenga una conciliación bancaria PARCIAL en curso (aplicado>0): ahí queda un
+  // saldo por pagar REAL y sí se ofrece. NO se toca saldoFactura (lo usa la pestaña "Cobradas s/ respaldo" y reconciliar).
+  const facturasConSaldo = useMemo(()=> (billing||[]).filter(b=> !b.deleted_at && (b.amount||0)>0 && String(b.invoice_no||'').trim()!=='' && saldoFactura(b) > TOL && (['Pendiente','Vencido'].includes(b.status) || (b.status==='Pagado' && (aplicadoByFactura[b.id]||0) > TOL))), [billing,aplicadoByFactura])
   const facturasPorCliente = useMemo(()=>{ const m={}; facturasConSaldo.forEach(b=>{ (m[b.client_id]=m[b.client_id]||[]).push(b) }); return m },[facturasConSaldo])
   // Abono conciliable contra facturas: identificado a cliente, no interno, y de honorarios (Comisión/Subarriendo/Otro NO calzan).
   const esConciliable = m => m.tipo==='abono' && !m.es_interno && !!m.cliente_id && (!m.categoria || m.categoria==='Cliente')
