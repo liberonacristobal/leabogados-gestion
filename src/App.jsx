@@ -2514,6 +2514,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           ['inteligencia','Power BI', ic(<><path d='M3 3v18h18'/><rect x='7' y='12' width='3' height='6'/><rect x='12' y='8' width='3' height='10'/><rect x='17' y='4' width='3' height='14'/></>,C.tealText), C.tealBg],
           ['conciliacion','Conciliación', ic(<><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></>,C.greenText), C.greenBg],
           ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>,C.accent), C.azulBg],
+          ['cierreMes','Cierre mes', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='10' x2='21' y2='10'/><path d='M8.5 15.5l2.5 2.5 4.5-4.5'/></>,C.greenText), C.greenBg],
           ['micarga','Mi carga', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><rect x='7' y='12' width='2.5' height='6' rx='.5' fill={C.soonText} stroke='none'/><rect x='11' y='14' width='2.5' height='4' rx='.5' fill={C.soonText} stroke='none'/><rect x='15' y='11' width='2.5' height='7' rx='.5' fill={C.soonText} stroke='none'/></>,C.soonText), C.ambarBg],
           ['mas','Más', ic(<><circle cx='5' cy='12' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='19' cy='12' r='1'/></>,C.muted), C.bgSoft||'#F5F7F9'],
         ]
@@ -6171,6 +6172,214 @@ function DepurarCobradasModal({rows=[], clients=[], respaldoMap={}, onOpenFactur
   </>)
 }
 
+// ─── CIERRE DE MES ────────────────────────────────────────────────────────────
+// Vista viva (sin tabla nueva): cruza las facturas realmente emitidas del mes con la conciliación
+// bancaria (esté o no realizada). Reusa el matcher read-only `pagosDe` (RUT + monto exacto) y el
+// `respaldoMap` (conciliación formal). Permite navegar cualquier mes pasado y comparar la tendencia.
+const CIERRE_EST = {
+  cobrada:   { label:'Cobrada',        color:C.greenText,   bg:C.greenBg },
+  detectado: { label:'Pago detectado', color:C.tealText,    bg:C.tealBg },
+  sinpago:   { label:'Sin pago',       color:C.overdueText, bg:C.overdueBg },
+}
+function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abonos=[], pagosDe, onConciliarPago, onRecordar, onRecordarTanda, recordadoMap={}, diasDesde, onOpenClientFicha, onOpenFactura, mesInicial }) {
+  const MESNOM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const hoyKey = new Date().toISOString().slice(0,7)
+  const hoyISO = new Date().toISOString().slice(0,10)
+  const [mes,setMes] = useState(mesInicial && /^\d{4}-\d{2}$/.test(mesInicial) ? mesInicial : hoyKey)
+  const [modo,setModo] = useState('mes')      // 'mes' | 'acum' (acumulado del año hasta el mes elegido)
+  const [resp,setResp] = useState(null)       // abogado responsable (null = todos)
+  const [estFiltro,setEstFiltro] = useState(null)   // null | 'cobrada' | 'detectado' | 'sinpago'
+  const [expand,setExpand] = useState(null)   // factura.id con detalle abierto
+  const [busyId,setBusyId] = useState(null)
+
+  const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
+  const respByClient = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
+  const respDe = b => (b.sale_id&&respBySale[String(b.sale_id)])||respByClient[String(b.client_id)]||null
+  const esEmit = b => !!(b.invoice_no||b.folio)
+  const emisKey = b => String(b.issued_at||b.date||b.created_at||'').slice(0,7)
+  const clientNom = id => (clients.find(c=>String(c.id)===String(id))?.name)||'Sin cliente'
+
+  const emitidasAll = useMemo(()=> (billing||[]).filter(b=>!b.deleted_at && esEmit(b) && b.status!=='Anulada' && b.billing_type!=='reembolso'), [billing])
+  const respList = useMemo(()=>{ const s=new Set(); emitidasAll.forEach(b=>{ const r=respDe(b); if(r) s.add(r) }); return [...s].sort((a,b)=>a.localeCompare(b,'es')) },[emitidasAll,respBySale,respByClient])
+
+  // Cifras consistentes: monto = verdad del DTE; abonado = lo respaldado en banco o el pago registrado; saldo = monto − abonado.
+  const abonadoDe = b => Math.max(Number(b.paid_amount)||0, Number(respaldoMap[b.id])||0)
+  const montoDe = b => montoFactura(b)
+  const saldoDe = b => (b.status==='Anulada')?0:(b.status==='Pagado'?0:Math.max(0, montoDe(b)-abonadoDe(b)))
+  const tieneRespaldo = b => (Number(respaldoMap[b.id])||0) >= montoDe(b)*0.99
+
+  const mesYear = mes.slice(0,4)
+  const enPeriodo = k => modo==='mes' ? k===mes : (!!k && k.slice(0,4)===mesYear && k<=mes)
+
+  const filas = useMemo(()=> emitidasAll
+    .filter(b=> enPeriodo(emisKey(b)) && (!resp || respDe(b)===resp))
+    .map(b=>{ const monto=montoDe(b), saldo=saldoDe(b), cobrado=Math.max(0,monto-saldo)
+      let est; if(saldo<=0) est='cobrada'; else { const pg=pagosDe?pagosDe(b):[]; est=(pg&&pg.length>0)?'detectado':'sinpago' }
+      return {b, monto, saldo, cobrado, est, resp:respDe(b), pagos: est==='detectado'&&pagosDe?pagosDe(b):[]} })
+    .sort((a,z)=> (a.est==='detectado'?0:a.est==='sinpago'?1:2)-(z.est==='detectado'?0:z.est==='sinpago'?1:2) || z.monto-a.monto)
+  , [emitidasAll, mes, modo, resp, respaldoMap, abonos])   // eslint-disable-line
+
+  const tot = useMemo(()=>{ let emi=0,cob=0,pen=0,nC=0,nD=0,nS=0,mC=0,mD=0,mS=0
+    filas.forEach(f=>{ emi+=f.monto; cob+=f.cobrado; pen+=f.saldo
+      if(f.est==='cobrada'){nC++;mC+=f.monto} else if(f.est==='detectado'){nD++;mD+=f.saldo} else {nS++;mS+=f.saldo} })
+    return {emi,cob,pen,tasa:emi>0?cob/emi:0,nC,nD,nS,mC,mD,mS} },[filas])
+
+  // Pagos del banco del período que no calzan con ninguna factura pendiente → plata recibida sin identificar.
+  const matchedAbonos = useMemo(()=>{ const s=new Set(); emitidasAll.forEach(b=>{ if(saldoDe(b)>0){ (pagosDe?pagosDe(b):[]).forEach(({m})=>s.add(String(m.id))) } }); return s },[emitidasAll,abonos,respaldoMap])   // eslint-disable-line
+  const sinIdentificar = useMemo(()=> (abonos||[]).filter(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); return m.estado!=='conciliado' && resto>0 && enPeriodo(String(m.fecha||'').slice(0,7)) && !matchedAbonos.has(String(m.id)) }), [abonos,matchedAbonos,mes,modo])   // eslint-disable-line
+  const totSinId = sinIdentificar.reduce((a,m)=>a+((m.monto||0)-(m.monto_conciliado||0)),0)
+
+  // Tendencia: tasa de cobro de los últimos 6 meses (para comparar).
+  const trend = useMemo(()=>{ const out=[]; const [y,m]=mes.split('-').map(Number)
+    for(let i=5;i>=0;i--){ let yy=y, mm=m-i; while(mm<=0){mm+=12;yy--}; const k=`${yy}-${String(mm).padStart(2,'0')}`
+      const fs=emitidasAll.filter(b=> emisKey(b)===k && (!resp||respDe(b)===resp))
+      const emi=fs.reduce((a,b)=>a+montoDe(b),0), cob=fs.reduce((a,b)=>a+Math.max(0,montoDe(b)-saldoDe(b)),0)
+      out.push({k, mesN:MESNOM[mm-1].slice(0,3), emi, cob, pen:emi-cob, tasa:emi>0?cob/emi:0, act:k===mes}) }
+    return out }, [mes,emitidasAll,resp,respaldoMap])   // eslint-disable-line
+  const prev=trend[4], cur=trend[5]
+
+  const shiftMes = d => { const [y,m]=mes.split('-').map(Number); let mm=m+d, yy=y; while(mm<=0){mm+=12;yy--} while(mm>12){mm-=12;yy++}; setMes(`${yy}-${String(mm).padStart(2,'0')}`); setExpand(null); setEstFiltro(null) }
+  const mesLabel = `${MESNOM[+mes.slice(5,7)-1]} ${mes.slice(0,4)}`
+  const pct = x => `${Math.round(x*100)}%`
+  const deltaTxt = (a,b)=>{ if(!b) return a>0?'nuevo':''; const d=Math.round((a-b)/b*100); return `${d>=0?'▲':'▼'} ${Math.abs(d)}%` }
+  const deltaCol = (a,b,inv)=>{ if(a===b) return C.done; const up=a>b; return (inv?!up:up)?C.greenText:C.overdueText }
+
+  const visibles = estFiltro ? filas.filter(f=>f.est===estFiltro) : filas
+  const vencidasSinPago = filas.filter(f=>f.est==='sinpago' && f.b.due && f.b.due < hoyISO)
+  const puedeSig = mes < hoyKey
+
+  const enlazar = async(f)=>{ if(busyId||!f.pagos.length) return; setBusyId(f.b.id); try{ await onConciliarPago(f.pagos[0].m, f.b) }catch(_){}; setBusyId(null); setExpand(null) }
+
+  const tile = (k,n,m)=>{ const e=CIERRE_EST[k]; const on=estFiltro===k
+    return <button onClick={()=>setEstFiltro(on?null:k)} style={{flex:1,minWidth:0,textAlign:'left',background:on?e.bg:'#fff',border:`1px solid ${on?e.color:C.border}`,borderRadius:11,padding:'8px 9px',cursor:'pointer'}}>
+      <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2}}><span style={{width:7,height:7,borderRadius:'50%',background:e.color,flexShrink:0}}/><span style={{fontSize:10.5,fontWeight:700,color:e.color,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.label}</span></div>
+      <div style={{fontSize:14.5,fontWeight:800,color:C.text,letterSpacing:-.2}}>{fmtShort(m)}</div>
+      <div style={{fontSize:9.5,color:C.muted}}>{n} factura{n!==1?'s':''}</div>
+    </button> }
+
+  const dfmt = d => { const s=fmtDate(d); return s||'—' }
+
+  return (<div style={{maxWidth:660,margin:'0 auto'}}>
+    {/* Navegador de mes + modo */}
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+      <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
+        <button onClick={()=>shiftMes(-1)} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:16,cursor:'pointer',lineHeight:1}}>‹</button>
+        <div style={{fontSize:16,fontWeight:800,color:C.accent,minWidth:0}}>{mesLabel}</div>
+        <button onClick={()=>puedeSig&&shiftMes(1)} disabled={!puedeSig} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:puedeSig?C.muted:C.border,fontSize:16,cursor:puedeSig?'pointer':'default',lineHeight:1}}>›</button>
+      </div>
+      <div style={{display:'flex',background:C.bgSoft,borderRadius:9,padding:2}}>
+        {[['mes','Mes'],['acum','Acumulado']].map(([v,l])=><button key={v} onClick={()=>setModo(v)} style={{fontSize:11.5,fontWeight:700,padding:'5px 11px',borderRadius:7,border:'none',cursor:'pointer',background:modo===v?'#fff':'transparent',color:modo===v?C.accent:C.muted,boxShadow:modo===v?'0 1px 2px rgba(0,0,0,.06)':'none'}}>{l}</button>)}
+      </div>
+    </div>
+
+    {/* Filtro por abogado responsable */}
+    {respList.length>1&&<div style={{display:'flex',gap:5,overflowX:'auto',marginBottom:10,paddingBottom:2}}>
+      {[[null,'Todos'],...respList.map(r=>[r,r])].map(([v,l])=>{ const on=resp===v; const pc=v?personChip(v):null
+        return <button key={v||'all'} onClick={()=>setResp(v)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?(pc?pc.color:C.accent):C.border}`,background:on?(pc?pc.bg:C.azulBg):'#fff',color:on?(pc?pc.color:C.accent):C.muted,whiteSpace:'nowrap'}}>{l}</button> })}
+    </div>}
+
+    {/* Foto: Emitido (protagonista) con Cobrado / Pendiente anidados */}
+    <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginBottom:8}}>
+      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:8}}>{modo==='mes'?`Emitido · ${mesLabel}`:`Emitido acumulado ${mesYear} (a ${MESNOM[+mes.slice(5,7)-1].toLowerCase()})`}</div>
+      <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:11}}>
+        <div style={{fontSize:26,fontWeight:800,color:C.accent,letterSpacing:-.5}}>{fmt(tot.emi)}</div>
+        <div style={{fontSize:11.5,color:C.muted,fontWeight:600}}>{filas.length} factura{filas.length!==1?'s':''}</div>
+      </div>
+      <div style={{display:'flex',gap:0,alignItems:'stretch',borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+        <div onClick={()=>setEstFiltro('cobrada')} style={{flex:1,cursor:'pointer',paddingRight:12}}>
+          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Cobrado</div>
+          <div style={{fontSize:18,fontWeight:800,color:C.greenText,letterSpacing:-.3}}>{fmt(tot.cob)}</div>
+          <div style={{fontSize:10,color:C.muted}}>tasa de cobro {pct(tot.tasa)}</div>
+        </div>
+        <div onClick={()=>setEstFiltro('sinpago')} style={{flex:1,cursor:'pointer',paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
+          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Pendiente</div>
+          <div style={{fontSize:18,fontWeight:800,color:C.overdueText,letterSpacing:-.3}}>{fmt(tot.pen)}</div>
+          <div style={{fontSize:10,color:C.muted}}>{tot.nD+tot.nS} sin cobrar</div>
+        </div>
+      </div>
+      {/* barra tasa de cobro */}
+      <div style={{height:6,borderRadius:4,background:C.overdueBg,marginTop:11,overflow:'hidden'}}><div style={{width:`${Math.round(tot.tasa*100)}%`,height:'100%',background:C.normal,borderRadius:4}}/></div>
+    </div>
+
+    {/* Estados (clickeables → filtran la lista) */}
+    <div style={{display:'flex',gap:6,marginBottom:8}}>
+      {tile('cobrada',tot.nC,tot.mC)}
+      {tile('detectado',tot.nD,tot.mD)}
+      {tile('sinpago',tot.nS,tot.mS)}
+    </div>
+
+    {/* Pagos del banco sin identificar */}
+    {sinIdentificar.length>0&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,borderRadius:11,padding:'9px 12px',marginBottom:8}}>
+      <span style={{width:7,height:7,borderRadius:'50%',background:C.coralText,flexShrink:0}}/>
+      <div style={{flex:1,fontSize:12,color:C.coralText}}><b>{sinIdentificar.length} pago{sinIdentificar.length!==1?'s':''} del banco sin identificar</b> · {fmt(totSinId)}<div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Depósitos del período que no calzan con ninguna factura pendiente. Revísalos en Conciliación.</div></div>
+    </div>}
+
+    {/* Tanda de recordatorios */}
+    {vencidasSinPago.length>0&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.overdueBg,borderRadius:11,padding:'9px 12px',marginBottom:8}}>
+      <div style={{flex:1,fontSize:12,color:C.overdueText}}><b>{vencidasSinPago.length} factura{vencidasSinPago.length!==1?'s':''} vencida{vencidasSinPago.length!==1?'s':''} sin pago</b><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Enviar recordatorio de cobro desde tu cuenta.</div></div>
+      {onRecordarTanda&&<button onClick={()=>onRecordarTanda(vencidasSinPago.map(f=>f.b))} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'6px 13px',cursor:'pointer',flexShrink:0}}>Recordar a {vencidasSinPago.length}</button>}
+    </div>}
+
+    {/* Lista de facturas del período */}
+    {estFiltro&&<div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:CIERRE_EST[estFiltro].color}}>Mostrando: {CIERRE_EST[estFiltro].label}</span><button onClick={()=>setEstFiltro(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>ver todas</button></div>}
+    <div style={{display:'flex',flexDirection:'column',gap:5}}>
+      {visibles.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:12.5,padding:'22px 0'}}>No hay facturas emitidas {modo==='mes'?`en ${mesLabel.toLowerCase()}`:`en ${mesYear}`}{resp?` de ${resp}`:''}.</div>}
+      {visibles.map(f=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
+        return <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,borderLeft:`3px solid ${e.color}`,overflow:'hidden'}}>
+          <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',cursor:'pointer'}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13.5,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{clientNom(f.b.client_id)}</div>
+              <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}{f.resp?` · ${f.resp}`:''}</div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{fmt(f.monto)}</div>
+              <span style={{fontSize:9.5,fontWeight:700,color:e.color,background:e.bg,borderRadius:10,padding:'1px 7px',display:'inline-block',marginTop:2}}>{e.label}{f.est==='cobrada'&&!tieneRespaldo(f.b)?' · sin respaldo':''}</span>
+            </div>
+          </div>
+          {abierto&&<div style={{padding:'0 12px 10px',borderTop:`1px solid ${C.bgSoft}`}}>
+            <div style={{display:'flex',flexWrap:'wrap',gap:'2px 14px',fontSize:11,color:C.muted,margin:'8px 0'}}>
+              <span>Emitida <b style={{color:C.text}}>{dfmt(f.b.issued_at)}</b></span>
+              <span>Enviada <b style={{color:f.b.email_sent_at?C.text:C.done}}>{dfmt(f.b.email_sent_at)}</b></span>
+              <span>Pagada <b style={{color:(f.b.paid_at||f.b.payment_date)?C.text:C.done}}>{dfmt(f.b.paid_at||f.b.payment_date)}</b></span>
+              <span>Conciliada <b style={{color:tieneRespaldo(f.b)?C.greenText:C.done}}>{tieneRespaldo(f.b)?'sí':'—'}</b></span>
+            </div>
+            {f.saldo>0&&<div style={{fontSize:11,color:C.muted,marginBottom:8}}>Saldo por cobrar <b style={{color:C.overdueText}}>{fmt(f.saldo)}</b></div>}
+            {f.est==='detectado'&&f.pagos[0]&&<div style={{background:C.tealBg,borderRadius:9,padding:'8px 10px',marginBottom:8}}>
+              <div style={{fontSize:11,color:C.tealText}}>Pago en el banco que calza: <b>{fmt((f.pagos[0].m.monto||0)-(f.pagos[0].m.monto_conciliado||0))}</b> · {fmtDate(f.pagos[0].m.fecha)}{f.pagos[0].m.nombre_contraparte?` · ${f.pagos[0].m.nombre_contraparte}`:''}</div>
+            </div>}
+            <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+              {f.est==='detectado'&&<button onClick={()=>enlazar(f)} disabled={busyId===f.b.id} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',opacity:busyId===f.b.id?.6:1}}>{busyId===f.b.id?'Enlazando…':'Enlazar pago'}</button>}
+              {f.est==='sinpago'&&onRecordar&&<button onClick={()=>onRecordar(f.b)} style={{fontSize:11.5,fontWeight:700,color:rec?C.grisText:'#fff',background:rec?C.bgSoft:C.accent,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>{rec?'Recordado':'Recordar cobro'}</button>}
+              <button onClick={()=>onOpenFactura&&onOpenFactura(f.b)} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Abrir factura</button>
+              <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(f.b.client_id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Ficha del cliente</button>
+            </div>
+          </div>}
+        </div> })}
+    </div>
+
+    {/* Historial y comparación */}
+    <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginTop:10}}>
+      <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:10}}>Historial y comparación</div>
+      {cur&&prev&&<div style={{display:'flex',gap:7,marginBottom:12}}>
+        {[['Emitido',cur.emi,prev.emi,false],['Cobrado',cur.cob,prev.cob,false],['Pendiente',cur.pen,prev.pen,true]].map(([l,a,b,inv])=>
+          <div key={l} style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 9px'}}>
+            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
+            <div style={{fontSize:15,fontWeight:800,color:C.text,letterSpacing:-.2}}>{fmtShort(a)}</div>
+            <div style={{fontSize:9.5,fontWeight:700,color:deltaCol(a,b,inv),marginTop:1}}>{deltaTxt(a,b)} <span style={{color:C.done,fontWeight:600}}>vs {prev.mesN}</span></div>
+          </div>)}
+      </div>}
+      <div style={{display:'flex',alignItems:'flexEnd',gap:7,height:96}}>
+        {trend.map(t=>{ const h=Math.max(4,Math.round(t.tasa*100)); return <div key={t.k} onClick={()=>{setMes(t.k);setExpand(null);setEstFiltro(null)}} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%',cursor:'pointer'}}>
+          <div style={{fontSize:9.5,fontWeight:800,color:t.act?C.accent:C.greenText,marginBottom:2}}>{t.emi>0?pct(t.tasa):'—'}</div>
+          <div style={{width:'62%',height:`${h}%`,background:t.emi>0?C.normal:C.border,borderRadius:'4px 4px 0 0',outline:t.act?`2px solid ${C.accent}`:'none',outlineOffset:1}}/>
+          <div style={{fontSize:9,color:t.act?C.accent:C.muted,fontWeight:t.act?800:600,marginTop:6}}>{t.mesN}</div>
+        </div> })}
+      </div>
+      <div style={{fontSize:10.5,color:C.muted,marginTop:8}}>Cada barra es la tasa de cobro del mes (cobrado ÷ emitido). Toca un mes para abrir su cierre.</div>
+    </div>
+  </div>)
+}
+
 function BillingView({billing,clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,intent,onIntentDone}) {
   const [siiOpen,setSiiOpen] = useState(false)
   const [depurarRows,setDepurarRows] = useState(null)   // facturas saldadas a confirmar (modal detallado)
@@ -6179,7 +6388,8 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   const [filter,setFilter] = useState('resumen')
   // Deep-link desde los accesos directos del Inicio: abre el cotejo SII o el checklist "Facturas del mes"
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
-  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
+  const [cierreOpen,setCierreOpen] = useState(false)
+  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='cierre') setCierreOpen(true); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
   const [groupOpen,setGroupOpen] = usePersistedState('bill_grp',{})   // colapso por grupo (Pagadas/Anuladas cerrados por defecto)
@@ -6602,6 +6812,17 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
     try{ const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text}); if(via){ const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(b.id),value:at},{onConflict:'kind,key'}); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; appAlert(`Recordatorio (${r.nivel}) enviado${via==='oficina'?' desde la cuenta de oficina':''}.`) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
+  // Recordatorio de cobro por TANDA (desde el Cierre de mes): una sola compuerta que lista los destinatarios;
+  // envía secuencialmente desde tu cuenta (mismo generador que el individual). Correos SIEMPRE desde el usuario.
+  const recordarCobroTanda = async(facturas)=>{
+    const dest = (facturas||[]).map(b=>{ const cl=clients.find(c=>String(c.id)===String(b.client_id)); const to=(cl?.email||'').trim(); return to?{b,to,name:cl?.name||'Cliente',r:recordatorioCobro(b)}:null }).filter(Boolean)
+    const sinCorreo = (facturas||[]).length - dest.length
+    if(!dest.length){ appAlert('Ninguna de estas facturas tiene correo del cliente en la ficha para recordar.'); return }
+    if(!await appConfirm(`¿Enviar ${dest.length} recordatorio${dest.length!==1?'s':''} de cobro desde tu cuenta?\n\n${dest.slice(0,8).map(d=>`· ${d.name} — ${d.r.folio}`).join('\n')}${dest.length>8?`\n… y ${dest.length-8} más`:''}${sinCorreo>0?`\n\n(${sinCorreo} sin correo se omiten.)`:''}`)) return
+    let ok=0
+    for(const d of dest){ try{ const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text}); if(via){ ok++; const at=new Date().toISOString(); try{ await supabase.from('learnings').upsert({kind:'factura_recordado',key:String(d.b.id),value:at},{onConflict:'kind,key'}) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
+    appAlert(`${ok} de ${dest.length} recordatorio${dest.length!==1?'s':''} enviado${ok!==1?'s':''}.`)
+  }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
   const acuseCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -6875,6 +7096,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
         </div>
         {siiOpen&&<SiiSyncModal onClose={()=>{setSiiOpen(false);setCotejoMes(null)}} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>}
         {depurarRows&&<Modal title='Marcar como pagadas' onClose={()=>setDepurarRows(null)} closeOnBackdrop={false}><DepurarCobradasModal rows={depurarRows} clients={clients} respaldoMap={respaldoMap} onOpenFactura={b=>{setDepurarRows(null);onEdit&&onEdit(b)}} onClose={()=>setDepurarRows(null)} onConfirm={(sel)=>{ onDepurarCobradas(sel); setDepurarRows(null) }}/></Modal>}
+        {cierreOpen&&<Modal title='Cierre de mes' onClose={()=>setCierreOpen(false)}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>{setCierreOpen(false);onEdit&&onEdit(b)}}/></Modal>}
         {filter!=='anticipos'&&filter!=='checklist'&&filter!=='sinanio'&&filter!=='resumen'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:9,alignItems:'start'}}>
           {(()=>{ const on=estadoActivo('emitidas'); return (
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
@@ -7131,6 +7353,20 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <div style={{display:'flex',justifyContent:'flex-end',gap:4,marginBottom:8}}>
               {[['','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v||'t'} onClick={()=>setFYear(v)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${fYear===v?C.accent:C.border}`,background:fYear===v?C.azulBg:'#fff',color:fYear===v?C.accent:C.muted}}>{l}</span>)}
             </div>
+            {/* Cierre de mes: mini-resumen del mes en curso + acceso al detalle (quién pagó, quién no, montos, por mes). El cruce vive en CierreMesModal. */}
+            {(()=>{ const cmK=new Date().toISOString().slice(0,7); const MN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+              const emi=bb.filter(b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.issued_at||b.date||'').slice(0,7)===cmK)
+              const mo=b=>montoFactura(b); const ab=b=>Math.max(Number(b.paid_amount)||0,Number(respaldoMap[b.id])||0); const sa=b=>b.status==='Pagado'?0:Math.max(0,mo(b)-ab(b))
+              const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
+              return <div onClick={()=>setCierreOpen(true)} style={{background:C.accent,borderRadius:13,padding:'13px 15px',marginBottom:7,cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:9,color:C.onNavyLabel,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:3}}>Cierre de mes · {MN[+cmK.slice(5,7)-1]}</div>
+                  {emi.length>0
+                    ? <div style={{fontSize:13.5,color:'#fff',fontWeight:700}}>Cobrado {fmtShort(tCob)} de {fmtShort(tEmi)} <span style={{color:C.onNavyLabel,fontWeight:600}}>· {tasa}% · {emi.length} factura{emi.length!==1?'s':''}</span></div>
+                    : <div style={{fontSize:13,color:'#fff',fontWeight:600}}>Ver quién pagó, quién no y montos, por mes</div>}
+                </div>
+                <span style={{color:'#fff',fontSize:18,flexShrink:0}}>›</span>
+              </div> })()}
             <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'14px 15px',marginBottom:7}}>
               <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:12}}>Etapas del cobro</div>
               <div style={{display:'flex',alignItems:'stretch'}}>
@@ -23659,7 +23895,7 @@ export default function App() {
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
-            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
+            {tab==='dashboard'&&userRole==='admin'&&<Dashboard sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} onPagarTercero={handlePagarTercero} onPagarTercerosBulk={handlePagarTercerosBulk} setTab={setTab} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} onOpenOficina={()=>{setOfiOpen(true);setTab('expenses')}} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onAcceso={(id)=>{ if(id==='tasks')setTab('tasks'); else if(id==='inteligencia')setTab('inteligencia'); else if(id==='conciliacion'){setModal({type:'conciliaHub'})} else if(id==='facturasMes'){setBillingIntent('checklist');setTab('billing')} else if(id==='cierreMes'){setBillingIntent('cierre');setTab('billing')} else if(id==='micarga')setModal({type:'miCarga'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} setTab={setTab} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>setModal({type:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const {data:nb}=await getBilling();if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
