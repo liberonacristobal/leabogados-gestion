@@ -2514,9 +2514,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           ['inteligencia','Power BI', ic(<><path d='M3 3v18h18'/><rect x='7' y='12' width='3' height='6'/><rect x='12' y='8' width='3' height='10'/><rect x='17' y='4' width='3' height='14'/></>,C.tealText), C.tealBg],
           ['conciliacion','Conciliación', ic(<><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></>,C.greenText), C.greenBg],
           ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>,C.accent), C.azulBg],
-          ['cierreMes','Cierre mes', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='10' x2='21' y2='10'/><path d='M8.5 15.5l2.5 2.5 4.5-4.5'/></>,C.greenText), C.greenBg],
           ['micarga','Mi carga', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><rect x='7' y='12' width='2.5' height='6' rx='.5' fill={C.soonText} stroke='none'/><rect x='11' y='14' width='2.5' height='4' rx='.5' fill={C.soonText} stroke='none'/><rect x='15' y='11' width='2.5' height='7' rx='.5' fill={C.soonText} stroke='none'/></>,C.soonText), C.ambarBg],
-          ['mas','Más', ic(<><circle cx='5' cy='12' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='19' cy='12' r='1'/></>,C.muted), C.bgSoft||'#F5F7F9'],
+          ['cierreMes','Cierre mes', ic(<><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='3' y1='10' x2='21' y2='10'/><path d='M8.5 15.5l2.5 2.5 4.5-4.5'/></>,C.greenText), C.greenBg],
         ]
         const miIni = INICIALES_RESP[user?.name]||null
         const mine = (proyectosCartera||[]).filter(p=>p.activo!==false && (!miIni || (p.responsable||'')===miIni))
@@ -20107,6 +20106,35 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
   )
 }
 
+// Confirmación detallada del "Conciliar en lote": en vez del aviso genérico, lista CADA par abono↔factura
+// (cliente protagonista · factura · fecha del pago · RUT · monto) con checkbox para destildar lo que no.
+function ConciliarLoteModal({ rows=[], cmap={}, clients=[], onClose, onConfirm }){
+  const [sel,setSel] = useState(()=>new Set(rows.map(x=>String(x.m.id))))
+  const toggle = id => setSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  const selRows = rows.filter(x=>sel.has(String(x.m.id)))
+  const total = selRows.reduce((a,x)=>a+(Number(x.m.monto)||0),0)
+  const nom = m => cmap[m.cliente_id] || m.nombre_contraparte || (clients.find(c=>String(c.id)===String(m.cliente_id))?.name) || 'Sin cliente'
+  return (<>
+    <div style={{padding:'0 2px 10px',fontSize:12.5,color:C.muted,lineHeight:1.5}}>Cada pago calza <b style={{color:C.text}}>exacto en pesos</b> con el saldo de su factura y comparte el <b style={{color:C.text}}>RUT</b>. Destilda el que no quieras conciliar. Es reversible.</div>
+    <div style={{maxHeight:'52vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:6}}>
+      {rows.map(({m,f})=>{ const on=sel.has(String(m.id))
+        return <div key={m.id} onClick={()=>toggle(String(m.id))} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'9px 11px',border:`1px solid ${on?C.greenText:C.border}`,borderRadius:10,background:on?C.greenBg:'#fff',cursor:'pointer'}}>
+          <span style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${on?C.greenText:C.done}`,background:on?C.greenText:'#fff',flexShrink:0,marginTop:1,display:'flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13.5,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nom(m)}</div>
+            <div style={{fontSize:10.5,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>→ Factura N° {folioN(f.invoice_no)||'—'}{f.issued_at?` · emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.concept?` · ${f.concept}`:''}</div>
+            <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Pago {fmtFechaDMY(m.fecha)}{m.rut_contraparte?` · RUT ${m.rut_contraparte}`:''}</div>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:C.greenText,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(m.monto)}</div>
+        </div> })}
+    </div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+      <button onClick={onClose} style={{fontSize:13,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 14px',cursor:'pointer'}}>Cancelar</button>
+      <button disabled={!selRows.length} onClick={()=>onConfirm(selRows)} style={{fontSize:13,fontWeight:700,color:'#fff',background:selRows.length?C.greenText:C.done,border:'none',borderRadius:9,padding:'9px 15px',cursor:selRows.length?'pointer':'default'}}>Conciliar {selRows.length} · {fmt(total)}</button>
+    </div>
+  </>)
+}
+
 // ─── CONCILIACIÓN BANCARIA (Fase 1: importación + identificación, read-only) ────
 function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],user,focusMovId,onFocusConsumed,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII}){
   // Capa 2 — RUT conocidos para el tag "quién es"
@@ -20666,6 +20694,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [loteOpen,setLoteOpen] = useState(false)
   const [loteBusy,setLoteBusy] = useState(false)
   const [loteProg,setLoteProg] = useState(0)
+  const [loteConfirm,setLoteConfirm] = useState(null)   // exactos pendientes de confirmar en el modal detallado
   const [siiBuscando,setSiiBuscando] = useState(null)   // {hechos,total,mes} mientras busca en el SII
   const [siiResumen,setSiiResumen] = useState(null)     // resultado del último "Buscar todo en el SII"
   const [siiMovBusy,setSiiMovBusy] = useState(null)     // id del movimiento cuyo chip está buscando en el SII
@@ -20706,10 +20735,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   }
   const conciliarLote = async(exactos)=>{
     if(loteBusy||!exactos.length) return
-    if(!(await appConfirm(`Conciliar ${exactos.length} abono${exactos.length!==1?'s':''} con su factura (calce exacto en pesos, mismo RUT). Es reversible. ¿Seguir?`))) return
     setLoteBusy(true); setLoteProg(0)
     for(let i=0;i<exactos.length;i++){ try{ await reconciliar(exactos[i].m, exactos[i].f, 'lote') }catch(_){}; setLoteProg(i+1) }
-    setLoteBusy(false); setLoteOpen(false)
+    setLoteBusy(false); setLoteOpen(false); setLoteConfirm(null)
   }
 
   // ── Pago en GRUPO: N transferencias del mismo cliente (cercanas en fecha) que juntas pagan M facturas (suma exacta) ──
@@ -21257,6 +21285,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
   return (
     <div style={{paddingBottom:80}}>
+      {loteConfirm&&<Modal title='Conciliar en lote' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
@@ -21513,14 +21542,14 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
               <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',background:C.bgSoft,cursor:'pointer'}}>
                 <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={15} c={C.accent}/></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Conciliar en lote</div><div style={{fontSize:10,color:C.muted}}>{exactos.length} calzan exacto · {revisar.length} por revisar{sinFac.length?` · ${sinFac.length} sin factura`:''}</div></div>
-                {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();conciliarLote(exactos)}} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
+                {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();setLoteConfirm(exactos)}} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
                 <span style={{fontSize:12,color:C.muted,marginLeft:4}}>{loteOpen?'▾':'▸'}</span>
               </div>
               {loteOpen&&<div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
                 {exactos.length>0?<>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
                     <span style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Calzan exacto · {exactos.length}</span>
-                    <button onClick={()=>conciliarLote(exactos)} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',opacity:loteBusy?.6:1}}>{loteBusy?`Conciliando ${loteProg}/${exactos.length}…`:`Conciliar los ${exactos.length}`}</button>
+                    <button onClick={()=>setLoteConfirm(exactos)} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',opacity:loteBusy?.6:1}}>{loteBusy?`Conciliando ${loteProg}/${exactos.length}…`:`Conciliar los ${exactos.length}`}</button>
                   </div>
                   {exactos.slice(0,25).map(({m,f})=>(
                     <div key={m.id} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
@@ -23830,10 +23859,6 @@ export default function App() {
                   </button>
                   )
                 })()}
-                {userRole==='admin'&&<button onClick={()=>{setOpenConcProp(true);setTab('conciliacion')}} title='Conciliación bancaria · pagos sin conciliar' aria-label='Conciliación bancaria' style={{position:'relative',width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:concPend>0?C.accent:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='3' y1='21' x2='21' y2='21'/><line x1='3' y1='10' x2='21' y2='10'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='12' y1='14' x2='12' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></svg>
-                  {concPend>0&&<span style={{position:'absolute',top:-2,right:-2,minWidth:14,height:14,padding:'0 3px',borderRadius:7,background:C.normal,color:'#fff',fontSize:8,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{concPend}</span>}
-                </button>}
                 <button onClick={e=>{e.stopPropagation();setPaletteOpen(true)}} title='Buscar o ir a (⌘K)' aria-label='Buscar o ir a' style={{width:28,height:28,borderRadius:6,background:'none',border:'none',padding:0,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                 </button>
@@ -23848,6 +23873,11 @@ export default function App() {
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setPaletteOpen(true)}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>
                   Buscar acciones…
+                </div>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setTab('conciliacion')}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='3' y1='21' x2='21' y2='21'/><line x1='3' y1='10' x2='21' y2='10'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='12' y1='14' x2='12' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></svg>
+                  Conciliación bancaria
+                  {concPend>0&&<span style={{marginLeft:'auto',minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:C.normal,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{concPend}</span>}
                 </div>
                 <div style={{fontSize:10,color:C.done,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>SISTEMA</div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'redProfesional'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
@@ -23931,7 +23961,7 @@ export default function App() {
           )
           return <Modal title='Conciliación' onClose={()=>setModal(null)}>
             <div style={{display:'flex',flexDirection:'column',gap:9}}>
-              {row(ic(<><line x1='3' y1='21' x2='21' y2='21'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></>,C.greenText),C.greenBg,'Banco','Cartola del banco ↔ facturas y fondos',0,()=>{setModal(null);setOpenConcProp(true);setTab('conciliacion')})}
+              {row(ic(<><line x1='3' y1='21' x2='21' y2='21'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></>,C.greenText),C.greenBg,'Bancaria','Cartola del banco ↔ facturas y fondos',0,()=>{setModal(null);setTab('conciliacion')})}
               {row(ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>,C.soonText),C.ambarBg,'Cotejar con el SII','Folios emitidos ↔ programadas del mes',siiN,()=>{setBillingIntent('cotejo');setModal(null);setTab('billing')})}
               {row(ic(<><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></>,C.accent),C.azulBg,'Revisar duplicados','Programadas ya emitidas y copias',dupN,()=>{setModal({type:'conciliar',data:null})})}
               {row(ic(<><path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></>,C.soonText),C.ambarBg,'Cobertura SII','Facturas del año sin cliente asignado',cobN,()=>{setModal({type:'coberturaSII'})})}
