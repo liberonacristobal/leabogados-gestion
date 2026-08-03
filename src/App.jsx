@@ -89,7 +89,9 @@ const bigDate = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul',
 // Saldo de una factura = lo que falta cobrar. FUENTE ÚNICA: lo abonado = el mayor entre paid_amount (campo de la factura) y los abonos CONCILIADOS del banco (_respaldoCache, suma de conciliacion.monto_aplicado). Así nunca cuenta doble ni ignora un abono que el banco ya respaldó. Pagada/Anulada = 0.
 let _respaldoCache = {}
 const setRespaldoCache = m => { _respaldoCache = m || {} }
-const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) return 0; const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.max(0,(b.amount||0)-abonado) }
+// El total de la factura es la AUTORIDAD del DTE (montoFactura lee el MntTotal real del XML; cae a amount si no hay XML).
+// Nunca usar b.amount suelto para el saldo: el amount es el monto PROGRAMADO (UF estimada) y diverge del emitido real.
+const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) return 0; const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.max(0,montoFactura(b)-abonado) }
 // Por cobrar de un conjunto de facturas — FUENTE ÚNICA del "por cobrar" del cliente (lista, ficha Resumen y Financiero deben coincidir). Solo cuentas por cobrar REALES: emitidas con folio, Pendiente/Vencido, saldo pendiente (saldoBill). Excluye sin-folio (eso es "por facturar"), anticipadas, anuladas y reembolsos.
 const porCobrarBills = bills => (bills||[]).filter(b=>b && !b.deleted_at && b.billing_type!=='reembolso' && b.invoice_no && ['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
 // CANON DE COLOR POR ESTADO DE COBRO — fuente única (un color por estado, sin duplicados ni hex sueltos). Cada estado: {label, color (línea/borde/cifra), bg (fondo de badge), text (texto sobre bg)}.
@@ -5835,6 +5837,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
       const {error} = await supabase.from('billing').update({
         invoice_no: String(it.folio),
         issued_at: isoFecha(it.fechaEmision)||it.fechaEmision,        // A4: fecha ISO (no cruda), igual que las otras rutas
+        ...(Number(it.monto)>0?{amount:Math.round(Number(it.monto))}:{}),   // el monto REAL es el del SII (it.monto), no el programado — evita el desfase saldo/conciliación
         sii_tipo_dte: it.tipoDte||null,
         sii_synced_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -5861,7 +5864,7 @@ function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[]
     if(ambBusy||ambDone[it.folio]) return                             // guard anti doble-click
     setAmbBusy(it.folio); setError('')
     try{
-      const patch = { invoice_no:String(it.folio), issued_at:isoFecha(it.fechaEmision)||it.fechaEmision, sii_tipo_dte:it.tipoDte||null, sii_synced_at:new Date().toISOString(), updated_at:new Date().toISOString() }
+      const patch = { invoice_no:String(it.folio), issued_at:isoFecha(it.fechaEmision)||it.fechaEmision, ...(Number(it.monto)>0?{amount:Math.round(Number(it.monto))}:{}), sii_tipo_dte:it.tipoDte||null, sii_synced_at:new Date().toISOString(), updated_at:new Date().toISOString() }   // amount = monto REAL del SII (no el programado)
       if(cand.estado==='Programada') patch.status='Pendiente'
       const {error} = await supabase.from('billing').update(patch).eq('id', cand.id)
       if(error) throw error
@@ -20492,7 +20495,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const aplicadoByFactura = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.factura_id) m[c.factura_id]=(m[c.factura_id]||0)+(c.monto_aplicado||0) }); return m },[conc])
   const cartolaHasta = useMemo(()=>{ let mx=''; for(const x of (movs||[])){ const f=String(x.fecha||'').slice(0,10); if(f>mx) mx=f } return mx||null },[movs])
   const concByMov = useMemo(()=>{ const m={}; conc.forEach(c=>{ (m[c.movimiento_id]=m[c.movimiento_id]||[]).push(c) }); return m },[conc])
-  const saldoFactura = b => Math.max(0,(b.amount||0) - (aplicadoByFactura[b.id]||0))
+  const saldoFactura = b => Math.max(0,montoFactura(b) - (aplicadoByFactura[b.id]||0))   // AUTORIDAD del DTE, no el amount programado
   // Índice memoizado del pool de calce: facturas con saldo por aplicar (Pendiente|Pagado, no anuladas/borradas, amount−Σconciliado>TOL),
   // agrupadas por cliente. Antes cada movimiento re-escaneaba TODO billing (O(movs×facturas) en cada render → congelaba el iPhone
   // con cartolas grandes). Ahora el lookup por cliente es O(1) y la conversión a candidatos solo recorre las facturas de ese cliente.
@@ -23662,7 +23665,8 @@ export default function App() {
     let created=null
     try{
       const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(row.fechaEmision)   // DD/MM/YYYY→ISO
-      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:row.monto, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null })
+      const montoReal = (row.doc?dteMontoTotal(row.doc):null) ?? row.monto   // el monto REAL es el del DTE emitido; row.monto es respaldo
+      created=await upsertBilling({ client_id:cli?.id||null, concept:row.concepto||'Honorarios', receptor_name:row.receptor||null, receptor_rut:row.rut||null, amount:montoReal, status:'Pendiente', invoice_no:String(row.folio), issued_at:isoF, due:dueFromIssued(isoF), billing_type:'honorarios', sii_tipo_dte:row.tipoDte||null, dte_xml:row.doc||null, sii_synced_at:new Date().toISOString(), notes:null })
       if(cli && row.rut){ try{ await supabase.from('client_entities').upsert({client_id:cli.id,rut:row.rut,name:row.receptor||null},{onConflict:'rut',ignoreDuplicates:true}) }catch(_){}}   // M5: no pisar el nombre bueno de la RS
     }catch(e){ if(!/duplicate/i.test(e.message||'')) throw e }   // ya estaba: la buscamos abajo para conciliar con ella
     let nb=null; try{ nb=await getBilling(); if(nb)setBilling(nb) }catch(_){}
@@ -23692,8 +23696,10 @@ export default function App() {
     setEmitirBusy(true)
     try{
       const r=await _siiFetch(ep.base)
-      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null }
-      await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha}).eq('id',ep.billId)
+      // El monto REAL de la factura es el del DTE emitido (UF del día), no el programado. Reemplaza amount al emitir.
+      const dteTot=r.dteXml?dteMontoTotal(r.dteXml):null
+      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null, ...(dteTot!=null?{amount:dteTot}:{}) }
+      await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha, ...(dteTot!=null?{amount:dteTot}:{})}).eq('id',ep.billId)
       setBilling(p=>p.map(x=>x.id===ep.billId?{...x,...patch}:x))
       setEmitirPreview(null)
       // Guarda el PDF (logo+timbre) y el XML en Drive (carpeta de facturación) y los adjunta a la factura. No bloquea.

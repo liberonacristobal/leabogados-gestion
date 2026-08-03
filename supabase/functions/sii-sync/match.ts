@@ -124,6 +124,9 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
           status: 'Pendiente',
           invoice_no: String(v.folio),
           issued_at: v.fechaEmision,
+          // El monto REAL es el del DTE emitido (v.montoTotal), NO el programado (b.amount). Al estampar el folio,
+          // el amount pasa a ser el emitido: si no, el saldo/conciliacion quedan con el programado (UF estimada) y divergen.
+          amount: v.montoTotal,
           sii_synced_at: new Date().toISOString(),
           sii_tipo_dte: v.tipoDte,
           receptor_rut: b.receptor_rut || v.rutReceptor,
