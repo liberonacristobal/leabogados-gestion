@@ -7403,20 +7403,6 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <div style={{display:'flex',justifyContent:'flex-end',gap:4,marginBottom:8}}>
               {[['','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v||'t'} onClick={()=>setFYear(v)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${fYear===v?C.accent:C.border}`,background:fYear===v?C.azulBg:'#fff',color:fYear===v?C.accent:C.muted}}>{l}</span>)}
             </div>
-            {/* Cierre de mes: mini-resumen del mes en curso + acceso al detalle (quién pagó, quién no, montos, por mes). El cruce vive en CierreMesModal. */}
-            {(()=>{ const cmK=new Date().toISOString().slice(0,7); const MN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-              const emi=bb.filter(b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.issued_at||b.date||'').slice(0,7)===cmK)
-              const mo=b=>montoFactura(b); const ab=b=>Math.max(Number(b.paid_amount)||0,Number(respaldoMap[b.id])||0); const sa=b=>b.status==='Pagado'?0:Math.max(0,mo(b)-ab(b))
-              const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
-              return <div onClick={()=>setCierreOpen(true)} style={{background:C.accent,borderRadius:13,padding:'13px 15px',marginBottom:7,cursor:'pointer',display:'flex',alignItems:'center',gap:12}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:9,color:C.onNavyLabel,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:3}}>Cierre de mes · {MN[+cmK.slice(5,7)-1]}</div>
-                  {emi.length>0
-                    ? <div style={{fontSize:13.5,color:'#fff',fontWeight:700}}>Cobrado {fmtShort(tCob)} de {fmtShort(tEmi)} <span style={{color:C.onNavyLabel,fontWeight:600}}>· {tasa}% · {emi.length} factura{emi.length!==1?'s':''}</span></div>
-                    : <div style={{fontSize:13,color:'#fff',fontWeight:600}}>Ver quién pagó, quién no y montos, por mes</div>}
-                </div>
-                <span style={{color:'#fff',fontSize:18,flexShrink:0}}>›</span>
-              </div> })()}
             <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'14px 15px',marginBottom:7}}>
               <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:12}}>Etapas del cobro</div>
               <div style={{display:'flex',alignItems:'stretch'}}>
@@ -7449,6 +7435,19 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 </div>
               </div>
             </div>
+            {/* Cierre de mes — acceso SUAVE bajo la foto (canon: la foto es la protagonista). Mini-resumen del mes + detalle quién pagó/quién no. */}
+            {(()=>{ const cmK=new Date().toISOString().slice(0,7); const MN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+              const emi=bb.filter(b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.issued_at||b.date||'').slice(0,7)===cmK)
+              const mo=b=>montoFactura(b); const ab=b=>Math.max(Number(b.paid_amount)||0,Number(respaldoMap[b.id])||0); const sa=b=>b.status==='Pagado'?0:Math.max(0,mo(b)-ab(b))
+              const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
+              return <div onClick={()=>setCierreOpen(true)} style={{display:'flex',alignItems:'center',gap:9,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:8,cursor:'pointer'}}>
+                <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11.5,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>Cierre de mes · {MN[+cmK.slice(5,7)-1]}</div>
+                  <div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{emi.length>0?`Cobrado ${fmtShort(tCob)} de ${fmtShort(tEmi)} · ${tasa}% · ${emi.length} factura${emi.length!==1?'s':''}`:'Quién pagó, quién no y montos'}</div>
+                </div>
+                <span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
+              </div> })()}
             {/* 2 tarjetas mini: Facturas del mes (por emitir del mes) + Revisar duplicados */}
             {(()=>{ const mesAct=new Date().toISOString().slice(0,7); const pemMes=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&String(b.due||'').startsWith(mesAct)); const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0); const dupN=yaFacturadasIds.size; return (
               <div style={{display:'grid',gridTemplateColumns:dupN>0?'1fr 1fr':'1fr',gap:8,marginBottom:8}}>
