@@ -2334,7 +2334,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   const yr = currentYear
   const bb = billing
-  const salesYr = sales.filter(s=>s.year===yr&&s.status!=='Borrador'&&s.status!=='Propuesta'&&s.status!=='Rechazada')
+  // "Vendido del año" = Activo + Terminado (MISMA definición que kpis.vendidoYTD y SalesView.vendUF — fuente única; antes usaba "no Borrador/Propuesta/Rechazada", que divergía si aparecía otro estado como Pausado).
+  const salesYr = sales.filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&Number(s.year)===yr)
   const ufState = useUF()
   const ufHoy = ufState.uf
 
@@ -3959,22 +3960,28 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
             {years.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
           <select value={fArea} onChange={e=>setFArea(e.target.value)} style={{flex:1,minWidth:100,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12}}>
-            <option value=''>Todas las areas</option>
+            <option value=''>Todas las áreas</option>
             {['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}
           </select>
         </div>
-        {/* Hero: Vendido del año (toca para UF/$) + Pipeline (toca para filtrar a propuestas) */}
+        {/* Hero: Vendido del año (navy suave, toggle UF·$) + Propuestas (toca para filtrar a propuestas). La META no se muestra acá a propósito: vive en el Dashboard "Cómo va el año" (fuente única, sobre neto) — evita duplicar un % de meta bruto que pelee con el de allá. */}
         <div style={{display:'flex',gap:8,marginBottom:8}}>
-          <div onClick={()=>setMontoUF(v=>!v)} style={{flex:1.3,minWidth:0,background:C.accent,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
-            <div style={{fontSize:9,color:C.onNavyLabel,textTransform:'uppercase',letterSpacing:.4}}>Vendido {fYear||'total'}</div>
-            <div style={{fontSize:23,fontWeight:700,color:'#fff',lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
-            <div style={{fontSize:9,color:C.onNavyLabel,marginTop:3}}>{actYr.length} activas · {termYr.length} terminadas · toca para {montoUF?'$':'UF'}</div>
+          <div onClick={()=>setMontoUF(v=>!v)} style={{flex:1.3,minWidth:0,background:C.azulBg,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Vendido {fYear||'total'}</span>
+              <span onClick={e=>{e.stopPropagation();setMontoUF(v=>!v)}} title='Alternar UF / pesos' style={{display:'inline-flex',fontSize:8.5,fontWeight:700,borderRadius:5,overflow:'hidden',border:`1px solid ${C.border}`,flexShrink:0}}>
+                <span style={{padding:'1px 6px',background:montoUF?C.accent:'#fff',color:montoUF?'#fff':C.muted}}>UF</span>
+                <span style={{padding:'1px 6px',background:!montoUF?C.accent:'#fff',color:!montoUF?'#fff':C.muted}}>$</span>
+              </span>
+            </div>
+            <div style={{fontSize:23,fontWeight:800,color:C.accent,lineHeight:1.05,fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmtMonto(vendUF,vendCLP)}</div>
+            <div style={{fontSize:9.5,color:C.muted,marginTop:3}}>{actYr.length} activas · {termYr.length} terminadas</div>
           </div>
           {(()=>{ const vacio=propuestasFiltradas.length===0; return (
           <div onClick={vacio?onAddPropuesta:()=>setFStatus(fStatus==='Propuesta'?'':'Propuesta')} title={vacio?'Crear la primera propuesta':'Ver propuestas'} style={{flex:1,minWidth:0,background:fStatus==='Propuesta'?C.azulBg:'#fff',border:`1px solid ${fStatus==='Propuesta'?C.accent:C.border}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
-            <div style={{display:'flex',alignItems:'center',gap:4}}><SIcon n='clock' s={12} c={C.muted}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}>Pipeline</span></div>
-            <div style={{fontSize:18,fontWeight:700,color:C.muted,lineHeight:1.2,marginTop:2}}>{vacio?'—':fmtUF(pipelineUF)}</div>
-            <div style={{fontSize:9,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2}}>{vacio?'+ Crear la primera':`${propuestasFiltradas.length} propuesta${propuestasFiltradas.length!==1?'s':''}`}</div>
+            <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.4,fontWeight:600}}>Propuestas</div>
+            <div style={{fontSize:18,fontWeight:700,color:C.accent,lineHeight:1.2,marginTop:2}}>{vacio?'—':fmtUF(pipelineUF)}</div>
+            <div style={{fontSize:9.5,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2}}>{vacio?'+ Crear la primera':`${propuestasFiltradas.length} en pipeline`}</div>
           </div>
           )})()}
         </div>
