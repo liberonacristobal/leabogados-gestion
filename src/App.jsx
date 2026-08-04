@@ -209,6 +209,22 @@ function EstadoFacturaChip({b, aplicado=0, respaldoMap=null, cartolaHasta=null, 
   if(!e) return null
   return <span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap',display:'inline-block',...style}}>{short?e.short:e.label}{chevron?' ›':''}</span>
 }
+// CATÁLOGO ÚNICO de botones de acción — una sola geometría (radio 8 · 5×12 · 11px), color = jerarquía.
+// Relleno para lo principal (navy=navegar/enviar, verde=confirmar plata), tinte para secundarias (por naturaleza), contorno para lo neutro.
+// NO cambia textos, solo estilo. Reemplaza los botones de acción inline dispersos (Recordar/Conciliar/Editar/Enviar/Acuse/Vincular) que hoy tienen radios y colores mezclados.
+const _ACT_VARIANT = {
+  primary:  {background:C.accent,  color:'#fff',        border:'none'},
+  success:  {background:C.normal,  color:'#fff',        border:'none'},
+  softNavy: {background:C.azulBg,  color:C.accent,      border:'none'},
+  softGreen:{background:C.greenBg, color:C.greenText,   border:'none'},
+  softAmber:{background:C.soonBg,  color:C.soonText,    border:`1px solid ${C.soon}`},
+  softMuted:{background:C.bgWarm,  color:C.grisText,    border:'none'},
+  ghost:    {background:'#fff',    color:C.muted,       border:`1px solid ${C.border}`},
+}
+function ActBtn({variant='ghost', onClick, disabled=false, title, children, style={}}){
+  const v = _ACT_VARIANT[variant] || _ACT_VARIANT.ghost
+  return <button onClick={onClick} disabled={disabled} title={title} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 12px',lineHeight:1,cursor:disabled?'default':'pointer',whiteSpace:'nowrap',...v,...style}}>{children}</button>
+}
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
 const fmtFechaTS = ts => { if(!ts) return '—'; const d=new Date(ts); return isNaN(d)?'—':`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}` }
@@ -7160,7 +7176,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               {lista.map(({b,dias,venc})=>{ const cl=clients.find(x=>x.id===b.client_id); return (
                 <div key={b.id} onClick={()=>onOpenClientFicha&&b.client_id&&onOpenClientFicha(b.client_id)} style={{display:'flex',alignItems:'center',gap:9,paddingTop:6,borderTop:`0.5px solid ${C.border}`,cursor:onOpenClientFicha?'pointer':'default'}}>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{b.invoice_no?` · Factura N° ${folioN(b.invoice_no)}`:''}</div><div style={{fontSize:10,color:venc?C.coralText:C.muted}}>{dias===0?'Enviada hoy':`Enviada hace ${dias}d`}{venc?' · vencida':''} · {fmt(saldoBill(b))}{recordadoMap[String(b.id)]&&<span style={{color:C.grisText}}> · {diasDesde(recordadoMap[String(b.id)])===0?'recordado hoy':`recordado hace ${diasDesde(recordadoMap[String(b.id)])}d`}</span>}</div></div>
-                  {(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const reciente=rd!=null&&rd<=2; return <button onClick={(e)=>{e.stopPropagation();recordarCobro(b)}} style={{fontSize:10,fontWeight:600,color:reciente?C.grisText:'#fff',background:reciente?C.bgWarm:C.accent,border:'none',borderRadius:20,padding:'4px 12px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{reciente?'Recordar otra vez':'Recordar'}</button> })()}
+                  {(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const reciente=rd!=null&&rd<=2; return <ActBtn variant={reciente?'softMuted':'softNavy'} onClick={(e)=>{e.stopPropagation();recordarCobro(b)}} style={{flexShrink:0}}>{reciente?'Recordar otra vez':'Recordar'}</ActBtn> })()}
                 </div>
               )})}
             </div>}
@@ -7561,12 +7577,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ const hayAb=saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status); return <><div style={{fontSize:13,fontWeight:600,color:hayAb?(er==='Vencido'?C.overdueText:C.accent):C.text}}>{fmt(hayAb?saldoBill(b):(ui?ui.clpHoy:b.amount))}</div>{hayAb&&<div style={{fontSize:9,color:C.muted}}>de {fmt(ui?ui.clpHoy:b.amount)}</div>}</> })()}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
-                {!porConciliar&&['Pendiente','Vencido'].includes(er)&&(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const rec=rd!=null&&rd<=2; return <button onClick={()=>recordarCobro(b)} title={rd!=null?(rd===0?'Recordado hoy':`Recordado hace ${rd}d`):''} style={{fontSize:10,color:rec?C.grisText:C.accent,background:rec?C.bgWarm:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{rec?'Recordar otra vez':'Recordar'}</button> })()}
-                {!b.invoice_no&&conciliable&&<button onClick={()=>onConciliar&&onConciliar(cli)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Vincular factura emitida</button>}
-                {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
-                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
-                {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
-                {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>setPagosFor(pagosFor===b.id?null:b.id)} style={{fontSize:10,color:'#fff',background:porConciliar?C.normal:C.tealText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{porConciliar?'Conciliar pago':'Buscar pago'}</button>}
+                {!porConciliar&&['Pendiente','Vencido'].includes(er)&&(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const rec=rd!=null&&rd<=2; return <ActBtn variant={rec?'softMuted':'softNavy'} onClick={()=>recordarCobro(b)} title={rd!=null?(rd===0?'Recordado hoy':`Recordado hace ${rd}d`):''}>{rec?'Recordar otra vez':'Recordar'}</ActBtn> })()}
+                {!b.invoice_no&&conciliable&&<ActBtn variant='softAmber' onClick={()=>onConciliar&&onConciliar(cli)}>Vincular factura emitida</ActBtn>}
+                {onEdit&&<ActBtn variant='ghost' onClick={()=>onEdit(b)}>Editar</ActBtn>}
+                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<ActBtn variant='primary' onClick={()=>setFacturaEmail(b)}>{b.email_sent_at?'Reenviar':'Enviar'}</ActBtn>}
+                {(b.status==='Pagado'||b.status==='Anticipada')&&<ActBtn variant='softGreen' onClick={()=>acuseCobro(b)}>Acuse</ActBtn>}
+                {['Pendiente','Vencido'].includes(er)&&<ActBtn variant={porConciliar?'success':'ghost'} onClick={()=>setPagosFor(pagosFor===b.id?null:b.id)}>{porConciliar?'Conciliar pago':'Buscar pago'}</ActBtn>}
                 {(()=>{ const abs=abonosDe(b); return abs.length>0?<div style={{width:'100%',marginTop:6,background:C.greenBg,borderRadius:9,padding:'7px 10px'}}><div style={{fontSize:9,fontWeight:700,color:C.greenText,marginBottom:4,letterSpacing:.3}}>ABONOS CONCILIADOS (BANCO)</div>{abs.map(({c,m})=><div key={c.movimiento_id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,fontSize:10,padding:'2px 0'}}><span style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDate(m.fecha)} · {m.nombre_contraparte||'Banco'}{m.n_operacion?` · Op ${m.n_operacion}`:''}</span><span style={{color:C.greenText,fontWeight:700,whiteSpace:'nowrap'}}>−{fmt(c.monto_aplicado)}</span></div>)}<div style={{display:'flex',justifyContent:'space-between',marginTop:4,paddingTop:4,borderTop:`0.5px solid ${C.normal}`,fontSize:10,fontWeight:700,color:C.text}}><span>Saldo</span><span>{fmt(saldoBill(b))}</span></div></div>:null })()}
                 {pagosFor===b.id&&(()=>{ const ps=pagosDe(b); return (<div style={{width:'100%',marginTop:6,background:C.tealBg,borderRadius:9,padding:'8px 10px'}}>
                   {ps.length===0
@@ -7574,7 +7590,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     : <><div style={{fontSize:9,color:C.tealText,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,marginBottom:5}}>Pagos del banco que calzan · {fmt(saldoBill(b))}</div>
                       {ps.map(({m,rut})=>(<div key={m.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:`1px solid ${rut?C.normal:C.border}`,borderRadius:8,padding:'7px 9px',marginBottom:5}}>
                         <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:rut?C.greenText:C.soonText}}>{rut?'CALCE EXACTO · mismo RUT':'MISMO MONTO'}</div><div style={{fontSize:11,color:C.text,marginTop:2}}>{fmtDate(m.fecha)} · <b>{fmt(m.monto)}</b></div><div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}{m.n_operacion?` · Op ${m.n_operacion}`:''}</div></div>
-                        <button disabled={pagoBusy} onClick={()=>conciliarPago(m,b)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.normal,border:'none',borderRadius:20,padding:'5px 12px',cursor:pagoBusy?'default':'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Conciliar pago</button>
+                        <ActBtn variant='success' disabled={pagoBusy} onClick={()=>conciliarPago(m,b)} style={{flexShrink:0}}>Conciliar pago</ActBtn>
                       </div>))}</>}
                 </div>)})()}
               </div>}
@@ -7790,12 +7806,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ const hayAb=saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status); return <><div style={{fontSize:13,fontWeight:600,color:hayAb?(er==='Vencido'?C.overdueText:C.accent):C.text}}>{fmt(hayAb?saldoBill(b):(ui?ui.clpHoy:b.amount))}</div>{hayAb&&<div style={{fontSize:9,color:C.muted}}>de {fmt(ui?ui.clpHoy:b.amount)}</div>}</> })()}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
               </div>
               {exp&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 10px 8px'}}>
-                {!porConciliar&&['Pendiente','Vencido'].includes(er)&&(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const rec=rd!=null&&rd<=2; return <button onClick={()=>recordarCobro(b)} title={rd!=null?(rd===0?'Recordado hoy':`Recordado hace ${rd}d`):''} style={{fontSize:10,color:rec?C.grisText:C.accent,background:rec?C.bgWarm:C.azulBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{rec?'Recordar otra vez':'Recordar'}</button> })()}
-                {!b.invoice_no&&conc.has(b.id)&&<button onClick={()=>onConciliar&&onConciliar(cl)} style={{fontSize:10,background:'#FFF8E1',color:C.soonText,border:'1px solid #FAC775',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Vincular factura emitida</button>}
-                {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:10,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Editar</button>}
-                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<button onClick={()=>setFacturaEmail(b)} style={{fontSize:10,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{b.email_sent_at?'Reenviar':'Enviar'}</button>}
-                {(b.status==='Pagado'||b.status==='Anticipada')&&<button onClick={()=>acuseCobro(b)} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>Acuse</button>}
-                {['Pendiente','Vencido'].includes(er)&&<button onClick={()=>setPagosFor(pagosFor===b.id?null:b.id)} style={{fontSize:10,color:'#fff',background:porConciliar?C.normal:C.tealText,border:'none',borderRadius:8,padding:'4px 12px',fontWeight:600,cursor:'pointer'}}>{porConciliar?'Conciliar pago':'Buscar pago'}</button>}
+                {!porConciliar&&['Pendiente','Vencido'].includes(er)&&(()=>{ const rd=diasDesde(recordadoMap[String(b.id)]); const rec=rd!=null&&rd<=2; return <ActBtn variant={rec?'softMuted':'softNavy'} onClick={()=>recordarCobro(b)} title={rd!=null?(rd===0?'Recordado hoy':`Recordado hace ${rd}d`):''}>{rec?'Recordar otra vez':'Recordar'}</ActBtn> })()}
+                {!b.invoice_no&&conc.has(b.id)&&<ActBtn variant='softAmber' onClick={()=>onConciliar&&onConciliar(cl)}>Vincular factura emitida</ActBtn>}
+                {onEdit&&<ActBtn variant='ghost' onClick={()=>onEdit(b)}>Editar</ActBtn>}
+                {b.invoice_no&&b.status!=='Programada'&&b.status!=='Anulada'&&<ActBtn variant='primary' onClick={()=>setFacturaEmail(b)}>{b.email_sent_at?'Reenviar':'Enviar'}</ActBtn>}
+                {(b.status==='Pagado'||b.status==='Anticipada')&&<ActBtn variant='softGreen' onClick={()=>acuseCobro(b)}>Acuse</ActBtn>}
+                {['Pendiente','Vencido'].includes(er)&&<ActBtn variant={porConciliar?'success':'ghost'} onClick={()=>setPagosFor(pagosFor===b.id?null:b.id)}>{porConciliar?'Conciliar pago':'Buscar pago'}</ActBtn>}
                 {(()=>{ const abs=abonosDe(b); return abs.length>0?<div style={{width:'100%',marginTop:6,background:C.greenBg,borderRadius:9,padding:'7px 10px'}}><div style={{fontSize:9,fontWeight:700,color:C.greenText,marginBottom:4,letterSpacing:.3}}>ABONOS CONCILIADOS (BANCO)</div>{abs.map(({c,m})=><div key={c.movimiento_id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,fontSize:10,padding:'2px 0'}}><span style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDate(m.fecha)} · {m.nombre_contraparte||'Banco'}{m.n_operacion?` · Op ${m.n_operacion}`:''}</span><span style={{color:C.greenText,fontWeight:700,whiteSpace:'nowrap'}}>−{fmt(c.monto_aplicado)}</span></div>)}<div style={{display:'flex',justifyContent:'space-between',marginTop:4,paddingTop:4,borderTop:`0.5px solid ${C.normal}`,fontSize:10,fontWeight:700,color:C.text}}><span>Saldo</span><span>{fmt(saldoBill(b))}</span></div></div>:null })()}
                 {pagosFor===b.id&&(()=>{ const ps=pagosDe(b); return (<div style={{width:'100%',marginTop:6,background:C.tealBg,borderRadius:9,padding:'8px 10px'}}>
                   {ps.length===0
@@ -7803,7 +7819,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                     : <><div style={{fontSize:9,color:C.tealText,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,marginBottom:5}}>Pagos del banco que calzan · {fmt(saldoBill(b))}</div>
                       {ps.map(({m,rut})=>(<div key={m.id} style={{display:'flex',alignItems:'center',gap:8,background:'#fff',border:`1px solid ${rut?C.normal:C.border}`,borderRadius:8,padding:'7px 9px',marginBottom:5}}>
                         <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:rut?C.greenText:C.soonText}}>{rut?'CALCE EXACTO · mismo RUT':'MISMO MONTO'}</div><div style={{fontSize:11,color:C.text,marginTop:2}}>{fmtDate(m.fecha)} · <b>{fmt(m.monto)}</b></div><div style={{fontSize:9,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}{m.n_operacion?` · Op ${m.n_operacion}`:''}</div></div>
-                        <button disabled={pagoBusy} onClick={()=>conciliarPago(m,b)} style={{fontSize:10,fontWeight:600,color:'#fff',background:C.normal,border:'none',borderRadius:20,padding:'5px 12px',cursor:pagoBusy?'default':'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Conciliar pago</button>
+                        <ActBtn variant='success' disabled={pagoBusy} onClick={()=>conciliarPago(m,b)} style={{flexShrink:0}}>Conciliar pago</ActBtn>
                       </div>))}</>}
                 </div>)})()}
               </div>}
@@ -7889,7 +7905,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                       <div style={{fontSize:ind?11.5:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ind?'':(clients.find(c=>String(c.id)===String(b.client_id))?.name||'—')}{b.invoice_no?`${ind?'':' · '}Factura N° ${folioN(b.invoice_no)}`:''}</div>
                       <div style={{fontSize:10,color:nivCol(r.nivel)}}>{r.nivel} · {fmt(saldoBill(b))}</div>
                     </div>
-                    <button onClick={()=>recordarCobro(b)} style={{flexShrink:0,fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'5px 12px',cursor:'pointer'}}>Recordar</button>
+                    <ActBtn variant='softNavy' onClick={()=>recordarCobro(b)} style={{flexShrink:0}}>Recordar</ActBtn>
                   </div>
                 ) }
                 return (
@@ -13733,7 +13749,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
                       ? <><div style={{fontSize:9,color:C.done}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:C.overdueText,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.done,marginTop:1}}>Abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
                       : <div style={{fontSize:13,fontWeight:600,color:esVencidaB(b)?C.overdueText:(pend?C.accent:C.text)}}>{fmt(b.amount)}</div> })()}
-                    {pend&&<button onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer',marginTop:5}}>Recordar</button>}
+                    {pend&&<ActBtn variant='softNavy' onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{marginTop:5}}>Recordar</ActBtn>}
                   </div>
                 </div>
                 {e&&<div style={{marginTop:6,marginLeft:49}}><EstadoFacturaChip b={b} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} chevron={conciliada}/></div>}
