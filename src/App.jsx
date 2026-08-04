@@ -21236,7 +21236,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [propExp,setPropExp] = useState(()=>new Set())   // movIds con la tarjeta desplegada (triage colapsado por defecto)
   const [propTime,setPropTime] = useState(()=>new Set(['hoy','semana']))   // secciones de tiempo desplegadas (Hoy/Semana abiertas por defecto)
   const [propFiltro,setPropFiltro] = useState('todos')   // filtro de la foto: todos | calce | revisar (chips clickeables)
-  useEffect(()=>{ if(openProp){ setPropOpen(true); onPropOpened&&onPropOpened() } },[openProp])   // abrir la bandeja desde el icono de banco del landing
+  useEffect(()=>{ if(openProp){ setSub('abonos'); setConcView('porconciliar'); onPropOpened&&onPropOpened() } },[openProp])   // icono de banco del landing → filtro "Por conciliar" (ya no un panel aparte)
   const rutEq = (a,b) => { const x=crNormRut(a), y=crNormRut(b); return !!x && x===y }
   // Señal premium: el banco escribe el folio en la glosa ("PAGO FACTURA 412", "F°412"). Si ese folio calza exacto, se prefiere.
   const folioGlosa = m => { const mt=String(m?.descripcion||'').match(/\b(?:factura|fact|fac|fra|f[°ºn])\s*[°ºn.\-:]*\s*(\d{2,7})\b/i); return mt?mt[1]:null }
@@ -21367,7 +21367,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
   return (
     <div style={{paddingBottom:80}}>
-      {loteConfirm&&<Modal title='Conciliar en lote' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
+      {loteConfirm&&<Modal title='Conciliar varias' onClose={()=>!loteBusy&&setLoteConfirm(null)} closeOnBackdrop={false}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></Modal>}
       <div style={{padding:'18px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={onClose} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}>←</button>
@@ -21594,8 +21594,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         {/* Conciliación (Fase 2) — solo abonos: acción + resumen (el estado se elige en el filtro de arriba) */}
         {sub==='abonos'&&(
           <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8,flexWrap:'wrap'}}>
-            {sugeridosId.length>0&&<button onClick={()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Sugerencias · {sugeridosId.length}</button>}
-            <button onClick={()=>setPropOpen(true)} disabled={resumenConc.pend===0} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:'none',background:resumenConc.pend===0?C.done:C.accent,color:'#fff',cursor:resumenConc.pend===0?'default':'pointer',whiteSpace:'nowrap'}}>Revisar propuesta</button>
+            {/* "Revisar propuesta" se eliminó: su función (revisar los pagos con factura que calza) vive en el filtro "Por conciliar" — un solo flujo, la misma tarjeta del detalle. "Sugerencias" (por nombre) queda como acción rápida para identificar en lote. */}
+            {sugeridosId.length>0&&<button onClick={()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Identificar por nombre · {sugeridosId.length}</button>}
             {resumenConc.total>0&&(()=>{ const pct=Math.round(resumenConc.done/resumenConc.total*100); return (
               <span style={{fontSize:10.5,color:C.muted}}><b style={{color:C.greenText}}>{pct}%</b> conciliado <span style={{color:C.done}}>· {resumenConc.done}/{resumenConc.total}</span></span>
             )})()}
@@ -21603,7 +21603,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         )}
         {/* Estado de conciliación — chips livianos: solo estados con pendientes (>0); tocar filtra, tocar de nuevo = Todos */}
-        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',chipCounts.porconciliar,C.soonText,'#FAC775'],['descalces','Descalces',chipCounts.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',chipCounts.sinid,C.soonText,C.border]].filter(c=>c[2]>0); return ch.length>0?(
+        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',chipCounts.porconciliar,C.soonText,'#FAC775'],['descalces','Sin factura que calce',chipCounts.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',chipCounts.sinid,C.soonText,C.border]].filter(c=>c[2]>0); return ch.length>0?(
           <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
             {ch.map(([v,l,n,fg,bd])=>{ const on=concView===v; return <span key={v} onClick={()=>setConcView(on?'todos':v)} style={{fontSize:11,fontWeight:600,borderRadius:12,padding:'3px 11px',cursor:'pointer',border:`1px solid ${on?fg:bd}`,background:on?fg:'#fff',color:on?'#fff':fg}}>{l} · {n}</span> })}
             {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{fontSize:10,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Todos</span>}
@@ -21623,7 +21623,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
               <div onClick={()=>setLoteOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',background:C.bgSoft,cursor:'pointer'}}>
                 <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='exchange' s={15} c={C.accent}/></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Conciliar en lote</div><div style={{fontSize:10,color:C.muted}}>{exactos.length} calzan exacto · {revisar.length} por revisar{sinFac.length?` · ${sinFac.length} sin factura`:''}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Conciliar varias</div><div style={{fontSize:10,color:C.muted}}>{exactos.length} calzan exacto · {revisar.length} por revisar{sinFac.length?` · ${sinFac.length} sin factura`:''}</div></div>
                 {exactos.length>0&&!loteOpen&&<button onClick={e=>{e.stopPropagation();setLoteConfirm(exactos)}} disabled={loteBusy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0,opacity:loteBusy?.6:1}}>{loteBusy?`${loteProg}/${exactos.length}…`:`Conciliar ${exactos.length}`}</button>}
                 <span style={{fontSize:12,color:C.muted,marginLeft:4}}>{loteOpen?'▾':'▸'}</span>
               </div>
@@ -21915,20 +21915,22 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>El depósito</div>
                                 <div style={{fontSize:14,fontWeight:700,color:C.greenText}}>+{fmtM(m.monto)}</div>
                                 <div style={{fontSize:10,color:C.muted}}>{fmtFechaDMY(m.fecha)} · {cta}</div>
-                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomBanco}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div>
-                                {m.n_operacion&&<div style={{fontSize:10,color:C.muted}}>N° op. {m.n_operacion}</div>}
+                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{onOpenClientFicha&&m.cliente_id?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(m.cliente_id)}} style={{color:C.accent,cursor:'pointer'}}>{nomBanco}</span>:nomBanco}{m.rut_contraparte?<> · <Copyable text={m.rut_contraparte} title='Copiar RUT' style={{color:C.text}}>{m.rut_contraparte}</Copyable></>:''}</div>
+                                {m.n_operacion&&<div style={{fontSize:10,color:C.muted}}>N° op. <Copyable text={String(m.n_operacion)} title='Copiar N° operación' style={{color:C.muted}}>{m.n_operacion}</Copyable></div>}
                                 {m.descripcion&&<div style={{fontSize:9.5,color:C.done,marginTop:2,lineHeight:1.35}}>{(m.descripcion||'').slice(0,80)}{(m.descripcion||'').length>80?'…':''}</div>}
+                                {(()=>{ const otros=(movs||[]).filter(x=> String(x.id)!==String(m.id) && x.tipo==='abono' && !x.es_interno && !(concByMov[x.id]?.length) && ((m.cliente_id&&String(x.cliente_id||'')===String(m.cliente_id)) || (m.rut_contraparte&&x.rut_contraparte&&crNormRut(x.rut_contraparte)===crNormRut(m.rut_contraparte)))); if(!otros.length) return null; const tot=otros.reduce((a,x)=>a+((x.monto||0)-(x.monto_conciliado||0)),0); return <div style={{fontSize:9.5,fontWeight:600,color:C.soonText,marginTop:3}}>+ {otros.length} pago{otros.length!==1?'s':''} más de este cliente sin conciliar · {fmtM(tot)}</div> })()}
                               </div>
                               <div style={{flex:'1 1 150px',minWidth:130}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>La factura</div>
                                 <div style={{fontSize:13,fontWeight:700,color:C.accent}}>N°{folioN(sug.invoice_no)||'—'} · {fmtM(sld)}</div>
                                 <div style={{fontSize:10,color:C.muted}}>Emitida {fmtFechaDMY(sug.issued_at)}{sug.due?` · vence ${fmtFechaDMY(sug.due)}`:''}</div>
-                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsF}{sug.receptor_rut?` · ${sug.receptor_rut}`:''}</div>
+                                <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsF}{sug.receptor_rut?<> · <Copyable text={sug.receptor_rut} title='Copiar RUT' style={{color:C.text}}>{sug.receptor_rut}</Copyable></>:''}</div>
                                 <div style={{marginTop:3,display:'flex',gap:4,flexWrap:'wrap'}}>
                                   {est&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:est.bg,color:est.fg}}>{est.label}</span>}
                                   {esReemb&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:'#FAECE7',color:C.coralText}}>Reembolso de gastos</span>}
                                 </div>
                                 {sug.concept&&<div style={{fontSize:9.5,color:C.done,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sug.concept}</div>}
+                                {(()=>{ const prev=(conc||[]).filter(c=>String(c.factura_id)===String(sug.id)&&c.tipo_destino==='factura'); if(!prev.length) return null; return <div style={{fontSize:9.5,color:C.greenText,marginTop:2,lineHeight:1.35}}>Abonos previos: {prev.map(c=>{ const mm=(movs||[]).find(x=>String(x.id)===String(c.movimiento_id)); return `${mm?fmtFechaDMY(mm.fecha):'—'} ${fmtM(c.monto_aplicado)}` }).join(' · ')}</div> })()}
                               </div>
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginTop:7,paddingTop:6,borderTop:`1px solid ${C.bgSoft}`}}>
