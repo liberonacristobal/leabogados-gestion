@@ -6179,9 +6179,9 @@ function DepurarCobradasModal({rows=[], clients=[], respaldoMap={}, onOpenFactur
 // bancaria (esté o no realizada). Reusa el matcher read-only `pagosDe` (RUT + monto exacto) y el
 // `respaldoMap` (conciliación formal). Permite navegar cualquier mes pasado y comparar la tendencia.
 const CIERRE_EST = {
-  cobrada:   { label:'Pagada',         color:C.greenText,   bg:C.greenBg },
-  detectado: { label:'Pago detectado', color:C.tealText,    bg:C.tealBg },
-  sinpago:   { label:'Sin pago',       color:C.overdueText, bg:C.overdueBg },
+  cobrada:   { label:'Pagada',        color:C.greenText,   bg:C.greenBg,   dot:C.normal },
+  detectado: { label:'Por conciliar', color:C.soonText,    bg:C.soonBg,    dot:C.soon },
+  sinpago:   { label:'Sin pago',      color:C.overdueText, bg:C.overdueBg, dot:C.overdue },
 }
 function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abonos=[], pagosDe, onConciliarPago, onRecordar, onRecordarTanda, recordadoMap={}, diasDesde, onOpenClientFicha, onOpenFactura, mesInicial }) {
   const MESNOM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -6253,10 +6253,10 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   const enlazar = async(f)=>{ if(busyId||!f.pagos.length) return; setBusyId(f.b.id); try{ await onConciliarPago(f.pagos[0].m, f.b) }catch(_){}; setBusyId(null); setExpand(null) }
 
   const tile = (k,n,m)=>{ const e=CIERRE_EST[k]; const on=estFiltro===k
-    return <button onClick={()=>setEstFiltro(on?null:k)} style={{flex:1,minWidth:0,textAlign:'left',background:on?e.bg:'#fff',border:`1px solid ${on?e.color:C.border}`,borderRadius:11,padding:'8px 9px',cursor:'pointer'}}>
-      <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2}}><span style={{width:7,height:7,borderRadius:'50%',background:e.color,flexShrink:0}}/><span style={{fontSize:10.5,fontWeight:700,color:e.color,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.label}</span></div>
-      <div style={{fontSize:14.5,fontWeight:800,color:C.text,letterSpacing:-.2}}>{fmtShort(m)}</div>
-      <div style={{fontSize:9.5,color:C.muted}}>{n} factura{n!==1?'s':''}</div>
+    return <button onClick={()=>setEstFiltro(on?null:k)} style={{flex:1,minWidth:0,textAlign:'left',background:on?C.bgSoft:'#fff',border:`0.5px solid ${on?C.accent:C.border}`,borderRadius:11,padding:'8px 9px',cursor:'pointer'}}>
+      <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2}}><span style={{width:6,height:6,borderRadius:'50%',background:e.dot,flexShrink:0}}/><span style={{fontSize:10,fontWeight:600,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.label}</span></div>
+      <div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-.2}}>{fmtShort(m)}</div>
+      <div style={{fontSize:9,color:C.done}}>{n} factura{n!==1?'s':''}</div>
     </button> }
 
   const dfmt = d => { const s=fmtDate(d); return s||'—' }
@@ -6290,17 +6290,15 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
       <div style={{display:'flex',gap:0,alignItems:'stretch',borderTop:`1px solid ${C.border}`,paddingTop:10}}>
         <div onClick={()=>setEstFiltro('cobrada')} style={{flex:1,cursor:'pointer',paddingRight:12}}>
           <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Cobrado</div>
-          <div style={{fontSize:18,fontWeight:800,color:C.greenText,letterSpacing:-.3}}>{fmt(tot.cob)}</div>
-          <div style={{fontSize:10,color:C.muted}}>tasa de cobro {pct(tot.tasa)}</div>
+          <div style={{fontSize:17,fontWeight:700,color:C.greenText,letterSpacing:-.3}}>{fmt(tot.cob)}</div>
+          <div style={{fontSize:10,color:C.done}}>Tasa de cobro {pct(tot.tasa)}</div>
         </div>
         <div onClick={()=>setEstFiltro('sinpago')} style={{flex:1,cursor:'pointer',paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
-          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Pendiente</div>
-          <div style={{fontSize:18,fontWeight:800,color:C.overdueText,letterSpacing:-.3}}>{fmt(tot.pen)}</div>
-          <div style={{fontSize:10,color:C.muted}}>{tot.nD+tot.nS} sin cobrar</div>
+          <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>Por cobrar</div>
+          <div style={{fontSize:17,fontWeight:700,color:C.accent,letterSpacing:-.3}}>{fmt(tot.pen)}</div>
+          <div style={{fontSize:10,color:C.done}}>{tot.nD+tot.nS} facturas</div>
         </div>
       </div>
-      {/* barra tasa de cobro */}
-      <div style={{height:6,borderRadius:4,background:C.overdueBg,marginTop:11,overflow:'hidden'}}><div style={{width:`${Math.round(tot.tasa*100)}%`,height:'100%',background:C.normal,borderRadius:4}}/></div>
     </div>
 
     {/* Estados (clickeables → filtran la lista) */}
@@ -6312,14 +6310,14 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
 
     {/* Pagos del banco sin identificar */}
     {sinIdentificar.length>0&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.ambarBg,borderRadius:11,padding:'9px 12px',marginBottom:8}}>
-      <span style={{width:7,height:7,borderRadius:'50%',background:C.coralText,flexShrink:0}}/>
-      <div style={{flex:1,fontSize:12,color:C.coralText}}><b>{sinIdentificar.length} pago{sinIdentificar.length!==1?'s':''} del banco sin identificar</b> · {fmt(totSinId)}<div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Depósitos del período que no calzan con ninguna factura pendiente. Revísalos en Conciliación.</div></div>
+      <span style={{width:6,height:6,borderRadius:'50%',background:C.soon,flexShrink:0}}/>
+      <div style={{flex:1,fontSize:12,fontWeight:600,color:C.soonText}}>{sinIdentificar.length} pago{sinIdentificar.length!==1?'s':''} del banco sin identificar · {fmt(totSinId)}</div>
     </div>}
 
     {/* Tanda de recordatorios */}
     {vencidasSinPago.length>0&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.overdueBg,borderRadius:11,padding:'9px 12px',marginBottom:8}}>
-      <div style={{flex:1,fontSize:12,color:C.overdueText}}><b>{vencidasSinPago.length} factura{vencidasSinPago.length!==1?'s':''} vencida{vencidasSinPago.length!==1?'s':''} sin pago</b><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>Enviar recordatorio de cobro desde tu cuenta.</div></div>
-      {onRecordarTanda&&<button onClick={()=>onRecordarTanda(vencidasSinPago.map(f=>f.b))} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:20,padding:'6px 13px',cursor:'pointer',flexShrink:0}}>Recordar a {vencidasSinPago.length}</button>}
+      <div style={{flex:1,fontSize:12,fontWeight:600,color:C.overdueText}}>{vencidasSinPago.length} factura{vencidasSinPago.length!==1?'s':''} vencida{vencidasSinPago.length!==1?'s':''} sin pago</div>
+      {onRecordarTanda&&<button onClick={()=>onRecordarTanda(vencidasSinPago.map(f=>f.b))} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.done}`,borderRadius:7,padding:'6px 12px',cursor:'pointer',flexShrink:0}}>Recordar a {vencidasSinPago.length} ›</button>}
     </div>}
 
     {/* Lista de facturas del período */}
@@ -6327,33 +6325,38 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     <div style={{display:'flex',flexDirection:'column',gap:5}}>
       {visibles.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:12.5,padding:'22px 0'}}>No hay facturas emitidas {modo==='mes'?`en ${mesLabel.toLowerCase()}`:`en ${mesYear}`}{resp?` de ${resp}`:''}.</div>}
       {visibles.map(f=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
-        return <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:11,borderLeft:`3px solid ${e.color}`,overflow:'hidden'}}>
-          <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',cursor:'pointer'}}>
+        const dep=f.est==='detectado'&&f.pagos[0]?f.pagos[0].m:null; const depMonto=dep?((dep.monto||0)-(dep.monto_conciliado||0)):0
+        const rn=r=>String(r||'').replace(/[.\s-]/g,'').toUpperCase(); const rutMatch=!!(dep&&f.b.receptor_rut&&dep.rut_contraparte&&rn(dep.rut_contraparte)===rn(f.b.receptor_rut)); const montoExacto=!!(dep&&depMonto===f.monto)
+        return <div key={f.b.id} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderLeft:`2px solid ${e.dot}`,borderRadius:10,overflow:'hidden'}}>
+          <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',cursor:'pointer'}}>
             <div style={{flex:1,minWidth:0}}>
-              <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13.5,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{clientNom(f.b.client_id)}</div>
-              <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}{f.resp?` · ${f.resp}`:''}</div>
+              <div onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.b.client_id)}} style={{fontSize:13,fontWeight:600,color:C.accent,textDecoration:'underline',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{clientNom(f.b.client_id)}</div>
+              <div style={{fontSize:10,color:C.done,marginTop:1}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}{f.resp?` · ${f.resp}`:''}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{fmt(f.monto)}</div>
-              <span style={{fontSize:9.5,fontWeight:700,color:e.color,background:e.bg,borderRadius:10,padding:'1px 7px',display:'inline-block',marginTop:2}}>{e.label}{f.est==='cobrada'&&!tieneRespaldo(f.b)?' · sin respaldo':''}</span>
+              <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>{fmt(f.monto)}</div>
+              <div style={{fontSize:9.5,color:e.color,marginTop:1}}><span style={{width:5,height:5,borderRadius:'50%',background:e.dot,display:'inline-block',marginRight:4,verticalAlign:1}}/>{e.label}{f.est==='cobrada'&&!tieneRespaldo(f.b)?' · sin respaldo':''}</div>
             </div>
+            <span style={{fontSize:12,color:C.done}}>{abierto?'▾':'▸'}</span>
           </div>
-          {abierto&&<div style={{padding:'0 12px 10px',borderTop:`1px solid ${C.bgSoft}`}}>
-            <div style={{display:'flex',flexWrap:'wrap',gap:'2px 14px',fontSize:11,color:C.muted,margin:'8px 0'}}>
-              <span>Emitida <b style={{color:C.text}}>{dfmt(f.b.issued_at)}</b></span>
-              <span>Enviada <b style={{color:f.b.email_sent_at?C.text:C.done}}>{dfmt(f.b.email_sent_at)}</b></span>
-              <span>Pagada <b style={{color:(f.b.paid_at||f.b.payment_date)?C.text:C.done}}>{dfmt(f.b.paid_at||f.b.payment_date)}</b></span>
-              <span>Conciliada <b style={{color:tieneRespaldo(f.b)?C.greenText:C.done}}>{tieneRespaldo(f.b)?'sí':'—'}</b></span>
+          {abierto&&<div style={{padding:'0 11px 10px',borderTop:`1px solid ${C.bgSoft}`}}>
+            <div style={{display:'flex',flexWrap:'wrap',gap:'2px 14px',fontSize:10.5,color:C.muted,margin:'8px 0 9px'}}>
+              <span>Emitida <span style={{color:C.text,fontWeight:600}}>{dfmt(f.b.issued_at)}</span></span>
+              <span>Enviada {f.b.email_sent_at?<span style={{color:C.text,fontWeight:600}}>{dfmt(f.b.email_sent_at)}</span>:'—'}</span>
+              <span>Pagada {(f.b.paid_at||f.b.payment_date)?<span style={{color:C.text,fontWeight:600}}>{dfmt(f.b.paid_at||f.b.payment_date)}</span>:'—'}</span>
             </div>
-            {f.saldo>0&&<div style={{fontSize:11,color:C.muted,marginBottom:8}}>Saldo por cobrar <b style={{color:C.overdueText}}>{fmt(f.saldo)}</b></div>}
-            {f.est==='detectado'&&f.pagos[0]&&<div style={{background:C.tealBg,borderRadius:9,padding:'8px 10px',marginBottom:8}}>
-              <div style={{fontSize:11,color:C.tealText}}>Pago en el banco que calza: <b>{fmt((f.pagos[0].m.monto||0)-(f.pagos[0].m.monto_conciliado||0))}</b> · {fmtDate(f.pagos[0].m.fecha)}{f.pagos[0].m.nombre_contraparte?` · ${f.pagos[0].m.nombre_contraparte}`:''}</div>
+            {f.est==='detectado'&&dep&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:9,overflow:'hidden',marginBottom:9}}>
+              <div style={{display:'flex'}}>
+                <div style={{flex:1,padding:'8px 10px'}}><div style={{fontSize:8.5,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>El depósito</div><div style={{fontSize:13,fontWeight:700,color:C.greenText,marginTop:1}}>+{fmt(depMonto)}</div><div style={{fontSize:9.5,color:C.muted,marginTop:2}}>{fmtDate(dep.fecha)}{dep.nombre_contraparte?` · ${dep.nombre_contraparte}`:''}</div></div>
+                <div style={{flex:1,padding:'8px 10px',borderLeft:`1px solid ${C.bgSoft}`}}><div style={{fontSize:8.5,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>La factura</div><div style={{fontSize:13,fontWeight:700,color:C.accent,marginTop:1}}>N° {folioN(f.b.invoice_no)||'—'}</div><div style={{fontSize:9.5,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmt(f.monto)}{f.b.concept?` · ${f.b.concept}`:''}</div></div>
+              </div>
+              {(rutMatch||montoExacto)&&<div style={{display:'flex',gap:12,padding:'6px 10px',background:C.bgSoft}}>{rutMatch&&<span style={{fontSize:10,color:C.greenText}}>✓ Mismo RUT</span>}{montoExacto&&<span style={{fontSize:10,color:C.greenText}}>✓ Monto exacto</span>}</div>}
             </div>}
-            <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-              {f.est==='detectado'&&<button onClick={()=>enlazar(f)} disabled={busyId===f.b.id} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',opacity:busyId===f.b.id?.6:1}}>{busyId===f.b.id?'Enlazando…':'Enlazar pago'}</button>}
-              {f.est==='sinpago'&&onRecordar&&<button onClick={()=>onRecordar(f.b)} style={{fontSize:11.5,fontWeight:700,color:rec?C.grisText:'#fff',background:rec?C.bgSoft:C.accent,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>{rec?'Recordado':'Recordar cobro'}</button>}
-              <button onClick={()=>onOpenFactura&&onOpenFactura(f.b)} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Abrir factura</button>
-              <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(f.b.client_id)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Ficha del cliente</button>
+            {f.saldo>0&&f.est!=='detectado'&&<div style={{fontSize:10.5,color:C.muted,marginBottom:8}}>Saldo por cobrar <span style={{color:C.overdueText,fontWeight:600}}>{fmt(f.saldo)}</span></div>}
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {f.est==='detectado'&&<button onClick={()=>enlazar(f)} disabled={busyId===f.b.id} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:7,padding:'6px 16px',cursor:'pointer',opacity:busyId===f.b.id?.6:1}}>{busyId===f.b.id?'Conciliando…':'Conciliar'}</button>}
+              {f.est==='sinpago'&&onRecordar&&<button onClick={()=>onRecordar(f.b)} style={{fontSize:11,fontWeight:600,color:rec?C.done:C.accent,background:'#fff',border:`1px solid ${rec?C.border:C.done}`,borderRadius:7,padding:'6px 12px',cursor:'pointer'}}>{rec?'Recordado ✓':'Recordar cobro ›'}</button>}
+              <button onClick={()=>onOpenFactura&&onOpenFactura(f.b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'6px 12px',cursor:'pointer'}}>Abrir factura ›</button>
             </div>
           </div>}
         </div> })}
@@ -6363,10 +6366,10 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:13,padding:'13px 15px',marginTop:10}}>
       <div style={{fontSize:9,color:C.done,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',marginBottom:10}}>Historial y comparación</div>
       {cur&&prev&&<div style={{display:'flex',gap:7,marginBottom:12}}>
-        {[['Emitido',cur.emi,prev.emi,false],['Cobrado',cur.cob,prev.cob,false],['Pendiente',cur.pen,prev.pen,true]].map(([l,a,b,inv])=>
+        {[['Emitido',cur.emi,prev.emi,false],['Cobrado',cur.cob,prev.cob,false],['Por cobrar',cur.pen,prev.pen,true]].map(([l,a,b,inv])=>
           <div key={l} style={{flex:1,background:C.bgSoft,borderRadius:9,padding:'7px 9px'}}>
             <div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{l}</div>
-            <div style={{fontSize:15,fontWeight:800,color:C.text,letterSpacing:-.2}}>{fmtShort(a)}</div>
+            <div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-.2}}>{fmtShort(a)}</div>
             <div style={{fontSize:9.5,fontWeight:700,color:deltaCol(a,b,inv),marginTop:1}}>{deltaTxt(a,b)} <span style={{color:C.done,fontWeight:600}}>vs {prev.mesN}</span></div>
           </div>)}
       </div>}
