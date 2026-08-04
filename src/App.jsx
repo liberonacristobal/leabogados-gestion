@@ -221,9 +221,11 @@ const _ACT_VARIANT = {
   softMuted:{background:C.bgWarm,  color:C.grisText,    border:'none'},
   ghost:    {background:'#fff',    color:C.muted,       border:`1px solid ${C.border}`},
 }
-function ActBtn({variant='ghost', onClick, disabled=false, title, children, style={}}){
+function ActBtn({variant='ghost', size='md', onClick, disabled=false, title, children, style={}}){
   const v = _ACT_VARIANT[variant] || _ACT_VARIANT.ghost
-  return <button onClick={onClick} disabled={disabled} title={title} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 12px',lineHeight:1,cursor:disabled?'default':'pointer',whiteSpace:'nowrap',...v,...style}}>{children}</button>
+  // md = acción compacta en fila (~26px). lg = pie de modal/formulario (~35px, la menor altura cómoda; antes 40-44px).
+  const sz = size==='lg' ? {fontSize:13,padding:'9px 14px'} : {fontSize:11,padding:'5px 12px'}
+  return <button onClick={onClick} disabled={disabled} title={title} style={{fontWeight:600,borderRadius:8,lineHeight:1,cursor:disabled?'default':'pointer',whiteSpace:'nowrap',...sz,...v,...style}}>{children}</button>
 }
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -787,7 +789,7 @@ function ClientsViewLimited({clients,expenses,tasks,clientEntities,rendiciones,s
                 {cl.abogado_responsable&&(()=>{ const pc=personChip(cl.abogado_responsable); return <span style={{fontSize:10,background:pc.bg,color:pc.color,borderRadius:10,padding:'1px 8px',fontWeight:600}}>{cl.abogado_responsable}</span> })()}
               </div>
             </div>
-            <button onClick={()=>onEdit(cl)} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:'#fff',color:C.text,fontSize:12,fontWeight:600,cursor:'pointer'}}>Editar</button>
+            <ActBtn variant='ghost' onClick={()=>onEdit(cl)}>Editar</ActBtn>
           </div>
           <FichaTabs tab={effTab} setTab={setFtab} role={esResp?'admin':'limited'}/>
         </div>
@@ -5483,9 +5485,9 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
             {/* Venta asociada (para el registro): muestra la vinculada o un selector para vincularla en el flujo. */}
             <div style={{fontSize:9.5,color:C.muted,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Venta:{(()=>{ const linked=(sales||[]).find(s=>String(s.id)===String(b.client_id?b.sale_id:null)); if(linked&&ventaNombre(linked)) return <b style={{color:C.text}}>{ventaNombre(linked)}</b>; const cs=(sales||[]).filter(s=>String(s.client_id)===String(b.client_id)&&ventaNombre(s)); if(!onAssignSeries||!cs.length) return <span style={{color:C.soonText}}>Sin venta asociada{cs.length?'':' · el cliente no tiene ventas'}</span>; return <select defaultValue='' onChange={e=>{ if(e.target.value) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:`1px solid ${C.soon}`,background:'#fff',color:C.text}}><option value=''>Vincular a venta…</option>{cs.map(s=><option key={s.id} value={s.id}>{ventaNombre(s)}{s.year?` · ${s.year}`:''}</option>)}</select> })()}</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-              <button onClick={()=>verFacturaPdf(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver PDF con timbre</button>
-              {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver ficha</button>}
-              {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Editar</button>}
+              <ActBtn variant='ghost' onClick={()=>verFacturaPdf(b)}>Ver PDF con timbre</ActBtn>
+              {onOpenClientFicha&&b.client_id&&<ActBtn variant='ghost' onClick={()=>onOpenClientFicha(b.client_id)}>Ver ficha</ActBtn>}
+              {onEdit&&<ActBtn variant='ghost' onClick={()=>onEdit(b)}>Editar</ActBtn>}
               {sent&&onUnsend&&<button onClick={()=>onUnsend(b)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Marcar no enviada</button>}
             </div>
           </div>
@@ -5678,8 +5680,8 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                           </div>
                           <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
                             {onEnviar&&<button onClick={()=>onEnviar(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>{b.email_sent_at?'Reenviar correo':'Enviar al cliente'}</button>}
-                            {!rs&&onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Asignar razón social</button>}
-                            {onEdit&&<button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Editar · ver PDF</button>}
+                            {!rs&&onEdit&&<ActBtn variant='softAmber' onClick={()=>onEdit(b)}>Asignar razón social</ActBtn>}
+                            {onEdit&&<ActBtn variant='ghost' onClick={()=>onEdit(b)}>Editar · ver PDF</ActBtn>}
                             {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Ver ficha</button>}
                           </div>
                         </div>
@@ -7075,9 +7077,9 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                   ):(pagado&&onRevertirPago)?(
                     <button onClick={async()=>{ if(await appConfirm('¿Marcar esta factura como NO pagada? Vuelve a Pendiente y se borra la fecha de pago.')) onRevertirPago(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Deshacer pago</button>
                   ):(anulada&&onReactivar)&&(
-                    <button onClick={async()=>{ if(await appConfirm('¿Reactivar esta factura anulada? Vuelve a su estado previo y se borra el registro de baja.')) onReactivar(b)}} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Reactivar</button>
+                    <ActBtn variant='ghost' onClick={async()=>{ if(await appConfirm('¿Reactivar esta factura anulada? Vuelve a su estado previo y se borra el registro de baja.')) onReactivar(b)}}>Reactivar</ActBtn>
                   )}
-                  <button onClick={()=>onEdit(b)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Editar</button>
+                  <ActBtn variant='ghost' onClick={()=>onEdit(b)}>Editar</ActBtn>
                 </div></>}
               </div>
               )
@@ -8854,7 +8856,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
             {sel?.razon_social?.trim()&&<div style={{fontSize:12,color:C.done}}>{sel.razon_social}</div>}
             {sel?.rut&&<div style={{fontSize:12,color:C.done}}>{sel.rut}</div>}
           </div>
-          <button onClick={()=>abrirEditar(sel)} style={{height:32,padding:'0 12px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>Editar</button>
+          <ActBtn variant='ghost' onClick={()=>abrirEditar(sel)} style={{flexShrink:0}}>Editar</ActBtn>
         </div>
 
         {sel?.datos_pago?.trim()&&(
@@ -11245,8 +11247,8 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
             ? <span style={{fontSize:10,color:C.overdue,fontWeight:600}}>Anulada{r.anulada_por?` · ${r.anulada_por}`:''}</span>
             : <button onClick={()=>handleAnularRendicion(r)} style={{fontSize:10,color:C.overdue,background:'none',border:`1px solid ${C.overdue}`,borderRadius:5,padding:'3px 9px',cursor:'pointer'}}>Anular</button>}
           <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
-            {cl&&!r.anulada_at&&<button onClick={()=>{setRendEdit(r);setRendEntityIds([]);setRendicionClient(cl)}} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Editar</button>}
-            <button onClick={()=>verPdfRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
+            {cl&&!r.anulada_at&&<ActBtn variant='ghost' onClick={()=>{setRendEdit(r);setRendEntityIds([]);setRendicionClient(cl)}}>Editar</ActBtn>}
+            <ActBtn variant='ghost' onClick={()=>verPdfRend(r)}>Ver PDF</ActBtn>
             {cl&&!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar rendición':'Enviar rendición'}</button>}
             {cl&&!r.anulada_at&&r.sent_at&&<button onClick={()=>{ const devF=(expenses||[]).find(e=>e.type==='fondo'&&(e.amount||0)<0&&String(e.client_id)===String(r.client_id)&&new RegExp('rendici[oó]n n°\\s*'+(r.correlativo||'?'),'i').test(e.concept||'')); const amt=devF?Math.abs(devF.amount):Math.max(0,saldoCliente(expenses,r.client_id)); setDevEmailRend({rend:r,client:cl,amount:amt,fecha:devF?devF.date:new Date().toISOString().slice(0,10)}) }} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.azulInfo}`,background:'#fff',color:C.azulInfo,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.devolucion_at?'Reenviar devolución':'Enviar devolución'}</button>}
             {cl&&!r.anulada_at&&<button onClick={async()=>{ const now=r.devolucion_at?null:new Date().toISOString(); try{ await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',r.id); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,devolucion_at:now}:x)) }catch(e){ appAlert('No se pudo marcar: '+(e.message||e)) } }} title={r.devolucion_at?'Quitar la marca':'Marcar como enviada sin mandar correo'} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${r.devolucion_at?C.greenText:C.border}`,background:r.devolucion_at?C.greenBg:'#fff',color:r.devolucion_at?C.greenText:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.devolucion_at?'Devolución enviada':'Marcar a mano'}</button>}
@@ -14908,8 +14910,8 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,marginTop:6}}>
-                    {onEditRendicion&&!r.anulada_at&&<button onClick={()=>onEditRendicion(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Editar</button>}
-                    <button onClick={()=>verPdf(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
+                    {onEditRendicion&&!r.anulada_at&&<ActBtn variant='ghost' onClick={()=>onEditRendicion(r)}>Editar</ActBtn>}
+                    <ActBtn variant='ghost' onClick={()=>verPdf(r)}>Ver PDF</ActBtn>
                     {!r.anulada_at&&<button onClick={()=>setEmailRend(r)} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>{r.sent_at?'Reenviar al cliente':'Enviar al cliente'}</button>}
                   </div>
                 </div>
@@ -18757,7 +18759,7 @@ function LearningCenter({clients=[], onClose}){
                 ) : (
                   <>
                     <div style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{color:C.muted}}>{keyTxt(r)}</span> <span style={{color:C.done}}>→</span> <b style={{color:C.accent}}>{g.val(r)}</b></div>
-                    {EDITABLES[r.kind] && <button onClick={()=>editar(r)} title='Corregir el valor' style={{flexShrink:0,fontSize:11,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Editar</button>}
+                    {EDITABLES[r.kind] && <ActBtn variant='ghost' onClick={()=>editar(r)} title='Corregir el valor' style={{flexShrink:0}}>Editar</ActBtn>}
                     <button onClick={()=>olvidar(r)} title='Dejar de sugerir esto' style={{flexShrink:0,fontSize:11,color:C.overdueText,background:'none',border:`1px solid ${C.border}`,borderRadius:7,padding:'4px 9px',cursor:'pointer'}}>Olvidar</button>
                   </>
                 )}
@@ -24059,7 +24061,7 @@ export default function App() {
                   <div style={{display:'flex',justifyContent:'space-between',padding:'7px 0 0',marginTop:3,borderTop:`0.5px solid ${C.border}`,fontSize:13}}><span style={{color:C.accent,fontWeight:600}}>Total exento</span><span style={{color:C.accent,fontWeight:600}}>{fmt(ep.prev.total)}</span></div>
                 </div>
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <button onClick={verPdf} style={{fontSize:12,fontWeight:600,color:C.tealText,background:'#fff',border:`0.5px solid ${C.tealText}`,borderRadius:8,padding:'8px 11px',cursor:'pointer'}}>Ver PDF</button>
+                  <ActBtn variant='ghost' onClick={verPdf}>Ver PDF</ActBtn>
                   <button disabled={emitirBusy} onClick={()=>setEmitirPreview(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
                   <button disabled={emitirBusy} onClick={confirmEmitirDTE} style={{fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',opacity:emitirBusy?.6:1}}>{emitirBusy?'Emitiendo…':'Emitir'}</button>
                 </div>
