@@ -338,7 +338,9 @@
       "Bash(perl -0pi -e \"s/\\(id:'b14'.*?amount:26000000, status:'Vencido',    invoice_no:'1248', issued_at:'2026-03-10', due:'2026-03-25', paid_at:\\)null/\\\\${1}'2026-04-15', paid_amount:26000000, reconciled_at:'2026-04-15'/\" src/demoData.js)",
       "Bash(perl -CSD -0pi -e 's/\\(# Changelog\\\\n\\)/$1- 2026-08-03 — **Depurar cobradas: confirmación detallada \\(no más \"marcar sin ver qué\"\\)**. El confirm genérico \\(\"N factura\\(s\\) ya saldadas… ¿marcar pagadas?\"\\) pasó a un modal `DepurarCobradasModal` que lista CADA factura: cliente \\(protagonista\\) · folio · monto · estado \\(Vencida\\\\/Pendiente\\) · la evidencia del saldo $0 \\(conciliada con el banco \\\\/ abonos aplicados · monto\\) · fecha de emisión y fecha de pago. Cada fila es clickeable \\(abre la factura\\) y trae checkbox para elegir cuáles marcar \\(deseleccionar la que no\\); el botón muestra el total \\(\"Marcar N pagadas · \\\\$X\"\\). Reversible. Se quitó el appConfirm de handleDepurarCobradas \\(el modal es la confirmación\\). Verificado en demo.\\\\n/' CHANGELOG.md)",
       "Bash(sort -t: -k2)",
-      "Bash(uniq -f1)"
+      "Bash(uniq -f1)",
+      "Bash(echo \"push done: $?\")",
+      "Bash(echo \"done $?\")"
     ]
   }
 }
