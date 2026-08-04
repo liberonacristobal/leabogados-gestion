@@ -156,7 +156,7 @@ const RESPALDO_CUTOFF = '2025-02-06'
 function facturaRespaldo(b, respaldoMap={}, cartolaHasta=null){
   if(!b || b.status!=='Pagado' || b.deleted_at) return null
   if((b.billing_type||'')==='reembolso') return null
-  const monto = b.amount||0
+  const monto = montoFactura(b)   // autoridad DTE, no el amount programado
   const aplicado = respaldoMap[b.id]||0
   if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Pagada y conciliada', short:'Conciliada', bg:C.azulBg, fg:C.accent}
   if(aplicado>0) return {key:'parcial', label:`Pagada · parcial · falta ${fmt(monto-aplicado)}`, short:'Parcial', bg:C.ambarBg, fg:C.soonText}
@@ -185,8 +185,11 @@ function estadoFacturaLabel(b, aplicado=0, cartolaHasta=null){
   if(b.status==='Anticipada') return {key:'anticipada', label:'Anticipada', short:'Anticipada', bg:C.greenBg, fg:C.greenText}
   if(b.status==='Programada') return {key:'programada', label:'Programada', short:'Programada', bg:C.border, fg:C.muted}
   if(['Pendiente','Vencido'].includes(b.status)){
+    const monto = montoFactura(b)   // autoridad DTE
+    // 100% respaldada por el banco pero aún no marcada Pagada → NO es "Sin pago": coincide con estadoCobro (saldada). Evita el contradictorio "Cobrado"(estadoCobro) vs "Sin pago"(aquí) en la misma factura.
+    if(monto>0 && aplicado>=monto) return {key:'verificada', label:'Pagada y conciliada', short:'Conciliada', bg:C.azulBg, fg:C.accent}
     // Parcial: hay abono/conciliación (aplicado) pero no cubre el total → mostrar el saldo pendiente, no "Sin pago".
-    if(aplicado>0 && aplicado<(b.amount||0)) return {key:'parcial', label:`Abonada · falta ${fmt((b.amount||0)-aplicado)}`, short:'Parcial', bg:C.ambarBg, fg:C.soonText}
+    if(aplicado>0 && aplicado<monto) return {key:'parcial', label:`Abonada · falta ${fmt(monto-aplicado)}`, short:'Parcial', bg:C.ambarBg, fg:C.soonText}
     return {key:'sinpago', label:'Sin pago', short:'Sin pago', bg:C.soonBg, fg:C.soonText}
   }
   return {key:'otro', label:b.status||'', short:b.status||'', bg:C.border, fg:C.muted}
@@ -195,6 +198,14 @@ function RespaldoBadge({b, respaldoMap, cartolaHasta}){
   const r = facturaRespaldo(b, respaldoMap, cartolaHasta)
   if(!r) return null
   return <span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:r.bg,color:r.fg,whiteSpace:'nowrap',display:'inline-block'}}>{r.label}</span>
+}
+// CHIP ÚNICO del estado de una factura para MOSTRAR — fuente única visual. Deriva de estadoFacturaLabel (que ya concuerda con estadoCobro: nunca "Cobrado" y "Sin pago" a la vez).
+// Pasa `respaldoMap` (usa b.id) o `aplicado` directo. `short` usa la etiqueta corta; `chevron` agrega ' ›' cuando la fila despliega detalle.
+function EstadoFacturaChip({b, aplicado=0, respaldoMap=null, cartolaHasta=null, short=false, chevron=false, style={}}){
+  const ap = respaldoMap ? (respaldoMap[b?.id]||0) : aplicado
+  const e = estadoFacturaLabel(b, ap, cartolaHasta)
+  if(!e) return null
+  return <span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap',display:'inline-block',...style}}>{short?e.short:e.label}{chevron?' ›':''}</span>
 }
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -5634,7 +5645,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                           <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
                           <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{rsDisplay(rs)}</span>:<span style={{color:C.soonText}}>Sin razón social</span>} · {b.concept||'—'}</div>
                         </div>
-                        {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
+                        <EstadoFacturaChip b={b} aplicado={abonado} cartolaHasta={cartolaHasta} style={{fontSize:9,padding:'2px 8px',borderRadius:7,flexShrink:0}}/>
                         <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,color:parcial?C.soonText:C.muted,fontWeight:parcial?600:400}}>{fmt(saldoB)}</div>{parcial&&<div style={{fontSize:9,color:C.done,whiteSpace:'nowrap'}}>saldo · de {fmt(b.amount)}</div>}</div>
                       </div>
                       {fo&&(
@@ -13718,7 +13729,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
                     {pend&&<button onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{fontSize:10,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'3px 12px',fontWeight:600,cursor:'pointer',marginTop:5}}>Recordar</button>}
                   </div>
                 </div>
-                {e&&<div style={{marginTop:6,marginLeft:49}}><span style={{fontSize:10,fontWeight:600,padding:'2px 9px',borderRadius:6,background:e.bg,color:e.fg,whiteSpace:'nowrap',display:'inline-block'}}>{e.label}{conciliada?' ›':''}</span></div>}
+                {e&&<div style={{marginTop:6,marginLeft:49}}><EstadoFacturaChip b={b} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} chevron={conciliada}/></div>}
                 {conciliada&&detOpen&&(()=>{ const cs=fConcByFac[b.id]||[]; const mv=fMovById[cs[0]?.movimiento_id]; return (
                   <div style={{marginTop:8,marginLeft:49,background:'#F0F7F4',border:`1px solid #CFE9DD`,borderRadius:8,padding:'8px 10px'}}>
                     <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Movimiento bancario</div>
