@@ -92,6 +92,9 @@ const setRespaldoCache = m => { _respaldoCache = m || {} }
 // El total de la factura es la AUTORIDAD del DTE (montoFactura lee el MntTotal real del XML; cae a amount si no hay XML).
 // Nunca usar b.amount suelto para el saldo: el amount es el monto PROGRAMADO (UF estimada) y diverge del emitido real.
 const saldoBill = b => { if(!b || ['Pagado','Anulada'].includes(b.status)) return 0; const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.max(0,montoFactura(b)-abonado) }
+// Lo COBRADO de una factura = plata efectivamente recibida. FUENTE ÚNICA del "cobrado" del cliente (Financiero, Resumen y Estado de cuenta deben coincidir).
+// Pagada = monto completo (DTE); parcial (Pendiente/Vencido con abono) = lo abonado, tope el monto; Anulada = 0. Mismo abonado que saldoBill (banco o paid_amount) → cobrado + saldo = monto.
+const cobradoBill = b => { if(!b || b.status==='Anulada') return 0; if(b.status==='Pagado') return montoFactura(b); const abonado = Math.max(b.paid_amount||0, _respaldoCache[b.id]||0); return Math.min(montoFactura(b), abonado) }
 // Por cobrar de un conjunto de facturas — FUENTE ÚNICA del "por cobrar" del cliente (lista, ficha Resumen y Financiero deben coincidir). Solo cuentas por cobrar REALES: emitidas con folio, Pendiente/Vencido, saldo pendiente (saldoBill). Excluye sin-folio (eso es "por facturar"), anticipadas, anuladas y reembolsos.
 const porCobrarBills = bills => (bills||[]).filter(b=>b && !b.deleted_at && b.billing_type!=='reembolso' && b.invoice_no && ['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
 // CANON DE COLOR POR ESTADO DE COBRO — fuente única (un color por estado, sin duplicados ni hex sueltos). Cada estado: {label, color (línea/borde/cifra), bg (fondo de badge), text (texto sobre bg)}.
@@ -2125,7 +2128,7 @@ function VentasPorMes({sales,ufHoy,moneda='CLP',clients=[],onOpenClientFicha}) {
             {openRec&&(
               <div style={{marginTop:8}}>
                 {[...recurrentes].map(s=>{
-                  const uref=ufHoy||s.uf_value||UF_FALLBACK
+                  const uref=s.uf_value>0?s.uf_value:(ufHoy||UF_FALLBACK)   // UF congelada de la venta (misma fuente que recUF/recCLP) → el detalle SUMA al total; no reconvertir con la UF de hoy
                   const clp = s.moneda==='CLP' ? (parseFloat(s.amount_clp)||0) : Math.round((parseFloat(s.amount_uf)||0)*uref)
                   const uf = s.moneda==='CLP' ? (uref?(parseFloat(s.amount_clp)||0)/uref:0) : (parseFloat(s.amount_uf)||0)
                   const cl=clients.find(c=>String(c.id)===String(s.client_id)); const cn=cl?.name||'—'
@@ -13332,7 +13335,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const movById=useMemo(()=>{const m={};movs.forEach(x=>m[x.id]=x);return m},[movs])
   const facturas=useMemo(()=>clientBilling.filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&b.status!=='Programada'),[clientBilling])
   const facturado=facturas.reduce((s,b)=>s+montoFactura(b),0)   // autoridad DTE
-  const pagadoTot=facturas.reduce((s,b)=>s+(b.status==='Pagado'?montoFactura(b):(b.paid_amount||0)),0)
+  const pagadoTot=facturas.reduce((s,b)=>s+cobradoBill(b),0)   // incluye parciales (banco o paid_amount); fuente única, coincide con Financiero/Resumen
   const porCobrar=porCobrarBills(clientBilling)
   const fg=fgCliente(expenses,client.id)
   const aFavor=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
@@ -13341,7 +13344,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const grupos=useMemo(()=>{const g={};facturas.forEach(b=>{const rs=b.receptor_name||client.name||'—';(g[rs]=g[rs]||[]).push(b)})
     const cmp=ord==='monto'?(x,y)=>(y.amount||0)-(x.amount||0):ord==='proyecto'?(x,y)=>((ventaById[x.sale_id]?.title||x.concept||'zzz')).localeCompare(ventaById[y.sale_id]?.title||y.concept||'zzz')||((x.issued_at||'')<(y.issued_at||'')?1:-1):(x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1
     Object.values(g).forEach(a=>a.sort(cmp));return g},[facturas,ord,ventaById])
-  const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=montoFactura(b);o.pag+=(b.status==='Pagado'?montoFactura(b):(b.paid_amount||0));o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
+  const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=montoFactura(b);o.pag+=cobradoBill(b);o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
   const kpi=(label,val,sub,col,corner)=>(<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
   const Hdr=({icon,title,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{title}</span>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
   return (<div style={{padding:'14px 20px 40px'}}>
@@ -13516,7 +13519,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
   const real = all.filter(b=>b.billing_type!=='reembolso')
   const facturado = real.filter(esFacturada).reduce((a,b)=>a+montoFactura(b),0)   // montoFactura = autoridad del DTE (no el amount programado)
-  const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)
+  const cobrado = real.reduce((a,b)=>a+cobradoBill(b),0)   // incluye abonos parciales (fuente única cobradoBill)
   const porCobrar = porCobrarBills(real)
   const programado = real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
   const overdueTot = real.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
@@ -13628,7 +13631,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         const projCard = s => {
           const sb=clientBilling.filter(b=>!b.deleted_at&&b.sale_id===s.id)
           const fac=sb.filter(esFacturada).reduce((a,b)=>a+montoFactura(b),0)
-          const cob=sb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)
+          const cob=sb.reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales; fuente única
           const pen=porCobrarBills(sb)
           const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1)
           const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'
@@ -14606,7 +14609,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
   // Vendido UF: misma fuente que Dashboard/Ventas (recurrentes x12, CLP convertido a UF)
   const vendidoUF = clientSales.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const facturado = clientBilling.filter(esFacturada).reduce((a,b)=>a+montoFactura(b),0)   // autoridad DTE
-  const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)
+  const cobrado = clientBilling.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso').reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales; fuente única
   const porCobrar = clientBilling.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status))
   const totalPorCobrar = porCobrarBills(clientBilling)   // fuente única (mismo helper que Financiero/lista/Dashboard)
   // Saldo del cliente: fuente única (fgCliente) — mismo criterio (todo lo no-fondo es gasto) que la lista de Gastos y el Dashboard.
