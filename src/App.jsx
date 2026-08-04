@@ -13629,8 +13629,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         const progYear=real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&String(b.due||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
         return <div style={{display:'flex',gap:7,overflowX:'auto',marginBottom:12,paddingBottom:2,scrollbarWidth:'none',alignItems:'stretch'}}>
           {/* Por cobrar con Vencido ANIDADO (jerarquía: el vencido es parte del por cobrar, no una tarjeta paralela) */}
-          <div style={{flex:'0 0 auto',background:overdueTot>0?C.overdueBg:C.card,border:`1px solid ${overdueTot>0?'#F7C1C1':C.border}`,borderRadius:10,padding:'7px 11px'}}>
-            <div style={{fontSize:8,color:overdueTot>0?C.overdueText:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div>
+          <div style={{flex:'0 0 auto',background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 11px'}}>
+            <div style={{fontSize:8,color:C.muted,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div>
             <div style={{fontSize:14,fontWeight:700,color:porCobrar>0?C.accent:C.text,whiteSpace:'nowrap'}}>{fmt(porCobrar)}</div>
             {overdueTot>0&&<div style={{fontSize:10,fontWeight:600,color:C.overdue,whiteSpace:'nowrap',marginTop:2}}>Vencido {fmt(overdueTot)}</div>}
           </div>
@@ -14675,7 +14675,7 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:20}}>
           {[
             ['Vendido',vendidoUF>0?fmtUF(vendidoUF):'—','#E6EEF1',C.accent,'financiero'],
-            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?C.overdueBg:C.bgSoft,totalPorCobrar>0?C.overdue:C.muted,'financiero'],
+            ['Por cobrar',totalPorCobrar>0?fmt(totalPorCobrar):'$0',totalPorCobrar>0?C.azulBg:C.bgSoft,totalPorCobrar>0?C.accent:C.muted,'financiero'],   // canon: por cobrar = navy (rojo es solo para vencido)
             ['Cobrado',fmt(cobrado),'#E1F5EE',C.normal,'financiero'],
             ['Saldo fondos',fmt(saldoFondos),saldoFondos<0?C.overdueBg:C.greenBg,saldoFondos<0?C.overdue:C.normal,null],
           ].map(([l,v,bg,col,go])=>(
