@@ -22007,7 +22007,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                 {gs.length>0&&<button disabled={busy===m.id} onClick={()=>{ let acc=0; const sel=new Set(); for(const g of gs){ if(acc>=resto) break; sel.add(g.id); acc+=(g.amount||0) } setDevolSel(sel); setFondoFor(null); setDevolFor(devolFor===m.id?null:m.id) }} style={{fontSize:10,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.coralText}`,background:'#fff',color:C.coralText,cursor:busy===m.id?'default':'pointer'}}>Es devolución de gastos ▾</button>}
                               </div>)}
                             {optRow('exchange',C.muted,C.bgWarm,'Otro tipo de pago','No es de un cliente',()=>setOtroFor(otroFor===m.id?null:m.id),otroFor===m.id,
-                              <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 2px 6px 36px'}}>{CATS_ABONO.filter(c=>c!=='Provisión de gastos').map(c=>{ const t=TAG_STY[c]||{bg:C.bgWarm,color:C.grisText}; return <button key={c} onClick={()=>{setOtroFor(null);setCategoria(m,c)}} style={{fontSize:10,fontWeight:600,borderRadius:7,padding:'4px 10px',border:`1px solid ${C.border}`,background:'#fff',color:t.color,cursor:'pointer'}}>{c}</button> })}</div>)}
+                              <div onClick={e=>e.stopPropagation()} style={{padding:'0 2px 6px 36px'}}>
+                                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:7}}>{CATS_ABONO.filter(c=>c!=='Provisión de gastos').map(c=>{ const t=TAG_STY[c]||{bg:C.bgWarm,color:C.grisText}; return <button key={c} onClick={()=>{setOtroFor(null);setCategoria(m,c)}} style={{fontSize:10,fontWeight:600,borderRadius:7,padding:'4px 10px',border:`1px solid ${C.border}`,background:'#fff',color:t.color,cursor:'pointer'}}>{c}</button> })}</div>
+                                <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                                  <span style={{fontSize:9.5,color:C.muted}}>¿Corresponde a alguien del sistema?</span>
+                                  <AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>{setOtroFor(null);identificar(m,cid)}} label='Asignar a…' placeholder='Buscar persona o entidad…'/>
+                                </div>
+                              </div>)}
                           </div>
                         })()}
                         {splitMov===m.id&&(()=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const adel=Math.max(0,Math.min(parseInt(splitAdel)||0,resto)); const fond=resto-adel; return (
