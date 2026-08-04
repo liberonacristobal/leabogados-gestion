@@ -2234,7 +2234,9 @@ function computeAgingCartera(billingRows, clientesMap){
   const COL = { current:C.normal, warning:C.soon, overdue:C.overdue }
   const BG  = { current:C.greenBg, warning:'#FFF8E1', overdue:C.overdueBg }
   const LBL = { current:'Al día', warning:'31-60 días', overdue:'Vencido +60' }
-  const pend = (billingRows||[]).filter(b=>b.status==='Pendiente'||b.status==='Vencido')
+  // Mismo universo que porCobrarBills (fuente única del "por cobrar"): emitidas con folio, no borradas.
+  // Sin esto el aging contaba facturas borradas y sin folio (por facturar), inflando el total ~$40M.
+  const pend = (billingRows||[]).filter(b=>(b.status==='Pendiente'||b.status==='Vencido') && b.invoice_no && !b.deleted_at)
   const diasVenc = b => { const dl=daysLeft(b.due); return dl===null?null:-dl }
   const bucketDe = b => { const dv=diasVenc(b); if(dv===null) return 'current'; if(dv>60) return 'overdue'; if(dv>30) return 'warning'; return 'current' }
   const total = pend.reduce((a,b)=>a+saldoBill(b),0)
@@ -2313,18 +2315,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const vendidoNetoCLP = vendidoBrutoCLP - costoCLP
   const pctMeta = Math.min(100, Math.round((vendidoNetoUF/META_UF)*100))
 
-  const facturado = bb.filter(b=>b.issued_at?.startsWith(String(yr))&&esFacturada(b)).reduce((a,b)=>a+(b.amount||0),0)
-  const cobrado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&(b.paid_at?.startsWith(String(yr))||b.issued_at?.startsWith(String(yr)))).reduce((a,b)=>a+(b.amount||0),0)
-  // Tasa de cobro: del facturado de ESTE año, cuánto está pagado (mismo universo numerador/denominador → nunca pasa de 100%).
-  const cobradoDelFacturado = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
-  const tasaCobro = facturado>0 ? Math.min(100,Math.round((cobradoDelFacturado/facturado)*100)) : 0
-
   const porCobrar = bb.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status))
-  const totalPorCobrar = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
-  // KPIs accionables del Dashboard (mismo criterio que Facturación). Tappables → tab Facturación.
-  const kpiPendiente = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
-  const kpiVencido = bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso').reduce((a,b)=>a+(b.amount||0),0)
-  const kpiProgramado = bb.filter(b=>b.status==='Programada'&&b.billing_type!=='reembolso'&&b.due?.startsWith(String(yr))).reduce((a,b)=>a+(b.amount||0),0)
+  const totalPorCobrar = porCobrarBills(bb)   // fuente única del "por cobrar" (mismo helper que ficha/lista)
   const top5 = [...porCobrar].sort((a,b)=>(daysLeft(a.due)||0)-(daysLeft(b.due)||0)).slice(0,5)
 
   const byArea = {}
@@ -2335,7 +2327,6 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   expenses.forEach(e=>{ balances[e.client_id]=(balances[e.client_id]||0)+saldoDelta(e) })
   const negatives = clients.filter(c=>!c.is_internal&&balances[c.id]<0)
   const [openCobranza,setOpenCobranza] = usePersistedState('d_cob',false)
-  const [funnelKpi,setFunnelKpi] = useState(null)   // paso del funnel (facturado/cobrado/programado) abierto para ver su detalle
   const [cajaExp,setCajaExp] = useState(null)  // persona de caja chica con su detalle desplegado
   const [cpExp,setCpExp] = useState(null)       // cuenta por pagar a proveedor con su origen desplegado
   const [openOficina,setOpenOficina] = useState(false)
@@ -2390,9 +2381,9 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
   const m = metricasAnio(selYear)
   // Facturado/Cobrado del AÑO seleccionado (facturas emitidas en el año; cobrado = de esas, cuánto pagado).
   const _sySel = String(selYear)
-  const facturadoSel = bb.filter(b=>esFacturada(b)&&b.issued_at?.startsWith(_sySel)).reduce((a,b)=>a+(b.amount||0),0)
-  const cobradoSel = bb.filter(b=>b.status==='Pagado'&&b.billing_type!=='reembolso'&&b.issued_at?.startsWith(_sySel)).reduce((a,b)=>a+(b.amount||0),0)
-  const porCobrarSel = Math.max(0, facturadoSel - cobradoSel)
+  // "Por cobrar" = saldo vivo real (fuente única porCobrarBills: folio, Pendiente/Vencido, saldoBill sobre el DTE, descuenta abonos).
+  // NO facturado−cobrado con amount programado: eso ignoraba abonos parciales e inflaba la cifra (era un 3er número distinto al de Cobranza).
+  const porCobrarSel = porCobrarBills(bb)
   const fmtMon = v => dashMoneda==='UF' ? (ufRef>0?fmtUFk(Math.round(v/ufRef)):'—') : fmtShort(v)
   // Para cifras de VENTAS (tienen UF nominal): en modo UF usa el UF nominal directo (cuadra con la pestaña Ventas); en CLP usa el monto en pesos. NO reconvertir CLP↔UF con la UF de hoy.
   const vMon = (uf,clp) => dashMoneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
@@ -5346,15 +5337,16 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
   const emitidasPorAnio = (()=>{
     const g={}
     billing.filter(b=>!b.deleted_at&&esEmitida(b)&&fecEmis(b)).forEach(b=>{ const d=fecEmis(b); const y=d.slice(0,4), mk=d.slice(0,7); (g[y]=g[y]||{}); (g[y][mk]=g[y][mk]||[]).push(b) })
-    return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1).map(([y,months])=>{ const flat=Object.values(months).flat(); return { y, months:Object.entries(months).sort((a,z)=>a[0]>z[0]?-1:1).map(([mk,fs])=>[mk, fs.slice().sort((a,b)=>(fecEmis(b)||'').localeCompare(fecEmis(a)||''))]), total:flat.reduce((a,b)=>a+(b.amount||0),0), n:flat.length } })
+    return Object.entries(g).sort((a,z)=>a[0]>z[0]?-1:1).map(([y,months])=>{ const flat=Object.values(months).flat(); return { y, months:Object.entries(months).sort((a,z)=>a[0]>z[0]?-1:1).map(([mk,fs])=>[mk, fs.slice().sort((a,b)=>(fecEmis(b)||'').localeCompare(fecEmis(a)||''))]), total:flat.reduce((a,b)=>a+montoFactura(b),0), n:flat.length } })
   })()
 
   // "Ya emitida" (programada cuyo gemelo emitido ya existe) — FUENTE ÚNICA compartida (matchProgEmitidas), misma que el
   // conteo de duplicados de Facturación y el panel Conciliar → los tres siempre coinciden.
   const _twins = useMemo(()=>{ const m=new Map(); matchProgEmitidas(billing,clients,clientEntities).forEach(x=>m.set(String(x.prog.id),x.real)); return m }, [billing,clients,clientEntities])
   const emitidaTwin = p => _twins.get(String(p.id))||null
-  const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+(b.amount||0),0)
-  const emitidasCLP = items.filter(esEmitida).reduce((a,b)=>a+(b.amount||0),0)
+  // Totales por montoFactura (autoridad del DTE) para que el total cuadre EXACTO con la suma de las filas (que ya usan montoFactura). Sin DTE, montoFactura cae a amount.
+  const porFacturarCLP = items.filter(b=>!esEmitida(b)).reduce((a,b)=>a+montoFactura(b),0)
+  const emitidasCLP = items.filter(esEmitida).reduce((a,b)=>a+montoFactura(b),0)
   const totalCLP = porFacturarCLP + emitidasCLP
   const totalUF = ufState.uf ? totalCLP/ufState.uf : null
   const nEmit = items.filter(esEmitida).length
@@ -13339,8 +13331,8 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const cartolaHastaEC=useMemo(()=>{let mx='';for(const x of movs){const f=String(x.fecha||'').slice(0,10);if(f>mx)mx=f}return mx||null},[movs])
   const movById=useMemo(()=>{const m={};movs.forEach(x=>m[x.id]=x);return m},[movs])
   const facturas=useMemo(()=>clientBilling.filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&b.status!=='Programada'),[clientBilling])
-  const facturado=facturas.reduce((s,b)=>s+(b.amount||0),0)
-  const pagadoTot=facturas.reduce((s,b)=>s+(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0)),0)
+  const facturado=facturas.reduce((s,b)=>s+montoFactura(b),0)   // autoridad DTE
+  const pagadoTot=facturas.reduce((s,b)=>s+(b.status==='Pagado'?montoFactura(b):(b.paid_amount||0)),0)
   const porCobrar=porCobrarBills(clientBilling)
   const fg=fgCliente(expenses,client.id)
   const aFavor=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
@@ -13349,7 +13341,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
   const grupos=useMemo(()=>{const g={};facturas.forEach(b=>{const rs=b.receptor_name||client.name||'—';(g[rs]=g[rs]||[]).push(b)})
     const cmp=ord==='monto'?(x,y)=>(y.amount||0)-(x.amount||0):ord==='proyecto'?(x,y)=>((ventaById[x.sale_id]?.title||x.concept||'zzz')).localeCompare(ventaById[y.sale_id]?.title||y.concept||'zzz')||((x.issued_at||'')<(y.issued_at||'')?1:-1):(x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1
     Object.values(g).forEach(a=>a.sort(cmp));return g},[facturas,ord,ventaById])
-  const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=(b.amount||0);o.pag+=(b.status==='Pagado'?(b.amount||0):(b.paid_amount||0));o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
+  const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=montoFactura(b);o.pag+=(b.status==='Pagado'?montoFactura(b):(b.paid_amount||0));o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
   const kpi=(label,val,sub,col,corner)=>(<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.3}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.done,lineHeight:1.3}}>{sub}</div></div>)
   const Hdr=({icon,title,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0}}>{title}</span>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
   return (<div style={{padding:'14px 20px 40px'}}>
@@ -13523,8 +13515,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
   const real = all.filter(b=>b.billing_type!=='reembolso')
-  const facturado = real.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
-  const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = real.filter(esFacturada).reduce((a,b)=>a+montoFactura(b),0)   // montoFactura = autoridad del DTE (no el amount programado)
+  const cobrado = real.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)
   const porCobrar = porCobrarBills(real)
   const programado = real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
   const overdueTot = real.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
@@ -13615,7 +13607,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
     <div style={{padding:'16px 20px 60px'}}>
       {/* Tira de 4 KPIs del cliente (heredada del landing), scroll horizontal; Programado/Cobrado por año */}
       {(()=>{
-        const cobYear=real.filter(b=>b.status==='Pagado'&&String(b.paid_at||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
+        const cobYear=real.filter(b=>b.status==='Pagado'&&String(b.paid_at||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+montoFactura(b),0)
         const progYear=real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&String(b.due||b.issued_at||'').slice(0,4)===selYear).reduce((a,b)=>a+(b.amount||0),0)
         return <div style={{display:'flex',gap:7,overflowX:'auto',marginBottom:12,paddingBottom:2,scrollbarWidth:'none',alignItems:'stretch'}}>
           {/* Por cobrar con Vencido ANIDADO (jerarquía: el vencido es parte del por cobrar, no una tarjeta paralela) */}
@@ -13635,8 +13627,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         if(!activas.length && !terminadas.length) return null
         const projCard = s => {
           const sb=clientBilling.filter(b=>!b.deleted_at&&b.sale_id===s.id)
-          const fac=sb.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
-          const cob=sb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+          const fac=sb.filter(esFacturada).reduce((a,b)=>a+montoFactura(b),0)
+          const cob=sb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)
           const pen=porCobrarBills(sb)
           const uf=(s.amount_uf||0)*(s.cobro_type==='mensual'?12:1)
           const ai={Corporativo:'building',Tributario:'file',Laboral:'users'}[s.area]||'briefcase'
@@ -14613,10 +14605,10 @@ function ClientFicha({client,clients,sales,billing,expenses,tasks,clientEntities
 
   // Vendido UF: misma fuente que Dashboard/Ventas (recurrentes x12, CLP convertido a UF)
   const vendidoUF = clientSales.reduce((a,s)=>a+ventaUF(s,ufRef),0)
-  const facturado = clientBilling.filter(esFacturada).reduce((a,b)=>a+(b.amount||0),0)
-  const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+  const facturado = clientBilling.filter(esFacturada).reduce((a,b)=>a+montoFactura(b),0)   // autoridad DTE
+  const cobrado = clientBilling.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)
   const porCobrar = clientBilling.filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status))
-  const totalPorCobrar = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
+  const totalPorCobrar = porCobrarBills(clientBilling)   // fuente única (mismo helper que Financiero/lista/Dashboard)
   // Saldo del cliente: fuente única (fgCliente) — mismo criterio (todo lo no-fondo es gasto) que la lista de Gastos y el Dashboard.
   const {fondos, gastos, saldo:saldoFondos} = fgCliente(expenses, client.id)
 
@@ -16741,7 +16733,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
       const bb=filterByPeriod(billing,'issued_at').filter(b=>b.billing_type!=='reembolso'&&['Pendiente','Vencido','Pagado'].includes(b.status))
       const pending=bb.filter(b=>b.status==='Pendiente').reduce((a,b)=>a+saldoBill(b),0)   // saldo real (descuenta abonos parciales), no el monto total
       const overdue=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
-      const paid=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(b.amount||0),0)
+      const paid=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)   // autoridad DTE
       html+=`<div class="section${sections.ventas?' page-break':''}">
         <div class="section-title">Cobranza</div>
         <div class="kpi-grid">
@@ -16756,7 +16748,7 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
           const dias=b.due?Math.round((new Date()-new Date(b.due+'T12:00'))/86400000):null
           const badgeClass=b.status==='Pagado'?'badge-paid':b.status==='Vencido'?'badge-overdue':'badge-pending'
           const diasStr=dias!==null&&dias>0?`${dias}d vencido`:dias!==null&&dias<0?`${Math.abs(dias)}d restantes`:'—'
-          html+=`<tr><td>${c?.name||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.concept||'—'}</td><td style="font-family:monospace">${b.invoice_no||'—'}</td><td>${b.issued_at||'—'}</td><td><span class="badge ${badgeClass}">${b.status}</span></td><td style="text-align:right;font-weight:600">${fmtN(b.amount)}</td><td style="color:${dias>0?C.overdue:A2}">${diasStr}</td></tr>`
+          html+=`<tr><td>${c?.name||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.concept||'—'}</td><td style="font-family:monospace">${b.invoice_no||'—'}</td><td>${b.issued_at||'—'}</td><td><span class="badge ${badgeClass}">${b.status}</span></td><td style="text-align:right;font-weight:600">${fmtN(montoFactura(b))}</td><td style="color:${dias>0?C.overdue:A2}">${diasStr}</td></tr>`
         })
         html+=`</tbody><tfoot><tr><td colspan="5">TOTAL</td><td style="text-align:right">${fmtN(pending+overdue+paid)}</td><td></td></tr></tfoot></table>`
       } else {
