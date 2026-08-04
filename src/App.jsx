@@ -6215,7 +6215,9 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   const MESNOM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const hoyKey = new Date().toISOString().slice(0,7)
   const hoyISO = new Date().toISOString().slice(0,10)
-  const [mes,setMes] = useState(mesInicial && /^\d{4}-\d{2}$/.test(mesInicial) ? mesInicial : hoyKey)
+  // El cierre por defecto es el MES ANTERIOR: es el que ya cerramos (facturas emitidas) y donde deben reflejarse los pagos. En agosto → julio.
+  const prevKey = (()=>{ const n=new Date(); const p=new Date(n.getFullYear(),n.getMonth()-1,1); return `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}` })()
+  const [mes,setMes] = useState(mesInicial && /^\d{4}-\d{2}$/.test(mesInicial) ? mesInicial : prevKey)
   const [modo,setModo] = useState('mes')      // 'mes' | 'acum' (acumulado del año hasta el mes elegido)
   const [resp,setResp] = useState(null)       // abogado responsable (null = todos)
   const [estFiltro,setEstFiltro] = useState(null)   // null | 'cobrada' | 'detectado' | 'sinpago'
@@ -7436,7 +7438,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               </div>
             </div>
             {/* Cierre de mes — acceso SUAVE bajo la foto (canon: la foto es la protagonista). Mini-resumen del mes + detalle quién pagó/quién no. */}
-            {(()=>{ const cmK=new Date().toISOString().slice(0,7); const MN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+            {(()=>{ const _now=new Date(); const _pm=new Date(_now.getFullYear(),_now.getMonth()-1,1); const cmK=`${_pm.getFullYear()}-${String(_pm.getMonth()+1).padStart(2,'0')}`; const MN=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']   // Cierre = mes ANTERIOR (el que cerramos, ya emitido); mes capitalizado (pedido del usuario)
               const emi=bb.filter(b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.issued_at||b.date||'').slice(0,7)===cmK)
               const mo=b=>montoFactura(b); const ab=b=>Math.max(Number(b.paid_amount)||0,Number(respaldoMap[b.id])||0); const sa=b=>b.status==='Pagado'?0:Math.max(0,mo(b)-ab(b))
               const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
@@ -21909,7 +21911,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                         {sug&&(()=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const sld=saldoFactura(sug); const exacto=sld===resto; const est=estadoFacturaLabel(sug,aplicadoByFactura[sug.id]||0,cartolaHasta); const esReemb=(sug.billing_type||'')==='reembolso'; const rutMatch=[...rutsFac(sug)].some(r=>rutsMov.has(r)); const rsF=sug.receptor_name||cmap[sug.client_id]||cmap[m.cliente_id]||'—'; const cta=m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'; return (
                           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'9px 10px',marginBottom:6}}>
                             <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                              <div style={{flex:'1 1 150px',minWidth:130}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>El depósito</div>
                                 <div style={{fontSize:14,fontWeight:700,color:C.greenText}}>+{fmtM(m.monto)}</div>
                                 <div style={{fontSize:10,color:C.muted}}>{fmtFechaDMY(m.fecha)} · {cta}</div>
@@ -21917,7 +21919,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                 {m.n_operacion&&<div style={{fontSize:10,color:C.muted}}>N° op. {m.n_operacion}</div>}
                                 {m.descripcion&&<div style={{fontSize:9.5,color:C.done,marginTop:2,lineHeight:1.35}}>{(m.descripcion||'').slice(0,80)}{(m.descripcion||'').length>80?'…':''}</div>}
                               </div>
-                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                              <div style={{flex:'1 1 150px',minWidth:130}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>La factura</div>
                                 <div style={{fontSize:13,fontWeight:700,color:C.accent}}>N°{folioN(sug.invoice_no)||'—'} · {fmtM(sld)}</div>
                                 <div style={{fontSize:10,color:C.muted}}>Emitida {fmtFechaDMY(sug.issued_at)}{sug.due?` · vence ${fmtFechaDMY(sug.due)}`:''}</div>
@@ -21932,10 +21934,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginTop:7,paddingTop:6,borderTop:`1px solid ${C.bgSoft}`}}>
                               {rutMatch&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px'}}>✓ Mismo RUT</span>}
                               <span style={{fontSize:9.5,fontWeight:700,color:exacto?C.greenText:C.soonText,background:exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px'}}>{exacto?'✓ Monto exacto':`Dif ${fmtM(Math.abs(sld-resto))}`}</span>
-                              <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
-                                <button disabled={busy===m.id} onClick={()=>setReembFor(reembFor===m.id?null:m.id)} title='La factura es de gastos/reembolso: se marca pagada pero no cuenta como ingreso' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'4px 10px',border:'none',cursor:busy===m.id?'default':'pointer',background:reembFor===m.id?'#FAECE7':C.bgSoft,color:reembFor===m.id?C.coralText:C.muted}}>Es reembolso{reembFor===m.id?' ▴':' ▾'}</button>
-                                <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 14px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
-                              </div>
+                              {/* "Es reembolso" SOLO cuando la factura es de gastos/reembolso (para las de honorarios no aplica; lo demás va en "¿A qué corresponde?") */}
+                              {esReemb&&<button disabled={busy===m.id} onClick={()=>setReembFor(reembFor===m.id?null:m.id)} title='La factura es de gastos/reembolso: se marca pagada pero no cuenta como ingreso' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'4px 10px',border:'none',cursor:busy===m.id?'default':'pointer',background:reembFor===m.id?'#FAECE7':C.bgSoft,color:reembFor===m.id?C.coralText:C.muted}}>Es reembolso{reembFor===m.id?' ▴':' ▾'}</button>}
+                              <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{marginLeft:'auto',background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 16px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
                             </div>
                             {reembFor===m.id&&<div style={{marginTop:7,background:'#FAECE7',borderRadius:8,padding:'8px 10px'}}>
                               <div style={{fontSize:10,color:C.coralText,marginBottom:6,lineHeight:1.4}}>Factura de gastos: se marca <b>pagada</b> con respaldo, pero <b>No cuenta como ingreso</b>. Elige:</div>
@@ -21955,7 +21956,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               <button disabled={busy===m.id} onClick={()=>reconciliarGrupo(grp.transfers,grp.facturas)} style={{background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 13px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar grupo</button>
                             </div>
                             <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                              <div style={{flex:'1 1 150px',minWidth:130}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Los depósitos · {grp.transfers.length}</div>
                                 {grp.transfers.map(t=>(<div key={t.id} style={{padding:'3px 0',borderTop:`1px solid ${C.bgSoft}`}}>
                                   <div style={{display:'flex',justifyContent:'space-between',gap:6}}><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>+{fmtM(t.monto)}</span><span style={{fontSize:10,color:C.done}}>{fmtFechaDMY(t.fecha)}</span></div>
@@ -21964,7 +21965,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                                 </div>))}
                                 <div style={{display:'flex',justifyContent:'space-between',borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:4,fontSize:10.5,fontWeight:700,color:C.text}}><span>Suma</span><span>{fmtM(depSum)}</span></div>
                               </div>
-                              <div style={{flex:'1 1 160px',minWidth:150}}>
+                              <div style={{flex:'1 1 150px',minWidth:130}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>Las facturas · {grp.facturas.length}</div>
                                 {grp.facturas.map(f=>(<div key={f.id} style={{padding:'3px 0',borderTop:`1px solid ${C.bgSoft}`}}>
                                   <div style={{display:'flex',justifyContent:'space-between',gap:6}}><span style={{fontSize:11,fontWeight:700,color:C.accent}}>N°{folioN(f.invoice_no)||'—'}</span><span style={{fontSize:11,fontWeight:700,color:C.text}}>{fmtM(saldoFactura(f))}</span></div>
