@@ -21237,10 +21237,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
     if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
     if(sub==='abonos'){
-      if(concView==='sinid') l=l.filter(m=>!m.es_interno&&!m.cliente_id&&!tieneCand(m)&&!RESUELTAS_ABO.includes(m.categoria))
-      else if(concView==='porconciliar') l=l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length))
-      else if(concView==='conciliados') l=l.filter(m=>concByMov[m.id]?.length)
-      else if(concView==='descalces') l=l.filter(esDescalce)
+      // El movimiento ABIERTO (modalMov) nunca se filtra fuera: al conciliar/identificar queda a la vista
+      // con su estado hecho + Deshacer (no se esfuma bajo el dedo). Se reordena solo al cerrarlo o abrir otro.
+      const keepOpen=m=>String(m.id)===String(modalMov)
+      if(concView==='sinid') l=l.filter(m=>keepOpen(m)||(!m.es_interno&&!m.cliente_id&&!tieneCand(m)&&!RESUELTAS_ABO.includes(m.categoria)))
+      else if(concView==='porconciliar') l=l.filter(m=>keepOpen(m)||(tieneCand(m)&&!(concByMov[m.id]?.length)))
+      else if(concView==='conciliados') l=l.filter(m=>keepOpen(m)||concByMov[m.id]?.length)
+      else if(concView==='descalces') l=l.filter(m=>keepOpen(m)||esDescalce(m))
     }
     // Búsqueda por RUT / nombre del banco / cliente resuelto.
     if(q.trim()){ const qq=q.trim().toLowerCase(), qd=q.replace(/[^0-9kK]/g,'').toLowerCase()
@@ -21248,7 +21251,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         return nm.includes(qq)||cl.includes(qq)||(qd.length>=3&&rut.includes(qd)) }) }
     l=l.slice().sort((a,b)=> orden==='asc' ? ((a.fecha||'')<(b.fecha||'')?-1:1) : ((a.fecha||'')>(b.fecha||'')?-1:1))
     return l.slice(0,400)
-  },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap])
+  },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap,modalMov])
   // Contadores de los chips de estado sobre la MISMA base filtrada que la lista (cuenta/mes/año/resp) — evita mostrar "88" cuando la vista filtrada está vacía.
   const chipCounts = useMemo(()=>{
     if(sub!=='abonos') return {porconciliar:0,descalces:0,sinid:0}
