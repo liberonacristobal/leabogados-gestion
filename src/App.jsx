@@ -1797,7 +1797,7 @@ function BottomNav({tab,setTab,overdueN,userRole}) {
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:'10px 0 8px',background:'none',border:'none',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,position:'relative',minWidth:0}}>
           <span style={{lineHeight:0,color:tab===t.id?C.accent:C.muted,display:'flex'}}>{icons[t.icon]||icons.grid}</span>
           <span style={{fontSize:10,color:tab===t.id?C.accent:C.muted,fontWeight:tab===t.id?700:400,whiteSpace:'nowrap'}}>{t.label}</span>
-          {t.id==='billing'&&overdueN>0&&<span style={{position:'absolute',top:4,right:'calc(50% - 16px)',background:C.overdue,color:'#fff',borderRadius:10,fontSize:9,fontWeight:700,padding:'1px 5px'}}>{overdueN}</span>}
+          {/* Badge "N vencidas" del nav eliminado (2026-08-04, pedido del usuario): un número rojo suelto no dice qué es; el detalle de vencidas vive en la foto "Etapas del cobro". */}
         </button>
       ))}
     </div>
@@ -4034,17 +4034,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               {rows.length>8&&<div onClick={()=>setVerTodasV(v=>!v)} style={{textAlign:'center',padding:'7px 0',fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-8} más · ver todas`}</div>}
             </div>
           )})()}
-          {(propuestasFiltradas.length>0||totalCerradas>0)&&(
-            <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginTop:14}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}><span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Embudo de propuestas</span>{totalCerradas>0&&<span style={{fontSize:11,fontWeight:700,color:C.normal}}>{conversionPct.toFixed(0)}% conversión</span>}</div>
-              {totalCerradas>0?<><div style={{display:'flex',height:22,borderRadius:5,overflow:'hidden'}}>
-                <div style={{width:`${conversionPct}%`,background:C.normal,display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{conversionPct>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Activadas {activadasFiltradas.length}</span>}</div>
-                <div style={{flex:1,background:'#F09595',display:'flex',alignItems:'center',paddingLeft:8,minWidth:0,overflow:'hidden'}}>{(100-conversionPct)>=20&&<span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>Rech. {rechazadasFiltradas.length}</span>}</div>
-              </div>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.done,marginTop:5}}><span>desc. promedio {conDesc.length>0?descuentoProm.toFixed(0):'0'}%</span><span>Valor rechazado {fmtUF(valorRechazadoUF)}</span></div></>
-              :<div style={{fontSize:11,color:C.muted}}>{propuestasFiltradas.length} propuesta{propuestasFiltradas.length!==1?'s':''} en pipeline · {fmtUF(pipelineUF)}</div>}
-            </div>
-          )}
+          {/* "Embudo de propuestas" eliminado (2026-08-04, pedido del usuario): no aportaba — la conversión/rechazado no era accionable y el pipeline vivo ya está en el tile "Propuestas". */}
         </>)}
       </div>
     </div>
