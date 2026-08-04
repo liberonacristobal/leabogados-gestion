@@ -20080,6 +20080,7 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
   const [yr,setYr]=useState('todos')
   const [openMes,setOpenMes]=useState(()=>new Set())   // meses abiertos (default cerrados: primero el panorama)
   const [pickFac,setPickFac]=useState(null)      // factura con candidatos alternativos desplegados
+  const [montoFacFor,setMontoFacFor]=useState(null)   // movimiento sin identificar cuyas facturas-por-monto (último criterio) están desplegadas para elegir
   const [loteBusy,setLoteBusy]=useState(false)
   const [loteProg,setLoteProg]=useState(0)
   const rutsFac = fac => { const s=new Set(); const add=r=>{const n=nrm(r); if(n)s.add(n)}; add(fac.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(fac.entity_id)); if(e)add(e.rut); const c=(clients||[]).find(x=>String(x.id)===String(fac.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(fac.client_id)).forEach(x=>add(x.rut)); return s }
@@ -20617,6 +20618,21 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     const cids=[...new Set(ms.map(b=>String(b.client_id)))]
     if(cids.length!==1) return null
     return { cid:cids[0], factura:ms[0] }
+  }
+  // ÚLTIMO criterio de calce — SOLO sugerencia manual (nunca auto): un depósito sin identificar (sin cliente ni RUT que calce) se
+  // busca contra CUALQUIER factura emitida sin pago cuyo saldo calce EXACTO, con la ventana AMPLIA del matcher normal (hasta ~36 meses
+  // tarde), sin la ventana estrecha del auto ni exigir cliente único. Devuelve las candidatas ordenadas por cercanía al pago, para elegir.
+  const facturaPorMontoManual = (mov) => {
+    if(mov.cliente_id || mov.es_interno || mov.tipo!=='abono') return []
+    const amt = mov.monto||0; if(amt<=0) return []
+    const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
+    const delta = iso => (payT&&iso) ? (payT-new Date(iso.slice(0,10)+'T12:00').getTime())/86400000 : null
+    return facturasConSaldo
+      .filter(b=> b.client_id && Math.abs(saldoFactura(b)-amt)<=TOL)
+      .map(b=>({b, d:delta(b.issued_at)}))
+      .filter(x=> x.d===null || (x.d>=-60 && x.d<=1095))
+      .sort((a,b)=> (a.d==null?9e9:Math.abs(a.d))-(b.d==null?9e9:Math.abs(b.d)))
+      .map(x=>x.b)
   }
   // D — Sugerencias de identificación por NOMBRE (único) para abonos sin cliente. El auto ya hace la id por monto; esto es para confirmar en lote las de nombre (con compuerta humana).
   const sugeridosId = useMemo(()=>{ const out=[]
@@ -21747,7 +21763,17 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           ? <span onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} title='Tocar para editar / cambiar cliente' style={{fontWeight:500,color:C.muted,border:`1px solid ${C.border}`,borderRadius:3,padding:'1px 8px',background:'#fff',cursor:'pointer'}}>{cliName}</span>
                           : <button onClick={()=>{setEditMov(m.id);setEditForm({rut:m.rut_contraparte||'',nombre:m.nombre_contraparte||''})}} style={{fontSize:10,color:C.soon,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Asignar cliente</button>}
                         {!cliName&&sugerencias[m.id]&&cmap[sugerencias[m.id]]&&<button onClick={()=>identificar(m,sugerencias[m.id],true)} title='Asignar este cliente (aprende el RUT)' style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,background:C.greenBg,color:C.greenText,border:'none',cursor:'pointer'}}>{cmap[sugerencias[m.id]]} <span style={{fontWeight:600,opacity:.85}}>· por el nombre</span></button>}
-                        {!cliName&&!sugerencias[m.id]&&(()=>{ const cm=clientePorMonto(m); if(!cm) return null; const nom=cmap[cm.cid]||clients.find(c=>String(c.id)===String(cm.cid))?.name||'cliente'; return <button onClick={()=>identificar(m,cm.cid,true)} title={`Asignar a ${nom} — tiene la Factura N°${folioN(cm.factura.invoice_no)||'—'} que calza exacto`} style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,background:C.azulBg,color:C.accent,border:'none',cursor:'pointer'}}>{nom} <span style={{fontWeight:600,opacity:.85}}>· calza con N°{folioN(cm.factura.invoice_no)||'—'}</span></button> })()}
+                        {!cliName&&!sugerencias[m.id]&&(()=>{
+                          const cm=clientePorMonto(m)
+                          if(cm){ const nom=cmap[cm.cid]||clients.find(c=>String(c.id)===String(cm.cid))?.name||'cliente'; return <button onClick={()=>identificar(m,cm.cid,true)} title={`Asignar a ${nom} — tiene la Factura N°${folioN(cm.factura.invoice_no)||'—'} que calza exacto`} style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,background:C.azulBg,color:C.accent,border:'none',cursor:'pointer'}}>{nom} <span style={{fontWeight:600,opacity:.85}}>· calza con N°{folioN(cm.factura.invoice_no)||'—'}</span></button> }
+                          // Último criterio de calce: factura emitida sin pago con el mismo monto exacto (ventana amplia).
+                          const fm=facturaPorMontoManual(m); if(!fm.length) return null
+                          if(fm.length===1){ const f=fm[0]; const nom=cmap[f.client_id]||clients.find(c=>String(c.id)===String(f.client_id))?.name||'cliente'; return <button onClick={()=>identificar(m,f.client_id,true)} title={`Único calce por monto: Factura N°${folioN(f.invoice_no)||'—'} de ${nom} (emitida sin pago, mismo monto exacto)`} style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,background:C.azulBg,color:C.accent,border:'none',cursor:'pointer'}}>{nom} <span style={{fontWeight:600,opacity:.85}}>· calza con N°{folioN(f.invoice_no)||'—'}</span></button> }
+                          const open=montoFacFor===m.id
+                          return <><button onClick={()=>setMontoFacFor(open?null:m.id)} title='Facturas emitidas sin pago del mismo monto exacto — elige cuál' style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,background:C.azulBg,color:C.accent,border:'none',cursor:'pointer'}}>{fm.length} facturas calzan {fmtM(m.monto)} {open?'▴':'▾'}</button>
+                            {open&&<div style={{flexBasis:'100%',display:'flex',flexDirection:'column',gap:4,marginTop:4}}>{fm.slice(0,8).map(f=>{ const nom=cmap[f.client_id]||clients.find(c=>String(c.id)===String(f.client_id))?.name||'cliente'; return <button key={f.id} onClick={()=>{identificar(m,f.client_id,true);setMontoFacFor(null)}} style={{textAlign:'left',fontSize:10,fontWeight:600,padding:'4px 9px',borderRadius:7,background:'#fff',border:`1px solid ${C.border}`,color:C.text,cursor:'pointer'}}>{nom} · Factura N°{folioN(f.invoice_no)||'—'} <span style={{color:C.muted,fontWeight:400}}>· emitida {fmtFechaDMY(f.issued_at)}</span></button> })}</div>}
+                          </>
+                        })()}
                         {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}
                         {(m.tipo==='cargo'||m.categoria||tagFor===m.id||(m.tipo==='abono'&&!m.es_interno&&(!m.cliente_id||!tieneCand(m))))&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
                           tagFor===m.id
