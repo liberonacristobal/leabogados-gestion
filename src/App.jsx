@@ -20216,6 +20216,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
 
   const cargar = useCallback(async()=>{
     setLoading(true)
+    if(DEMO){ setMovs(demoData.cartola_movimientos||[]); setAliases(demoData.cliente_alias||[]); setConc(demoData.conciliacion||[]); setLoading(false); return }
     const [{data:m},{data:a},{data:cc}] = await Promise.all([
       supabase.from('cartola_movimientos').select('*').order('fecha',{ascending:false}).limit(8000),
       supabase.from('cliente_alias').select('*'),
