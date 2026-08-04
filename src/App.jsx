@@ -21548,24 +21548,49 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',flexShrink:0}}>{lista.length}{(()=>{const tot=movs.filter(m=>sub==='abonos'?m.tipo==='abono':m.tipo==='cargo').length;return tot>lista.length?` / ${tot}`:''})()}</span>
         </div>
 
-        {/* Conciliación (Fase 2) — solo abonos: acción + resumen (el estado se elige en el filtro de arriba) */}
-        {sub==='abonos'&&(
-          <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8,flexWrap:'wrap'}}>
-            {/* "Revisar propuesta" se eliminó: su función (revisar los pagos con factura que calza) vive en el filtro "Por conciliar" — un solo flujo, la misma tarjeta del detalle. "Sugerencias" (por nombre) queda como acción rápida para identificar en lote. */}
-            {sugeridosId.length>0&&<button onClick={()=>{setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:10.5,fontWeight:700,height:26,boxSizing:'border-box',padding:'0 12px',borderRadius:7,border:`1px solid ${C.accent}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Identificar por nombre · {sugeridosId.length}</button>}
-            {resumenConc.total>0&&(()=>{ const pct=Math.round(resumenConc.done/resumenConc.total*100); return (
-              <span style={{fontSize:10.5,color:C.muted}}><b style={{color:C.greenText}}>{pct}%</b> conciliado <span style={{color:C.done}}>· {resumenConc.done}/{resumenConc.total}</span></span>
-            )})()}
-            {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones)' style={{marginLeft:'auto',fontSize:10,fontWeight:600,height:26,boxSizing:'border-box',display:'inline-flex',alignItems:'center',backgroundColor:C.soonBg,color:C.soonText,borderRadius:7,padding:'0 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{resumenConc.fondos} prov →</span>}
-          </div>
-        )}
-        {/* Estado de conciliación — chips livianos: solo estados con pendientes (>0); tocar filtra, tocar de nuevo = Todos */}
-        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',chipCounts.porconciliar,C.soonText,'#FAC775'],['descalces','Sin factura que calce',chipCounts.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',chipCounts.sinid,C.soonText,C.border],['conciliados','Conciliados',chipCounts.conciliados,C.greenText,'#9FE1CB']].filter(c=>c[2]>0); return ch.length>0?(
-          <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
-            {ch.map(([v,l,n,fg,bd])=>{ const on=concView===v; return <span key={v} onClick={()=>setConcView(on?'todos':v)} style={{fontSize:11,fontWeight:600,borderRadius:12,padding:'3px 11px',cursor:'pointer',border:`1px solid ${on?fg:bd}`,background:on?fg:'#fff',color:on?'#fff':fg}}>{l} · {n}</span> })}
-            {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{fontSize:10,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Todos</span>}
-          </div>
-        ):null })()}
+        {/* Conciliación — bandeja de pendientes: solo lo accionable. Un protagonista ("te faltan N"), cada estado una fila tappable que filtra la lista; el archivo (conciliados) y las provisiones bajan a un susurro al pie. Sin % ni barra: la confianza va por diseño y así ambas cifras (filas + conciliados) salen de la MISMA base (chipCounts). */}
+        {sub==='abonos'&&(()=>{
+          const porc=chipCounts.porconciliar, desc=chipCounts.descalces, sinid=chipCounts.sinid, conc=chipCounts.conciliados
+          const pend=porc+desc+sinid, nSug=sugeridosId.length
+          const rows=[
+            {v:'porconciliar', n:porc, bg:C.soonBg,    col:C.soonText,    l:'Por conciliar',          sub:'Calzan con una factura — un toque'},
+            {v:'descalces',    n:desc, bg:C.overdueBg, col:C.overdueText, l:'Sin factura que calce',  sub:'Piden tu criterio'},
+            {v:'sinid',        n:sinid,bg:C.bgWarm,    col:C.grisText,    l:'Sin identificar',        sub:'Falta asignar cliente', act:nSug>0?`Identificar ${nSug} por su nombre →`:null},
+          ].filter(r=>r.n>0)
+          return (
+            <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10,background:'#fff'}}>
+              {pend>0?<>
+                <div style={{display:'flex',alignItems:'center',padding:'10px 13px 5px'}}>
+                  <span style={{fontSize:11.5,fontWeight:600,color:C.text,flex:1}}>Te faltan por resolver · {pend}</span>
+                  {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{fontSize:10,color:C.muted,textDecoration:'underline',cursor:'pointer'}}>Ver todos</span>}
+                </div>
+                {rows.map(r=>{ const on=concView===r.v; return (
+                  <div key={r.v} onClick={()=>setConcView(on?'todos':r.v)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 13px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:'#fff'}}>
+                    <span style={{width:34,height:34,borderRadius:10,flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,fontVariantNumeric:'tabular-nums',background:r.bg,color:r.col}}>{r.n}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13.5,color:C.text}}>{r.l}</div>
+                      {r.act
+                        ? <div onClick={e=>{e.stopPropagation();setRevSugSel(new Set(sugeridosId.map(s=>s.mov.id)));setRevSugOpen(true)}} style={{fontSize:11,fontWeight:600,color:C.accent,marginTop:2,cursor:'pointer'}}>{r.act}</div>
+                        : <div style={{fontSize:11,color:C.muted,marginTop:2}}>{r.sub}</div>}
+                    </div>
+                    <span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
+                  </div>
+                )})}
+              </>:(
+                <div style={{display:'flex',alignItems:'center',gap:11,padding:'13px'}}>
+                  <span style={{width:28,height:28,borderRadius:'50%',background:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={15} c={C.greenText}/></span>
+                  <span style={{fontSize:14,fontWeight:600,color:C.greenText}}>Todo conciliado · {conc}</span>
+                </div>
+              )}
+              {(( pend>0&&conc>0 )||resumenConc.fondos>0)&&(
+                <div style={{display:'flex',gap:14,alignItems:'center',padding:'9px 13px',borderTop:`0.5px solid ${C.border}`,background:C.bgSoft}}>
+                  {pend>0&&conc>0&&<span onClick={()=>setConcView(concView==='conciliados'?'todos':'conciliados')} style={{fontSize:11,color:C.done,cursor:'pointer'}}>{conc} conciliados</span>}
+                  {resumenConc.fondos>0&&<span onClick={()=>setCuentaF('gastos')} title='Ver Cta. Gastos (donde suelen estar las provisiones / fondos por rendir)' style={{fontSize:11,color:C.done,cursor:'pointer',marginLeft:'auto'}}>{resumenConc.fondos} en Cta. Gastos →</span>}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Conciliar en lote: calces exactos y únicos de una; el resto (varios candidatos / sin factura) se cuenta y se resuelve abajo. */}
         {sub==='abonos'&&(()=>{
