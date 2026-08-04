@@ -5453,9 +5453,9 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                 <div style={{display:'flex',justifyContent:'space-between',borderTop:`1px solid ${C.border}`,paddingTop:7}}><span style={{fontSize:12,fontWeight:600,color:C.accent}}>Total exento</span><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{fmt(tot)}</span></div>
               </div>
             </div>
-            <div style={{fontSize:9.5,color:C.muted}}>Se enviará a {dest?<b style={{color:C.accent}}>{dest}</b>:<span style={{color:C.soonText}}>lo eliges al enviar</span>}{sent?<span style={{color:C.greenText}}> · enviado el {fmtFechaDMY(b.email_sent_at)}</span>:''}</div>
+            <div style={{fontSize:9.5,color:C.muted}}>Se enviará a {dest?<b style={{color:C.accent}}>{dest}</b>:<span style={{color:C.soonText}}>Lo eliges al enviar</span>}{sent?<span style={{color:C.greenText}}> · enviado el {fmtFechaDMY(b.email_sent_at)}</span>:''}</div>
             {/* Venta asociada (para el registro): muestra la vinculada o un selector para vincularla en el flujo. */}
-            <div style={{fontSize:9.5,color:C.muted,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Venta:{(()=>{ const linked=(sales||[]).find(s=>String(s.id)===String(b.client_id?b.sale_id:null)); if(linked&&ventaNombre(linked)) return <b style={{color:C.text}}>{ventaNombre(linked)}</b>; const cs=(sales||[]).filter(s=>String(s.client_id)===String(b.client_id)&&ventaNombre(s)); if(!onAssignSeries||!cs.length) return <span style={{color:C.soonText}}>sin venta asociada{cs.length?'':' · el cliente no tiene ventas'}</span>; return <select defaultValue='' onChange={e=>{ if(e.target.value) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:`1px solid ${C.soon}`,background:'#fff',color:C.text}}><option value=''>Vincular a venta…</option>{cs.map(s=><option key={s.id} value={s.id}>{ventaNombre(s)}{s.year?` · ${s.year}`:''}</option>)}</select> })()}</div>
+            <div style={{fontSize:9.5,color:C.muted,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Venta:{(()=>{ const linked=(sales||[]).find(s=>String(s.id)===String(b.client_id?b.sale_id:null)); if(linked&&ventaNombre(linked)) return <b style={{color:C.text}}>{ventaNombre(linked)}</b>; const cs=(sales||[]).filter(s=>String(s.client_id)===String(b.client_id)&&ventaNombre(s)); if(!onAssignSeries||!cs.length) return <span style={{color:C.soonText}}>Sin venta asociada{cs.length?'':' · el cliente no tiene ventas'}</span>; return <select defaultValue='' onChange={e=>{ if(e.target.value) onAssignSeries(e.target.value,[b.id]) }} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:`1px solid ${C.soon}`,background:'#fff',color:C.text}}><option value=''>Vincular a venta…</option>{cs.map(s=><option key={s.id} value={s.id}>{ventaNombre(s)}{s.year?` · ${s.year}`:''}</option>)}</select> })()}</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
               <button onClick={()=>verFacturaPdf(b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver PDF con timbre</button>
               {onOpenClientFicha&&b.client_id&&<button onClick={()=>onOpenClientFicha(b.client_id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer'}}>Ver ficha</button>}
@@ -5488,14 +5488,14 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
           {onCotejar&&(
             <button onClick={onCotejar} title='Trae lo emitido del SII y lo calza con las programadas' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
               <span style={{width:36,height:36,borderRadius:10,background:C.ambarBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></svg></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cotejar SII</div><div style={{fontSize:10,color:C.muted}}>por cotejar</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cotejar SII</div><div style={{fontSize:10,color:C.muted}}>Por cotejar</div></div>
               <span style={{fontSize:19,fontWeight:600,color:C.soonText,flexShrink:0}}>{porEmitir.length}</span>
             </button>
           )}
           {onCargarXML&&(
             <button onClick={onCargarXML} title='Sube el archivo respaldo de MIPYME → genera el PDF y lo adjunta' style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
               <span style={{width:36,height:36,borderRadius:10,background:C.tealBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.tealText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></svg></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cargar XML</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>cargadas en {(MESES[+month-1]||'').toLowerCase()}</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Cargar XML</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Cargadas en {(MESES[+month-1]||'').toLowerCase()}</div></div>
               <span style={{fontSize:19,fontWeight:600,color:C.tealText,flexShrink:0}}>{cargadasXml}</span>
             </button>
           )}
@@ -5511,7 +5511,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
         </button>
         <button onClick={()=>setChecklistTab(t=>t==='enviar'?null:'enviar')} title='Emitidas con respaldo que aún no envías al cliente' style={{display:'flex',alignItems:'center',gap:10,background:checklistTab==='enviar'?C.azulBg:'#fff',border:checklistTab==='enviar'?`1.5px solid ${C.accent}`:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 12px',cursor:'pointer',textAlign:'left'}}>
           <span style={{width:36,height:36,borderRadius:10,background:checklistTab==='enviar'?'#fff':C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z'/></svg></span>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Por enviar</div><div style={{fontSize:10,color:C.muted}}>al cliente</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Por enviar</div><div style={{fontSize:10,color:C.muted}}>Al cliente</div></div>
           <span style={{fontSize:19,fontWeight:600,color:C.accent,flexShrink:0}}>{porEnviar.length}</span>
         </button>
       </div>
@@ -5637,7 +5637,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                         {bigDate(fecEmis(b),C.greenText)}
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c?.name||'Sin cliente'} <span style={{fontWeight:400,color:C.muted}}>· Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span></div>
-                          <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{rsDisplay(rs)}</span>:<span style={{color:C.soonText}}>sin razón social</span>} · {b.concept||'—'}</div>
+                          <div style={{fontSize:10,color:C.grisText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs?<span style={{color:C.muted}}>{rsDisplay(rs)}</span>:<span style={{color:C.soonText}}>Sin razón social</span>} · {b.concept||'—'}</div>
                         </div>
                         {est&&<span style={{fontSize:9,fontWeight:600,padding:'2px 8px',borderRadius:7,background:est.bg,color:est.fg,whiteSpace:'nowrap',flexShrink:0}}>{est.label}</span>}
                         <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,color:parcial?C.soonText:C.muted,fontWeight:parcial?600:400}}>{fmt(saldoB)}</div>{parcial&&<div style={{fontSize:9,color:C.done,whiteSpace:'nowrap'}}>saldo · de {fmt(b.amount)}</div>}</div>
@@ -5647,7 +5647,7 @@ function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], on
                           {/* Traza de la factura: emitida · correo (con fecha de envío) · estado de cobro */}
                           <div style={{background:C.bgSoft,borderRadius:8,padding:'7px 10px',marginBottom:8,fontSize:10.5,color:C.muted,display:'flex',flexDirection:'column',gap:2}}>
                             <div>Emitida <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b>{b.dte_xml?<span style={{color:C.greenText}}> · PDF con timbre</span>:''}</div>
-                            <div>Correo: {b.email_sent_at?<b style={{color:C.greenText}}>✓ enviado el {fmtFechaDMY(b.email_sent_at)}</b>:<span style={{color:C.soonText}}>sin enviar</span>}</div>
+                            <div>Correo: {b.email_sent_at?<b style={{color:C.greenText}}>✓ enviado el {fmtFechaDMY(b.email_sent_at)}</b>:<span style={{color:C.soonText}}>Sin enviar</span>}</div>
                             <div>Cobro: <b style={{color:(est&&est.fg)||C.muted}}>{(est&&est.label)||b.status}</b></div>
                           </div>
                           <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
@@ -7081,7 +7081,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                         {r.msg&&<div style={{fontSize:10,color:C.overdueText}}>{r.msg}</div>}
                         {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en Cobertura SII o en la factura.</div>}
                       </div>
-                      {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>ver PDF ↗</a>}
+                      {r.url&&<a href={r.url} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.accent,textDecoration:'none',flexShrink:0}}>Ver PDF ↗</a>}
                       <span style={{fontSize:9,fontWeight:700,color:s.c,background:s.bg,borderRadius:20,padding:'2px 8px',flexShrink:0}}>{s.t}</span>
                     </div>
                     {esSin&&<div style={{display:'flex',gap:8,alignItems:'center',marginTop:6,flexWrap:'wrap'}}>
@@ -7121,7 +7121,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
             <button onClick={()=>irAEstado('emitidas')} style={{textAlign:'left',background:on?'#E6EEF1':'#fff',borderRadius:9,padding:'7px 9px',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,cursor:'pointer',minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}><SIcon n='file' s={12} c={C.accent}/><span style={{fontSize:9,color:C.muted,textTransform:'uppercase',letterSpacing:.2,whiteSpace:'nowrap'}}>Por cobrar</span></div>
               <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>{fmtShort(pending)}</div>
-              {overdue>0&&<div onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{fontSize:10,color:C.overdue,fontWeight:600,marginTop:3,whiteSpace:'nowrap'}}>vencido {fmtShort(overdue)}</div>}
+              {overdue>0&&<div onClick={e=>{e.stopPropagation();irAEstado('vencido')}} style={{fontSize:10,color:C.overdue,fontWeight:600,marginTop:3,whiteSpace:'nowrap'}}>Vencido {fmtShort(overdue)}</div>}
             </button>
           )})()}
           {[['Por facturar',programado,'programadas','#537281','#EDF1F3','clock'],['Cobrado',paid,'pagado',C.normal,'#E1F5EE','check']].map(([l,v,fl,col,bg,icon])=>{ const on=estadoActivo(fl); return (
@@ -7423,12 +7423,12 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               <div style={{display:'grid',gridTemplateColumns:dupN>0?'1fr 1fr':'1fr',gap:8,marginBottom:8}}>
                 <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}>
                   <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></svg></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>Facturas del mes</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>por emitir{pemTot?` · ${fmtShort(pemTot)}`:''}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>Facturas del mes</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Por emitir{pemTot?` · ${fmtShort(pemTot)}`:''}</div></div>
                   <div style={{fontSize:18,fontWeight:700,color:C.accent,flexShrink:0}}>{pemN}</div>
                 </div>
                 {dupN>0&&<div onClick={()=>onConciliar&&onConciliar()} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}>
                   <span style={{width:30,height:30,borderRadius:8,background:C.ambarBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></svg></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.soonText,whiteSpace:'nowrap'}}>Revisar duplicados</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>ya tienen factura real</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.soonText,whiteSpace:'nowrap'}}>Revisar duplicados</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Ya tienen factura real</div></div>
                   <div style={{fontSize:18,fontWeight:700,color:C.soonText,flexShrink:0}}>{dupN}</div>
                 </div>}
               </div>
@@ -7771,7 +7771,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
                 <div style={{minWidth:0,flex:1}}>
-                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{cl&&rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}{!cl&&b.receptor_name?<span style={{marginLeft:6,fontSize:9,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:9,padding:'1px 7px'}}>sin vincular</span>:''}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?.name||b.receptor_name||'Sin cliente'}{cl&&rs.name&&rs.name!==cl?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs.name)}</span>:''}{!cl&&b.receptor_name?<span style={{marginLeft:6,fontSize:9,fontWeight:600,background:C.soonBg,color:C.soonText,borderRadius:9,padding:'1px 7px'}}>Sin vincular</span>:''}</div>
                   <div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'—')}{b.invoice_no&&b.concept?` · ${b.concept}`:''}{(()=>{const e=envioBadge(b);return e?<span style={{color:e.col,fontWeight:600}}> · {e.txt}</span>:null})()}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ const hayAb=saldoBill(b)<(b.amount||0)&&!['Pagado','Anulada'].includes(b.status); return <><div style={{fontSize:13,fontWeight:600,color:hayAb?(er==='Vencido'?C.overdueText:C.accent):C.text}}>{fmt(hayAb?saldoBill(b):(ui?ui.clpHoy:b.amount))}</div>{hayAb&&<div style={{fontSize:9,color:C.muted}}>de {fmt(ui?ui.clpHoy:b.amount)}</div>}</> })()}{diasMini&&<div style={{fontSize:9,fontWeight:600,color:col}}>{diasMini}</div>}</div>
