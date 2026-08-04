@@ -21679,7 +21679,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
                     <span onClick={m.cliente_id&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(m.cliente_id)}:undefined} title={m.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:m.cliente_id&&onOpenClientFicha?'pointer':'inherit'}}>{cliName||nomBanco}</span>
-                    <span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF===m.rol_cuenta?'ambas':m.rol_cuenta)}} title='Filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:9,background:rc.bg,color:rc.color,cursor:'pointer',flexShrink:0}}>{rc.t}</span>
+                    {m.rol_cuenta==='gastos'&&<span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF==='gastos'?'ambas':'gastos')}} title='Cta. Gastos — filtrar por esta cuenta' style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:9,background:rc.bg,color:rc.color,cursor:'pointer',flexShrink:0}}>{rc.t}</span>}
                     <span style={{fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue,flexShrink:0}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
@@ -21736,7 +21736,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                           </>
                         })()}
                         {/* Categoría = chip clickeable (sin texto "Cambiar tag"). Devolución en cargos con flecha ← */}
-                        {(m.tipo==='cargo'||m.categoria||tagFor===m.id||(m.tipo==='abono'&&!m.es_interno&&(!m.cliente_id||!tieneCand(m))))&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
+                        {/* Clasificar SOLO para: cargos (su única vía), o abonos SIN cliente (los abonos CON cliente clasifican en "¿A qué corresponde? → Otro tipo de pago"; y su categoría ya se ve en el badge de estado, no se repite acá). */}
+                        {(m.tipo==='cargo'||tagFor===m.id||(m.tipo==='abono'&&!m.es_interno&&!m.cliente_id))&&(()=>{ const cats=m.tipo==='abono'?CATS_ABONO:CATS_CARGO; const tagTxt=c=>c==='Devolución'?'← Devolución':c==='Provisión de gastos'?'Fondo por Rendir':c; return (
                           tagFor===m.id
                             ? <>{cats.map(c=>{const t=TAG_STY[c];return <button key={c} onClick={()=>setCategoria(m,c)} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{tagTxt(c)}</button>})}{m.categoria&&<button onClick={()=>setCategoria(m,null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Quitar</button>}<button onClick={()=>setTagFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cerrar</button></>
                             : m.categoria
@@ -21895,7 +21896,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               <span style={{fontSize:9.5,fontWeight:700,color:exacto?C.greenText:C.soonText,background:exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px'}}>{exacto?'✓ Monto exacto':`Dif ${fmtM(Math.abs(sld-resto))}`}</span>
                               {/* "Es reembolso" SOLO cuando la factura es de gastos/reembolso (para las de honorarios no aplica; lo demás va en "¿A qué corresponde?") */}
                               {esReemb&&<button disabled={busy===m.id} onClick={()=>setReembFor(reembFor===m.id?null:m.id)} title='La factura es de gastos/reembolso: se marca pagada pero no cuenta como ingreso' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'4px 10px',border:'none',cursor:busy===m.id?'default':'pointer',background:reembFor===m.id?'#FAECE7':C.bgSoft,color:reembFor===m.id?C.coralText:C.muted}}>Es reembolso{reembFor===m.id?' ▴':' ▾'}</button>}
-                              <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{marginLeft:'auto',background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 16px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
+                              <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{marginLeft:'auto',background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 16px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar ahora</button>
                             </div>
                             {reembFor===m.id&&<div style={{marginTop:7,background:'#FAECE7',borderRadius:8,padding:'8px 10px'}}>
                               <div style={{fontSize:10,color:C.coralText,marginBottom:6,lineHeight:1.4}}>Factura de gastos: se marca <b>pagada</b> con respaldo, pero <b>No cuenta como ingreso</b>. Elige:</div>
