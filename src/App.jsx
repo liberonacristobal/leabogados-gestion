@@ -20193,6 +20193,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [facBuscaQ,setFacBuscaQ] = useState('')  // buscador del estado de cuenta del cliente en el panel del pago      // id de la factura con el detalle expandido en el selector "Otra factura"
   const [rsConcOpen,setRsConcOpen] = useState(()=>new Set())   // por RS: mostrar las cobradas-conciliadas (colapsadas por defecto)
   const [modalMov,setModalMov] = useState(null)  // id del movimiento abierto en el modal de detalle
+  const [otrasSet,setOtrasSet] = useState(()=>new Set())   // movs cuyo "Otras opciones" el usuario alternó (override del default)
+  const toggleOtras = id => setOtrasSet(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
   // Salto desde el Estado de cuenta del cliente: limpia filtros, abre el movimiento y hace scroll. Espera a que carguen los movs.
   useEffect(()=>{ if(!focusMovId) return; const m=movs.find(x=>x.id===focusMovId); if(!m) return
     setSub(m.tipo==='cargo'?'cargos':'abonos'); setCuentaF('ambas'); setAnioF('todos'); setMesF('todos'); setRespF('todos'); setQ(''); setModalMov(focusMovId)
@@ -21803,6 +21805,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
                   // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
                   const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
+                  // Recomendado protagonista: si hay una factura que calza EXACTO, "Otras opciones" arranca plegado; si no, abierto.
+                  const calceFuerte=!!sug && saldoFactura(sug)===resto
+                  const showOtras=otrasSet.has(m.id)?calceFuerte:!calceFuerte
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
@@ -21836,7 +21841,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               <div style={{flex:'1 1 160px',minWidth:150}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>La factura</div>
                                 <div style={{fontSize:13,fontWeight:700,color:C.accent}}>N°{folioN(sug.invoice_no)||'—'} · {fmtM(sld)}</div>
-                                <div style={{fontSize:10,color:C.muted}}>emitida {fmtFechaDMY(sug.issued_at)}</div>
+                                <div style={{fontSize:10,color:C.muted}}>emitida {fmtFechaDMY(sug.issued_at)}{sug.due?` · vence ${fmtFechaDMY(sug.due)}`:''}</div>
                                 <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsF}{sug.receptor_rut?` · ${sug.receptor_rut}`:''}</div>
                                 <div style={{marginTop:3,display:'flex',gap:4,flexWrap:'wrap'}}>
                                   {est&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:est.bg,color:est.fg}}>{est.label}</span>}
@@ -21905,6 +21910,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{fontSize:9.5,color:C.muted,marginTop:5}}>Concilias la factura y el resto lo colocas con los botones de abajo (Fondo por Rendir · Saldo a Favor · Devolución). O usa "Buscar en SII" si la factura del resto no está.</div>
                           </div>
                         )}
+                        {sug&&<div onClick={()=>toggleOtras(m.id)} style={{display:'flex',alignItems:'center',fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',padding:'7px 0',marginTop:1,borderTop:`1px solid ${C.bgSoft}`}}><span>Otras opciones</span><span style={{fontSize:9,color:C.done,marginLeft:7,fontWeight:500}}>varias · anticipo · fondo · reembolso · devolución</span><span style={{marginLeft:'auto',color:C.done}}>{showOtras?'▾':'▸'}</span></div>}
+                        {showOtras&&<>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
                           {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
                           {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga varias facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?C.accent:C.azulBg,color:comboFor===m.id?'#fff':C.accent,border:'none'}}>Paga {combo.length} facturas{comboFor===m.id?' ▴':' ▾'}</button>}
@@ -22006,6 +22013,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               </div>
                             )})}
                           </div>) })()}
+                        </>}
                       </>}
                     </div>
                   )
