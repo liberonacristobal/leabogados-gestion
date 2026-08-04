@@ -1053,9 +1053,9 @@ function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
       )}
 
       <div style={{display:'flex',gap:8,marginTop:4}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:'1px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={saving||!name.trim()} onClick={handleGuardar}
-          style={{flex:2,padding:11,borderRadius:10,border:'none',background:showConfirm?C.overdue:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(!name.trim())?.6:1}}>
+          style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:showConfirm?C.overdue:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(!name.trim())?.6:1}}>
           {saving?'Guardando...':(showConfirm?'Sí, crear de todas formas':'Guardar cliente')}
         </button>
       </div>
@@ -1758,7 +1758,7 @@ function CajaChicaView({expenses,setExpenses,clients,currentUserName,currentUser
               </div>
 
               <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>{setShowNuevaCaja(false);setEditCajaId(null)}} disabled={saving} style={{flex:1,height:44,borderRadius:10,border:'0.5px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button onClick={()=>{setShowNuevaCaja(false);setEditCajaId(null)}} disabled={saving} style={{flex:1,height:38,borderRadius:10,border:'0.5px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                 <button onClick={handleNuevaCaja} disabled={saving||!newMonto} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:newMonto?'pointer':'not-allowed',opacity:(saving||!newMonto)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{saving?<Spin/>:null}{saving?'Guardando...':(editCajaId?'Guardar cambios':'Registrar caja')}</button>
               </div>
               {editCajaId&&<button onClick={handleBorrarCaja} disabled={saving} style={{width:'100%',marginTop:10,height:38,borderRadius:10,border:'none',background:'none',color:C.overdue,fontSize:12,fontWeight:600,cursor:'pointer'}}>Eliminar esta caja</button>}
@@ -3063,7 +3063,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
                 </div>
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setPayTercero(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>setPayTercero(null)} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':'Marcar pagado'}</button>
                 </div>
               </div>
@@ -3133,7 +3133,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                   <div><span style={fl}>Fecha documento</span><input type='date' value={payDocF} onChange={e=>setPayDocF(e.target.value)} style={inp}/></div>
                 </div>
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setPayGroup(null)} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>setPayGroup(null)} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button disabled={payingNow} onClick={marcar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:600,cursor:payingNow?'default':'pointer',opacity:payingNow?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{payingNow?<Spin/>:null}{payingNow?'Guardando...':`Marcar ${payGroup.cuentas.length} pagadas`}</button>
                 </div>
               </div>
@@ -5267,8 +5267,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {/* 11. Botones — CTA principal full-width abajo, acciones secundarias arriba (responsive móvil) */}
       <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:6}}>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-          {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Borrador</button>}
+          <button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Borrador</button>}
           {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{flex:1,padding:'11px 0',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         </div>
         <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:handleSave}
@@ -7374,7 +7374,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
               )
             })()}
             <div style={{padding:'14px 20px 20px',display:'flex',gap:8}}>
-              <button onClick={()=>setPayingId(null)} style={{flex:1,height:40,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={()=>setPayingId(null)} style={{flex:1,height:38,borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:500,cursor:'pointer'}}>Cancelar</button>
               <button onClick={confirmPago} disabled={pagando} style={{flex:2,height:40,borderRadius:8,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:500,cursor:pagando?'default':'pointer',opacity:pagando?.6:1}}>{pagando?'Guardando…':(()=>{ const total=pb.amount||0, ya=pb.paid_amount||0; const monto=parseInt(String(payMonto).replace(/[^\d]/g,''))||0; return (monto>0&&ya+monto<total)?'Confirmar abono':'Confirmar pago' })()}</button>
             </div>
           </div>
@@ -8250,7 +8250,7 @@ function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onAssignSe
             <label style={flabel}>Observaciones (opcional)</label>
             <input value={obsBaja} onChange={e=>setObsBaja(e.target.value)} placeholder='Detalle adicional...' style={{...inp,marginBottom:14}}/>
             <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setAnularOpen(false)} style={{flex:1,height:40,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={()=>setAnularOpen(false)} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
               <button disabled={!motivoBaja} onClick={async()=>{ await onAnular(bill,motivoBaja,obsBaja); setAnularOpen(false); onClose() }} style={{flex:2,height:40,borderRadius:10,border:'none',background:motivoBaja?C.overdue:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:motivoBaja?'pointer':'default'}}>{bill?.dte_track_id?'Anular y emitir NC':'Confirmar baja'}</button>
             </div>
           </div>
@@ -8334,7 +8334,7 @@ function AnticipoForm({clients,sales,clientEntities,onSave,onClose,saving,preCli
         </div>
 
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar anticipo'}</button>
         </div>
       </div>
@@ -8366,7 +8366,7 @@ function FacturarBloqueModal({anticipo,billing=[],sales=[],clients=[],onConfirm,
         </div>
         <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.4}}>Crea <strong style={{color:C.text}}>1 factura Pagada</strong> por el total con el anticipo; las cuotas quedan de referencia.</div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={busy} onClick={async()=>{ setBusy(true); const r=await onConfirm({invoice_no:invoiceNo.trim()||null,issued_at:issued}); setBusy(false); if(r) onClose() }} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:busy?'default':'pointer',opacity:busy?.6:1}}>{busy?'Emitiendo...':'Emitir factura'}</button>
         </div>
       </div>
@@ -8421,7 +8421,7 @@ function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onConfirm,on
             )})()}
           </>)}
           <div style={{display:'flex',gap:8}}>
-            <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+            <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
             <button disabled={sel.size===0||sumSel>(anticipo.monto||0)} onClick={()=>onConfirm([...sel])} style={{flex:2,height:42,borderRadius:10,border:'none',background:(sel.size&&sumSel<=(anticipo.monto||0))?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&sumSel<=(anticipo.monto||0))?'pointer':'default'}}>Cubrir {sel.size>0?`${sel.size} cuota${sel.size!==1?'s':''}`:''}</button>
           </div>
         </div>
@@ -8467,7 +8467,7 @@ function AsignarConsolidadoModal({anticipo,billing=[],sales=[],clients=[],onConf
         </div>
         <div style={{background:C.ambarBg,borderRadius:8,padding:'9px 11px',fontSize:11,color:C.soonText,lineHeight:1.45,marginBottom:14}}>Registra <strong>1 factura Pagada</strong> por {fmt(total)} (la que emitiste en el SII), <strong>anula</strong> las cuotas seleccionadas y aplica los anticipos disponibles del cliente.</div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={busy||!sel.size} onClick={confirmar} style={{flex:2,height:42,borderRadius:10,border:'none',background:(sel.size&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&!busy)?'pointer':'default'}}>{busy?'Asignando…':'Asignar y anular programadas'}</button>
         </div>
       </>)}
@@ -8591,7 +8591,7 @@ function FusionAnticiposModal({bank, manual, clients=[], sales=[], clientEntitie
         <div style={{fontSize:11,color:C.muted,marginTop:6,lineHeight:1.55}}>Proyecto: {resProyTxt} · RS: {resRSTxt}</div>
       </div>
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button onClick={()=>{onConfirm();onClose()}} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Fusionar</button>
       </div>
     </Modal>
@@ -8815,7 +8815,7 @@ function ProveedoresModal({proveedores=[],terceros=[],billing=[],clients=[],sale
           <textarea value={f.datos_pago} onChange={e=>up('datos_pago',e.target.value)} placeholder='Banco, tipo de cuenta, N° cuenta, RUT, correo…' style={{width:'100%',minHeight:74,border:`0.5px solid ${C.border}`,borderRadius:10,fontSize:13,padding:'10px 11px',color:C.text,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>setView(f.id?'ficha':'list')} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={()=>setView(f.id?'ficha':'list')} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}</button>
         </div>
       </div>
@@ -9325,19 +9325,19 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
       {selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>}
       {/* Botones */}
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         {esEdicion ? (
           <button disabled={!selected.size||saving} onClick={handleGuardarEdicion}
-            style={{flex:3,padding:11,borderRadius:10,border:'none',background:selected.size?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+            style={{flex:3,padding:'9px 14px',borderRadius:10,border:'none',background:selected.size?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
             {saving?'Guardando…':'Guardar cambios'}
           </button>
         ) : (<>
         <button disabled={!selected.size||saving} onClick={()=>handleGenerar('pdf')}
-          style={{flex:1.3,padding:11,borderRadius:10,border:`1px solid ${selected.size?C.accent:C.done}`,background:'#fff',color:selected.size?C.accent:C.done,fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+          style={{flex:1.3,padding:'9px 14px',borderRadius:10,border:`1px solid ${selected.size?C.accent:C.done}`,background:'#fff',color:selected.size?C.accent:C.done,fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
           {saving?'…':'↓ PDF'}
         </button>
         <button disabled={!selected.size||saving} onClick={()=>handleGenerar('enviar')}
-          style={{flex:1.7,padding:11,borderRadius:10,border:'none',background:selected.size?C.normal:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
+          style={{flex:1.7,padding:'9px 14px',borderRadius:10,border:'none',background:selected.size?C.normal:C.done,color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size?'pointer':'not-allowed'}}>
           {saving?'Generando…':'Enviar al cliente'}
         </button>
         </>)}
@@ -11873,7 +11873,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
                 <div style={{fontSize:12,color:C.muted,marginBottom:notaSinFondosSel.length?8:14,lineHeight:1.4}}>{selNota.size} gasto{selNota.size!==1?'s':''} · <b style={{color:C.text}}>{fmt(notaTotal)}</b>. Se <b>Guarda</b> la liquidación como <b style={{color:C.soonText}}>Por enviar</b>. El correo a la notaría lo mandas después, cuando hagas la transferencia.</div>
                 {notaSinFondosSel.length>0&&<div style={{fontSize:12,color:C.overdueText,background:C.overdueBg,border:'1px solid #F0997B',borderRadius:8,padding:'8px 10px',marginBottom:14,lineHeight:1.4}}><b>Atención:</b> incluyes {notaSinFondosSel.length} gasto{notaSinFondosSel.length!==1?'s':''} de cliente(s) <b>Sin fondos</b> ({fmt(notaSinFondosSel.reduce((a,e)=>a+(e.amount||0),0))}) — estarías adelantando plata de la oficina.</div>}
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setNotaConfirm(false)} style={{flex:1,height:40,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>setNotaConfirm(false)} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                   <button disabled={notaSending} onClick={liquidarNotaria} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:notaSending?'default':'pointer',opacity:notaSending?.6:1}}>{notaSending?'Guardando…':'Liquidar'}</button>
                 </div>
               </div>
@@ -11898,7 +11898,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Correo de la notaría</label>
               <input value={notaEmail} onChange={e=>setNotaEmail(e.target.value)} placeholder='notaria@...' style={{width:'100%',height:36,marginBottom:16,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 11px',fontSize:13,background:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none'}}/>
               <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>!notaSending&&setNotaSend(null)} style={{flex:1,height:40,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+                <button onClick={()=>!notaSending&&setNotaSend(null)} style={{flex:1,height:38,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
                 <button disabled={notaSending||!compFile||!(notaEmail||'').trim()} onClick={()=>enviarNotaria(notaSend)} style={{flex:2,height:40,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(notaSending||!compFile||!(notaEmail||'').trim())?'default':'pointer',opacity:(notaSending||!compFile||!(notaEmail||'').trim())?.5:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{notaSending?<Spin/>:<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>}{notaSending?'Enviando…':'Enviar detalle + comprobante'}</button>
               </div>
             </Modal>
@@ -12233,7 +12233,7 @@ function FondoForm({clients,expenses,sales,clientEntities,rendiciones=[],onSave,
 
         {esDev&&selectedClient&&(parseInt(f.amount)||0)>0&&<div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.45,background:C.greenBg,borderRadius:8,padding:'9px 11px'}}>Al guardar, se abre el <b style={{color:C.accent}}>Correo de devolución</b> con el formato de la rendición y los destinatarios — solo adjuntas el comprobante y envías.</div>}
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={saving||!canSave} onClick={guardar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:canSave?'pointer':'not-allowed',opacity:canSave?1:.6,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{saving?<Spin/>:null}{saving?'Guardando...':(esDev?'Guardar devolución':'Guardar fondo')}</button>
         </div>
       </div>
@@ -12418,8 +12418,8 @@ function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,
       )}
 
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
-        {selectedClient&&<button disabled={saving||!rows.some(r=>r.amount&&parseInt(r.amount)>0)} onClick={saveAll} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!rows.some(r=>r.amount)?.6:1}}>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+        {selectedClient&&<button disabled={saving||!rows.some(r=>r.amount&&parseInt(r.amount)>0)} onClick={saveAll} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!rows.some(r=>r.amount)?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar todo'}
         </button>}
       </div>
@@ -12536,8 +12536,8 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         <button onClick={()=>onDelete(expense.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={saving||!(parseInt(f.amount)>0)||!f.date} onClick={()=>onSave({...f,amount:Math.max(0,parseInt(f.amount)||0),subcategory:f.category==='Otro'?(f.subcategory?.trim()||null):null,...(f.personal_de?{client_id:null,entity_id:null,paid_by_client:false}:{})})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!f.amount||!f.date)?'default':'pointer',opacity:(!f.amount||!f.date)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -12805,15 +12805,15 @@ function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDelegate,onC
       )}
 
       <div style={{display:'flex',gap:8,marginTop:8}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         {selectedClient&&(deleg ? (
           <button disabled={saving||!puedeDelegar} onClick={handleDelegar}
-            style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:puedeDelegar?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeDelegar?1:.6}}>
+            style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:puedeDelegar?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:puedeDelegar?1:.6}}>
             {saving?<Spin/>:null}{saving?'Delegando...':'Delegar'}
           </button>
         ) : (
           <button disabled={saving||!canSave} onClick={handleGuardar}
-            style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
+            style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:canSave?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:canSave?1:.6}}>
             {saving?<Spin/>:null}{saving?'Guardando...':(task?'Guardar tarea':'Enviar tarea')}
           </button>
         ))}
@@ -13974,7 +13974,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
         </div>
         <details style={{marginBottom:14}}><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildHtml(body,false)}}/></details>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+          <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={sending||!para.trim()} onClick={enviar} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:para.trim()?'pointer':'not-allowed',opacity:(sending||!para.trim())?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>{sending?<Spin/>:null}{sending?'Enviando...':'Enviar devolución'}</button>
         </div>
       </div>
@@ -14604,9 +14604,9 @@ Saludos cordiales,`
       </div>
       <details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button onClick={verPDF} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
-        <button onClick={enviar} disabled={sending||!para.trim()} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':'Enviar'}</button>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={verPDF} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Ver PDF</button>
+        <button onClick={enviar} disabled={sending||!para.trim()} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':'Enviar'}</button>
       </div>
     </Modal>
   )
@@ -15458,8 +15458,8 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales}) {
       )}
       <div style={{display:'flex',gap:8,marginTop:4}}>
         {client?.id&&<button onClick={()=>onDelete(client.id)} style={{padding:'11px 14px',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Archivar / eliminar</button>}
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!f.name?.trim()} onClick={()=>onSave({...f, _rsIni: client?.id?undefined:(rsIni.name?.trim()||rsIni.rut?.trim()?rsIni:undefined)})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!f.name?.trim()?.6:1}}>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={saving||!f.name?.trim()} onClick={()=>onSave({...f, _rsIni: client?.id?undefined:(rsIni.name?.trim()||rsIni.rut?.trim()?rsIni:undefined)})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:!f.name?.trim()?.6:1}}>
           {saving?<Spin/>:null}{saving?'Guardando...':'Guardar'}
         </button>
       </div>
@@ -16217,8 +16217,8 @@ function ClienteDriveImporter({clients,onImported,onClose}){
             <div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Todos los clientes de Drive ya están en la app</div>
           )}
           <div style={{display:'flex',gap:8,marginTop:8,position:'sticky',bottom:0,background:C.bg,paddingBottom:8}}>
-            <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-            <button onClick={saveSelected} disabled={saving||selectedCount===0} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:selectedCount===0?.5:1}}>
+            <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+            <button onClick={saveSelected} disabled={saving||selectedCount===0} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:selectedCount===0?.5:1}}>
               {saving?'Importando...':`Importar ${selectedCount} cliente${selectedCount!==1?'s':''}`}
             </button>
           </div>
@@ -16379,8 +16379,8 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
             <InvoiceClientPicker key={inv.id} inv={inv} clients={clients} assigned={clients.find(c=>c.id===assignments[inv.id])} onAssign={clientId=>setAssignments(p=>({...p,[inv.id]:clientId}))}/>
           ))}
           <div style={{display:'flex',gap:8,marginTop:4}}>
-            <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
-            <button onClick={saveAssignmentsDrive} disabled={savingA} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:savingA?'default':'pointer',opacity:savingA?.6:1}}>{savingA?'Guardando…':'Guardar asignaciones'}</button>
+            <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
+            <button onClick={saveAssignmentsDrive} disabled={savingA} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:savingA?'default':'pointer',opacity:savingA?.6:1}}>{savingA?'Guardando…':'Guardar asignaciones'}</button>
           </div>
         </div>
       )}
@@ -16613,8 +16613,8 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
             <InvoiceClientPicker key={inv.id} inv={inv} clients={clients} assigned={clients.find(c=>c.id===assignments[inv.id])} onAssign={clientId=>setAssignments(p=>({...p,[inv.id]:clientId}))}/>
           ))}
           <div style={{display:'flex',gap:8,marginTop:4}}>
-            <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
-            <button onClick={saveAssignments} disabled={savingA} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:savingA?'default':'pointer',opacity:savingA?.6:1}}>{savingA?'Guardando…':'Guardar asignaciones'}</button>
+            <button onClick={()=>{setStep('done');onImported([])}} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Omitir</button>
+            <button onClick={saveAssignments} disabled={savingA} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:savingA?'default':'pointer',opacity:savingA?.6:1}}>{savingA?'Guardando…':'Guardar asignaciones'}</button>
           </div>
         </div>
       )}
@@ -16625,8 +16625,8 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
             {log.map((l,i)=><div key={i}>{l}</div>)}
           </div>
           <div style={{display:'flex',gap:8}}>
-            <button onClick={()=>{setStep('select');setLog([]);setProgress({done:0,total:0});setUnmatched([]);setAssignments({})}} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Subir más</button>
-            <button onClick={onClose} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+            <button onClick={()=>{setStep('select');setLog([]);setProgress({done:0,total:0});setUnmatched([]);setAssignments({})}} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Subir más</button>
+            <button onClick={onClose} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
           </div>
         </div>
       )}
@@ -16907,8 +16907,8 @@ function ReportBuilder({sales,billing,clients,expenses,tasks,onClose}) {
       )}
 
       <div style={{display:'flex',gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={!anySelected} onClick={generatePDF} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!anySelected?.6:1}}>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={!anySelected} onClick={generatePDF} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:!anySelected?.6:1}}>
           Ver reporte
         </button>
       </div>
@@ -17016,8 +17016,8 @@ function CierreTareaModal({task, clients=[], saving, onConfirm, onClose}){
       {err&&<div style={{fontSize:12,color:C.overdueText,marginTop:8}}>{err}</div>}
       <div style={{fontSize:11,color:C.muted,marginTop:12,lineHeight:1.4}}>El detalle y los documentos le llegan por correo a quien asignó la tarea.</div>
       <div style={{display:'flex',gap:8,marginTop:14}}>
-        <button onClick={onClose} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button onClick={guardar} disabled={saving} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:saving?'default':'pointer',opacity:saving?.6:1}}>{saving?'Guardando…':'Terminar y reportar'}</button>
+        <button onClick={onClose} disabled={saving} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={guardar} disabled={saving} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:saving?'default':'pointer',opacity:saving?.6:1}}>{saving?'Guardando…':'Terminar y reportar'}</button>
       </div>
     </>
   )
@@ -17107,9 +17107,9 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
         </div>
       )}
       <div style={{display:'flex',gap:8,marginTop:6}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
-        {!terminada&&<button onClick={()=>onComplete(task)} style={{flex:1,padding:11,borderRadius:10,border:'1px solid #1D9E75',background:C.greenBg,color:C.greenText,fontSize:13,fontWeight:700,cursor:'pointer'}}>Marcar terminada</button>}
-        <button onClick={()=>onEdit(task)} style={{flex:1,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Editar</button>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cerrar</button>
+        {!terminada&&<button onClick={()=>onComplete(task)} style={{flex:1,padding:'9px 14px',borderRadius:10,border:'1px solid #1D9E75',background:C.greenBg,color:C.greenText,fontSize:13,fontWeight:700,cursor:'pointer'}}>Marcar terminada</button>}
+        <button onClick={()=>onEdit(task)} style={{flex:1,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>Editar</button>
       </div>
     </>
   )
@@ -17862,7 +17862,7 @@ ${muestra}`
         )})}
       </div>
       <div style={{display:'flex',gap:8,marginTop:12}}>
-        <button onClick={onClose} style={{flex:1,height:42,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button onClick={onClose} style={{flex:1,height:38,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button disabled={importando||validas.length===0} onClick={importar} style={{flex:2,height:42,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(importando||validas.length===0)?'default':'pointer',opacity:(importando||validas.length===0)?.6:1}}>{importando?'Importando…':`Importar ${validas.length}`}</button>
       </div>
     </div>
@@ -18911,7 +18911,7 @@ function RedProfesionalModal({preset=null, onClose, onSaved}){
             <input value={f.origen} onChange={e=>up('origen',e.target.value)} placeholder='Dónde lo conocí (origen)' style={inp}/>
             <input value={f.descripcion} onChange={e=>up('descripcion',e.target.value)} placeholder='Descripción breve' style={inp}/>
             <div style={{display:'flex',gap:8,marginTop:2}}>
-              <button onClick={preset?onClose:resetF} disabled={saving} style={{flex:1,height:40,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+              <button onClick={preset?onClose:resetF} disabled={saving} style={{flex:1,height:38,borderRadius:9,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
               <button onClick={guardar} disabled={saving||!f.nombre.trim()} style={{flex:2,height:40,borderRadius:9,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(saving||!f.nombre.trim())?.6:1}}>{saving?'Guardando…':(edit?'Guardar':'Agregar a la red')}</button>
             </div>
           </div>
@@ -22282,8 +22282,8 @@ function AjusteModal({client, user, onSave, onClose, saving}){
       <div style={{marginTop:14}}><Lbl>Motivo <span style={{textTransform:'none',letterSpacing:0,color:C.done}}>(obligatorio)</span></Lbl>
         <input value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder='Ej: gastos de CBR 2024 no cargados' style={inp}/></div>
       <div style={{display:'flex',gap:10,marginTop:20}}>
-        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={!valid||saving} onClick={()=>onSave({client_id:client.id,type:'gasto',category:'Ajuste',concept:motivo.trim(),amount:m,date:hoy,created_by:user?.email||null})} style={{flex:2,padding:11,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!valid||saving)?'default':'pointer',opacity:(!valid||saving)?.6:1}}>{saving?'Creando...':'Crear ajuste'}</button>
+        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
+        <button disabled={!valid||saving} onClick={()=>onSave({client_id:client.id,type:'gasto',category:'Ajuste',concept:motivo.trim(),amount:m,date:hoy,created_by:user?.email||null})} style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:(!valid||saving)?'default':'pointer',opacity:(!valid||saving)?.6:1}}>{saving?'Creando...':'Crear ajuste'}</button>
       </div>
     </div>
   )
