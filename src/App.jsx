@@ -3994,15 +3994,15 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               {[['abogado','Responsable'],['area','Área']].map(([v,l])=>{ const on=groupBy===v; return <span key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{fontSize:10,fontWeight:on?700:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</span> })}
             </div>
           </div>
-          {/* Desglose = tabla alineada (sin barra): columnas fijas Ventas·UF·$·% para comparar de un vistazo hacia abajo; color real de la persona (colorGrupo→PERSON_CHIP) en punto/nombre/%. Cada fila filtra su detalle (selGroup). */}
-          {grupos.length>0&&(()=>{ const GT='1fr 38px 56px 50px 46px'; const nc={fontVariantNumeric:'tabular-nums',textAlign:'right',paddingLeft:7,borderLeft:`0.5px solid ${C.border}`}; const hc={...nc,fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3}; return (
+          {/* Desglose = tabla alineada SIN líneas verticales (los separadores | ensuciaban al cortarse entre filas): columnas fijas Ventas·UF·$·% comparables hacia abajo; el % va en chip con el color de la persona (personChip → bg+color) como ancla a la derecha. Cada fila filtra su detalle (selGroup). */}
+          {grupos.length>0&&(()=>{ const GT='1fr 40px 54px 48px 46px'; const nc={fontVariantNumeric:'tabular-nums',textAlign:'right'}; const hc={...nc,fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3}; return (
             <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'0 12px',marginBottom:6}}>
-              <div style={{display:'grid',gridTemplateColumns:GT,columnGap:8,alignItems:'center',padding:'8px 0 6px'}}>
+              <div style={{display:'grid',gridTemplateColumns:GT,columnGap:10,alignItems:'center',padding:'8px 0 6px'}}>
                 <span style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{groupBy==='abogado'?'Responsable':'Área'}</span>
-                <span style={hc}>Ventas</span><span style={hc}>UF</span><span style={hc}>$</span><span style={hc}>%</span>
+                <span style={hc}>Ventas</span><span style={hc}>UF</span><span style={hc}>$</span><span style={{...hc,textAlign:'center'}}>%</span>
               </div>
-              {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?g.uf/vendUF*100:0; const pctTxt=(pct>0&&pct<1)?pct.toFixed(1).replace('.',','):Math.round(pct); const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); return (
-                <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{display:'grid',gridTemplateColumns:GT,columnGap:8,alignItems:'center',padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:(sin?'#FBF7EF':'transparent')}}>
+              {grupos.map(g=>{ const col=colorGrupo(g.key); const chip=groupBy==='abogado'?personChip(g.key):{bg:(col||C.muted)+'1A',color:col}; const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?g.uf/vendUF*100:0; const pctTxt=(pct>0&&pct<1)?pct.toFixed(1).replace('.',','):Math.round(pct); const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); return (
+                <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{display:'grid',gridTemplateColumns:GT,columnGap:10,alignItems:'center',padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:(sin?'#FBF7EF':'transparent')}}>
                   <span style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
                     <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
                     <span style={{fontSize:13.5,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.key}</span>
@@ -4011,7 +4011,7 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
                   <span style={{...nc,fontSize:13,color:C.muted}}>{g.count}</span>
                   <span style={{...nc,fontSize:13,fontWeight:600,color:C.text}}>{Math.round(g.uf).toLocaleString('es-CL')}</span>
                   <span style={{...nc,fontSize:12,color:C.muted}}>{fmtShort(gclp)}</span>
-                  <span style={{...nc,fontSize:14,fontWeight:700,color:col}}>{pctTxt}%</span>
+                  <span style={{background:chip.bg,color:chip.color,borderRadius:7,padding:'3px 0',textAlign:'center',fontSize:12.5,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{pctTxt}%</span>
                 </div>
               )}) }
             </div>
