@@ -20227,6 +20227,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   const [tipoAprendido,setTipoAprendido] = useState({})  // RUT/nombre → categoría aprendida (cartola_tipo)
   const [splitMov,setSplitMov] = useState(null)  // id del movimiento con el split adelanto/fondo abierto
   const [splitAdel,setSplitAdel] = useState('')  // monto que va a adelanto (el resto a fondo)
+  const [fondoFor,setFondoFor] = useState(null)  // "Fondo por rendir" desplegado (adelanto vs devolución) — lista uniforme "¿A qué corresponde?"
+  const [otroFor,setOtroFor] = useState(null)    // "Otro tipo de pago" desplegado (categorías) — lista uniforme
+  const [otraFacFor,setOtraFacFor] = useState(null)  // "Otra factura" desplegado (estado de cuenta del cliente) — lista uniforme
   const [editForm,setEditForm] = useState({rut:'',nombre:''})
   const [conc,setConc] = useState([])           // filas de conciliacion (factura/anticipo aplicados)
   const [concView,setConcView] = useState('todos') // abonos: 'todos' | 'porconciliar' | 'conciliados'
@@ -21881,9 +21884,9 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                   // Sugerencia permisiva: AUTO usa mejorCandidato (único/seguro); la sugerencia para CONFIRMAR cae al mejor
                   // candidato ordenado (RS·mes·cercanía) aunque no sea único → surfacea recurrentes que antes no se sugerían.
                   const showPick=myConc.length===0||resto>TOL; const sug=showPick?(mejorCandidato(m)||cands[0]||null):null
-                  // Recomendado protagonista: si hay una factura que calza EXACTO, "Otras opciones" arranca plegado; si no, abierto.
+                  // La lista uniforme "¿A qué corresponde?" es SIEMPRE visible (ya no se colapsa tras "Otras opciones"): todas las formas de aplicar el pago a la vista.
                   const calceFuerte=!!sug && saldoFactura(sug)===resto
-                  const showOtras=otrasSet.has(m.id)?calceFuerte:!calceFuerte
+                  const showOtras=true
                   return (
                     <div style={{marginTop:5}} onClick={e=>e.stopPropagation()}>
                       <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:4}}>Conciliar</div>
@@ -21986,16 +21989,27 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{fontSize:9.5,color:C.muted,marginTop:5}}>Concilias la factura y el resto lo colocas con los botones de abajo (Fondo por Rendir · Saldo a Favor · Devolución). O usa "Buscar en SII" si la factura del resto no está.</div>
                           </div>
                         )}
-                        {sug&&<div onClick={()=>toggleOtras(m.id)} style={{display:'flex',alignItems:'center',fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',padding:'7px 0',marginTop:1,borderTop:`1px solid ${C.bgSoft}`}}><span>Otras opciones</span><span style={{fontSize:9,color:C.done,marginLeft:7,fontWeight:500}}>Varias · anticipo · fondo · reembolso · devolución</span><span style={{marginLeft:'auto',color:C.done}}>{showOtras?'▾':'▸'}</span></div>}
-                        {showOtras&&<>
-                        <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
-                          {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
-                          {combo&&<button disabled={busy===m.id} onClick={()=>setComboFor(comboFor===m.id?null:m.id)} title='Una transferencia que paga varias facturas — revísalas antes de confirmar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:comboFor===m.id?C.accent:C.azulBg,color:comboFor===m.id?'#fff':C.accent,border:'none'}}>Paga {combo.length} facturas{comboFor===m.id?' ▴':' ▾'}</button>}
-                          {fmg&&<button disabled={busy===m.id} onClick={()=>reconciliarFacturaGastos(m,fmg)} title='Pagó la factura junto con el reembolso de gastos' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:C.tealBg,color:C.tealText,border:'none'}}>Factura N°{folioN(fmg.factura.invoice_no)||'—'} + {fmtM(fmg.excess)} gastos</button>}
-                          <button disabled={busy===m.id} onClick={()=>{ if(splitMov===m.id){setSplitMov(null);return} const resto=(m.monto||0)-(m.monto_conciliado||0); setSplitAdel(String(resto)); setSplitMov(m.id) }} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:splitMov===m.id?C.azulInfo:C.azulBg,color:splitMov===m.id?'#fff':C.azulInfo,border:'none'}}>Saldo a Favor | Anticipo{splitMov===m.id?' ▴':''}</button>
-                          <button disabled={busy===m.id} onClick={()=>crearFondoProvision(m)} title='Acredita el resto al fondo por rendir del cliente (no toca la factura ya conciliada)' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:C.tealBg,color:C.tealText,border:'none'}}>Fondo por Rendir</button>
-                          <button disabled={busy===m.id} onClick={()=>{ const gs=gastosReembolsables(m.cliente_id); if(!gs.length){ devolucionGastos(m); return } const resto=(m.monto||0)-(m.monto_conciliado||0); let acc=0; const sel=new Set(); for(const g of gs){ if(acc>=resto) break; sel.add(g.id); acc+=(g.amount||0) } setDevolSel(sel); setDevolFor(devolFor===m.id?null:m.id) }} title='El cliente devuelve gastos que el estudio adelantó (corrige su saldo)' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:busy===m.id?'default':'pointer',background:'#FAECE7',color:C.coralText,border:'none'}}>Devolución de gastos{devolFor===m.id?' ▴':''}</button>
+                        <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0 2px',marginTop:1,borderTop:`1px solid ${C.bgSoft}`}}>
+                          <span style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>¿A qué corresponde?</span>
+                          {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon}}>Resta {fmtM(resto)}</span>}
                         </div>
+                        {showOtras&&<>
+                        {(()=>{ const gs=gastosReembolsables(m.cliente_id)
+                          const optRow=(icon,ic,ibg,name,hint,onClick,open,extra)=>(<div key={name}><div onClick={busy===m.id?undefined:onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer'}}><span style={{width:26,height:26,borderRadius:7,background:ibg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={15} c={ic}/></span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{name}</div>{hint&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hint}</div>}</div><span style={{color:C.done,fontSize:13,flexShrink:0}}>{open?'▾':'›'}</span></div>{open&&extra}</div>)
+                          return <div style={{marginBottom:6}}>
+                            {optRow('file',C.accent,C.azulBg,'Otra factura','Elegir del estado de cuenta',()=>setOtraFacFor(otraFacFor===m.id?null:m.id),otraFacFor===m.id,null)}
+                            {combo&&optRow('receipt',C.accent,C.azulBg,`Varias facturas · ${combo.length}`,'Un pago que salda 2 o más',()=>setComboFor(comboFor===m.id?null:m.id),comboFor===m.id,null)}
+                            {fmg&&optRow('wallet',C.tealText,C.tealBg,`Factura N°${folioN(fmg.factura.invoice_no)||'—'} + gastos`,`Paga la factura y deja ${fmtM(fmg.excess)} de fondo`,()=>reconciliarFacturaGastos(m,fmg),false,null)}
+                            {optRow('clock',C.azulInfo,C.azulBg,'Anticipo · saldo a favor','Pagó antes de la factura',()=>{ if(splitMov===m.id){setSplitMov(null);return} setSplitAdel(String(resto)); setSplitMov(m.id) },splitMov===m.id,null)}
+                            {optRow('wallet',C.tealText,C.tealBg,'Fondo por rendir',gs.length?'Adelanto · o devolución de gastos':'Adelanto para gastos futuros',()=>setFondoFor(fondoFor===m.id?null:m.id),fondoFor===m.id,
+                              <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 2px 6px 36px'}}>
+                                <button disabled={busy===m.id} onClick={()=>{setFondoFor(null);crearFondoProvision(m)}} style={{fontSize:10,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.tealText}`,background:'#fff',color:C.tealText,cursor:busy===m.id?'default':'pointer'}}>Adelanto de gastos · {fmtM(resto)}</button>
+                                {gs.length>0&&<button disabled={busy===m.id} onClick={()=>{ let acc=0; const sel=new Set(); for(const g of gs){ if(acc>=resto) break; sel.add(g.id); acc+=(g.amount||0) } setDevolSel(sel); setFondoFor(null); setDevolFor(devolFor===m.id?null:m.id) }} style={{fontSize:10,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.coralText}`,background:'#fff',color:C.coralText,cursor:busy===m.id?'default':'pointer'}}>Es devolución de gastos ▾</button>}
+                              </div>)}
+                            {optRow('exchange',C.muted,C.bgWarm,'Otro tipo de pago','No es de un cliente',()=>setOtroFor(otroFor===m.id?null:m.id),otroFor===m.id,
+                              <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 2px 6px 36px'}}>{CATS_ABONO.filter(c=>c!=='Provisión de gastos').map(c=>{ const t=TAG_STY[c]||{bg:C.bgWarm,color:C.grisText}; return <button key={c} onClick={()=>{setOtroFor(null);setCategoria(m,c)}} style={{fontSize:10,fontWeight:600,borderRadius:7,padding:'4px 10px',border:`1px solid ${C.border}`,background:'#fff',color:t.color,cursor:'pointer'}}>{c}</button> })}</div>)}
+                          </div>
+                        })()}
                         {splitMov===m.id&&(()=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const adel=Math.max(0,Math.min(parseInt(splitAdel)||0,resto)); const fond=resto-adel; return (
                           <div onClick={e=>e.stopPropagation()} style={{marginBottom:6,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                             <span style={{fontSize:10,fontWeight:600,color:C.azulInfo,background:C.azulBg,borderRadius:6,padding:'3px 8px',display:'inline-flex',alignItems:'center',gap:5}}>Anticipo <input value={splitAdel} onChange={e=>setSplitAdel(e.target.value.replace(/[^0-9]/g,''))} inputMode='numeric' style={{width:80,border:`1px solid ${C.azulInfo}`,borderRadius:4,padding:'1px 5px',fontSize:11,fontWeight:600,color:C.accent,background:'#fff',outline:'none'}}/></span>
@@ -22030,8 +22044,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               <button onClick={()=>setComboFor(null)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
                             </div>
                           </div>) })()}
-                        {(()=>{
-                          // Estado de cuenta del cliente (siempre visible): agrupado por razón social, montos a la derecha, fila → detalle.
+                        {otraFacFor===m.id&&(()=>{
+                          // Estado de cuenta del cliente — se abre desde la fila "Otra factura": agrupado por razón social, montos a la derecha, fila → detalle.
                           const payTms=m.fecha?new Date(m.fecha+'T12:00').getTime():null; const qq=facBuscaQ.trim().toLowerCase()
                           const facsShow=facsAll.filter(f=> !qq || (`n°${folioN(f.invoice_no)||''} ${f.concept||''} ${f.amount||''}`.toLowerCase().includes(qq))).sort((a,b)=>(b.issued_at||'').localeCompare(a.issued_at||''))
                           const grupos={}; facsShow.forEach(f=>{ const rs=f.receptor_name||cmap[m.cliente_id]||'—'; (grupos[rs]=grupos[rs]||[]).push(f) })
