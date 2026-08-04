@@ -6335,7 +6335,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
     </div>}
 
     {/* Lista de facturas del período */}
-    {estFiltro&&<div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:CIERRE_EST[estFiltro].color}}>Mostrando: {CIERRE_EST[estFiltro].label}</span><button onClick={()=>setEstFiltro(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>ver todas</button></div>}
+    {estFiltro&&<div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:CIERRE_EST[estFiltro].color}}>Mostrando: {CIERRE_EST[estFiltro].label}</span><button onClick={()=>setEstFiltro(null)} style={{fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Ver todas</button></div>}
     <div style={{display:'flex',flexDirection:'column',gap:5}}>
       {visibles.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:12.5,padding:'22px 0'}}>No hay facturas emitidas {modo==='mes'?`en ${mesLabel.toLowerCase()}`:`en ${mesYear}`}{resp?` de ${resp}`:''}.</div>}
       {visibles.map(f=>{ const e=CIERRE_EST[f.est]; const abierto=expand===f.b.id; const rd=diasDesde?diasDesde(recordadoMap[String(f.b.id)]):null; const rec=rd!=null&&rd<=2
@@ -21861,7 +21861,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               <div style={{flex:'1 1 160px',minWidth:150}}>
                                 <div style={{fontSize:9,fontWeight:700,color:C.done,textTransform:'uppercase',letterSpacing:.3,marginBottom:2}}>La factura</div>
                                 <div style={{fontSize:13,fontWeight:700,color:C.accent}}>N°{folioN(sug.invoice_no)||'—'} · {fmtM(sld)}</div>
-                                <div style={{fontSize:10,color:C.muted}}>emitida {fmtFechaDMY(sug.issued_at)}{sug.due?` · vence ${fmtFechaDMY(sug.due)}`:''}</div>
+                                <div style={{fontSize:10,color:C.muted}}>Emitida {fmtFechaDMY(sug.issued_at)}{sug.due?` · vence ${fmtFechaDMY(sug.due)}`:''}</div>
                                 <div style={{fontSize:10.5,color:C.text,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rsF}{sug.receptor_rut?` · ${sug.receptor_rut}`:''}</div>
                                 <div style={{marginTop:3,display:'flex',gap:4,flexWrap:'wrap'}}>
                                   {est&&<span style={{fontSize:9,fontWeight:700,borderRadius:6,padding:'1px 6px',background:est.bg,color:est.fg}}>{est.label}</span>}
@@ -21871,8 +21871,8 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                               </div>
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginTop:7,paddingTop:6,borderTop:`1px solid ${C.bgSoft}`}}>
-                              {rutMatch&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px'}}>✓ mismo RUT</span>}
-                              <span style={{fontSize:9.5,fontWeight:700,color:exacto?C.greenText:C.soonText,background:exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px'}}>{exacto?'✓ monto exacto':`dif ${fmtM(Math.abs(sld-resto))}`}</span>
+                              {rutMatch&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px'}}>✓ Mismo RUT</span>}
+                              <span style={{fontSize:9.5,fontWeight:700,color:exacto?C.greenText:C.soonText,background:exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px'}}>{exacto?'✓ Monto exacto':`Dif ${fmtM(Math.abs(sld-resto))}`}</span>
                               <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
                                 <button disabled={busy===m.id} onClick={()=>setReembFor(reembFor===m.id?null:m.id)} title='La factura es de gastos/reembolso: se marca pagada pero no cuenta como ingreso' style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'4px 10px',border:'none',cursor:busy===m.id?'default':'pointer',background:reembFor===m.id?'#FAECE7':C.bgSoft,color:reembFor===m.id?C.coralText:C.muted}}>Es reembolso{reembFor===m.id?' ▴':' ▾'}</button>
                                 <button disabled={busy===m.id} onClick={()=>reconciliar(m,sug,'manual')} style={{background:C.accent,color:'#fff',fontSize:11,fontWeight:600,borderRadius:6,padding:'5px 14px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap'}}>Conciliar</button>
@@ -21930,7 +21930,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
                             <div style={{fontSize:9.5,color:C.muted,marginTop:5}}>Concilias la factura y el resto lo colocas con los botones de abajo (Fondo por Rendir · Saldo a Favor · Devolución). O usa "Buscar en SII" si la factura del resto no está.</div>
                           </div>
                         )}
-                        {sug&&<div onClick={()=>toggleOtras(m.id)} style={{display:'flex',alignItems:'center',fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',padding:'7px 0',marginTop:1,borderTop:`1px solid ${C.bgSoft}`}}><span>Otras opciones</span><span style={{fontSize:9,color:C.done,marginLeft:7,fontWeight:500}}>varias · anticipo · fondo · reembolso · devolución</span><span style={{marginLeft:'auto',color:C.done}}>{showOtras?'▾':'▸'}</span></div>}
+                        {sug&&<div onClick={()=>toggleOtras(m.id)} style={{display:'flex',alignItems:'center',fontSize:11,fontWeight:600,color:C.muted,cursor:'pointer',padding:'7px 0',marginTop:1,borderTop:`1px solid ${C.bgSoft}`}}><span>Otras opciones</span><span style={{fontSize:9,color:C.done,marginLeft:7,fontWeight:500}}>Varias · anticipo · fondo · reembolso · devolución</span><span style={{marginLeft:'auto',color:C.done}}>{showOtras?'▾':'▸'}</span></div>}
                         {showOtras&&<>
                         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
                           {myConc.length>0&&<span style={{fontSize:10,fontWeight:700,color:C.soon,textTransform:'uppercase',letterSpacing:.3}}>Resta {fmtM(resto)}</span>}
