@@ -21276,13 +21276,13 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concView,concByMov,billing,q,orden,cmap,modalMov])
   // Contadores de los chips de estado sobre la MISMA base filtrada que la lista (cuenta/mes/año/resp) — evita mostrar "88" cuando la vista filtrada está vacía.
   const chipCounts = useMemo(()=>{
-    if(sub!=='abonos') return {porconciliar:0,descalces:0,sinid:0}
+    if(sub!=='abonos') return {porconciliar:0,descalces:0,sinid:0,conciliados:0}
     let l=movs.filter(m=>m.tipo==='abono')
     if(cuentaF!=='ambas') l=l.filter(m=>m.rol_cuenta===cuentaF)
     if(anioF!=='todos') l=l.filter(m=>(m.fecha||'').slice(0,4)===anioF)
     if(mesF!=='todos') l=l.filter(m=>(m.fecha||'').slice(5,7)===mesF)
     if(respF!=='todos') l=l.filter(m=> respF==='__sin__' ? !(m.cliente_id&&respByCid[String(m.cliente_id)]) : respByCid[String(m.cliente_id)]===respF)
-    return { porconciliar:l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length)).length, descalces:l.filter(esDescalce).length, sinid:l.filter(m=>!m.es_interno&&!m.cliente_id&&!tieneCand(m)&&!RESUELTAS_ABO.includes(m.categoria)).length }
+    return { porconciliar:l.filter(m=>tieneCand(m)&&!(concByMov[m.id]?.length)).length, descalces:l.filter(esDescalce).length, sinid:l.filter(m=>!m.es_interno&&!m.cliente_id&&!tieneCand(m)&&!RESUELTAS_ABO.includes(m.categoria)).length, conciliados:l.filter(m=>concByMov[m.id]?.length).length }
   },[movs,sub,cuentaF,anioF,mesF,respF,respByCid,concByMov,billing])
 
   const rolChip = rol => rol==='honorarios'?{bg:C.azulBg,color:C.accent,t:'Cta. Honorarios'}:rol==='gastos'?{bg:C.ambarBg,color:C.soonText,t:'Cta. Gastos'}:{bg:C.bgWarm,color:C.grisText,t:'—'}
@@ -21302,7 +21302,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
     }
     if(m.estado==='parcial') return {t:`Parcial · resta ${fmtM((m.monto||0)-(m.monto_conciliado||0))}`, c:C.soon, bg:'#FFF8E1'}
     if(m.categoria){ const s=TAG_STY[m.categoria]||{bg:C.bgWarm,color:C.grisText}; const ct=m.categoria==='Devolución'?'← Devolución':m.categoria==='Provisión de gastos'?'Fondo por Rendir':m.categoria; return {t:ct, c:s.color, bg:s.bg} }
-    if(m.tipo==='abono') return m.cliente_id ? {t:'Por conciliar', c:C.soon, bg:'#FFF8E1'} : {t:'Sin identificar', c:'#A35200', bg:C.overdueBg}
+    if(m.tipo==='abono'){ if(!m.cliente_id) return {t:'Sin identificar', c:'#A35200', bg:C.overdueBg}; return tieneCand(m) ? {t:'Por conciliar', c:C.soon, bg:'#FFF8E1'} : {t:'Sin factura que calce', c:C.coralText, bg:'#FAECE7'} }
     return {t:'Sin clasificar', c:C.muted, bg:C.bgWarm}
   }
   // Etiqueta legible para movimientos sin contraparte (tarjeta, SII, comisión, etc.) a partir de la glosa.
@@ -21557,7 +21557,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           </div>
         )}
         {/* Estado de conciliación — chips livianos: solo estados con pendientes (>0); tocar filtra, tocar de nuevo = Todos */}
-        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',chipCounts.porconciliar,C.soonText,'#FAC775'],['descalces','Sin factura que calce',chipCounts.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',chipCounts.sinid,C.soonText,C.border]].filter(c=>c[2]>0); return ch.length>0?(
+        {sub==='abonos'&&(()=>{ const ch=[['porconciliar','Por conciliar',chipCounts.porconciliar,C.soonText,'#FAC775'],['descalces','Sin factura que calce',chipCounts.descalces,C.overdue,'#F1B0AF'],['sinid','Sin identificar',chipCounts.sinid,C.soonText,C.border],['conciliados','Conciliados',chipCounts.conciliados,C.greenText,'#9FE1CB']].filter(c=>c[2]>0); return ch.length>0?(
           <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
             {ch.map(([v,l,n,fg,bd])=>{ const on=concView===v; return <span key={v} onClick={()=>setConcView(on?'todos':v)} style={{fontSize:11,fontWeight:600,borderRadius:12,padding:'3px 11px',cursor:'pointer',border:`1px solid ${on?fg:bd}`,background:on?fg:'#fff',color:on?'#fff':fg}}>{l} · {n}</span> })}
             {concView!=='todos'&&<span onClick={()=>setConcView('todos')} style={{fontSize:10,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Todos</span>}
@@ -22086,7 +22086,7 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
           <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:460,background:'#fff',borderRadius:18,maxHeight:'86vh',display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 12px 40px rgba(0,0,0,.18)'}}>
             <div style={{padding:'16px 18px 12px',borderBottom:`1px solid ${C.border}`}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <span style={{fontSize:18,fontWeight:500,color:C.accent}}>Revisar sugerencias</span>
+                <span style={{fontSize:18,fontWeight:500,color:C.accent}}>Identificar por nombre</span>
                 <span onClick={()=>setRevSugOpen(false)} style={{fontSize:21,color:C.muted,cursor:'pointer',lineHeight:1}}>×</span>
               </div>
               <div style={{fontSize:11,color:C.muted,marginTop:3}}>Abonos sin identificar con un cliente sugerido por nombre (único). Confirma los correctos → quedan listos para conciliar y se aprende el patrón.</div>
