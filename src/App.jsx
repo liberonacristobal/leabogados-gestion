@@ -3994,20 +3994,28 @@ function SalesView({sales,clients,clientEntities=[],onEdit,onAdd,onAddPropuesta,
               {[['abogado','Responsable'],['area','Área']].map(([v,l])=>{ const on=groupBy===v; return <span key={v} onClick={()=>{setGroupBy(v);setSelGroup(null)}} style={{fontSize:10,fontWeight:on?700:600,borderRadius:20,padding:'3px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</span> })}
             </div>
           </div>
-          {(()=>{ const leader=grupos[0]?.uf||0; return grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?g.uf/vendUF*100:0; const pctTxt=(pct>0&&pct<1)?pct.toFixed(1).replace('.',','):Math.round(pct); const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); const barW=leader>0?Math.max(2,Math.round(g.uf/leader*100)):0; return (
-            <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{background:sin?'#FBF7EF':'#fff',border:`1px solid ${on?col:C.border}`,borderLeft:`4px solid ${col}`,borderRadius:13,padding:'12px 14px',marginBottom:10,cursor:'pointer',boxShadow:on?`0 0 0 1px ${col}`:undefined}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:14,fontWeight:700,color:C.accent}}>{g.key}</span> <span style={{fontSize:11,color:C.done,fontWeight:500}}>· {g.count} venta{g.count!==1?'s':''}</span>{sin&&<span style={{fontSize:9,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px',marginLeft:6}}>Asignar</span>}</span>
-                <span style={{fontSize:26,fontWeight:800,letterSpacing:'-1px',lineHeight:1,color:col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{pctTxt}%</span>
+          {/* Desglose = tabla alineada (sin barra): columnas fijas Ventas·UF·$·% para comparar de un vistazo hacia abajo; color real de la persona (colorGrupo→PERSON_CHIP) en punto/nombre/%. Cada fila filtra su detalle (selGroup). */}
+          {grupos.length>0&&(()=>{ const GT='1fr 38px 56px 50px 46px'; const nc={fontVariantNumeric:'tabular-nums',textAlign:'right',paddingLeft:7,borderLeft:`0.5px solid ${C.border}`}; const hc={...nc,fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3}; return (
+            <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'0 12px',marginBottom:6}}>
+              <div style={{display:'grid',gridTemplateColumns:GT,columnGap:8,alignItems:'center',padding:'8px 0 6px'}}>
+                <span style={{fontSize:9,fontWeight:600,color:C.done,textTransform:'uppercase',letterSpacing:.3}}>{groupBy==='abogado'?'Responsable':'Área'}</span>
+                <span style={hc}>Ventas</span><span style={hc}>UF</span><span style={hc}>$</span><span style={hc}>%</span>
               </div>
-              <div style={{display:'flex',alignItems:'baseline',gap:12,margin:'8px 0'}}>
-                <span style={{fontSize:20,fontWeight:800,letterSpacing:'-.4px',color:col,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(g.uf)}</span>
-                <span style={{width:1,alignSelf:'stretch',background:C.border}}/>
-                <span style={{fontSize:20,fontWeight:800,letterSpacing:'-.4px',color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(gclp)}</span>
-              </div>
-              <div style={{height:8,borderRadius:5,background:'#EEF1F3',overflow:'hidden'}}><div style={{height:'100%',width:`${barW}%`,background:col,borderRadius:5}}/></div>
+              {grupos.map(g=>{ const col=colorGrupo(g.key); const on=selGroup===g.key; const sin=g.key==='Sin abogado'||g.key==='Sin área'; const pct=vendUF>0?g.uf/vendUF*100:0; const pctTxt=(pct>0&&pct<1)?pct.toFixed(1).replace('.',','):Math.round(pct); const gclp=Math.round(g.rows.reduce((a,s)=>a+ventaCLP(s,ufRef),0)); return (
+                <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false)}} style={{display:'grid',gridTemplateColumns:GT,columnGap:8,alignItems:'center',padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:(sin?'#FBF7EF':'transparent')}}>
+                  <span style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
+                    <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
+                    <span style={{fontSize:13.5,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.key}</span>
+                    {sin&&<span style={{fontSize:8.5,fontWeight:600,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px',flexShrink:0}}>Asignar</span>}
+                  </span>
+                  <span style={{...nc,fontSize:13,color:C.muted}}>{g.count}</span>
+                  <span style={{...nc,fontSize:13,fontWeight:600,color:C.text}}>{Math.round(g.uf).toLocaleString('es-CL')}</span>
+                  <span style={{...nc,fontSize:12,color:C.muted}}>{fmtShort(gclp)}</span>
+                  <span style={{...nc,fontSize:14,fontWeight:700,color:col}}>{pctTxt}%</span>
+                </div>
+              )}) }
             </div>
-          )}) })()}
+          )})()}
           {selGroup&&(()=>{ const g=grupos.find(x=>x.key===selGroup); const rows=g?g.rows:[]; if(!rows.length) return null; const col=colorGrupo(selGroup); return (
             <div style={{marginTop:12}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
