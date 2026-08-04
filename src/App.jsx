@@ -2611,8 +2611,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 {tendenciaPP!==null&&<div style={{fontSize:10,fontWeight:600,color:tendenciaPP>=0?C.greenText:C.overdue,marginTop:1}}>{tendenciaPP>=0?'+':''}{tendenciaPP} pp vs {selYear-1}</div>}
                 <div style={{height:8.5,borderRadius:5,background:C.bgWarm,overflow:'hidden',margin:'9px 0 4px'}}><div style={{height:'100%',width:`${Math.min(100,pctMeta)}%`,background:heroCol,borderRadius:5,transition:'width .3s'}}/></div>
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:10}}>
-                  <span style={{color:C.overdueText}}>faltan {vMon(faltanUF,faltanVal)}</span>
-                  <span style={{color:C.muted,fontWeight:600}}>meta {vMon(metaUF,m.meta)}</span>
+                  <span style={{color:C.overdueText}}>Faltan {vMon(faltanUF,faltanVal)}</span>
+                  <span style={{color:C.muted,fontWeight:600}}>Meta {vMon(metaUF,m.meta)}</span>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between',gap:6,borderTop:`0.5px solid ${C.border}`,marginTop:11,paddingTop:10}}>
                   <div onClick={()=>setGaugeMode(neto?'venta':'neto')} style={{cursor:'pointer',minWidth:0}}><div style={{...lblBig,color:neto?C.accent:C.greenText}}>{vMon(otherUF,otherVal)}</div><div style={lblSm}>{neto?'Vendido':'Neto'}</div></div>
@@ -2912,8 +2912,8 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                     {pendienteTot>0&&<div style={{width:`${Math.round(pendienteTot/debe*100)}%`,background:C.soon}}/>}
                   </div>
                   <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',fontSize:12,marginBottom:13}}>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.normal}}>●</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot)}</b> <span style={{color:C.greenText}}>listo para pagar</span></span>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.soon}}>●</span><b style={{color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pendienteTot)}</b> <span style={{color:C.soonText}}>en espera del cobro</span></span>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.normal}}>●</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(porPagarTot)}</b> <span style={{color:C.greenText}}>Listo para pagar</span></span>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{color:C.soon}}>●</span><b style={{color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pendienteTot)}</b> <span style={{color:C.soonText}}>En espera del cobro</span></span>
                   </div>
                 </>)})()}
                 {grupos.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'16px 0'}}>No le debes nada a ningún proveedor.</div>}
@@ -2958,7 +2958,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                             <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:pi.bg,color:pi.c,flexShrink:0,whiteSpace:'nowrap'}}>{pi.l}</span>
                             {pp
                               ? <button onClick={()=>{setPayTercero(t);setPayFecha(new Date().toISOString().slice(0,10));setPayRef('');setPayDoc(t.factura_numero||'');setPayDocF(t.factura_fecha||'')}} style={{height:30,borderRadius:8,background:C.normal,color:'#fff',border:'none',fontSize:12,fontWeight:600,padding:'0 13px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Pagar</button>
-                              : <span title='Esperando que el cliente pague su factura' style={{fontSize:11,color:C.done,flexShrink:0,whiteSpace:'nowrap'}}>espera cobro</span>}
+                              : <span title='Esperando que el cliente pague su factura' style={{fontSize:11,color:C.done,flexShrink:0,whiteSpace:'nowrap'}}>Espera cobro</span>}
                           </div>
                           {on&&(
                             <div style={{padding:'0 12px 12px 27px',display:'flex',flexDirection:'column',gap:7}}>
@@ -3123,7 +3123,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
           <div onClick={onOpenOficina} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
             <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div></div>
-            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesOfi)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesOfi)}</div><div style={{fontSize:9,color:C.done}}>Este mes</div></div>
             <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
           </div>
         </div>
@@ -3157,7 +3157,7 @@ function Dashboard({sales,billing,clients,clientEntities=[],expenses,tasks,petty
                 <div key={u} onClick={()=>setTab&&setTab('gastos')} style={{background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${alerta?C.soon:C.normal}`,borderRadius:12,padding:12,marginBottom:9,cursor:setTab?'pointer':'default'}}>
                   <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:eventos.length?9:0}}>
                     <span style={{width:30,height:30,borderRadius:'50%',background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[u]||u[0]}</span>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{u}</div><div style={{fontSize:10,color:C.done}}>caja chica</div></div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{u}</div><div style={{fontSize:10,color:C.done}}>Caja chica</div></div>
                     <div style={{textAlign:'right',flexShrink:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:saldo<0?C.overdue:saldo>0?C.normal:C.muted}}>{fmtN(saldo)}</div>
                       <div style={{fontSize:9,color:sinLiq.length>0?C.soonText:C.greenText}}>{saldo<0?'le debes · ':''}{sinLiq.length>0?`${sinLiq.length} sin liquidar`:'al día'}{ultRend?` · rindió ${dTxt(ultRend.created_at||ultRend.date)}`:''}</div>
@@ -11690,7 +11690,7 @@ function ExpensesView({expenses,clients,clientEntities,sales=[],onAdd,onEdit,onA
               return (<div onClick={()=>{setOfiLente('estructural');setSelectedClient(ofi)}} style={{display:'flex',alignItems:'center',gap:11,background:'#fff',border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:12,padding:'12px 14px',marginTop:6,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='building' s={17} c={C.accent}/></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>Costos de oficina</div></div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesTot)}</div><div style={{fontSize:9,color:C.done}}>este mes</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent}}>{fmtShort(mesTot)}</div><div style={{fontSize:9,color:C.done}}>Este mes</div></div>
                 <span style={{fontSize:14,color:C.done,flexShrink:0}}>›</span>
               </div>)
             })()}
