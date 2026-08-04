@@ -107,7 +107,9 @@ const ESTADO_COBRO = {
   anticipada:  {label:'Anticipada',   color:C.azulInfo, bg:C.azulBg,    text:C.azulInfo,    icon:'clock'},
   anulada:     {label:'Anulada',      color:C.done,     bg:C.bgWarm,    text:C.grisText,    icon:'x'},
 }
-const esVencidaB = b => !!b && (b.status==='Vencido' || (b.status==='Pendiente' && (b.due||'') && (b.due||'') < new Date().toISOString().slice(0,10)))
+// Fecha de vencimiento canónica de una factura: due si existe, si no emisión + 30 días (plazo estándar). FUENTE ÚNICA (la usan esVencidaB y el Cierre).
+const venceBill = b => b?.due || (b?.issued_at ? (()=>{ const x=new Date(b.issued_at+'T00:00:00'); x.setDate(x.getDate()+30); return x.toISOString().slice(0,10) })() : '')
+const esVencidaB = b => !!b && (b.status==='Vencido' || (b.status==='Pendiente' && venceBill(b) && venceBill(b) < new Date().toISOString().slice(0,10)))
 // Deriva el estado de cobro (folio + saldo + vencimiento + status) y devuelve su token de color. opts.yaFact = la sin-folio cuya factura emitida ya existe (duplicada), que la vista detecta y pasa.
 const estadoCobro = (b, opts={}) => {
   if(!b) return ESTADO_COBRO.porCobrar
@@ -220,7 +222,9 @@ const urgency = (due,status) => {
   const d = daysLeft(due); if(d===null) return 'normal'
   if(d<0) return 'overdue'; if(d<=5) return 'urgent'; if(d<=14) return 'soon'; return 'normal'
 }
-function normRut(r){ return (r||'').replace(/\s/g,'').replace(/\./g,'').toLowerCase() }
+// RUT: normalizador ÚNICO de toda la app = el de cartola (crNormRut): mayúscula, solo dígitos + K (sin puntos, espacios ni guion).
+// Antes esta copia conservaba el guion y usaba minúscula (outlier): fallaba dedupe/match entre "12345678-9" y "123456789".
+const normRut = crNormRut
 function dueFromIssued(iso){ if(!iso) return null; const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10) }
 // N° de cuota desde la glosa (las cuotas viven embebidas en el concepto, ej. "Título — Cuota 1/3"). Vacío si no aplica.
 function parseCuota(concept){
@@ -5289,7 +5293,7 @@ function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',pla
 function ChecklistFacturacion({billing, clients, clientEntities=[], sales=[], onEmitir, onStatusChange, respaldoMap={}, cartolaHasta=null, onOpenClientFicha, onConciliar, onEdit, onEnviar, onEnviarVarias, onUnsend, onAssignSeries, onCotejar, onCargarXML, onReplaceProgramada}) {
   // Razón social a la que se emitió la factura (fuente única: entity_id → única RS del cliente → receptor_name).
   const rsDe = b => {
-    const nrm=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase()
+    const nrm=crNormRut   // normalizador único de RUT
     const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(b.client_id))
     if(b.entity_id){ const e=ents.find(e=>String(e.id)===String(b.entity_id)); if(e) return e.name }
     // Cruce por RUT del receptor (canon factura-rs-cruce-rut): la factura del SII trae receptor_rut; matchea la RS aunque haya varias.
@@ -6214,7 +6218,7 @@ function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abon
   // Cifras consistentes: monto = verdad del DTE; abonado = lo respaldado en banco o el pago registrado; saldo = monto − abonado.
   const abonadoDe = b => Math.max(Number(b.paid_amount)||0, Number(respaldoMap[b.id])||0)
   const montoDe = b => montoFactura(b)
-  const saldoDe = b => (b.status==='Anulada')?0:(b.status==='Pagado'?0:Math.max(0, montoDe(b)-abonadoDe(b)))
+  const saldoDe = saldoBill   // fuente única (idéntico: montoFactura − max(paid_amount, respaldo); respaldoMap puebla _respaldoCache)
   const tieneRespaldo = b => (Number(respaldoMap[b.id])||0) >= montoDe(b)*0.99
 
   const mesYear = mes.slice(0,4)
@@ -6726,14 +6730,14 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
   // Solo marcamos si ya se envió por la app (email_sent_at). Nunca "Sin enviar" (las facturas ya se enviaron fuera de la app; sería engañoso).
   const envioBadge = b => { if(!esEmitida(b)||!b.email_sent_at) return null; const d=Math.floor((Date.now()-new Date(b.email_sent_at).getTime())/86400000); return {txt:d>0?`Enviada · ${d}d`:'Enviada',col:C.greenText} }
   const [cobranzaOpen,setCobranzaOpen] = useState(false)
-  const venceG = b => b.due || (b.issued_at ? (()=>{const x=new Date(b.issued_at+'T00:00:00'); x.setDate(x.getDate()+30); return x.toISOString().slice(0,10)})() : '')
-  const esVencidaG = b => b.status==='Vencido' || (b.status==='Pendiente' && venceG(b) && venceG(b) < new Date().toISOString().slice(0,10))
+  const venceG = venceBill      // fuente única de fecha de vencimiento
+  const esVencidaG = esVencidaB  // fuente única de "está vencida"
   // Memoria de recordatorios enviados (sin columna nueva): learnings factura_recordado, key=factura.id → fecha ISO del último recordatorio.
   const [recordadoMap,setRecordadoMap] = useState({})
   useEffect(()=>{ let alive=true; supabase.from('learnings').select('key,value').eq('kind','factura_recordado').then(({data})=>{ if(alive&&data){ const m={}; data.forEach(r=>{ m[r.key]=r.value }); setRecordadoMap(m) } },()=>{}); return ()=>{alive=false} },[])
   const diasDesde = iso => iso ? Math.floor((Date.now()-new Date(iso).getTime())/86400000) : null
   // "Buscar pago": trae los abonos del banco (cartola) a Facturación para conciliar cada factura desde aquí. Reusa el calce exacto (monto = saldo, TOL=0) + el RUT del receptor; la marca-pagada va por onStatusChange (probada).
-  const nrG = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+  const nrG = crNormRut   // normalizador único de RUT
   const efClientIdG = b => b.client_id || (b.receptor_rut ? (clientEntities.find(e=>nrG(e.rut)===nrG(b.receptor_rut))?.client_id) : null) || null
   const [abonos,setAbonos] = useState([])
   useEffect(()=>{ if(DEMO){ setAbonos((demoData.cartola_movimientos||[]).filter(m=>m.tipo==='abono'&&!m.es_interno)); return } let alive=true; supabase.from('cartola_movimientos').select('*').eq('tipo','abono').neq('es_interno',true).order('fecha',{ascending:false}).then(({data})=>{ if(alive&&data) setAbonos(data) },()=>{}); return ()=>{alive=false} },[])
@@ -9379,7 +9383,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],onSave,onBulkImpor
   const respDeRow = r => (r.client_id ? (clients.find(c=>String(c.id)===String(r.client_id))?.abogado_responsable||null) : null)
   const [matchProg,setMatchProg] = useState(null)       // {done,total} de lotes IA
 
-  const normRut = r => (r||'').toString().replace(/[.\s]/g,'').replace(/-/g,'').toUpperCase()
+  const normRut = crNormRut   // normalizador único de RUT
   // Categorías válidas del sistema (mismas que GastosForm). No se crean nuevas desde el Excel.
   const CAT_OPCIONES = ['Notaria','CBR','Diario Oficial','Registro Civil','Otro']
   const catNorm = s => (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()
@@ -17611,7 +17615,7 @@ function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported
   const [iaBusy,setIaBusy] = useState(false)
   const [iaReport,setIaReport] = useState(null)   // auditoría de Opus 4.8 antes de importar
   const norm = s => String(s??'').toLowerCase().trim()
-  const normRut = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+  const normRut = crNormRut   // normalizador único de RUT
   const inp = {width:'100%',height:36,border:`0.5px solid ${C.border}`,borderRadius:8,fontSize:13,padding:'0 11px',color:C.text,background:'#fff',outline:'none',boxSizing:'border-box'}
   const fmt0 = n => fmt(Number(n)||0)   // formateador CLP único (global fmt): redondeo y signo -$ correctos
   const fmtD = iso => { if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:String(iso) }
@@ -20044,7 +20048,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied }){
 // tiene saldoFactura=monto, así que se liga sin cambiar estado ni mandar correo). No re-usa un mismo abono dos veces.
 function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=[],aplicadoByFactura={},onConciliar,busy,onClose}){
   const fmtM = fmt
-  const nrm = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
+  const nrm = crNormRut   // normalizador único de RUT
   const cmap = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>m[c.id]=c.name); return m },[clients])
   // Fecha de trabajo: paid_at (marca de pago) o, si quedó sin fecha (marcada a mano/Excel), issued_at.
   const fechaOf = b => String(b.paid_at||b.issued_at||'').slice(0,10)
@@ -20058,7 +20062,7 @@ function CobradasSinRespaldoModal({billing=[],movs=[],clients=[],clientEntities=
   const [loteBusy,setLoteBusy]=useState(false)
   const [loteProg,setLoteProg]=useState(0)
   const rutsFac = fac => { const s=new Set(); const add=r=>{const n=nrm(r); if(n)s.add(n)}; add(fac.receptor_rut); const e=(clientEntities||[]).find(x=>String(x.id)===String(fac.entity_id)); if(e)add(e.rut); const c=(clients||[]).find(x=>String(x.id)===String(fac.client_id)); if(c)add(c.rut); (clientEntities||[]).filter(x=>String(x.client_id)===String(fac.client_id)).forEach(x=>add(x.rut)); return s }
-  const candsFor = fac => { const facR=rutsFac(fac); const amt=fac.amount||0; const pf=fechaOf(fac); const pt=pf?new Date(pf+'T12:00').getTime():null
+  const candsFor = fac => { const facR=rutsFac(fac); const amt=montoFactura(fac); const pf=fechaOf(fac); const pt=pf?new Date(pf+'T12:00').getTime():null   // base = DTE, no el amount programado
     return (movs||[]).filter(m=> m.tipo==='abono' && !m.es_interno && ((m.monto||0)-(m.monto_conciliado||0))>0 && (String(m.cliente_id)===String(fac.client_id) || (m.rut_contraparte&&facR.has(nrm(m.rut_contraparte)))))
       .map(m=>{ const resto=(m.monto||0)-(m.monto_conciliado||0); const dt=m.fecha?new Date(m.fecha+'T12:00').getTime():null; const dias=(pt&&dt)?Math.round((dt-pt)/86400000):null; return {m,resto,dias,exacto:resto===amt,adias:dias==null?99999:Math.abs(dias)} })
       .sort((a,b)=> (b.exacto-a.exacto)||(a.adias-b.adias)) }
