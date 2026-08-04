@@ -7456,31 +7456,51 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 )
               })()}
             </div>
-            {/* Cierre de mes — acceso SUAVE bajo la foto (canon: la foto es la protagonista). Mini-resumen del mes + detalle quién pagó/quién no. */}
-            {(()=>{ const _now=new Date(); const _pm=new Date(_now.getFullYear(),_now.getMonth()-1,1); const cmK=`${_pm.getFullYear()}-${String(_pm.getMonth()+1).padStart(2,'0')}`; const MN=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']   // Cierre = mes ANTERIOR (el que cerramos, ya emitido); mes capitalizado (pedido del usuario)
+            {/* Bloque del mes (rediseño 2026-08-04, pedido del usuario). Fila 1 = 2 tiles con TONO propio y mes como KICKER (cabe en meses largos): Cierre AZUL (reporte del mes anterior) + Facturas por emitir VERDE (pendiente del mes actual), $ como cifra. Fila(s) 2+ = tiles chicos uniformes: Anticipos disponibles + Ver cobranza fijos; higiene condicional (Ya emitidas·vincular, Pagadas sin marcar, Sin año). Reemplaza Cierre/Facturas-del-mes/duplicados/cobradas-sin-marcar/chips (Proveedores fuera). */}
+            {(()=>{
+              const MN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+              const _now=new Date()
+              const _pm=new Date(_now.getFullYear(),_now.getMonth()-1,1)
+              const cmK=`${_pm.getFullYear()}-${String(_pm.getMonth()+1).padStart(2,'0')}`
+              const cap=s=>s.charAt(0).toUpperCase()+s.slice(1)
               const emi=bb.filter(b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.issued_at||b.date||'').slice(0,7)===cmK)
               const mo=b=>montoFactura(b); const ab=b=>Math.max(Number(b.paid_amount)||0,Number(respaldoMap[b.id])||0); const sa=b=>b.status==='Pagado'?0:Math.max(0,mo(b)-ab(b))
               const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
-              return <div onClick={()=>setCierreOpen(true)} style={{display:'flex',alignItems:'center',gap:9,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',marginBottom:8,cursor:'pointer'}}>
-                <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:11.5,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>Cierre de mes · {MN[+cmK.slice(5,7)-1]}</div>
-                  <div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{emi.length>0?`Cobrado ${fmtShort(tCob)} de ${fmtShort(tEmi)} · ${tasa}% · ${emi.length} factura${emi.length!==1?'s':''}`:'Quién pagó, quién no y montos'}</div>
+              const mesAct=_now.toISOString().slice(0,7)
+              const pemMes=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&String(b.due||'').startsWith(mesAct))
+              const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0)
+              const dupN=yaFacturadasIds.size
+              const cob=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Vencido','Pendiente'].includes(b.status)&&(b.amount||0)>0&&saldoBill(b)===0)
+              const kick={fontSize:8.5,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',color:C.muted,marginBottom:2}
+              const minis=[
+                {k:'Anticipos disponibles', v:antDisp>0?fmtShort(antDisp):'—', dot:antDisp>0?'#EF9F27':null, col:antDisp>0?C.accent:C.done, on:()=>go('anticipos')},
+                {k:'Cobranza', v:'Ver cobranza →', nav:true, col:C.accent, on:()=>setSaludCobranza(true)},
+                dupN>0&&{k:'Ya emitidas · vincular', v:String(dupN), dot:'#EF9F27', col:C.soonText, on:()=>onConciliar&&onConciliar()},
+                (cob.length>0&&onDepurarCobradas)&&{k:'Pagadas sin marcar', v:String(cob.length), dot:C.normal, col:C.greenText, on:()=>setDepurarRows(cob)},
+                sinAnio.length>0&&{k:'Sin año', v:String(sinAnio.length), dot:'#EF9F27', col:C.soonText, on:()=>go('sinanio')},
+              ].filter(Boolean)
+              return (
+              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:8}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <div onClick={()=>setCierreOpen(true)} style={{background:C.azulBg,border:'0.5px solid #D3E3F3',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',flexDirection:'column'}}>
+                    <div style={kick}>{cap(MN[_pm.getMonth()])}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span style={{width:24,height:24,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span><span style={{fontSize:10.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Cierre de mes</span></div>
+                    {emi.length>0?<><div style={{fontSize:20,fontWeight:800,color:C.accent,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(tCob)}</div><div style={{fontSize:9.5,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>de {fmtShort(tEmi)} cobrado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:2}}>Quién pagó y quién no</div>}
+                    <span style={{position:'absolute',top:10,right:11,color:'#7FA6BE',fontSize:13}}>›</span>
+                  </div>
+                  <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:C.greenBg,border:'0.5px solid #C4E7D9',borderRadius:11,padding:'11px 12px',cursor:'pointer',position:'relative',display:'flex',flexDirection:'column'}}>
+                    <div style={kick}>{cap(MN[_now.getMonth()])}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span style={{width:24,height:24,borderRadius:7,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg></span><span style={{fontSize:10.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Facturas por emitir</span></div>
+                    <div style={{fontSize:20,fontWeight:800,color:C.greenText,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{fmtShort(pemTot)}</div>
+                    <div style={{fontSize:9.5,color:'#3E7360',marginTop:4}}>{pemN} factura{pemN!==1?'s':''}</div>
+                    <span style={{position:'absolute',top:10,right:11,color:'#7FC4A9',fontSize:13}}>›</span>
+                  </div>
                 </div>
-                <span style={{color:C.done,fontSize:15,flexShrink:0}}>›</span>
-              </div> })()}
-            {/* 2 tarjetas mini: Facturas del mes (por emitir del mes) + Revisar duplicados */}
-            {(()=>{ const mesAct=new Date().toISOString().slice(0,7); const pemMes=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&String(b.due||'').startsWith(mesAct)); const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0); const dupN=yaFacturadasIds.size; return (
-              <div style={{display:'grid',gridTemplateColumns:dupN>0?'1fr 1fr':'1fr',gap:8,marginBottom:8}}>
-                <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}>
-                  <span style={{width:30,height:30,borderRadius:8,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></svg></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.accent,whiteSpace:'nowrap'}}>Facturas del mes</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Por emitir{pemTot?` · ${fmtShort(pemTot)}`:''}</div></div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.accent,flexShrink:0}}>{pemN}</div>
-                </div>
-                {dupN>0&&<div onClick={()=>onConciliar&&onConciliar()} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}>
-                  <span style={{width:30,height:30,borderRadius:8,background:C.ambarBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></svg></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:C.soonText,whiteSpace:'nowrap'}}>Revisar duplicados</div><div style={{fontSize:9.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Ya tienen factura real</div></div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.soonText,flexShrink:0}}>{dupN}</div>
+                {minis.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {minis.map((m,i)=><div key={i} onClick={m.on} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:10,padding:'8px 11px',cursor:'pointer',display:'flex',flexDirection:'column',gap:2,minHeight:52,justifyContent:'center'}}>
+                    <span style={{fontSize:10,fontWeight:600,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.k}</span>
+                    <span style={{fontSize:m.nav?12.5:15,fontWeight:m.nav?600:800,color:m.col,fontVariantNumeric:'tabular-nums',display:'flex',alignItems:'center',gap:6}}>{m.dot&&<span style={{width:6,height:6,borderRadius:'50%',background:m.dot,flexShrink:0}}/>}{m.v}</span>
+                  </div>)}
                 </div>}
               </div>
             )})()}
@@ -7491,13 +7511,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <span style={{color:C.overdue,fontSize:18,fontWeight:700}}>›</span>
               </div>
             ) })()}
-            {(()=>{ const cob=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Vencido','Pendiente'].includes(b.status)&&(b.amount||0)>0&&saldoBill(b)===0); if(!cob.length||!onDepurarCobradas) return null; return (
-              <div onClick={()=>setDepurarRows(cob)} title='Facturas ya saldadas (saldo $0) que siguen marcadas vencidas/pendientes — marcarlas pagadas' style={{display:'flex',alignItems:'center',gap:11,background:C.greenBg,borderLeft:`3px solid ${C.normal}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
-                <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.greenText}}>Ya cobradas sin marcar</div><div style={{fontSize:9,color:C.greenText}}>{cob.length} factura{cob.length!==1?'s':''} saldada{cob.length!==1?'s':''} sigue{cob.length!==1?'n':''} vencida/pendiente — depurar</div></div>
-                <span style={{color:C.normal,fontSize:18,fontWeight:700}}>›</span>
-              </div>
-            ) })()}
+            {/* "Ya cobradas sin marcar" ahora es el tile chico "Pagadas sin marcar" del bloque del mes (arriba). */}
             {(()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); if(!porEnviar.length) return null; return (
               <div onClick={abrirBandeja} title='Facturas emitidas que aún no se mandan al cliente' style={{display:'flex',alignItems:'center',gap:11,background:C.azulBg,borderLeft:`3px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',marginBottom:10,cursor:'pointer'}}>
                 <span style={{width:30,height:30,borderRadius:8,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='4' width='20' height='16' rx='2'/><path d='m22 7-10 5L2 7'/></svg></span>
@@ -7505,21 +7519,7 @@ function BillingView({billing,clients,sales,clientEntities,user,setBilling,antic
                 <span style={{color:C.onNavyLabel,fontSize:18,fontWeight:700}}>›</span>
               </div>
             ) })()}
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              <span onClick={()=>go('anticipos')} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:antDisp>0?C.accent:C.muted,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
-                <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={antDisp>0?C.accent:C.done} strokeWidth='2'><rect x='3' y='6' width='18' height='13' rx='2'/><path d='M16 6V4H8v2M3 11h18'/></svg>
-                Anticipos{antDisp>0&&<><span style={{width:5,height:5,borderRadius:'50%',background:'#EF9F27',display:'inline-block'}}/><b style={{color:C.greenText}}>{fmtShort(antDisp)}</b></>}
-              </span>
-              <span onClick={()=>go('terceros')} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:provPorPagar>0?C.accent:C.muted,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
-                <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={provPorPagar>0?C.accent:C.done} strokeWidth='2'><path d='M3 7h13v9H3zM16 10h3l2 3v3h-5'/><circle cx='7.5' cy='18.5' r='1.5'/><circle cx='17.5' cy='18.5' r='1.5'/></svg>
-                Proveedores{provPorPagar>0&&<><span style={{width:5,height:5,borderRadius:'50%',background:'#EF9F27',display:'inline-block'}}/><b style={{color:C.soonText}}>{fmtShort(provPorPagar)}</b></>}
-              </span>
-              <span onClick={()=>setSaludCobranza(true)} title='DSO, tasa de cobro, morosidad y top deudores' style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,color:C.accent,borderRadius:20,padding:'4px 12px',background:'#fff',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
-                <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 3v18h18'/><path d='m19 9-5 5-4-4-3 3'/></svg>
-                Cobranza
-              </span>
-              {sinAnio.length>0&&<span onClick={()=>go('sinanio')} style={{fontSize:11,fontWeight:600,color:C.soonText,border:'1px solid #FAC775',background:'#FFF8E1',borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>Sin año · {sinAnio.length}</span>}
-            </div>
+            {/* Anticipos / Cobranza / Sin año pasaron a tiles chicos del bloque del mes (arriba). Proveedores se quitó de acá (pedido del usuario). */}
             {(()=>{
               const emitidas=(billing||[]).filter(b=>b.dte_track_id&&!b.deleted_at).sort((a,b)=>(b.dte_emitido_at||'')>(a.dte_emitido_at||'')?1:-1)
               const enProd=emitidas.some(b=>b.dte_ambiente==='prod')
