@@ -20600,7 +20600,10 @@ function ConciliacionView({clients=[],clientEntities=[],billing=[],setBilling,an
         || (Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)))
       .map(x=>x.b) }
   // Mejor candidato para el AUTO: exacto+único; si hay varios del mismo monto, desempata por RS del pagador y luego mes del pago.
+  // Señal premium: el banco escribe el folio en la glosa ("PAGO FACTURA 412", "F°412"). Si ese folio calza con una candidata (ya exacta en monto), es LA factura.
+  const folioGlosa = m => { const mt=String(m?.descripcion||'').match(/\b(?:factura|fact|fac|fra|f[°ºn])\s*[°ºn.\-:]*\s*(\d{2,7})\b/i); return mt?mt[1]:null }
   const mejorCandidato = (mov, exclude) => { const cs=candidatos(mov,exclude); if(!cs.length) return null
+    const fg=folioGlosa(mov); if(fg){ const byFolio=cs.find(c=>String(folioN(c.invoice_no))===String(fg)); if(byFolio) return byFolio }   // el banco nombra el folio → preferirlo
     const pm=(mov.fecha||'').slice(0,7), pr=crNormRut(mov.rut_contraparte)
     if(cs.length===1){ const d=mesDiff((cs[0].issued_at||'').slice(0,7),pm); return (d==null||d>=-2)?cs[0]:null }
     let pool=cs
